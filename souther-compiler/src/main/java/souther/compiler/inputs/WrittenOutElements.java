@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AffineForms;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Symbols;
@@ -71,6 +73,22 @@ public final class WrittenOutElements {
         record NotWrittenOut() implements Walked {}
     }
 
+    /**
+     * The list written in the source that {@code container} stands at, with where its elements
+     * are read, or empty where it stands at any other container
+     * ({@link ElementsWrittenOut#listItStandsAt}).
+     *
+     * <p>Followed through the parameters a helper was handed its arguments by and not through a
+     * name the author wrote: what is worked out where a name is given is not worked out where it
+     * is read, and the list is not taken as written where it is asked.
+     */
+    public static Optional<AffineForms.ListWrittenOut<InputReads>> listItStandsAt(
+            Denotation container, Symbols symbols, DeclarationNewtypes newtypes) {
+        return ElementsWrittenOut.listItStandsAt(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, new HashSet<>(),
+                InputReads.NamesFollowed.THE_PARAMETERS_OF_AN_EXPANSION));
+    }
+
     /** Every element {@code container}, standing where it is followed to, holds. */
     public static Walked of(Denotation container, Symbols symbols, DeclarationNewtypes newtypes) {
         return of(container, symbols, newtypes, new HashSet<>());
@@ -86,8 +104,13 @@ public final class WrittenOutElements {
     /** What a walk in this reading of names came to, as its occurrences. */
     private static Walked from(ElementsWrittenOut.Walked<InputReads> walked) {
         return switch (walked) {
-            case ElementsWrittenOut.Walked.Each<InputReads>(var each) ->
-                    new Walked.Each(each.stream().map(WrittenOutElements::occurrence).toList());
+            case ElementsWrittenOut.Walked.Each<InputReads>(var each) -> {
+                ReadMeaning.Occurrence[] made = new ReadMeaning.Occurrence[each.size()];
+                for (int at = 0; at < made.length; at++) {
+                    made[at] = occurrence(each.get(at), at);
+                }
+                yield new Walked.Each(List.of(made));
+            }
             case ElementsWrittenOut.Walked.PastTheFigure<InputReads> _ ->
                     new Walked.PastTheFigure();
             case ElementsWrittenOut.Walked.NotWrittenOut<InputReads> _ ->
@@ -103,6 +126,14 @@ public final class WrittenOutElements {
                 container.at()), new Names(symbols, newtypes, Set.of()));
     }
 
+    /** The most elements {@code container}, standing where it is followed to, holds on any run
+     *  where it is written out ({@link ElementsWrittenOut#mostOf}). */
+    public static OptionalLong mostOf(Denotation container, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
+        return ElementsWrittenOut.mostOf(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, Set.of()));
+    }
+
     /** How a walk of the elements of a container reads names here, for a reading that walks them
      *  itself ({@link LawAtACall}). */
     public static ElementsWrittenOut.Reading<InputReads> reading(Symbols symbols,
@@ -110,9 +141,24 @@ public final class WrittenOutElements {
         return new Names(symbols, newtypes, Set.of());
     }
 
-    private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {
-        return new ReadMeaning.Occurrence(denotation(one.value()), one.keptWhere().stream()
-                .map(WrittenOutElements::kept).toList(), one.answered(), one.within());
+    /** {@code one}, the {@code written}th the walk wrote out, as this reading's occurrence. Most
+     *  are kept by nothing, and a walk writes out every occurrence each time it is asked, so the
+     *  truths are turned over by hand and none is made where there is none. */
+    private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one,
+                                                     int written) {
+        List<ElementsWrittenOut.Kept<InputReads>> keptWhere = one.keptWhere();
+        List<ReadMeaning.Occurrence.Kept> kept;
+        if (keptWhere.isEmpty()) {
+            kept = List.of();
+        } else {
+            ReadMeaning.Occurrence.Kept[] made = new ReadMeaning.Occurrence.Kept[keptWhere.size()];
+            for (int at = 0; at < made.length; at++) {
+                made[at] = kept(keptWhere.get(at));
+            }
+            kept = List.of(made);
+        }
+        return new ReadMeaning.Occurrence(denotation(one.value()), kept, one.answered(),
+                one.within(), written);
     }
 
     private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {
@@ -133,7 +179,8 @@ public final class WrittenOutElements {
      * How the walk reads names here: followed by this reading ({@link InputReads#standing}), stopping
      * at the names {@code met} already, and handed to a step's parameter as an application hands one.
      */
-    private record Names(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met)
+    private record Names(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met,
+                         InputReads.NamesFollowed followed)
             implements ElementsWrittenOut.Reading<InputReads> {
 
         Names {
@@ -142,10 +189,14 @@ public final class WrittenOutElements {
             Objects.requireNonNull(met, "having met some names, or none");
         }
 
+        Names(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met) {
+            this(symbols, newtypes, met, InputReads.NamesFollowed.EVERY_ONE);
+        }
+
         @Override
         public ElementsWrittenOut.Stood<InputReads> standing(Core e, InputReads at) {
             Denotation stood = InputReads.standing(new Denotation(e, at), symbols, newtypes,
-                    new HashSet<>(met));
+                    new HashSet<>(met), followed);
             return new ElementsWrittenOut.Stood<>(stood.value(), stood.at());
         }
 
@@ -163,6 +214,11 @@ public final class WrittenOutElements {
         @Override
         public Optional<Object> folded(ElementsWrittenOut.Stood<InputReads> value) {
             return value.at().folded(value.value(), symbols, newtypes);
+        }
+
+        @Override
+        public ElementBindings.AssembledWalk assembledAt(BindingId element, InputReads at) {
+            return at.assembledAt(element);
         }
     }
 }

@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
@@ -335,7 +336,7 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
         // Compiled as far as the trees asked about and no further: that each source is accepted
         // whole is what the tests above hold, and what is counted here is built before the backend.
         for (Case one : cases) {
-            Compilation compilation = Compilation.ofSource(one.source(), "m");
+            Compilation compilation = ACompiledModel.compiles(Compilation.ofSource(one.source(), "m"));
             for (String module : compilation.modules()) {
                 for (String behavior : compilation.declaredBehaviors(module)) {
                     say(tooDeep, one.what(), behavior, "the Hir it expanded",

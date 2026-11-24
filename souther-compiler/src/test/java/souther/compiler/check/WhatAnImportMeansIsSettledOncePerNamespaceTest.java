@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -35,8 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class WhatAnImportMeansIsSettledOncePerNamespaceTest {
 
     /** What was said about {@code own.sou}, as the message each report carries. */
-    private static List<String> saidAbout(Map<String, String> byId) {
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+    private static List<String> saidAbout(List<String> refusedWith, Map<String, String> byId) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         List<String> said = new ArrayList<>();
         for (Located each : compilation.diagnostics().get(new SourceId("own.sou"))) {
             said.add(each.diagnostic().said().getClass().getSimpleName());
@@ -62,7 +64,7 @@ class WhatAnImportMeansIsSettledOncePerNamespaceTest {
      */
     @Test
     void aClaimThatDoesNotStandIsNotBorrowedEither() {
-        assertEquals(List.of("TheModuleDoesNotExposeIt"), saidAbout(docs(
+        assertEquals(List.of("TheModuleDoesNotExposeIt"), saidAbout(List.of("E1507"), docs(
                 "a.sou", """
                         module app.a exposing ( In )
                         data In = { n: Int }
@@ -94,7 +96,7 @@ class WhatAnImportMeansIsSettledOncePerNamespaceTest {
      */
     @Test
     void aCollisionLeavesEachNamespaceWithWhatItHas() {
-        assertEquals(List.of("ImportedNameCollidesWithADeclaration"), saidAbout(docs(
+        assertEquals(List.of("ImportedNameCollidesWithADeclaration"), saidAbout(List.of("E1508"), docs(
                 "other.sou", """
                         module app.other exposing ( Thing )
                         data Thing = { n: Int }
@@ -119,7 +121,7 @@ class WhatAnImportMeansIsSettledOncePerNamespaceTest {
      */
     @Test
     void aQualifiedReferenceIsNotAClaimOnTheBareName() {
-        assertEquals(List.of(), saidAbout(docs(
+        assertEquals(List.of(), saidAbout(List.of(), docs(
                 "other.sou", """
                         module app.other exposing ( In, Mid, quote )
                         data In = { n: Int }
@@ -147,7 +149,7 @@ class WhatAnImportMeansIsSettledOncePerNamespaceTest {
     /** A data and a behavior of one spelling, from two modules: two meanings, so neither. */
     @Test
     void aDataAndABehaviorOfOneSpellingLeaveTheSpellingMeaningNeither() {
-        assertEquals(List.of("TheNameIsImportedFromTwoModules"), saidAbout(docs(
+        assertEquals(List.of("TheNameIsImportedFromTwoModules"), saidAbout(List.of("E1508"), docs(
                 "a.sou", """
                         module app.a exposing ( X )
                         data X = { n: Int }
@@ -176,7 +178,7 @@ class WhatAnImportMeansIsSettledOncePerNamespaceTest {
      */
     @Test
     void aRefusedClaimBesideAStandingOneLeavesTheStandingOne() {
-        assertEquals(List.of("TheModuleDoesNotExposeIt"), saidAbout(docs(
+        assertEquals(List.of("TheModuleDoesNotExposeIt"), saidAbout(List.of("E1507"), docs(
                 "a.sou", """
                         module app.a exposing ( Other )
                         data Other = { n: Int }

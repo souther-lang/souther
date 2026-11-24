@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.query.Bodies;
@@ -87,10 +88,10 @@ class AnApplicationsAnswerIsRecordedWhereTheApplicationIsTest {
 
     private static Bodies.Elaborated checked() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        assertNotNull(checked, "the model under test compiles: " + compilation.errors());
+        assertNotNull(checked, "the model under test is checked");
         return checked;
     }
 }

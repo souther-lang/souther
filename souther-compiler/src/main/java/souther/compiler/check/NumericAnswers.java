@@ -116,7 +116,7 @@ public final class NumericAnswers {
      * {@code Decimal} at the next (ADR-0082).
      *
      * <p>So a caller with a value in hand gets a concrete answer, and a caller holding only a
-     * declaration asks {@link #mayAnswerANumber} instead. Answered from the signature alone, a
+     * declaration asks {@link ArithmeticAnswers#mayAnswer} instead. Answered from the signature alone, a
      * polymorphic result reads as no number at all, and every rule written on a sum came back as a
      * rule about nothing.
      *
@@ -154,26 +154,6 @@ public final class NumericAnswers {
      */
     static boolean answerIsLeftToTheCall(Type result) {
         return result instanceof Type.Open;
-    }
-
-    /**
-     * Whether {@code operation} answers a number for some value it could be given.
-     *
-     * <p>The question a reader of declarations can ask, where {@link #typeOf} is the one a reader of
-     * a call can. What it may not do is decide the second: a sum over a list of text answers no
-     * number and is the same operation as a sum over a list of whole numbers, so an operation
-     * refused here would be refused for every call including the ones that do answer one.
-     *
-     * <p>Accumulating is not on its own enough. A join of strings walks a container from an
-     * identity through a step exactly as a sum does, and what it answers is declared: no call of it
-     * answers a number, and the walk says nothing about that either way.
-     */
-    static boolean mayAnswerANumber(BoundOperationFacts facts, ValueName.Stdlib.Operation named,
-                                    Stdlib.Signature signature) {
-        if (in(signature.result()) != null) {
-            return true;
-        }
-        return facts.accumulation(named) != null && answerIsLeftToTheCall(signature.result());
     }
 
     private NumericAnswers() {}

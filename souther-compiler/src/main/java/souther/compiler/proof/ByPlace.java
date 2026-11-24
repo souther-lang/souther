@@ -6,6 +6,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.StringContainment;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -50,6 +51,10 @@ public final class ByPlace {
                             proposition(ofTheElement, word), some);
             case LawProposition.Same<A>(LawSubject<A> one, LawSubject<A> other, boolean alike) ->
                     new LawProposition.Same<>(subject(one, word), subject(other, word), alike);
+            case LawProposition.Inside<A>(LawSubject<A> inner, LawSubject<A> outer,
+                                          StringContainment where, boolean inside) ->
+                    new LawProposition.Inside<>(subject(inner, word), subject(outer, word), where,
+                            inside);
         };
     }
 

@@ -1,14 +1,22 @@
 package souther.compiler.partition;
 
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -39,8 +47,11 @@ public sealed interface TakenConstraint {
      * composer does with a condition on the way is place a value for every position it names, and
      * that act is the same act in both vocabularies — read off the shapes, it would be written once
      * per shape and a vocabulary added later would be one the composer walks past.
+     *
+     * <p>In one order whatever order the constraint's form held its terms in, which the type says:
+     * a search places them one after another, and where it comes to a valid row first turns on it.
      */
-    java.util.Set<NumericTerm> terms();
+    SequencedSet<NumericTerm> terms();
 
     /**
      * {@code region} with this taken in.
@@ -50,10 +61,13 @@ public sealed interface TakenConstraint {
      * quiet answer is a region wider than every reader of it was told it had been narrowed to.
      */
     default SearchRegion narrowing(SearchRegion region) {
+        // What the language holds of the numbers it names comes in with it: a condition on a
+        // length past the longest string is one no row meets.
+        SearchRegion held = HeldByTheLanguage.assumedOn(region, terms());
         return switch (this) {
-            case Affine affine -> region.assuming(affine.form(), affine.rel()).taken();
-            case Ordered ordered -> region.assuming(ordered.term(), ordered.at(), ordered.rel());
-            case AwayFrom away -> region.apartFrom(away.term(), away.at());
+            case Affine affine -> held.assuming(affine.form(), affine.rel()).taken();
+            case Ordered ordered -> held.assuming(ordered.term(), ordered.at(), ordered.rel());
+            case AwayFrom away -> held.apartFrom(away.term(), away.at());
         };
     }
 
@@ -70,6 +84,72 @@ public sealed interface TakenConstraint {
         return nothingIsLeftFor(these, narrowedBy(these, rules));
     }
 
+    /**
+     * Whether {@code form rel 0} holds at every point of the runs {@code region} holds each
+     * number it names to, shown by the form's least and greatest value over them: each weight at
+     * the end of its number's run it is furthest from nought. False where a number has no run
+     * held at both ends, which says nothing of whether the condition holds.
+     */
+    static boolean holdsOverTheRunsOf(LinearForm<NumericTerm> form, Rel rel,
+                                      SearchRegion region) {
+        NumericDomain.Bounds run = runOf(form, region);
+        if (run == null) {
+            return false;
+        }
+        Endpoint low = run.min();
+        Endpoint high = run.max();
+        return switch (rel) {
+            case LE -> high != null && Count.number(high.at()).signum() <= 0;
+            case LT -> high != null && isBelowNought(high);
+            case GE -> low != null && Count.number(low.at()).signum() >= 0;
+            case GT -> low != null && isAboveNought(low);
+            case EQ -> low != null && high != null && Count.number(low.at()).signum() == 0
+                    && Count.number(high.at()).signum() == 0;
+            case NE -> (low != null && isAboveNought(low)) || (high != null && isBelowNought(high));
+        };
+    }
+
+    /** Whether a range with {@code lower} as its lower end holds no number at nought or below. */
+    private static boolean isAboveNought(Endpoint lower) {
+        int sign = Count.number(lower.at()).signum();
+        return sign > 0 || (sign == 0 && !lower.inclusive());
+    }
+
+    /** Whether a range with {@code upper} as its upper end holds no number at nought or above. */
+    private static boolean isBelowNought(Endpoint upper) {
+        int sign = Count.number(upper.at()).signum();
+        return sign < 0 || (sign == 0 && !upper.inclusive());
+    }
+
+    /**
+     * The numbers {@code form} comes to over the runs {@code region} holds each number it names to,
+     * or null where one of them has no run it holds. A product is what the ranges of its factors
+     * make of one, and an end a range lacks stays open.
+     */
+    private static NumericDomain.Bounds runOf(LinearForm<NumericTerm> form, SearchRegion region) {
+        return souther.compiler.numeric.Intervals.of(form, term -> runOf(term, region));
+    }
+
+    private static NumericDomain.Bounds runOf(NumericTerm term, SearchRegion region) {
+        if (term instanceof NumericTerm.ProductOf product) {
+            NumericDomain.Bounds one = runOf(product.one(), region);
+            NumericDomain.Bounds other = runOf(product.other(), region);
+            if (one != null && other != null) {
+                return souther.compiler.numeric.Intervals.product(one, other);
+            }
+        }
+        if (!(region.projectionOf(term) instanceof NumericDomain.FormProjection.Within within)) {
+            return null;
+        }
+        // What a type holds is as much a bound as what its declarations say: a value an Int holds
+        // lies between its ends. A product is asked of the ranges of its factors and is as wide
+        // as they work out ({@link SearchRegion#isAnInt}).
+        return region.isAnInt(term)
+                ? within.bounds().meet(souther.compiler.numeric.Intervals
+                        .theWholeNumbersAnIntHolds())
+                : within.bounds();
+    }
+
     /** {@code region} with each of {@code these} taken in. */
     static SearchRegion narrowedBy(List<TakenConstraint> these, SearchRegion region) {
         SearchRegion within = region;
@@ -77,6 +157,21 @@ public sealed interface TakenConstraint {
             within = one.narrowing(within);
         }
         return within;
+    }
+
+    /**
+     * {@code region} with {@code these} taken in but for the ones taken away: one occurrence of
+     * each of {@code once}, and every occurrence of each of {@code everywhere}. What else
+     * {@code these} narrow is kept, whatever the ones taken away say of it.
+     */
+    static SearchRegion narrowedByAllBut(List<TakenConstraint> these, List<TakenConstraint> once,
+                                         List<Affine> everywhere, SearchRegion region) {
+        List<TakenConstraint> remaining = new ArrayList<>(these);
+        for (TakenConstraint each : once) {
+            remaining.remove(each);
+        }
+        remaining.removeIf(everywhere::contains);
+        return narrowedBy(remaining, region);
     }
 
     /**
@@ -114,9 +209,37 @@ public sealed interface TakenConstraint {
      * <p>The threshold is inside the form as its constant, so a rule and the same rule with the
      * threshold moved across are one value. What this is over is every term the arithmetic could
      * name, however many of them there are.
+     *
+     * <p><b>Its terms are put in order once.</b> Putting them in the one order names every term
+     * and sorts by the names, and a way asks the terms of each condition it took in at every step
+     * it is walked past, so a condition is asked many times over for the one answer. The answer is
+     * kept in a cell the rest decides, as a proposition keeps its denial.
+     *
+     * @param inOrder where the terms in the one order are kept once asked for, made here whatever
+     *                is handed in
      */
-    record Affine(LinearForm<NumericTerm> form, Rel rel)
+    record Affine(LinearForm<NumericTerm> form, Rel rel, @DecidedByTheRest TermsInOrder inOrder)
             implements TakenConstraint, JointDemand {
+
+        public Affine {
+            inOrder = new TermsInOrder();
+        }
+
+        public Affine(LinearForm<NumericTerm> form, Rel rel) {
+            this(form, rel, null);
+        }
+
+        /** As the record would fold its two components, so a constraint hashes as it always has. */
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hashCode(form) + Objects.hashCode(rel);
+        }
+
+        /** Written as the two things it is, and not the cell beside them. */
+        @Override
+        public String toString() {
+            return "Affine[form=" + form + ", rel=" + rel + "]";
+        }
 
         /**
          * Every number of the form, and the value a count of how often a key occurs, or a total
@@ -125,26 +248,76 @@ public sealed interface TakenConstraint {
          * coefficient names it.
          */
         @Override
-        public java.util.Set<NumericTerm> terms() {
+        public SequencedSet<NumericTerm> terms() {
+            return inOrder.of(this);
+        }
+
+        private SequencedSet<NumericTerm> putInOrder() {
             if (form.coefs().keySet().stream().noneMatch(term ->
                     term instanceof NumericTerm.OccurrencesOfAKey
-                            || term instanceof NumericTerm.GatheredUnderAKey)) {
-                return form.coefs().keySet();
+                            || term instanceof NumericTerm.GatheredUnderAKey
+                            || term instanceof NumericTerm.ProductOf)) {
+                return NumericTerms.setInOrder(form.coefs().keySet());
             }
-            Set<NumericTerm> out = new LinkedHashSet<>();
-            for (NumericTerm term : form.coefs().keySet()) {
+            SequencedSet<NumericTerm> out = new LinkedHashSet<>();
+            for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
                 switch (term) {
                     case NumericTerm.OccurrencesOfAKey asked ->
                             out.add(new NumericTerm.ValueOf(asked.key()));
                     case NumericTerm.GatheredUnderAKey asked ->
                             out.add(new NumericTerm.ValueOf(asked.asked()));
+                    // The numbers either form is of are composed for the product to stand.
+                    case NumericTerm.ProductOf product -> product.factors().forEach(
+                            form -> out.addAll(NumericTerms.inOrder(form.coefs().keySet())));
                     case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _,
                          NumericTerm.OfAnElementsNeighbours _, NumericTerm.OccurrencesOfItsValue _,
                          NumericTerm.GatheredUnderItsKey _ -> { }
                 }
                 out.add(term);
             }
-            return out;
+            return Collections.unmodifiableSequencedSet(out);
+        }
+    }
+
+    /**
+     * Where a form's terms in the one order are kept, once asked for: one cell for each
+     * {@link Affine}, which every cell is equal to, since what it keeps is decided by the form.
+     */
+    final class TermsInOrder {
+
+        private volatile SequencedSet<NumericTerm> kept;
+
+        TermsInOrder() {
+        }
+
+        /** The terms kept, or those {@code of} puts in order, kept from now on. */
+        SequencedSet<NumericTerm> of(Affine of) {
+            SequencedSet<NumericTerm> held = kept;
+            if (held != null) {
+                return held;
+            }
+            SequencedSet<NumericTerm> made = of.putInOrder();
+            synchronized (this) {
+                if (kept == null) {
+                    kept = made;
+                }
+                return kept;
+            }
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof TermsInOrder;
+        }
+
+        @Override
+        public int hashCode() {
+            return 0;
+        }
+
+        @Override
+        public String toString() {
+            return "TermsInOrder";
         }
     }
 
@@ -191,8 +364,8 @@ public sealed interface TakenConstraint {
         }
 
         @Override
-        public java.util.Set<NumericTerm> terms() {
-            return java.util.Set.of(term);
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.setInOrder(List.of(term));
         }
     }
 
@@ -226,8 +399,8 @@ public sealed interface TakenConstraint {
         }
 
         @Override
-        public java.util.Set<NumericTerm> terms() {
-            return java.util.Set.of(term);
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.setInOrder(List.of(term));
         }
     }
 }

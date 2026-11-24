@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.FixtureValueEntries;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.jvm.ClassFileImage;
@@ -45,8 +46,7 @@ class AFixtureOnlyEntryIsRunAgainstAndNotShippedTest {
 
     @Test
     void aPrivateBaselinesFixtureEntryRunsAgainstAndIsNotShipped() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         assertEquals(List.of(), compilation.db().allReports().stream().map(String::valueOf).toList(),
                 "the model under test compiles");
 

@@ -1,6 +1,8 @@
 package souther.cli;
 
 import souther.lsp.transport.MessageConnection;
+import souther.test.Workers;
+import souther.test.WrittenOutput;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -14,6 +16,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -102,29 +104,36 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
     private static Answer converse(Consumer<Said> conversation) throws Exception {
         PipedOutputStream toServer = new PipedOutputStream();
         PipedInputStream serverIn = new PipedInputStream(toServer, 1 << 16);
-        ByteArrayOutputStream wrote = new ByteArrayOutputStream();
+        WrittenOutput wrote = new WrittenOutput();
         ByteArrayOutputStream complained = new ByteArrayOutputStream();
         Environment environment = CliInProcess.environment(Files.createTempDirectory("souther-lsp"),
                 serverIn, wrote, complained);
         AtomicInteger code = new AtomicInteger(-1);
-        Thread serving = Thread.ofPlatform().name("souther-lsp-under-test")
-                .start(() -> code.set(Main.run(new String[] {"lsp"}, environment)));
+        Thread serving = Workers.started("souther-lsp-under-test", () -> {
+            try {
+                code.set(Main.run(new String[] {"lsp"}, environment));
+            } finally {
+                wrote.ended();
+            }
+        });
         try {
             conversation.accept(new Said(toServer, wrote));
         } finally {
             toServer.close();
-            serving.join(WAIT_MILLIS);
         }
-        assertFalse(serving.isAlive(), "the server returned at the end of its input");
-        return new Answer(code.get(), framesSoFar(wrote.toByteArray()),
+        Workers.ended(serving, HUNG, "the server returned at the end of its input");
+        return new Answer(code.get(), framesSoFar(wrote.bytes()),
                 complained.toString(StandardCharsets.UTF_8));
     }
 
-    /** Long enough that a slow machine is not a failure, short enough to be a test. */
-    private static final long WAIT_MILLIS = 60_000;
+    /**
+     * What a hung server costs the build. A wait ends when what it waits for is written, so this
+     * decides nothing about a server that is slow; it bounds the case where nothing is coming.
+     */
+    private static final Duration HUNG = Duration.ofMinutes(2);
 
     /** What a test says to a session, and what it waits to hear back. */
-    private record Said(PipedOutputStream toServer, ByteArrayOutputStream wrote) {
+    private record Said(PipedOutputStream toServer, WrittenOutput wrote) {
 
         void send(String... messages) {
             try {
@@ -136,21 +145,15 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
         }
 
         void awaitNotification(String method) {
-            long until = System.currentTimeMillis() + WAIT_MILLIS;
-            while (System.currentTimeMillis() < until) {
-                boolean heard = framesSoFar(wrote.toByteArray()).stream()
-                        .anyMatch(m -> m.has("method") && m.get("method").asString().equals(method));
-                if (heard) {
-                    return;
-                }
-                try {
-                    Thread.sleep(2);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new AssertionError(e);
-                }
+            try {
+                assertTrue(wrote.awaitUntil(() -> framesSoFar(wrote.bytes()).stream()
+                                .anyMatch(m -> m.has("method")
+                                        && m.get("method").asString().equals(method)), HUNG),
+                        "the server never sent " + method);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
             }
-            throw new AssertionError("the server never sent " + method);
         }
     }
 

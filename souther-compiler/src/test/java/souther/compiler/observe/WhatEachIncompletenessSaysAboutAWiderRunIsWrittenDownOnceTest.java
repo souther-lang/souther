@@ -53,6 +53,7 @@ class WhatEachIncompletenessSaysAboutAWiderRunIsWrittenDownOnceTest {
         table.put("VALUE_NOT_WORKED_OUT", "UNAFFECTED");
         // The room that ran out is the host's, and a host is not an allowance.
         table.put("VALUE_ROOM_EXCEEDED", "UNAFFECTED");
+        table.put("VALUE_OUTSIDE_WHAT_WAS_SHOWN", "UNAFFECTED");
         return table;
     }
 

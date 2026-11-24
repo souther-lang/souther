@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -22,6 +23,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -97,7 +99,7 @@ class ARowNothingRanFillsNoCombinationTest {
         assertEquals(1, groups.size(), "the two decisions meet once");
         assertEquals(List.of(), offered.notOffered(),
                 "and none of them was held back, so what follows is about a group that was walked");
-        CellSelection first = groups.get(0).at(0);
+        CellSelection first = GenerationFixtures.firstWay(groups.get(0), 0);
         assertNotNull(first, "and its first choice is a combination");
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
@@ -119,8 +121,9 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup())
-                .groups().get(0).at(0);
+        CellSelection first = GenerationFixtures.firstWay(
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup())
+                        .groups().get(0), 0);
         assertNotNull(first);
         Set<ArmProbe> takes = claimedBy(first);
         assertTrue(takes.size() > 1, "the combination takes an arm of each decision: " + takes);
@@ -153,7 +156,7 @@ class ARowNothingRanFillsNoCombinationTest {
         List<Generator.GeneratedRow> aborted = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.NoAccount(),
-                        new AnswerObservation.NotAnswered()),
+                        new AnswerObservation.NotAnswered(), Optional.empty()),
                 List.of(), List.of(), every, Budgets.generation()).rows();
         List<Generator.GeneratedRow> notRun = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
@@ -361,7 +364,7 @@ class ARowNothingRanFillsNoCombinationTest {
         }
 
         static Model of(String source, String behavior) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
+            Compilation compilation = ACompiledModel.answered(source);
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

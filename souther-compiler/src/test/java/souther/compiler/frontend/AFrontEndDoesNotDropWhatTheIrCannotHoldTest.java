@@ -1,5 +1,6 @@
 package souther.compiler.frontend;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import org.junit.jupiter.api.Test;
 
@@ -42,15 +43,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
 
-    /** One declaration of each kind, written twice: with the clause and without it. */
-    private record Sample(String withClause, String withoutClause) {}
+    /** One declaration of each kind, written twice: with the clause, which the compiler refuses
+     *  with {@code refusedWithClause}, and without it, which compiles. */
+    private record Sample(String withClause, List<String> refusedWithClause,
+                          String withoutClause) {}
 
     private static final Map<String, Sample> BY_KIND = new LinkedHashMap<>(Map.of(
             "Data", new Sample("""
                     module m
                     data T = { a: Int }
                         invariant a >= 0
-                    """, """
+                    """, List.of(), """
                     module m
                     data T = { a: Int }
                     """),
@@ -60,7 +63,7 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
                     data B
                     data T = A | B
                         invariant value == A
-                    """, """
+                    """, List.of("E1107"), """
                     module m
                     data A
                     data B
@@ -70,7 +73,7 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
                     module m
                     data T
                         invariant true
-                    """, """
+                    """, List.of("E1102"), """
                     module m
                     data T
                     """)));
@@ -87,13 +90,13 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
     @Test
     void aClauseIsEitherHeldOrReported() {
         BY_KIND.forEach((kind, sample) -> {
-            Read with = read(sample.withClause());
-            Read without = read(sample.withoutClause());
+            Read with = read(sample.withClause(), sample.refusedWithClause());
+            Read without = read(sample.withoutClause(), List.of());
 
             assertTrue(with.holdsAClause() || with.diagnostics() > without.diagnostics(),
                     kind + ": the clause was neither held by the declaration nor reported."
                             + " It was written and then dropped, which leaves a reader of the IR"
-                            + " unable to tell it from a declaration nobody wrote a rule on");
+                            + " unable to tell it from a declaration nobody wrote a rule on.");
         });
     }
 
@@ -144,9 +147,9 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
      *  clause. Both from the one compile, since a second one is a second reading. */
     private record Read(int diagnostics, boolean holdsAClause) {}
 
-    private static Read read(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    private static Read read(String source, List<String> refusedWith) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSource(source, "Main"));
         int said = compilation.diagnostics().values().stream().mapToInt(List::size).sum();
         if (compilation.modules().isEmpty()) {
             return new Read(said, false);

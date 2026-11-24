@@ -164,7 +164,8 @@ class WhatTwoValuesAreEqualByIsOneAnswerOnBothSidesOfTheBoundaryTest {
         return ObservedValues.of(live, symbols,
                 new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
-                        FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))),
+                        FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null)),
+                        ValueOwnership.none()),
                 Limits.DEFAULT);
     }
 }

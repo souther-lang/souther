@@ -3,13 +3,15 @@ package souther.compiler.conformance;
 import org.junit.jupiter.api.Test;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 import souther.compiler.query.Composition;
+import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
 import souther.compiler.query.Settlements;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -43,9 +45,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * row nothing watched run, and a row whose values could not be read at the point, are offered and
  * come back {@code Undetermined} here. Strengthening the assertion to {@code Settles} would be
  * asserting something nothing establishes.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
     @Test
@@ -57,9 +63,10 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
         int settledNotComposedFor = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
-            for (String module : analysed.compilation().modules()) {
-                java.util.Map<String, Adequacy.Filling> filled =
-                        Adequacy.generatedOf(analysed.compilation().db(), module);
+            Compilation compilation = analysed.answered();
+            for (String module : compilation.modules()) {
+                Map<String, Adequacy.Filling> filled =
+                        Adequacy.generatedOf(compilation.db(), module);
                 if (filled == null) {
                     continue;
                 }
@@ -68,10 +75,9 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
                 // to be asked about.
                 Composition offering = Composition.composed(
                         OfferingRequest.overTheModule(module), filled,
-                        Adequacy.accountFor(analysed.compilation().db(), module,
-                                new souther.compiler.query.GenerationScope.Module()));
-                Settlements settlements =
-                        Settlements.of(analysed.compilation().db(), offering);
+                        Adequacy.accountFor(compilation.db(), module,
+                                new GenerationScope.Module()));
+                Settlements settlements = Settlements.of(compilation.db(), offering);
                 rows += settlements.byRow().size();
                 items += settlements.requested().size();
 
@@ -129,10 +135,16 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
             // input two lines part company at, and rows here are composed at the points of one
             // line. Worded rather than refused, as the rules below are.
             case ObligationIdentity.OfABorder _ -> "border";
+            // Nor for the weight of a position of a total: nothing composes a row to show one, and
+            // the rows written already are what shows it.
+            case ObligationIdentity.OfATiltAtAPosition _ -> "weight";
             // Nothing offers a row for a rule of a decision yet, so nothing puts one in the
             // universe a run is asked about. Worded rather than refused, so that the day one is
             // offered the count below says so instead of this failing somewhere else.
             case ObligationIdentity.OfADecisionRule _ -> "rule";
+            // A case a statement of the decision draws inside itself, asked where the rows leave
+            // one unseen. Worded for the same reason.
+            case ObligationIdentity.OfACaseOfAStatement _ -> "case of a statement";
             // Nor for a case of an input nothing divides into classes, for the same reason: what
             // this run composes rows from is the classes of a position.
             case ObligationIdentity.OfAnInputCase _ -> "input case";

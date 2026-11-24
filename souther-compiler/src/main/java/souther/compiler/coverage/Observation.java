@@ -37,9 +37,30 @@ import java.util.Set;
  * @param outcomes  the ways the conditions it evaluated came out
  * @param visits    the same ways, each with the visit it came out on, for the first visits to each
  *                  condition ({@link RecordedVisit#MOST})
+ * @param walks     the numbers of the walks the run entered
+ * @param walksOn   the numbers of the walks the run took a second element of, each one it entered
+ * @param compared  what the sides of its comparisons of whole numbers came to, on the visits kept
+ * @param pastTheKept the numbers of the conditions the run visited again after every visit kept
+ *                  was taken: the recording's own word that it stopped keeping there, which no
+ *                  count of what it kept can stand in for
  */
 public record Observation(NumberingIdentity numbering, Set<Integer> arms,
-                          Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits) {
+                          Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits,
+                          Set<Integer> walks, Set<Integer> walksOn,
+                          Set<RecordedComparison> compared, Set<Integer> pastTheKept) {
+
+    /** A run that entered no walk. */
+    public Observation(NumberingIdentity numbering, Set<Integer> arms,
+                       Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits) {
+        this(numbering, arms, outcomes, visits, Set.of(), Set.of());
+    }
+
+    /** A run that handed over no side of a comparison. */
+    public Observation(NumberingIdentity numbering, Set<Integer> arms,
+                       Set<RecordedConditionOutcome> outcomes, Set<RecordedVisit> visits,
+                       Set<Integer> walks, Set<Integer> walksOn) {
+        this(numbering, arms, outcomes, visits, walks, walksOn, Set.of(), Set.of());
+    }
 
     public Observation {
         if (numbering == null) {
@@ -49,6 +70,14 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         arms = arms == null ? Set.of() : Set.copyOf(arms);
         outcomes = outcomes == null ? Set.of() : Set.copyOf(outcomes);
         visits = visits == null ? Set.of() : Set.copyOf(visits);
+        walks = walks == null ? Set.of() : Set.copyOf(walks);
+        walksOn = walksOn == null ? Set.of() : Set.copyOf(walksOn);
+        compared = compared == null ? Set.of() : Set.copyOf(compared);
+        pastTheKept = pastTheKept == null ? Set.of() : Set.copyOf(pastTheKept);
+        if (!walks.containsAll(walksOn)) {
+            throw new IllegalArgumentException("a walk was taken past its first element and not"
+                    + " entered: " + walksOn + " of " + walks);
+        }
         // And each number under the family the call that wrote it was for. Said here, where the
         // recording is made, rather than left to whoever reads it: a number written into the wrong
         // family is the emitter having lit a place it was not at, and a reader meeting it later has
@@ -65,6 +94,32 @@ public record Observation(NumberingIdentity numbering, Set<Integer> arms,
         }
         for (RecordedVisit visit : visits) {
             requireIssuedTo(numbering, visit.at(), SiteAddress.ConditionOutcome.class, "a condition");
+        }
+        for (int raw : walks) {
+            requireIssuedTo(numbering, raw, SiteAddress.Walk.class, "a walk");
+        }
+        // The sides of a comparison belong to a visit the way it came out was recorded as, so a
+        // side with no such visit is a hand-over the recording made without the visit it is of.
+        for (RecordedComparison sides : compared) {
+            requireIssuedTo(numbering, sides.at(), SiteAddress.ConditionOutcome.class,
+                    "a comparison");
+            if (!visits.contains(new RecordedVisit(sides.at(), sides.nth(), true))
+                    && !visits.contains(new RecordedVisit(sides.at(), sides.nth(), false))) {
+                throw new IllegalArgumentException("the sides of visit " + sides.nth() + " to "
+                        + sides.at() + " were handed over, and that visit was not recorded");
+            }
+        }
+        // A condition visited past the kept was visited the most times kept first, every one of
+        // them recorded; said of one with fewer, the recording stopped somewhere it never got to.
+        for (int raw : pastTheKept) {
+            requireIssuedTo(numbering, raw, SiteAddress.ConditionOutcome.class, "a condition");
+            int site = raw;
+            long kept = visits.stream().filter(each -> each.at() == site)
+                    .map(RecordedVisit::nth).distinct().count();
+            if (kept != RecordedVisit.MOST) {
+                throw new IllegalArgumentException(raw + " was visited past the visits kept, and "
+                        + kept + " of them were recorded");
+            }
         }
     }
 

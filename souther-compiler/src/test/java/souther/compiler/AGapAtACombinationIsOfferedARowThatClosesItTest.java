@@ -113,18 +113,18 @@ class AGapAtACombinationIsOfferedARowThatClosesItTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.round")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 }

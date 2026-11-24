@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.coverage.ControlPlace;
@@ -8,6 +9,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.RecordedConditionOutcome;
 import souther.compiler.core.Core;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
@@ -168,7 +170,7 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
         Fixture(String model, int ways) {
             Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String module = compilation.modules().getFirst();
             read = compilation.db().ask(new Adequacy.Decides(module)).value().get("f").read();
             assertEquals(ways, read.impossible().size(),
@@ -195,8 +197,9 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
 
         /** What the rows took, where the one row is {@code run}. */
         Measure<DecisionEvidence.RowsPlaced> placing(ObservedInputs run) {
-            return DecisionEvidence.of("f", placement,
-                    List.of(new WitnessedRow(run, RowWitnesses.ANOTHER_ROW)), WeakeningSet.none());
+            return DecisionEvidence.of("f", placement, read.rules(),
+                    List.of(new WitnessedRow(run, RowWitnesses.ANOTHER_ROW)), WeakeningSet.none(),
+                    CasesTheRowsTook.none());
         }
 
         /** A row recorded bringing out each condition of every one of {@code ruled} as it says, at

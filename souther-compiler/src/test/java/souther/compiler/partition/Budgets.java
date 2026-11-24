@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.query.Compilation;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Front;
 
 /**
@@ -22,7 +22,7 @@ public final class Budgets {
 
     /** The policy a compilation that says nothing is held to. Built from an empty module, which
      *  sets the inputs in its constructor and compiles nothing. */
-    private static final AdequacyPolicy STANDARD = Compilation.ofSource("module example.empty", "Main")
+    private static final AdequacyPolicy STANDARD = ACompiledModel.answered("module example.empty")
             .db().ask(new Front.Adequacy()).value();
 
     public static AdequacyPolicy.OfTheGeneration generation() {

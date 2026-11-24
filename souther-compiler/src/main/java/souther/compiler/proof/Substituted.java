@@ -47,8 +47,8 @@ final class Substituted {
             case Value.OneMore(Value walked, Value next) ->
                     new Value.OneMore(value(walked, from, to), value(next, from, to));
             case Value.AsEntries(Value entries) -> new Value.AsEntries(value(entries, from, to));
-            case Value.Argument _, Value.Fresh _, Value.Whole _, Value.Decimal _, Value.Truth _,
-                 Value.Lambda _, Value.NothingYet _ -> value;
+            case Value.Argument _, Value.Fresh _, Value.Unit _, Value.Whole _, Value.Decimal _,
+                 Value.Truth _, Value.Lambda _, Value.NothingYet _ -> value;
         };
     }
 
@@ -75,6 +75,9 @@ final class Substituted {
             case LawProposition.Same<Value>(var one, var other, boolean alike) ->
                     new LawProposition.Same<>(subject(one, from, to), subject(other, from, to),
                             alike);
+            case LawProposition.Inside<Value>(var inner, var outer, var where, boolean inside) ->
+                    new LawProposition.Inside<>(subject(inner, from, to), subject(outer, from, to),
+                            where, inside);
         };
     }
 

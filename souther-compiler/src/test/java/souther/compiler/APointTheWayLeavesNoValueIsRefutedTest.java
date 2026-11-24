@@ -68,7 +68,7 @@ class APointTheWayLeavesNoValueIsRefutedTest {
     void aRefutedPointIsNoFinding() {
         Compilation compilation = measured();
         String human = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(human.contains("refuted 2"), human);
         assertFalse(human.contains("! no row is at the OFF point below the line (comparison@4:39)"),
                 human);
@@ -110,9 +110,6 @@ class APointTheWayLeavesNoValueIsRefutedTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList(), "the model is measured");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

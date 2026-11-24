@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -86,13 +88,14 @@ class WhatARuleRaisesDoesNotMoveWithWhatAReaderCanDoTest {
 
     /** The rules of {@code P}, read under {@code policy}. */
     private static FieldDomains read(ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "P"));
         assertNotNull(symbols.declaredNode(named.key()), "no `P` declared");
         return FieldDomains.of(named,
-                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy));
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy,
+                        TestDay.TODAY));
     }
 }

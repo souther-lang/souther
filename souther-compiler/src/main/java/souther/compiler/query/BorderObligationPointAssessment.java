@@ -1,6 +1,10 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Localizable;
+import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.AuthoredPlacement;
+import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
@@ -9,6 +13,7 @@ import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.reach.WhatMayStopARun;
@@ -18,6 +23,7 @@ import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.LinkedHashSet;
@@ -124,6 +130,11 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * the pair, and neither is what tells two of them apart; keyed on one, two readings of one line
      * arrived as one and {@link #across} refused a model the compiler can read.
      *
+     * <p><b>And which threshold of which computation.</b> The points in the runs beside a line are
+     * owed once for the comparison, whatever threshold drew them, so a point does not tell two
+     * computations cut at one place apart; the readings of it must, or the later of two replaces
+     * the earlier and what a search of the earlier found is gone.
+     *
      * <p><b>And how its points stand to the author's.</b> One comparison put at one place facing
      * its author's sides two ways is two readings there ({@link AuthoredPlacement}): what a row
      * showed about the run on one side is about one of the author's points in the one and another in
@@ -131,25 +142,33 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      *
      * <p><b>So a point and a reading of it are a line and where and how it was read.</b> A point
      * carries the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this
-     * carries the target and the placement, and the two together are the
+     * carries the target and the placement, and the two together — the point also carrying the
+     * threshold of a derived value that the line is — are the
      * {@link souther.compiler.partition.BoundaryLine} the readings of one behavior were folded under
      * ({@code Coverages.merged}). That is why the fold and this cannot come apart: they are one
      * equivalence written once, rather than two that agree while every quantity has one position
      * and every call faces the author's line one way.
      */
     public record Reading(souther.compiler.partition.BoundaryTarget target,
-                          AuthoredPlacement placement) {
+                          AuthoredPlacement placement,
+                          Optional<souther.compiler.partition.ThresholdOfADerivedValue> threshold) {
 
         public Reading {
-            if (target == null || placement == null) {
+            if (target == null || placement == null || threshold == null) {
                 throw new IllegalArgumentException("a reading is of some line, somewhere, facing"
-                        + " it some way");
+                        + " it some way, and is a threshold of a derived value or is not");
             }
+        }
+
+        /** A reading of a line that is no threshold of a derived value. */
+        public Reading(souther.compiler.partition.BoundaryTarget target,
+                       AuthoredPlacement placement) {
+            this(target, placement, Optional.empty());
         }
 
         /** The reading made where {@code line} was met. */
         public static Reading of(souther.compiler.partition.Border line) {
-            return new Reading(line.cut(), line.placement());
+            return new Reading(line.cut(), line.placement(), line.threshold());
         }
 
         /**
@@ -318,8 +337,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
         }
         List<BorderObligationPointAssessment> out = new ArrayList<>();
-        byPoint.forEach((point, met) ->
-                out.add(of(point, attribution.get(point), met, seats.get(point), premisesOf)));
+        byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met,
+                seats.get(point), premisesOf)));
         return List.copyOf(out);
     }
 
@@ -449,8 +468,34 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * else. What that field says is the surface's to write.
      */
     public PublishedRuleHandle handle(PublishedRuleHandle.WhereARuleIs places) {
+        return handleOf(List.of(this), places);
+    }
+
+    /**
+     * How a document sends a reader to the rule that drew the line of {@code assessments}, which
+     * are every assessment of one point.
+     *
+     * <p>Chosen once over what every one of them cites. A handle chosen per assessment and then
+     * picked among would be whichever assessment was met first, and a point read by two behaviors
+     * would be sent to by a different handle depending on which was walked first.
+     */
+    public static PublishedRuleHandle handleOf(List<BorderObligationPointAssessment> assessments,
+                                               PublishedRuleHandle.WhereARuleIs places) {
+        if (assessments.isEmpty()) {
+            throw new IllegalArgumentException("a point with no assessment has no rule to send a"
+                    + " reader to");
+        }
+        BorderObligationPoint point = assessments.getFirst().point();
+        Set<RuleCitation> cited = new LinkedHashSet<>();
+        for (BorderObligationPointAssessment each : assessments) {
+            if (!each.point().equals(point)) {
+                throw new IllegalStateException("assessments of two points are not one point's: "
+                        + point + " and " + each.point());
+            }
+            cited.addAll(each.ruleCitations());
+        }
         return PublishedRuleHandle.of(
-                PublicationOrders.handleFor(ruleCitations(), places)
+                PublicationOrders.handleFor(cited, places)
                         .orElseThrow(() -> new IllegalStateException("a line a reader is sent to is"
                                 + " one some reading said how to find: " + point)),
                 places);
@@ -492,16 +537,15 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * same at every reading of it, so any of them answers; where on the quantity it is takes a
      * reading's words and is said under the mark rather than in it.
      */
-    public String whichSide() {
+    public SearchMessage whichSide() {
         // Of a comparison a body wrote, the point is a side of the author's line, and a reading's
         // own side of the place it was put at is the other one wherever the call turned the
         // quantity round.
         if (point.line().at().isEmpty()) {
-            return souther.compiler.partition.Border.whichSideOf(point.line().line().facts(),
-                    point.point());
+            return Border.sideOf(point.line().line().facts(), point.point());
         }
         Map.Entry<Reading, BorderAssessment> said = met.firstEntry();
-        return said.getValue().border().whichSide(seats.get(said.getKey()).asked());
+        return said.getValue().border().sideOf(seats.get(said.getKey()).asked());
     }
 
     /**
@@ -734,7 +778,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * @param readAt the copies of the comparison the line was read at, which is what a surface names
      *               the calls of a helper by ({@link BorderAssessment#readAt})
      */
-    public record ReadingSaid(Reading where, String at, String asks, ModelOccurrences readAt) {}
+    public record ReadingSaid(Reading where, String at, String asks, Localizable asked,
+                              ModelOccurrences readAt) {}
 
     /**
      * How many readings a surface says under the point before saying how many are left.
@@ -744,6 +789,40 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * is a place to list them.
      */
     public static final int READINGS_SAID = 4;
+
+    /**
+     * Every reading of the point in one order, whatever order they were made in and whatever a
+     * report would call them.
+     *
+     * <p>For a surface that needs the readings in a steady order and says none of the words
+     * ({@link #readingsSaid}'s order is the words, and is the one a reader sees). By the quantity,
+     * what is asked of it, the cases it decides in, and the behavior that read it. Every reading
+     * here is of the one line that owes the point, so the lines are not compared: the order of the
+     * lines of a comparison ({@link AuthoredLine#inASteadyOrder}) is for numbering the lines of one
+     * comparison, and is refused for a declaration's. What is left tied is the readings of one
+     * behavior that ask alike and differ only by the call they were made at, which is a bag.
+     */
+    public List<Reading> readingsInSteadyOrder() {
+        Comparator<SteadyKey> order = Comparator
+                .comparing(SteadyKey::axis, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::asks, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::where,
+                        Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SteadyKey::behavior);
+        List<SteadyKey> keys = new ArrayList<>();
+        met.forEach((reading, at) -> {
+            DomainPoint asked = seatOf(reading).asked();
+            keys.add(new SteadyKey(reading, at.axis(),
+                    at.operator(asked) == null ? null : at.operator(asked) + " " + at.against(asked),
+                    at.decidesWhere(), reading.behavior()));
+        });
+        return keys.stream().sorted(order).map(SteadyKey::reading).toList();
+    }
+
+    /** What a reading is put in order by, worked out once for each reading and not once for each
+     *  comparison of two. */
+    private record SteadyKey(Reading reading, String axis, String asks, String where,
+                             String behavior) {}
 
     /**
      * Every reading of the point, as the sentences a surface prints under it, in the order the
@@ -758,14 +837,15 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * <p>All of them. Which to show is the surface's ({@link #READINGS_SAID}), so that what is left
      * out is a count the surface says rather than a reading this dropped.
      */
-    public List<ReadingSaid> readingsSaid() {
+    public List<ReadingSaid> readingsSaid(WhereTheReadingsDiffer apart) {
         List<ReadingSaid> out = new ArrayList<>();
         met.forEach((where, at) -> {
             DomainPoint asked = seats.get(where).asked();
-            out.add(new ReadingSaid(where, at.axis(),
-                    new BorderAssessment.Point(at, asked, at.at(asked)).asked(), at.readAt()));
+            BorderAssessment.Point point = new BorderAssessment.Point(at, asked, at.at(asked));
+            out.add(new ReadingSaid(where, at.axis(), point.asked(apart), point.askedPhrase(apart),
+                    at.readAt()));
         });
-        out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
+        out.sort(Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
         return List.copyOf(out);
     }
@@ -838,6 +918,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * same of both — a consumer joins on {@code obligationId} and shows this.
      */
     public PublishedSentence said(PublishedRuleHandle.WhereARuleIs places) {
-        return new PublishedSentence.AroundAHandle(role() + " point of ", handle(places), "");
+        return new PublishedSentence.AroundAHandle(handle(places),
+                new PublishedSentence.Around.PointOf(String.valueOf(role())));
     }
 }

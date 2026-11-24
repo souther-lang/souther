@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -30,7 +32,7 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
 
     @Test
     void aDeclarationTwoOfWhoseRulesCannotBothHoldSaysSoRatherThanCertifying() {
-        assertEquals(List.of("NothingIsLeft"), causesOf("""
+        assertEquals(List.of("NothingIsLeft"), causesOf(List.of("E1013"), """
                 module example.rooms
 
                 data Length = Int
@@ -42,13 +44,13 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
     /** And the same rules apart hold something, so the row above is about the pair. */
     @Test
     void eitherRuleOnItsOwnLeavesARangeAndIsCertified() {
-        assertEquals(List.of(), causesOf("""
+        assertEquals(List.of(), causesOf(List.of(), """
                 module example.rooms
 
                 data Length = Int
                     invariant low = value >= 5
                 """));
-        assertEquals(List.of(), causesOf("""
+        assertEquals(List.of(), causesOf(List.of(), """
                 module example.rooms
 
                 data Length = Int
@@ -56,9 +58,15 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
                 """));
     }
 
-    /** The causes a declaration's projection names, by kind, in the order it files them. */
-    private static List<String> causesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+    /**
+     * The causes a declaration's projection names, by kind, in the order it files them, the model
+     * being refused with {@code refusal}. A declaration nobody can build a value of is refused, and
+     * is what the first case is about; any other refusal is a model whose declarations were never
+     * read.
+     */
+    private static List<String> causesOf(List<String> refusal, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(refusal,
+                Compilation.ofSource(source, "Main"));
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
@@ -66,7 +74,7 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         return domains.projection().causes().stream()
                 .map(cause -> cause.getClass().getSimpleName())
                 .toList();

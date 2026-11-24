@@ -1,0 +1,757 @@
+package souther.compiler.meaning;
+
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
+
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.Set;
+import java.util.function.Function;
+
+/**
+ * How many of the ways of choosing a case of a line no comparison chosen on the way refutes, read
+ * as numbers: the ways whose comparisons of one affine form some one value of the form meets, and
+ * whose comparisons of remainders of one dividend some one remainder of it meets.
+ *
+ * <p>A count of ways of choosing, and not of cases there are or of work done. Two ways reaching
+ * one case are two ways here, as they are to {@link DecidingCase.Cases#structuralWays}; and a
+ * reader asking the cases does not walk these and only these, since it stops a choosing early or
+ * at a figure. Every atom that is not such a comparison is taken to hold either way, and whether
+ * a whole number meets a form is not asked, so the count is at least as many as the ways some row
+ * can take: what it says is that no more than these can.
+ *
+ * <p><b>Counted twice in one walk.</b> The ways no comparison leaves a form no value of, and of
+ * those, the ways no comparison of a remainder leaves its dividend none ({@link Counts}). Each
+ * count is worked out by states of its own, and given up for its own: the first keeps a way a
+ * remainder refutes, and the second does not pay for it.
+ *
+ * <p><b>What a line is taken apart by.</b> Where the ways as the choices stand are more than
+ * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}, {@link CasesOfALineAsked} takes the
+ * line apart where the intervals' count is no more than that, and past it where the numbers'
+ * count is, walked from each class of remainders ({@link #startingAtEachRemainder}), where the
+ * ways walked from all of them are no more than that as well; the walk ends every way
+ * at the part a {@link State} leaves nothing of, so it walks no way either count leaves out. Where
+ * the count is given up the line is cut off by the ways as the choices stand. The numbers' count
+ * is what a reader is told beside a line that stopped there; neither figure it meets is one the
+ * line stopped at.
+ *
+ * <p><b>Counted by what is left, and not way by way.</b> What a way has chosen so far leaves each
+ * form an interval and each dividend some of its remainders, and the ways past a case depend on
+ * nothing else of what was chosen before it. So each case is worked out once for each state it is
+ * reached in, with how many ways reach that state carried beside it, and the work is as many
+ * states as the cases are reached in — not as many as the ways.
+ */
+public final class NumericallyConsistentWays {
+
+    /**
+     * How many states the cases may be reached in, counted over every case, before the count is
+     * given up.
+     *
+     * <p>Not a figure a reading stops at: past it the line is cut off by the ways as the choices
+     * stand, as it would be with no count, and only the count is not said.
+     */
+    public static final int STATES_A_COUNT_IS_TAKEN_IN = 1 << 16;
+
+    /** Remainders past this divisor are not told apart, and a comparison of one leaves the
+     *  dividend's remainders as they were. */
+    private static final int MOST_REMAINDERS_TOLD_APART = Long.SIZE - 1;
+
+    private NumericallyConsistentWays() {
+    }
+
+    /** What counting came to. */
+    public sealed interface Counted {
+
+        /** No more ways than {@code ways} are consistent. */
+        record AtMost(BigInteger ways) implements Counted {
+
+            public AtMost {
+                if (ways == null || ways.signum() < 0) {
+                    throw new IllegalArgumentException("a count of ways is some number of them");
+                }
+            }
+        }
+
+        /** Nothing is said of how many ways are consistent, for the reason {@code why}. */
+        record NotCounted(WhyNotCounted why) implements Counted {
+
+            public NotCounted {
+                Objects.requireNonNull(why, "a count given up is given up for a reason");
+            }
+        }
+    }
+
+    /** Why a count was given up: neither is a figure the line stopped at. */
+    public enum WhyNotCounted {
+
+        /** More states were reached than {@link #STATES_A_COUNT_IS_TAKEN_IN}. */
+        STATES_A_COUNT_IS_TAKEN_IN,
+
+        /** More ways were consistent than {@link CaseCount#WAYS_A_COUNT_IS_HELD_TO}. */
+        WAYS_A_COUNT_IS_HELD_TO
+    }
+
+    /**
+     * The two counts one walk of the cases comes to.
+     *
+     * @param ofTheIntervals the ways no comparison chosen leaves a form no value of; no fewer than
+     *                       {@code ofTheNumbers}
+     * @param ofTheNumbers   the ways no comparison chosen refutes, its form's interval or its
+     *                       dividend's remainders
+     */
+    public record Counts(Counted ofTheIntervals, Counted ofTheNumbers) {
+
+        public Counts {
+            Objects.requireNonNull(ofTheIntervals, "the ways of the intervals were counted or not");
+            Objects.requireNonNull(ofTheNumbers, "the consistent ways were counted or not");
+        }
+    }
+
+    /** How many ways of choosing a case of {@code cases} no comparison chosen refutes. */
+    public static Counted of(DecidingCase.Cases cases) {
+        return counted(cases).ofTheNumbers();
+    }
+
+    /** How many ways of choosing a case of {@code cases} the intervals leave, and how many the
+     *  numbers do. */
+    public static Counts counted(DecidingCase.Cases cases) {
+        return counted(cases, State.NOTHING_CHOSEN);
+    }
+
+    /** The same, of the ways that start where {@code start} leaves the numbers. */
+    static Counted of(DecidingCase.Cases cases, State start) {
+        return counted(cases, start).ofTheNumbers();
+    }
+
+    private static Counts counted(DecidingCase.Cases cases, State start) {
+        Counting ofTheIntervals = new Counting(false);
+        Counting ofTheNumbers = new Counting(true);
+        EachCase both = cases.fold(new BothCounts(ofTheIntervals, ofTheNumbers));
+        return new Counts(ofTheIntervals.counted(both.ofTheIntervals(), start.ofItsForms()),
+                ofTheNumbers.counted(both.ofTheNumbers(), start));
+    }
+
+    /** What one case comes to from each state it is reached in, for each count. */
+    private record EachCase(Function<State, Map<State, BigInteger>> ofTheIntervals,
+                            Function<State, Map<State, BigInteger>> ofTheNumbers) {
+    }
+
+    /**
+     * The one walk of the cases, each case given what it comes to for both counts: each count
+     * worked out by its own states, kept and bounded by its own.
+     *
+     * <p>Two states and not one holding both. A way a remainder refutes is a way of the intervals
+     * still, and a state of the intervals' count from there on; held in one state with the
+     * numbers', every such way would be one more state of the numbers' count as well, and a
+     * count the remainders keep small would be given up for the states the intervals' needs.
+     */
+    private record BothCounts(Counting ofTheIntervals, Counting ofTheNumbers)
+            implements DecidingCase.Cases.Fold<EachCase> {
+
+        @Override
+        public EachCase one(DecidingCase.Cases.One one) {
+            return new EachCase(ofTheIntervals.one(one), ofTheNumbers.one(one));
+        }
+
+        @Override
+        public EachCase eachOf(DecidingCase.Cases.EachOf node, List<EachCase> alternatives) {
+            return new EachCase(
+                    ofTheIntervals.eachOf(node, alternatives.stream()
+                            .map(EachCase::ofTheIntervals).toList()),
+                    ofTheNumbers.eachOf(node, alternatives.stream()
+                            .map(EachCase::ofTheNumbers).toList()));
+        }
+
+        @Override
+        public EachCase together(DecidingCase.Cases.Together node, List<EachCase> factors) {
+            return new EachCase(
+                    ofTheIntervals.together(node, factors.stream()
+                            .map(EachCase::ofTheIntervals).toList()),
+                    ofTheNumbers.together(node, factors.stream()
+                            .map(EachCase::ofTheNumbers).toList()));
+        }
+
+        @Override
+        public EachCase notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+            return new EachCase(ofTheIntervals.notTakenApart(notTakenApart),
+                    ofTheNumbers.notTakenApart(notTakenApart));
+        }
+    }
+
+    /**
+     * What each case comes to from each state it is reached in, for one count: the states it
+     * leaves, each with how many of its ways leave it. Each answer is kept, so a case reached
+     * again in one state is not worked out again.
+     */
+    private static final class Counting
+            implements DecidingCase.Cases.Fold<Function<State, Map<State, BigInteger>>> {
+
+        /** Whether a comparison of a remainder narrows the states, or only an interval does. */
+        private final boolean readsTheRemainders;
+
+        private int reached;
+
+        Counting(boolean readsTheRemainders) {
+            this.readsTheRemainders = readsTheRemainders;
+        }
+
+        /** What {@code cases}, starting from {@code start}, came to: the ways counted, or why
+         *  they were not. */
+        Counted counted(Function<State, Map<State, BigInteger>> cases, State start) {
+            Map<State, BigInteger> out = cases.apply(start);
+            if (reached > STATES_A_COUNT_IS_TAKEN_IN) {
+                return new Counted.NotCounted(WhyNotCounted.STATES_A_COUNT_IS_TAKEN_IN);
+            }
+            BigInteger ways = out.values().stream().reduce(BigInteger.ZERO, Counting::sum);
+            return ways.compareTo(CaseCount.WAYS_A_COUNT_IS_HELD_TO) > 0
+                    ? new Counted.NotCounted(WhyNotCounted.WAYS_A_COUNT_IS_HELD_TO)
+                    : new Counted.AtMost(ways);
+        }
+
+        /** Past {@link CaseCount#WAYS_A_COUNT_IS_HELD_TO} a count is one past it, which says only
+         *  that it is more; so no number worked out here is longer than that. */
+        private static final BigInteger BEYOND = CaseCount.WAYS_A_COUNT_IS_HELD_TO.add(BigInteger.ONE);
+
+        private static BigInteger sum(BigInteger one, BigInteger other) {
+            return one.add(other).min(BEYOND);
+        }
+
+        private static BigInteger product(BigInteger one, BigInteger other) {
+            return one.multiply(other).min(BEYOND);
+        }
+
+        private Function<State, Map<State, BigInteger>> remembered(
+                Function<State, Map<State, BigInteger>> from) {
+            Map<State, Map<State, BigInteger>> known = new HashMap<>();
+            return state -> {
+                Map<State, BigInteger> answer = known.get(state);
+                if (answer != null) {
+                    return answer;
+                }
+                // Past the figure nothing more is worked out: what was counted is said to be no
+                // count at all.
+                if (++reached > STATES_A_COUNT_IS_TAKEN_IN) {
+                    return Map.of();
+                }
+                answer = from.apply(state);
+                known.put(state, answer);
+                return answer;
+            };
+        }
+
+        @Override
+        public Function<State, Map<State, BigInteger>> one(DecidingCase.Cases.One one) {
+            List<Narrowing> parts = new ArrayList<>();
+            conjunctsOf(one.condition()).forEach(part -> Narrowing.of(part).ifPresent(parts::add));
+            return remembered(state -> {
+                State left = state;
+                for (Narrowing part : parts) {
+                    left = left.taking(part, readsTheRemainders);
+                    if (left == null) {
+                        return Map.of();
+                    }
+                }
+                return Map.of(left, BigInteger.ONE);
+            });
+        }
+
+        @Override
+        public Function<State, Map<State, BigInteger>> eachOf(
+                DecidingCase.Cases.EachOf node,
+                List<Function<State, Map<State, BigInteger>>> alternatives) {
+            return remembered(state -> {
+                Map<State, BigInteger> out = new HashMap<>();
+                for (Function<State, Map<State, BigInteger>> alternative : alternatives) {
+                    alternative.apply(state).forEach((left, ways) ->
+                            out.merge(left, ways, Counting::sum));
+                }
+                return out;
+            });
+        }
+
+        @Override
+        public Function<State, Map<State, BigInteger>> together(
+                DecidingCase.Cases.Together node,
+                List<Function<State, Map<State, BigInteger>>> factors) {
+            return remembered(state -> {
+                Map<State, BigInteger> sofar = Map.of(state, BigInteger.ONE);
+                for (Function<State, Map<State, BigInteger>> factor : factors) {
+                    Map<State, BigInteger> next = new HashMap<>();
+                    sofar.forEach((before, ways) -> factor.apply(before).forEach((left, more) ->
+                            next.merge(left, product(ways, more), Counting::sum)));
+                    if (next.isEmpty()) {
+                        return Map.of();
+                    }
+                    sofar = next;
+                }
+                return sofar;
+            });
+        }
+
+        @Override
+        public Function<State, Map<State, BigInteger>> notTakenApart(
+                DecidingCase.Cases.NotTakenApart notTakenApart) {
+            return state -> Map.of(state, BigInteger.ONE);
+        }
+    }
+
+    /**
+     * The remainders of its dividend {@code part} holds at, as bits, where it compares a
+     * remainder of one dividend this tells apart; none where it does not. The same reading of a
+     * remainder's comparison a count takes.
+     */
+    static OptionalLong remaindersWhereItHolds(Proposition part) {
+        Optional<Remainders> meeting = Narrowing.of(part).flatMap(Narrowing::remainders);
+        return meeting.isEmpty() ? OptionalLong.empty()
+                : OptionalLong.of(meeting.get().allowed());
+    }
+
+    /**
+     * The states a walk of {@code cases} starts from so that no comparison of a remainder is a
+     * choice the walk finds refuted later: one for each way of taking one class of remainders of
+     * each dividend that two comparisons of {@code cases} leave different remainders of, less
+     * those no way is consistent from, so none where no way is. A class is the remainders no
+     * comparison tells apart, so two remainders that every comparison holds at alike are one
+     * start and not two walks of the same ways. Nothing said where there is no such dividend, or
+     * where the starts would be more than {@link #MOST_STARTS}, or where a count from one of them
+     * is given up.
+     *
+     * <p>From each start every comparison of those dividends is decided, so a way the walk takes
+     * past one is a way that start leaves, and is refuted at the comparison that refutes it rather
+     * than at one chosen later. A way no comparison refutes holds at some remainder of each, so
+     * some start leaves it; and from each start it holds at, the walk takes it again, which
+     * {@link Starts#walked} counts. So the starts take every way the numbers' count counts, and no
+     * other.
+     */
+    static Optional<Starts> startingAtEachRemainder(DecidingCase.Cases cases) {
+        Map<Dividend, Set<Long>> compared = new LinkedHashMap<>();
+        cases.fold(new DecidingCase.Cases.Fold<Boolean>() {
+
+            @Override
+            public Boolean one(DecidingCase.Cases.One one) {
+                for (Proposition part : conjunctsOf(one.condition())) {
+                    Narrowing.of(part).flatMap(Narrowing::remainders).ifPresent(meeting ->
+                            compared.computeIfAbsent(meeting.of(), _ -> new HashSet<>())
+                                    .add(meeting.allowed()));
+                }
+                return true;
+            }
+
+            @Override
+            public Boolean eachOf(DecidingCase.Cases.EachOf node, List<Boolean> alternatives) {
+                return true;
+            }
+
+            @Override
+            public Boolean together(DecidingCase.Cases.Together node, List<Boolean> factors) {
+                return true;
+            }
+
+            @Override
+            public Boolean notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                return true;
+            }
+        });
+        List<Map<Dividend, Long>> each = List.of(Map.of());
+        for (Map.Entry<Dividend, Set<Long>> one : compared.entrySet()) {
+            if (one.getValue().size() < 2) {
+                continue;
+            }
+            List<Long> classes = classesOfRemainders(one.getKey().divisor(), one.getValue());
+            if ((long) each.size() * classes.size() > MOST_STARTS) {
+                return Optional.empty();
+            }
+            List<Map<Dividend, Long>> more = new ArrayList<>();
+            for (Map<Dividend, Long> before : each) {
+                for (long kind : classes) {
+                    Map<Dividend, Long> taken = new HashMap<>(before);
+                    taken.put(one.getKey(), kind);
+                    more.add(taken);
+                }
+            }
+            each = more;
+        }
+        if (each.size() < 2) {
+            return Optional.empty();
+        }
+        Counting counting = new Counting(true);
+        Function<State, Map<State, BigInteger>> ways = cases.fold(counting);
+        List<State> out = new ArrayList<>();
+        BigInteger walked = BigInteger.ZERO;
+        for (Map<Dividend, Long> remainders : each) {
+            State start = new State(Map.of(), remainders);
+            BigInteger from = ways.apply(start).values().stream().reduce(BigInteger.ZERO,
+                    BigInteger::add);
+            if (from.signum() > 0) {
+                out.add(start);
+                walked = walked.add(from);
+            }
+        }
+        return counting.reached > STATES_A_COUNT_IS_TAKEN_IN ? Optional.empty()
+                : Optional.of(new Starts(out, walked));
+    }
+
+    /**
+     * Where a walk of some cases starts, and how many ways it takes from there.
+     *
+     * @param states the starts, each one a class of remainders for every dividend told apart
+     * @param walked the ways left from each start, together: how many times the walk comes to the
+     *               end of a way. A way that holds at the remainders of more than one start is
+     *               walked from each, so this is no fewer than the ways the numbers' count counts
+     */
+    record Starts(List<State> states, BigInteger walked) {
+
+        Starts {
+            states = List.copyOf(states);
+        }
+    }
+
+    /**
+     * The remainders of a dividend {@code divisor} divides by, as one mask for each class of them
+     * no comparison in {@code allowed} tells apart: those that every comparison holds at alike.
+     * Each comparison holds at all of a class or at none of it, so a walk from a class decides
+     * every comparison as it would from any one remainder in it.
+     */
+    static List<Long> classesOfRemainders(int divisor, Collection<Long> allowed) {
+        Map<List<Boolean>, Long> byWhatHolds = new LinkedHashMap<>();
+        List<Long> comparisons = List.copyOf(allowed);
+        for (int remainder = 0; remainder < divisor; remainder++) {
+            List<Boolean> holds = new ArrayList<>();
+            for (long comparison : comparisons) {
+                holds.add((comparison >> remainder & 1L) != 0);
+            }
+            byWhatHolds.merge(holds, 1L << remainder, (had, now) -> had | now);
+        }
+        return List.copyOf(byWhatHolds.values());
+    }
+
+    /** How many states a walk of a line's cases starts from, at most: each walks the cases. */
+    static final int MOST_STARTS = MOST_REMAINDERS_TOLD_APART + 1;
+
+    /**
+     * Whether {@code part} is something a {@link State} holds of what is chosen: a comparison of an
+     * affine form. Every other part leaves every state as it was, so a state says nothing of it.
+     */
+    static boolean leavesAStateWhatItHolds(Proposition part) {
+        return Narrowing.of(part).isEmpty();
+    }
+
+    /** What a condition chosen states together: its parts, where it is a conjunction. */
+    private static List<Proposition> conjunctsOf(Proposition condition) {
+        if (condition instanceof Proposition.All all) {
+            List<Proposition> out = new ArrayList<>();
+            all.parts().forEach(one -> out.addAll(conjunctsOf(one)));
+            return out;
+        }
+        return condition instanceof Proposition.Always ? List.of() : List.of(condition);
+    }
+
+    /**
+     * What one affine form is left: the values from {@code low} to {@code high}, each end in or
+     * out and absent where nothing bounds that side, and none of {@code not}.
+     *
+     * @param not values the form is not, each within the ends, in rising order
+     */
+    record Interval(ExactRatio low, boolean lowOpen, ExactRatio high, boolean highOpen,
+                    List<ExactRatio> not) {
+
+        static final Interval EVERY = new Interval(null, false, null, false, List.of());
+
+        Interval {
+            not = List.copyOf(not);
+        }
+
+        /** This, with the form in {@code rel} to {@code at}; null where that leaves no value. */
+        Interval with(Rel rel, ExactRatio at) {
+            Interval out = switch (rel) {
+                case GE, GT -> above(at, rel == Rel.GT);
+                case LE, LT -> below(at, rel == Rel.LT);
+                case EQ -> admits(at) ? new Interval(at, false, at, false, List.of()) : null;
+                case NE -> not.contains(at) ? this : without(at);
+            };
+            return out == null || out.empty() ? null : out.trimmed();
+        }
+
+        private Interval above(ExactRatio at, boolean open) {
+            int against = low == null ? 1 : at.compareTo(low);
+            return against > 0 || (against == 0 && open)
+                    ? new Interval(at, open, high, highOpen, not) : this;
+        }
+
+        private Interval below(ExactRatio at, boolean open) {
+            int against = high == null ? -1 : at.compareTo(high);
+            return against < 0 || (against == 0 && open)
+                    ? new Interval(low, lowOpen, at, open, not) : this;
+        }
+
+        private Interval without(ExactRatio at) {
+            List<ExactRatio> more = new ArrayList<>(not);
+            more.add(at);
+            more.sort(ExactRatio::compareTo);
+            return new Interval(low, lowOpen, high, highOpen, more);
+        }
+
+        private boolean admits(ExactRatio at) {
+            return within(at) && !(low != null && lowOpen && at.compareTo(low) == 0)
+                    && !(high != null && highOpen && at.compareTo(high) == 0)
+                    && !not.contains(at);
+        }
+
+        private boolean within(ExactRatio at) {
+            return (low == null || at.compareTo(low) >= 0)
+                    && (high == null || at.compareTo(high) <= 0);
+        }
+
+        private boolean empty() {
+            if (low == null || high == null) {
+                return false;
+            }
+            int against = low.compareTo(high);
+            return against > 0 || (against == 0 && (lowOpen || highOpen || not.contains(low)));
+        }
+
+        /** The same values, with no value it is not kept where the ends leave it out anyway. */
+        private Interval trimmed() {
+            List<ExactRatio> kept = not.stream().filter(this::within).toList();
+            return kept.size() == not.size() ? this
+                    : new Interval(low, lowOpen, high, highOpen, kept);
+        }
+    }
+
+    /**
+     * The coefficients of an affine form, hashed once: a state is looked up by its forms at every
+     * case it reaches, and a form's coefficients hash every quantity in them.
+     */
+    private record Form(Map<Quantity, ExactRatio> coefs, int hash) {
+
+        Form(Map<Quantity, ExactRatio> coefs) {
+            this(coefs, coefs.hashCode());
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Form form && hash == form.hash
+                    && coefs.equals(form.coefs));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    /** A dividend's remainders, told apart by the form of the dividend and the divisor. */
+    private record Dividend(Form form, int divisor) {
+    }
+
+    /** Which remainders of {@code of} a comparison leaves, as bits. */
+    private record Remainders(Dividend of, long allowed) {
+    }
+
+    /**
+     * One comparison of an affine form as it narrows a state, worked out once from the
+     * proposition: the form is to be {@code rel} to {@code at}, and a remainder compared leaves its
+     * dividend {@code remainders}, where it is one told apart.
+     */
+    private record Narrowing(Form form, Rel rel, ExactRatio at,
+                             Optional<Remainders> remainders) {
+
+        /** {@code part} as a narrowing; none where it compares no affine form, and so leaves
+         *  every state as it was. */
+        static Optional<Narrowing> of(Proposition part) {
+            if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean holds,
+                    Spelling _, var _)) || affine.form().coefs().isEmpty()) {
+                return Optional.empty();
+            }
+            Map<Quantity, ExactRatio> form = affine.form().coefs();
+            Optional<Remainders> remainders = Optional.empty();
+            if (form.size() == 1 && form.keySet().iterator().next()
+                    instanceof Quantity.RemainderOfADividend remainder
+                    && remainder.divisor().compareTo(
+                            BigInteger.valueOf(MOST_REMAINDERS_TOLD_APART)) <= 0) {
+                int divisor = remainder.divisor().intValueExact();
+                remainders = Optional.of(new Remainders(
+                        new Dividend(new Form(remainder.dividend().coefs()), divisor),
+                        remaindersMeeting(remainder, form.get(remainder),
+                                affine.form().constant(), affine.proposition(), holds,
+                                divisor)));
+            }
+            return Optional.of(new Narrowing(new Form(form),
+                    holds ? affine.proposition() : affine.proposition().denied(),
+                    affine.form().constant().negated(), remainders));
+        }
+
+        /**
+         * Which remainders of the dividend's form without its constant meet the comparison, as
+         * bits: the remainder compared is that one moved by the constant, round the divisor. A
+         * remainder whose comparison the exact arithmetic cannot hold is kept, as is every one
+         * where the constant is no whole number held, since keeping is what leaves the count a
+         * bound.
+         */
+        private static long remaindersMeeting(Quantity.RemainderOfADividend remainder,
+                                              ExactRatio by, ExactRatio constant, Rel rel,
+                                              boolean holds, int divisor) {
+            long every = (1L << divisor) - 1;
+            BigInteger moved = remainder.dividend().constant().isWhole()
+                    ? remainder.dividend().constant().floor().orNull() : null;
+            if (moved == null) {
+                return every;
+            }
+            long out = 0;
+            for (int left = 0; left < divisor; left++) {
+                int compared = BigInteger.valueOf(left).add(moved)
+                        .mod(BigInteger.valueOf(divisor)).intValueExact();
+                ExactRatio weighed = by.times(ExactRatio.of(compared)).orNull();
+                ExactRatio at = weighed == null ? null : weighed.plus(constant).orNull();
+                if (at == null || rel.holds(at.signum()) == holds) {
+                    out |= 1L << left;
+                }
+            }
+            return out;
+        }
+    }
+
+    /**
+     * What the comparisons chosen so far leave: each affine form's interval, and each dividend's
+     * remainders as the bits of a number.
+     *
+     * <p>Or each form's interval alone, for the intervals' count, which keeps no remainder.
+     *
+     * <p>Hashed once when made, since every case a state reaches looks it up and every case
+     * leaving it merges it, and each such hash would otherwise walk every form it holds.
+     */
+    static final class State {
+
+        static final State NOTHING_CHOSEN = new State(Map.of(), Map.of());
+
+        private final Map<Form, Interval> forms;
+        private final Map<Dividend, Long> remainders;
+        private final int hash;
+
+        /** Held as given: each map is made for this state and changed by nobody after. */
+        private State(Map<Form, Interval> forms, Map<Dividend, Long> remainders) {
+            this.forms = forms;
+            this.remainders = remainders;
+            int hash = 0;
+            for (Map.Entry<Form, Interval> each : forms.entrySet()) {
+                hash += mixed(31 * each.getKey().hashCode() + each.getValue().hashCode());
+            }
+            for (Map.Entry<Dividend, Long> each : remainders.entrySet()) {
+                hash += mixed(31 * each.getKey().hashCode() + each.getValue().hashCode());
+            }
+            this.hash = hash;
+        }
+
+        /**
+         * One entry's hash spread over every bit. A map's own hash adds each key's hash bitwise
+         * apart from its value's, and states giving a few forms one of two intervals each then
+         * share a hash far more often than not.
+         */
+        private static int mixed(int entry) {
+            int out = entry * 0x9E3779B9;
+            out ^= out >>> 16;
+            out *= 0x85EBCA6B;
+            return out ^ (out >>> 13);
+        }
+
+        /** This with every part {@code condition} states together chosen; null where they leave a
+         *  form or a dividend nothing. */
+        State takingAll(Proposition condition) {
+            State left = this;
+            for (Proposition part : conjunctsOf(condition)) {
+                left = left.taking(part);
+                if (left == null) {
+                    return null;
+                }
+            }
+            return left;
+        }
+
+        /** This with {@code part} chosen; null where it leaves a form or a dividend nothing. */
+        State taking(Proposition part) {
+            Optional<Narrowing> narrowing = Narrowing.of(part);
+            return narrowing.isEmpty() ? this : taking(narrowing.get(), true);
+        }
+
+        /**
+         * This as the rows it leaves and nothing of how they were left: without the interval of a
+         * form that is one remainder of a dividend, which the dividend's remainders say exactly.
+         * Two states that leave the same rows are one here, where they differ only in comparisons
+         * of a remainder the others made implied.
+         */
+        State rowsLeft() {
+            Map<Form, Interval> kept = new HashMap<>();
+            for (Map.Entry<Form, Interval> each : forms.entrySet()) {
+                if (!aRemainderTheRemaindersSay(each.getKey())) {
+                    kept.put(each.getKey(), each.getValue());
+                }
+            }
+            return kept.size() == forms.size() ? this : new State(kept, remainders);
+        }
+
+        /** Whether {@code form} is one remainder of a dividend that {@link #remainders} holds the
+         *  exact set of: one told apart, of a dividend moved by a whole number. */
+        private static boolean aRemainderTheRemaindersSay(Form form) {
+            return form.coefs().size() == 1
+                    && form.coefs().keySet().iterator().next()
+                    instanceof Quantity.RemainderOfADividend remainder
+                    && remainder.divisor().compareTo(
+                            BigInteger.valueOf(MOST_REMAINDERS_TOLD_APART)) <= 0
+                    && remainder.dividend().constant().isWhole();
+        }
+
+        /** The intervals this leaves its forms, and no remainder of any dividend: the state the
+         *  intervals' count reads. */
+        State ofItsForms() {
+            return remainders.isEmpty() ? this : new State(forms, Map.of());
+        }
+
+        /**
+         * This with {@code part} chosen; null where it leaves a form nothing, or where
+         * {@code readsTheRemainders} and it leaves a dividend nothing. Not reading the remainders,
+         * the state keeps none, and a comparison of one narrows only its form's interval.
+         */
+        private State taking(Narrowing part, boolean readsTheRemainders) {
+            Interval left = forms.getOrDefault(part.form(), Interval.EVERY)
+                    .with(part.rel(), part.at());
+            if (left == null) {
+                return null;
+            }
+            Map<Form, Interval> nextForms = new HashMap<>(forms);
+            nextForms.put(part.form(), left);
+            Map<Dividend, Long> nextRemainders = remainders;
+            if (readsTheRemainders && part.remainders().isPresent()) {
+                Remainders meeting = part.remainders().get();
+                long kept = remainders.getOrDefault(meeting.of(),
+                        (1L << meeting.of().divisor()) - 1) & meeting.allowed();
+                if (kept == 0) {
+                    return null;
+                }
+                nextRemainders = new HashMap<>(remainders);
+                nextRemainders.put(meeting.of(), kept);
+            }
+            return new State(nextForms, nextRemainders);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof State state && hash == state.hash
+                    && forms.equals(state.forms) && remainders.equals(state.remainders));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+}

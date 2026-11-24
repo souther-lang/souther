@@ -1,11 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.HeldOnce;
+import souther.compiler.collect.InTheOrderGiven;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -46,8 +47,32 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
             ordered.put(term, Objects.requireNonNull(direction.get(term),
                     () -> "a direction weighs each of its terms by something: " + term));
         }
-        direction = Collections.unmodifiableMap(ordered);
+        direction = InTheOrderGiven.map(ordered);
     }
+
+    /**
+     * As the direction hashes, which is what finds a quantity already made by the map it would be
+     * made of ({@link #tryOf}) before its terms are put in order.
+     */
+    @Override
+    public int hashCode() {
+        return direction.hashCode();
+    }
+
+    /** The same direction, whatever order either map was filled in. */
+    @Override
+    public boolean equals(Object other) {
+        return this == other || (other instanceof QuantityKey that
+                && direction.equals(that.direction));
+    }
+
+    /**
+     * The quantities made last. A cut, a reading and a border each work out the quantity of the
+     * form they hold, and every one of them was held: the same few directions, many times over —
+     * so one is found by the coefficients it would be made of, and only one not found is made,
+     * its terms put in order and copied.
+     */
+    private static final HeldOnce<QuantityKey> MADE = new HeldOnce<>(14);
 
     /**
      * The quantity {@code form} is a multiple of.
@@ -79,7 +104,7 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
             }
             smallest.put(each.getKey(), over);
         }
-        return new QuantityKey(smallest);
+        return MADE.held(smallest, QuantityKey::direction, QuantityKey::new);
     }
 
     /**

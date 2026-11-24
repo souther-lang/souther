@@ -21,8 +21,8 @@ import java.util.Set;
  * body one compiler admitted another refuses. What is read here is the database's own text, an
  * excerpt of one of its property files carried as a resource: the lines of the values the language
  * needs, under the file's own header, whose first line names the version ({@code #
- * DerivedGeneralCategory-18.0.0.txt}). Moving to a later version is replacing that excerpt, which
- * is a change to what the language reads.
+ * DerivedCoreProperties-17.0.0.txt} for the identifier alphabet). Moving to a later version is
+ * replacing that excerpt, which is a change to what the language reads.
  *
  * <p>The format is the one the database's derived property files share: a code point or a range
  * {@code 0041..005A}, a semicolon, the value, and a comment.

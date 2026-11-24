@@ -3,6 +3,8 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -141,7 +143,15 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 interned.none(Type.INT),
                 interned.opened(one, Type.INT),
                 interned.matched(one, List.of(List.of(data)), List.of(one)),
-                interned.attempted(one, List.of("c"), List.of(one)))) {
+                interned.attempted(one, List.of("c"), List.of(one)),
+                interned.howManyAre(evaluated, one, AddsWhatItDoesNotHold.Of.ELEMENTS),
+                interned.howManyAreIn(evaluated, evaluated, AddsWhatItDoesNotHold.Of.KEYS),
+                interned.howManyMeet(evaluated, interned.closure(1, one), AnswerAspect.TRUTH),
+                interned.howManyDifferent(evaluated, null, AddsWhatItDoesNotHold.Of.ELEMENTS),
+                interned.sumOfSizes(evaluated, null, new Term.CountedBy(
+                        new ValueName.Helper("m", "length"), null)),
+                interned.exactTotal(new ValueName.Helper("m", "f"), evaluated),
+                interned.codePoints(evaluated, new CodePointClass.NotWhitespace()))) {
             built.add(term.shape());
         }
 

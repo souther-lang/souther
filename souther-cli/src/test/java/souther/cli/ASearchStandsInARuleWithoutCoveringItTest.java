@@ -1,6 +1,7 @@
 package souther.cli;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -48,11 +49,15 @@ class ASearchStandsInARuleWithoutCoveringItTest {
                 | "first" : (Count(1), Count(6)) -> No
             """;
 
-    @Test
-    void aSearchFindsSomethingStandingInTheRuleTheRowsLeft() {
+    private static Compilation measuredModel() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        return ACompiledModel.compiles(compilation);
+    }
+
+    @Test
+    void aSearchFindsSomethingStandingInTheRuleTheRowsLeft() {
+        Compilation compilation = measuredModel();
         String module = compilation.modules().get(0);
 
         DecisionEvidence evidence =
@@ -75,9 +80,7 @@ class ASearchStandsInARuleWithoutCoveringItTest {
     /** And what it built is not a row of the model, so the rules the rows took do not move. */
     @Test
     void andWhatItBuiltCoversNothing() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredModel();
         String module = compilation.modules().get(0);
 
         DecisionEvidence before =

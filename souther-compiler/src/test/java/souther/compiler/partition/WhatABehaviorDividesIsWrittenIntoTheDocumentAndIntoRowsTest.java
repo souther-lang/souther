@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -63,8 +65,8 @@ class WhatABehaviorDividesIsWrittenIntoTheDocumentAndIntoRowsTest {
         List<String> classes = new ArrayList<>();
         axes.forEach(axis -> axis.get("classes").forEach(each -> classes.add(each.asString())));
         assertEquals(List.of(
-                        "code/String.startsWith(\"JP\", x)",
-                        "code/not String.startsWith(\"JP\", x)"),
+                        "code: String.startsWith(\"JP\", x)",
+                        "code: not String.startsWith(\"JP\", x)"),
                 classes,
                 "a person is told which strings this behavior tells apart");
     }
@@ -88,7 +90,8 @@ class WhatABehaviorDividesIsWrittenIntoTheDocumentAndIntoRowsTest {
         List<String> written = new ArrayList<>();
         for (PartitionClass each : axis.classes()) {
             List<FixtureTemplate> made = Partitions.standingFor(each.representatives(),
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Set.of())
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY), Set.of())
                     .values();
             assertFalse(made.isEmpty(), "a row can be composed for `" + each.label() + "`");
             made.forEach(one -> written.add(one.text()));
@@ -100,21 +103,13 @@ class WhatABehaviorDividesIsWrittenIntoTheDocumentAndIntoRowsTest {
     private static String json() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation compilation() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         assertNotNull(compilation.db().ask(new Adequacy.Divided(compilation.modules().get(0),
                 "route")).value(), "the behavior was divided");
         return compilation;

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -29,10 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a position and a word, so a reason that reaches one of the two positions a product names and not
  * the other is a failure.
  *
- * <p>The products here weigh a factor by two before they are taken, which is a product the
- * arithmetic does not read: {@code 2 * q} passes where its type stops for half the values of
- * {@code q}, whatever the other factor is. A product of two numbers each read as itself is read,
- * and whatever carries it leaves no place of it unread — the last of these.
+ * <p>The products here have a product as a factor of a product, which the arithmetic does not
+ * read: {@code (q * p) * q} is neither a number nor a form of one. A product of two numbers each
+ * read as itself is read, and whatever carries it leaves no place of it unread — the last of
+ * these.
  */
 class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
@@ -47,7 +48,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         assertEquals(List.of("xs[*].p: NON_AFFINE_PRODUCT", "xs[*].q: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
-                        let f (xs) = List.any(i -> 2 * i.q * i.p >= 1000, xs)
+                        let f (xs) = List.any(i -> i.q * i.p * i.q >= 1000, xs)
                         """));
     }
 
@@ -57,7 +58,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         "xs[*].q: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
-                        let f (xs) = List.length(List.filter(i -> 2 * i.q * i.p >= 1000, xs)) >= 1
+                        let f (xs) = List.length(List.filter(i -> i.q * i.p * i.q >= 1000, xs)) >= 1
                         """));
     }
 
@@ -67,7 +68,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> {
-                            let amount = 2 * i.q * i.p
+                            let amount = i.q * i.p * i.q
                             amount >= 1000
                         }, xs)
                         """));
@@ -75,14 +76,35 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
     @Test
     void aProductWrittenInAHelperIsTheSameProduct() {
-        assertEquals(List.of("xs: NON_AFFINE_PRODUCT", "xs[*]: NON_AFFINE_PRODUCT"),
+        assertEquals(List.of("xs: NON_AFFINE_PRODUCT", "xs[*].p: NON_AFFINE_PRODUCT",
+                        "xs[*].q: NON_AFFINE_PRODUCT"),
                 reasons("""
-                        behavior amount : (a: A) -> Int
-                        let amount (a) = 2 * a.q * a.p
+                        let amount (a: A): Int = a.q * a.p * a.q
 
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(i -> amount(i) >= 1000, xs)) >= 1
                         """));
+    }
+
+    /**
+     * A behavior the comparison calls is no carrier of the product: what its body multiplies is
+     * its own account, at its own positions, and its caller compares a number the call works out,
+     * which the caller's runs place. The product of any numbers may be past what an `Int` holds,
+     * so the behavior is not shown to answer every run, and its caller says that of the stop.
+     */
+    @Test
+    void aProductWrittenInABehaviorTheComparisonCallsIsThatBehaviorsToSay() {
+        String model = DATA + "\n" + """
+                behavior amount : (a: A) -> Int
+                let amount (a) = if a.q * a.p * a.q >= 1000 then 1 else 0
+
+                behavior f : (xs: List<A>) -> Bool
+                let f (xs) = List.length(List.filter(i -> amount(i) >= 1, xs)) >= 1
+                """;
+        assertEquals(List.of("xs[*]: EVALUATION_STOPS_NOT_FULLY_READ",
+                "xs[*]: RULE_MEASURED_ON_ITS_RUNS"), reasonsOf(model, "f"));
+        assertEquals(List.of("a.p: NON_AFFINE_PRODUCT", "a.q: NON_AFFINE_PRODUCT"),
+                reasonsOf(model, "amount"));
     }
 
     /**
@@ -94,17 +116,18 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         assertEquals(List.of("a: NON_AFFINE_PRODUCT", "b: NON_AFFINE_PRODUCT"),
                 reasons("""
                         behavior f : (a: Int, b: Int) -> Bool
-                        let f (a, b) = Int.add(2 * a * b, 1) >= 1000
+                        let f (a, b) = Int.add(a * b * a, 1) >= 1000
                         """));
     }
 
     /**
      * A quotient by an input held against another value is no line, and says it is a divisor.
-     * Against a number it is a line on each sign of the divisor, which stops where the comparison
-     * written out over the product on each sign stops: what is left unread of it is the relation,
-     * and not the division. The sign is what the quotient knows of the divisor and a product
+     * Against a number it is a line on each sign of the divisor, whose reading stops at the
+     * relation and not at the division. The sign is what the quotient knows of the divisor and a product
      * written alone does not: held above nought, the divisor keeps the dividend's least values
-     * below the line.
+     * below the line. A comparison read to the end is not asked here: the quotient parts its
+     * divisor at the sign itself, and the arms written out leave that to the conditions before
+     * them.
      */
     @Test
     void aQuotientByAnInputIsADivisorAndNotAProduct() {
@@ -113,14 +136,26 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= i.q, xs)
                         """));
-        assertEquals(reasons("""
+        // Written out, the product is an operation the comparison tells of, so a row is computed
+        // where it keeps inside the type and the relation is read. The quotient works out no
+        // product: its dividend and divisor are the positions, and the divisor away from nought
+        // keeps every row computed. A divisor the way does not keep from nought is one a run
+        // stops at, so what a run gets past it with is not shown and the relation is not read to
+        // the end.
+        assertEquals(List.of(), stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> if i.p > 0 then i.q >= 10 * i.p
                             else if i.p < 0 then i.q <= 10 * i.p else false, xs)
-                        """),
-                reasons("""
+                        """));
+        assertEquals(List.of("xs[*].p: EVALUATION_STOPS_NOT_FULLY_READ",
+                        "xs[*].q: EVALUATION_STOPS_NOT_FULLY_READ"),
+                stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= 10, xs)
+                        """));
+        assertEquals(List.of(), stopped("""
+                        behavior f : (xs: List<A>) -> Bool
+                        let f (xs) = List.any(i -> if i.p > 0 then i.q / i.p >= 10 else false, xs)
                         """));
     }
 
@@ -139,20 +174,23 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> 2 * i.q * i.p >= 1000 && i.q / i.p >= i.q, xs)) >= 1
+                            i -> i.q * i.p * i.q >= 1000 && i.q / i.p >= i.q, xs)) >= 1
                         """));
         // A quotient against a number counted beside the product is read, and leaves what the
-        // comparison written out over the product leaves.
+        // comparison written out over the product leaves, but for the stop at a divisor of
+        // nought, which the written out comparison has no divisor to say.
         assertEquals(reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> 2 * i.q * i.p >= 1000 && i.q >= 10 * i.p, xs)) >= 1
+                            i -> i.q * i.p * i.q >= 1000 && i.q >= 10 * i.p, xs)) >= 1
                         """),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> 2 * i.q * i.p >= 1000 && i.q / i.p >= 10, xs)) >= 1
-                        """));
+                            i -> i.q * i.p * i.q >= 1000 && i.q / i.p >= 10, xs)) >= 1
+                        """).stream()
+                        .filter(each -> !each.endsWith("EVALUATION_STOPS_NOT_FULLY_READ"))
+                        .toList());
     }
 
     @Test
@@ -171,7 +209,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
      *  does not hold, is a product at each of its positions, as one nothing reads is. */
     @Test
     void aProductBetweenTwoPositionsIsAProductAtEach() {
-        for (String condition : List.of("2 * a * b >= 1000", "Int.add(a * b, 1) >= 1000")) {
+        for (String condition : List.of("a * b * a >= 1000", "Int.add(a * b * a, 1) >= 1000")) {
             assertEquals(List.of("a: NON_AFFINE_PRODUCT", "b: NON_AFFINE_PRODUCT"),
                     reasons("""
                             behavior f : (a: Int, b: Int) -> Bool
@@ -203,8 +241,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                             amount >= 1000
                         }, xs)
                         """, """
-                        behavior amount : (a: A) -> Int
-                        let amount (a) = a.q * a.p
+                        let amount (a: A): Int = a.q * a.p
 
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(i -> amount(i) >= 1000, xs)) >= 1
@@ -236,11 +273,11 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
      */
     @Test
     void aProductInAnInvariantUnderAnOperationWithNoStatedFormIsTheSameProduct() {
-        List<String> bare = accountedFor("net.value == price.value * disc.value");
+        List<String> bare = accountedFor("net.value >= price.value * disc.value");
         assertTrue(bare.getFirst().contains("a product of two values that are not constants"),
                 bare.toString());
-        for (String clause : List.of("Decimal.compare(net.value, price.value * disc.value) == 0",
-                "Decimal.round(2, HALF_UP, price.value * disc.value) == net.value")) {
+        for (String clause : List.of("Decimal.compare(net.value, price.value * disc.value) >= 0",
+                "Decimal.round(2, HALF_UP, price.value * disc.value) <= net.value")) {
             assertEquals(bare, accountedFor(clause), clause);
         }
     }
@@ -262,10 +299,10 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 behavior pick : (l: Line) -> Int
                 let pick (l) = if l.qty > 3 then 1 else 0
                 """.formatted(clause), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not accounted for"))
                 .map(String::strip)
                 .sorted()
@@ -277,16 +314,34 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         return reasonsOf(DATA + "\n" + behaviors);
     }
 
-    private static List<String> reasonsOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+    /** The same, of the readings that stopped alone, and not of a rule read to the end. */
+    private static List<String> stopped(String behaviors) {
+        return notReadIn(DATA + "\n" + behaviors, "f").stream()
+                .filter(PartitionEvidence.NotRead::readingStopped)
+                .map(each -> each.at() + ": " + each.reason())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private static List<PartitionEvidence.NotRead> notReadIn(String model, String behavior) {
+        Compilation compilation = ACompiledModel.measured(model,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, () -> "the model under test compiles: " + model);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + model);
-        return measured.notRead().stream()
+        PartitionEvidence measured = coverage.get(behavior);
+        assertNotNull(measured, () -> behavior + " was measured: " + model);
+        return measured.notRead();
+    }
+
+    private static List<String> reasonsOf(String model) {
+        return reasonsOf(model, "f");
+    }
+
+    /** The same, of the behavior named. */
+    private static List<String> reasonsOf(String model, String behavior) {
+        return notReadIn(model, behavior).stream()
                 .map(each -> each.at() + ": " + each.reason())
                 .distinct()
                 .sorted()

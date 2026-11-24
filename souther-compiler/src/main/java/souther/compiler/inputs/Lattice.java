@@ -85,6 +85,37 @@ final class Lattice {
         return new Point(upper.at(), upper.inclusive() ? 0 : -1, Snap.NONE);
     }
 
+    /** Whether a run of numbers holds a point of the grid: it does, it does not, or that is not
+     *  worked out, which nothing reads as either answer. */
+    enum Occupancy { HOLDS, EMPTY, UNKNOWN }
+
+    /**
+     * Whether the run from {@code lower} to {@code upper}, either null where the run has no end on
+     * that side, holds a point of the grid {@code spacing} lays out: the least point in it is not
+     * past the greatest. A run open on a side holds one. Where the ends are too close for the
+     * places they are moved from to say which point is first, it is not worked out.
+     */
+    static Occupancy occupancy(Granularity spacing, ExactCut lower, ExactCut upper) {
+        if (lower == null || upper == null) {
+            return Occupancy.HOLDS;
+        }
+        int order = lower.at().compareTo(upper.at());
+        if (order > 0) {
+            return Occupancy.EMPTY;
+        }
+        if (order == 0) {
+            return lower.inclusive() && upper.inclusive() && holds(spacing, lower.at())
+                    ? Occupancy.HOLDS : Occupancy.EMPTY;
+        }
+        Point least = least(spacing, lower);
+        Point greatest = greatest(spacing, upper);
+        Integer placed = least == null || greatest == null ? null : compare(least, greatest);
+        if (placed == null) {
+            return Occupancy.UNKNOWN;
+        }
+        return placed > 0 ? Occupancy.EMPTY : Occupancy.HOLDS;
+    }
+
     /**
      * How {@code one} stands to {@code other} on the grid: negative where it is below, nought
      * where they are the one point, or null where the places the ends are moved from leave it

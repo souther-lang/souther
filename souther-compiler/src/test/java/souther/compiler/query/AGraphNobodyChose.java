@@ -327,25 +327,21 @@ final class AGraphNobodyChose {
      *     above it would have asked is never asked
      */
     private static boolean collectFallingShort(Recipe recipe, java.util.Set<Gap.Why> out) {
-        switch (recipe) {
+        return switch (recipe) {
             case Recipe.WithNoRule _ -> {
                 out.add(Gap.Why.A_CONTAINER_WITH_NO_RULE_FOR_PAIRING);
-                return true;
+                yield true;
             }
-            case Recipe.Says _, Recipe.Itself _ -> {
-                return false;
-            }
-            case Recipe.BehindAnAbsence(Recipe of) -> {
-                return collectFallingShort(of, out);
-            }
+            case Recipe.Says _, Recipe.Itself _ -> false;
+            case Recipe.BehindAnAbsence(Recipe of) -> collectFallingShort(of, out);
             // A set is where the walk pairs and stops, so nothing inside one is reached and what
             // can fall short is the pairing.
             case Recipe.InASet(List<Recipe> of) -> {
                 if (anyOnlyItself(of)) {
                     out.add(Gap.Why.MEMBERS_THAT_DO_NOT_PAIR);
-                    return true;
+                    yield true;
                 }
-                return false;
+                yield false;
             }
             // Something that wrote its own equality: where a part of it denies, no walk can say
             // whose denial its denial is — but only where the walk got as far as asking, which it
@@ -354,26 +350,16 @@ final class AGraphNobodyChose {
                 boolean below = under(of, out);
                 if (!below && anyOnlyItself(of)) {
                     out.add(Gap.Why.WHOSE_DENIAL_THIS_IS_CANNOT_BE_TOLD);
-                    return true;
+                    yield true;
                 }
-                return below;
+                yield below;
             }
-            case Recipe.Made(List<Recipe> of) -> {
-                return under(of, out);
-            }
-            case Recipe.InAList(List<Recipe> of) -> {
-                return under(of, out);
-            }
-            case Recipe.UnderKeys(List<Recipe> of) -> {
-                return under(of, out);
-            }
-            case Recipe.UnderAddresses(List<Recipe> of) -> {
-                return under(of, out);
-            }
-            case Recipe.InAnArray(List<Recipe> of) -> {
-                return under(of, out);
-            }
-        }
+            case Recipe.Made(List<Recipe> of) -> under(of, out);
+            case Recipe.InAList(List<Recipe> of) -> under(of, out);
+            case Recipe.UnderKeys(List<Recipe> of) -> under(of, out);
+            case Recipe.UnderAddresses(List<Recipe> of) -> under(of, out);
+            case Recipe.InAnArray(List<Recipe> of) -> under(of, out);
+        };
     }
 
     private static boolean under(List<Recipe> of, java.util.Set<Gap.Why> out) {

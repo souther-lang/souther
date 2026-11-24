@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
@@ -276,9 +277,7 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
                     | ([Expired, Expired]) -> false
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of("once/#xs [xs[*] is Expired]"),
                 new Measured(compilation, null).borders(),
                 "a line on how many are Expired, and none on the order of the cases at an element");
@@ -338,11 +337,7 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
     private static Measured measuredSource(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                        .toList(),
-                "the model under test compiles and its rows hold");
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test is measured");

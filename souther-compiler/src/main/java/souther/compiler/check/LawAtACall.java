@@ -86,6 +86,9 @@ public final class LawAtACall {
         /** Two subjects being one value, or not. */
         P same(LawProposition.Same<DeclaredArgument> same);
 
+        /** One string standing inside another, or not. */
+        P inside(LawProposition.Inside<DeclaredArgument> inside);
+
         /** A number of the arguments, where this did not settle it. */
         N counted(LawNumber<DeclaredArgument> number);
 
@@ -128,6 +131,7 @@ public final class LawAtACall {
                 yield meets != null ? reading.writtenOut(some, meets) : reading.someElement(some);
             }
             case LawProposition.Same<DeclaredArgument> same -> reading.same(same);
+            case LawProposition.Inside<DeclaredArgument> inside -> reading.inside(inside);
         };
     }
 
@@ -187,6 +191,43 @@ public final class LawAtACall {
             many += meets ? 1 : 0;
         }
         return OptionalLong.of(many);
+    }
+
+    /**
+     * The values whose sizes {@code sum} adds up, one for each element of its container written
+     * out that is there on every run — the element, or what the closure answers of it — or null
+     * where the container is not written out, whether an element is there turns on the run, what
+     * is added up of each is no size, or the closure is no block of one parameter. An element
+     * there on no run adds nothing.
+     *
+     * <p>The values and not the sum: how many each holds is the reader's number, as every number
+     * of a value is.
+     */
+    public static <E> List<ElementsWrittenOut.Stood<E>> sizedOfEachWrittenOut(
+            LawNumber.SumOver<DeclaredArgument> sum, Reading<E, ?, ?> reading) {
+        if (!(sum.ofTheElement() instanceof LawNumber.SizeOf<DeclaredArgument>(var of))) {
+            return null;
+        }
+        List<ElementsWrittenOut.Occurrence<E>> each = writtenOut(sum.container(), reading);
+        if (each == null) {
+            return null;
+        }
+        List<ElementsWrittenOut.Stood<E>> out = new ArrayList<>();
+        for (ElementsWrittenOut.Occurrence<E> one : each) {
+            Boolean there = ElementsWrittenOut.onEveryRun(one, reading.elements());
+            if (there == null) {
+                return null;
+            }
+            if (!there) {
+                continue;
+            }
+            ElementsWrittenOut.Stood<E> sized = valueOf(of, sum.container(), one.value(), reading);
+            if (sized == null) {
+                return null;
+            }
+            out.add(sized);
+        }
+        return out;
     }
 
     /** Every element of the container the call was handed as {@code container}, followed through
@@ -250,6 +291,15 @@ public final class LawAtACall {
                     case PRESENCE -> null;
                 };
                 yield holds == null ? null : holds == side.holds();
+            }
+            case LawProposition.Inside<DeclaredArgument>(var inner, var outer, var where,
+                                                         boolean holds) -> {
+                ElementsWrittenOut.Stood<E> within = valueOf(inner, container, element, reading);
+                ElementsWrittenOut.Stood<E> around = valueOf(outer, container, element, reading);
+                yield (within != null && around != null
+                        && reading.elements().folded(within).orElse(null) instanceof String looked
+                        && reading.elements().folded(around).orElse(null) instanceof String in)
+                        ? where.holds(looked, in) == holds : null;
             }
             case LawProposition.Compared<DeclaredArgument>(var form, var states) -> {
                 LinearForm<Object> total = form.over(number -> {

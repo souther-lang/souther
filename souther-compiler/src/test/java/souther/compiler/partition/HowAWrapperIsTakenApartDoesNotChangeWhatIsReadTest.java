@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -81,9 +82,7 @@ class HowAWrapperIsTakenApartDoesNotChangeWhatIsReadTest {
             """;
 
     private static PartitionEvidence measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         PartitionEvidence judged = compilation.db()
                 .ask(new Adequacy.Coverage("example.apart")).value().get("judge");
         assertNotNull(judged, "the model under test compiles");
@@ -150,7 +149,9 @@ class HowAWrapperIsTakenApartDoesNotChangeWhatIsReadTest {
                 () -> "and the point on the line is met by a total of exactly that: " + said);
         assertTrue(said.contains("List.sum(batch[*].amount) = 100000"),
                 () -> "which is a point about the total of what the elements hold: " + said);
-        assertTrue(said.contains("Line { amount = 100000 }"),
+        // Shared between two lines, which is the row at the point that also tells the sum's fold
+        // apart.
+        assertTrue(said.contains("Batch([Line { amount = 50000 }, Line { amount = 50000 }])"),
                 () -> "and a row is planned that puts it there: " + said);
     }
 
@@ -163,9 +164,7 @@ class HowAWrapperIsTakenApartDoesNotChangeWhatIsReadTest {
 
     /** The whole of what one behavior's measure came to, as it stands. */
     private static String whatWasMeasured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).evidence().toString();
     }

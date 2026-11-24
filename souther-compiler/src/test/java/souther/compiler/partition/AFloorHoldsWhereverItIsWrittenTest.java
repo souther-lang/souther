@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -14,8 +16,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -37,7 +37,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
             Hir.Data data = (Hir.Data) rules.symbols().declaredNode(named.key());
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, RuleReadingContext.unshared(rules,
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         }
 
         Type ref(String type) {
@@ -47,7 +47,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
         /** The world these readings are made in, with nothing to borrow from. */
         RuleReadingContext reading() {
             return RuleReadingContext.unshared(rules,
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         }
 
         /** The floor of a position of {@code type}, read as this model's rules leave it. */
@@ -69,14 +69,10 @@ class AFloorHoldsWhereverItIsWrittenTest {
      * reader and still comes back a number, so a model asserted only to have symbols can pin a floor
      * that no program could have written. */
     private static Model modelOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(rules, "the model did not compile");
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model under test is a program that can be written");
         return new Model(rules, module);
     }
 

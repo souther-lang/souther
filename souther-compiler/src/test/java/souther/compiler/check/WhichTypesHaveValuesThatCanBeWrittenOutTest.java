@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -30,8 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class WhichTypesHaveValuesThatCanBeWrittenOutTest {
 
     private static Symbols symbolsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(each -> each.diagnostic().code())

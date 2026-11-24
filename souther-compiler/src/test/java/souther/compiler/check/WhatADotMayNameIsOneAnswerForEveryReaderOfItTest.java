@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -247,26 +248,35 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
                 {"A", """
                         module demo
                         data A = { x: Int, x: String }
-                        """},
+                        """, "E1011"},
                 {"Bad", """
                         module demo
                         data Open   = { id: String }
                         data Closed = { id: String }
                         data Deal   = Open | Closed
                         data Bad    = { ...Deal }
-                        """},
+                        """, "E1015"},
                 {"Bad", """
                         module demo
                         data One = { id: String }
                         data Two = { id: String }
                         data Bad = { ...One, ...Two }
-                        """}}) {
+                        """, "E1004"}}) {
             // Resolved and not checked, which is the state these readings are made in: the check
             // refuses the module, and an editor is looking at it while it does.
             Compilation c = Compilation.ofSource(each[1], "Main");
+            List<String> refusedWith = List.of(each[2]);
+            ACompiledModel.refusedWith(refusedWith, c);
             Symbols scope = Scopes.derived(c.db(), "demo").value();
             Type position = Type.ref(TypeSymbols.declared(new TypeKey("demo", each[0])));
             FieldTypes text = new ResolvedFieldTypes(scope, ScopedDeclarations.wrapsOf(scope));
+            CompileException checked = assertThrows(CompileException.class,
+                    () -> new FieldRead(scope, ScopedDeclarations.sumsOf(scope),
+                            ScopedDeclarations.kindsOf(scope), text, FieldRead.Unreadable.REFUSED)
+                            .at(position));
+            assertTrue(refusedWith.contains(checked.code()),
+                    () -> "the module is refused for what the check's reading refuses: "
+                            + refusedWith);
 
             assertEquals(Map.of(),
                     new FieldRead(scope, ScopedDeclarations.sumsOf(scope), ScopedDeclarations.kindsOf(scope), text,FieldRead.Unreadable.MAKES_NOTHING_READABLE)
@@ -293,6 +303,7 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
                 module demo
                 data A = { x: Int, x: String }
                 """, "Main");
+        ACompiledModel.refusedWith(List.of("E1011"), c);
         Type a = Type.ref(TypeSymbols.declared(new TypeKey("demo", "A")));
         assertEquals(Map.of(),
                 SemanticSnapshot.of(c.db(), "demo").orElseThrow()
@@ -318,7 +329,7 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
     }
 
     private static Compilation compiled() {
-        return Compilation.ofSource(MODEL, "Main");
+        return ACompiledModel.compiles(Compilation.ofSource(MODEL, "Main"));
     }
 
     private static TypeSymbol named(String declaration) {

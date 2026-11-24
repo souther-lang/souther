@@ -9,15 +9,13 @@ import souther.compiler.types.BinOp;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import net.unit8.notation199x.pattern.PatternParser;
-import souther.compiler.regex.PatternPlan;
 import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
-import net.unit8.notation199x.Normalization;
+import souther.compiler.evaluate.JoinedText;
+import souther.exact.ExactDecimals;
 import net.unit8.notation199x.ScalarValues;
 
 /**
@@ -78,11 +76,12 @@ final class ConstantAlgebra {
      * the other operand is read at all.
      */
     static Optional<Object> settledByTheLeft(BinOp op, Object left) {
-        if (!(left instanceof Boolean settled)) {
+        Boolean runsWhenLeftIs = op.rightRunsWhenLeftIs();
+        if (!(left instanceof Boolean settled) || runsWhenLeftIs == null) {
             return Optional.empty();
         }
-        return (op == BinOp.AND && !settled) || (op == BinOp.OR && settled)
-                ? Optional.of(settled) : Optional.empty();
+        return settled.booleanValue() != runsWhenLeftIs.booleanValue() ? Optional.of(settled)
+                : Optional.empty();
     }
 
     /** What {@code op} makes of two constants, or empty where these two do not answer it. */
@@ -101,11 +100,11 @@ final class ConstantAlgebra {
             case ADD, SUB, MUL -> arith(op, a, b);
             // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
             // the string case folds, and a list is not a constant here to begin with. Canonicalized,
-            // the same seam String.append/Strings.append has: a folded `"a" ++ pad` and the same
-            // expression run at the runtime it would otherwise be compiled to cannot answer
-            // differently just because one of them happened at compile time.
+            // the join is what Strings.append answers, length checks and limit included, so a fold
+            // and the run cannot answer differently just because one of them happened at compile
+            // time. Where the run ends, there is no constant.
             case CONCAT -> a instanceof String x && b instanceof String y
-                    ? Optional.of(Normalization.nfc(x + y)) : Optional.empty();
+                    ? JoinedText.of(x, y).map(text -> (Object) text) : Optional.empty();
             case DIV -> quotient(a, b);
             // Answered above as what it placed. Written out rather than left to a default, because
             // what would arrive here is the partition above having admitted a comparison into the
@@ -210,6 +209,44 @@ final class ConstantAlgebra {
                     return Optional.of(s.contains(sub));
                 }
             }
+            // startsWith(prefix, s) and endsWith(suffix, s), the same way round
+            case STRING_STARTS_WITH -> {
+                if (args.size() == 2 && args.get(0) instanceof String prefix
+                        && args.get(1) instanceof String s) {
+                    return Optional.of(s.startsWith(prefix));
+                }
+            }
+            case STRING_ENDS_WITH -> {
+                if (args.size() == 2 && args.get(0) instanceof String suffix
+                        && args.get(1) instanceof String s) {
+                    return Optional.of(s.endsWith(suffix));
+                }
+            }
+            // The decimal operations, on the account of the arithmetic below: a sum, a difference and
+            // a product are the operators', and a comparison is by amount and not by how a decimal
+            // was written. A rounding is not here: which operations round, and what each way of
+            // rounding does, are the library's to say ({@link FoldedValue#rounded}).
+            case DECIMAL_ADD, DECIMAL_SUBTRACT, DECIMAL_MULTIPLY -> {
+                if (args.size() == 2 && args.get(0) instanceof BigDecimal a
+                        && args.get(1) instanceof BigDecimal b) {
+                    return arith(switch (kernel) {
+                        case DECIMAL_ADD -> BinOp.ADD;
+                        case DECIMAL_SUBTRACT -> BinOp.SUB;
+                        default -> BinOp.MUL;
+                    }, a, b);
+                }
+            }
+            case DECIMAL_COMPARE -> {
+                if (args.size() == 2 && args.get(0) instanceof BigDecimal a
+                        && args.get(1) instanceof BigDecimal b) {
+                    return Optional.of((long) a.compareTo(b));
+                }
+            }
+            case DECIMAL_FROM_INT -> {
+                if (args.size() == 1 && args.get(0) instanceof Long n) {
+                    return Optional.of(BigDecimal.valueOf(n));
+                }
+            }
             default -> { }
         }
         return Optional.empty();
@@ -249,7 +286,7 @@ final class ConstantAlgebra {
      * {@code Decimal} and an {@code Int} together, and the callers ask only where one side already
      * holds a ratio.
      */
-    private static ExactRatio exactly(Object constant) {
+    static ExactRatio exactly(Object constant) {
         return switch (constant) {
             case ExactRatio r -> r;
             case Long whole -> ExactRatio.of(whole);
@@ -304,26 +341,14 @@ final class ConstantAlgebra {
         }
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
             // A result the run time has no Decimal for is one it aborts on, and the fold answers
-            // nothing, as the Int fold does on overflow. A product's scale is the sum of its
-            // factors' and is refused whatever the product's value is, so it is checked before
-            // BigDecimal is asked; BigDecimal answers some products past the range instead of
-            // refusing them.
-            if (op == BinOp.MUL) {
-                long scale = (long) x.scale() + y.scale();
-                if (scale != (int) scale) {
-                    return Optional.empty();
-                }
-            }
-            try {
-                return Optional.of(switch (op) {
-                    case ADD -> x.add(y);
-                    case SUB -> x.subtract(y);
-                    case MUL -> x.multiply(y);
-                    default -> throw new IllegalStateException();
-                });
-            } catch (ArithmeticException _) {
-                return Optional.empty();
-            }
+            // nothing, as the Int fold does on overflow. Whether there is room is what the run
+            // time asks of ExactDecimals, and this asks the same.
+            return Optional.ofNullable(switch (op) {
+                case ADD -> ExactDecimals.sumWhereThereIsRoom(x, y);
+                case SUB -> ExactDecimals.differenceWhereThereIsRoom(x, y);
+                case MUL -> ExactDecimals.timesWhereThereIsRoom(x, y);
+                default -> throw new IllegalStateException();
+            });
         }
         return Optional.empty();
     }
@@ -355,19 +380,6 @@ final class ConstantAlgebra {
      * either of which leaves the match to the run time.
      */
     static Optional<Object> matching(PatternMeaning meaning, String s) {
-        return RECOGNIZERS.computeIfAbsent(meaning, ConstantAlgebra::recognizerOf)
-                .flatMap(recognizer -> recognizer.accepts(s, PatternPlan.Budget.OF_A_FOLD.meter()))
-                .map(Object.class::cast);
+        return Recognizer.recognizes(meaning, s).map(Object.class::cast);
     }
-
-    private static Optional<Recognizer> recognizerOf(PatternMeaning meaning) {
-        return Optional.ofNullable(Recognizer.of(meaning, PatternPlan.Budget.OF_A_FOLD.meter()));
-    }
-
-    /** What each pattern means, as the machine a fold walks. A declaration's pattern is asked about
-     * once per construction from it and once per reading of a branch, and building the machine is
-     * the only expensive thing here. Keyed by the meaning, so two spellings of one pattern are one
-     * machine. */
-    private static final Map<PatternMeaning, Optional<Recognizer>> RECOGNIZERS =
-            new ConcurrentHashMap<>();
 }

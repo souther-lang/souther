@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.carrier.Membership;
 import souther.compiler.diag.SourceLayouts;
@@ -64,13 +66,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
 
     /** The model these read, compiled once. Held rather than compiled per question, because the
      *  block below asks it where the rules it names are written. */
-    private static final Compilation COMPILED = compiled();
-
-    private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(TRIP, "Main");
-        compilation.answerEverything();
-        return compilation;
-    }
+    private static final Compilation COMPILED = ACompiledModel.answered(TRIP);
 
     private static MeasuredInput subject() {
         Compilation compilation = COMPILED;
@@ -79,7 +75,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("submit"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         return MeasuredInput.of("submit", domain.reading(rules),
@@ -96,8 +92,9 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                         Map.of("submit", new Adequacy.Filling(result,
                                 Generator.GenerationResult.NONE,
                                 Adequacy.Generated.RowsForRules.NOTHING,
-                                List.of())), null)),
-                Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE), COMPILED.db()).text();
+                                Adequacy.Generated.RowsForCases.NOTHING,
+                                List.of(), List.of())), null)),
+                Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE), COMPILED.db()).textInEnglish();
     }
 
     /** A run asked for nothing, which is what a reason about the run alone is written against. */

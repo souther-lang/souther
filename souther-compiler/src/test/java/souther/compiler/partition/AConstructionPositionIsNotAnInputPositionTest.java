@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
@@ -24,8 +27,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -82,8 +83,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
     }
 
     private static Read of(String source, String behavior) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -93,7 +94,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
     private static InputDomain reading(Read read) {
         RuleReadingContext context =
-                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES,
+                        TestDay.TODAY);
         return InputDomain.of(read.sig(), context, TypeCardinality.Counts.workedOutIn(context),
                 Membership.none());
     }
@@ -105,7 +107,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
                 TermPath.of(read.only().name()), read.rules().inners(), read.rules().symbols(),
                 read.rules().kinds(), read.rules().sums(), Set.of(),
                 required, ConstructionPlan.ContentsComposed.NONE,
-                ANY);
+                ANY, _ -> false);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
                 "nothing here asks one position to be two things").plan();
     }
@@ -231,7 +233,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
         List<String> both = new ArrayList<>();
         for (Path source : sources) {
-            String text = code(Files.readString(source, StandardCharsets.UTF_8));
+            String text = code(RepositoryJavaSources.forThisFork().mainText(source));
             if (!text.contains("ConstructionPlan") || !text.contains("InputDomain")) {
                 continue;
             }

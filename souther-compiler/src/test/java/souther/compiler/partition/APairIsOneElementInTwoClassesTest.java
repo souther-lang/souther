@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhatTheRowsReached;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -51,19 +52,24 @@ class APairIsOneElementInTwoClassesTest {
                 List.filter(p -> p.age >= 18 && p.status == Active, people)
 
             example select
-                | "ROW" : (PEOPLE) -> [ ]
+                | "ROW" : (PEOPLE) -> ANSWER
             """;
 
     private static Compilation compiled(String people) {
-        Compilation compilation =
-                Compilation.ofSource(MODEL.replace("PEOPLE", people), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return compiled(people, "[ ]");
+    }
+
+    private static Compilation compiled(String people, String answer) {
+        return ACompiledModel.measured(MODEL.replace("PEOPLE", people).replace("ANSWER", answer),
+                Adequacy.Asked.fullReport());
     }
 
     private static PartitionEvidence measured(String people) {
-        PartitionEvidence select = compiled(people).db()
+        return measured(people, "[ ]");
+    }
+
+    private static PartitionEvidence measured(String people, String answer) {
+        PartitionEvidence select = compiled(people, answer).db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("select");
         assertNotNull(select, () -> "the model under test compiles: " + people);
         return select;
@@ -89,7 +95,7 @@ class APairIsOneElementInTwoClassesTest {
                 [ Person { age = 17, status = Active },
                   Person { age = 20, status = Inactive } ]""");
 
-        assertEquals(List.of(Set.of("people[*].age/x < 18", "people[*].age/18 <= x"),
+        assertEquals(List.of(Set.of("people[*].age: x < 18", "people[*].age: 18 <= x"),
                         Set.of("Active", "Inactive")),
                 select.axes().stream().map(a -> WhatTheRowsReached.at(a).covered()).toList());
     }
@@ -120,6 +126,8 @@ class APairIsOneElementInTwoClassesTest {
         assertEquals(List.of("[Person { age = 17, status = Inactive }]",
                         "[Person { age = 18, status = Active }]"),
                 generated.get("select").composed().rows().stream()
+                        .filter(row -> row.purposes().stream().anyMatch(
+                                purpose -> !(purpose instanceof Generator.Purpose.ForAReplacement)))
                         .map(row -> row.inputs().get(0).text()).toList(),
                 () -> "a row for each combination nothing is in: "
                         + generated.get("select").composed().reasons());
@@ -129,7 +137,8 @@ class APairIsOneElementInTwoClassesTest {
     @Test
     void oneElementInBothIsTheWitness() {
         PartitionEvidence select =
-                measured("[ Person { age = 20, status = Active } ]");
+                measured("[ Person { age = 20, status = Active } ]",
+                        "[ Person { age = 20, status = Active } ]");
 
         assertEquals(1, select.pairs().counts().covered(),
                 () -> "the one its element is in: " + select.pairs());

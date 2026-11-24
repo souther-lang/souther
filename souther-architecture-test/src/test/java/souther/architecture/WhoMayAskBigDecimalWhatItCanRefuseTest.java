@@ -40,25 +40,35 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * taken off before the scale reaches its floor. {@code multiply} also works out the product's
      * scale before the call, because {@code BigDecimal} answers some products whose scale is out of
      * range instead of refusing them. {@code ofDecimalText} is handed only text the
-     * decimal-text grammar accepted, which has no exponent to overflow. {@code RationalMath.toInt}
-     * reports the refusal itself. {@code Representations.canonicalNumber} rescales to zero only after
+     * decimal-text grammar accepted, which has no exponent to overflow. {@code IntNarrowing.rounded}
+     * rounds a decimal as written only where its whole digits keep it inside the {@code Int}s, and
+     * on a refusal asks the exact number instead. {@code Representations.canonicalNumber} rescales to zero only after
      * counting the digits that asks for and finding them few. {@code ExactDecimals.spelledBounded}
      * counts the same way and calls {@code toPlainString} only where the count stays under the same
      * limit, and calls {@code toString} instead where it does not — total on every value regardless
      * ({@link BigDecimalCalls#ANSWERS_ON_EVERY_VALUE}), so there is nothing there to explain.
+     * {@code ExactArithmetic.canonical} moves a decimal by its own scale, which leaves a scale of
+     * nought and so none out of range.
      */
     private static final List<String> MAY_BE_REFUSED = List.of(
+            "souther/exact/ExactArithmetic#canonical(Ljava/math/BigDecimal;)Lsouther/exact/ExactParts;"
+                    + " scaleByPowerOfTen(I)Ljava/math/BigDecimal;",
+            "souther/exact/ExactDecimals#differenceWhereThereIsRoom(Ljava/math/BigDecimal;"
+                    + "Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
+                    + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/exact/ExactDecimals#leastDigits(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
                     + " stripTrailingZeros()Ljava/math/BigDecimal;",
             "souther/exact/ExactDecimals#spelledBounded(Ljava/math/BigDecimal;)Ljava/lang/String;"
                     + " toPlainString()Ljava/lang/String;",
-            "souther/runtime/DecimalMath#add(Ljava/math/BigDecimal;Ljava/math/BigDecimal;)"
-                    + "Ljava/math/BigDecimal; add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
+            "souther/exact/ExactDecimals#sumWhereThereIsRoom(Ljava/math/BigDecimal;"
+                    + "Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
+                    + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
+            "souther/exact/ExactDecimals#timesWhereThereIsRoom(Ljava/math/BigDecimal;"
+                    + "Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
+                    + " multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#divide(Ljava/math/BigDecimal;Ljava/math/BigDecimal;JL"
                     + "souther/runtime/RoundingMode;)Ljava/lang/Object;"
                     + " divide(Ljava/math/BigDecimal;ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#multiply(Ljava/math/BigDecimal;Ljava/math/BigDecimal;)"
-                    + "Ljava/math/BigDecimal; multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#ofDecimalText(Ljava/lang/String;)Ljava/math/BigDecimal;"
                     + " <init>(Ljava/lang/String;)V",
             "souther/runtime/DecimalMath#plainText(Ljava/math/BigDecimal;)Ljava/lang/String;"
@@ -66,14 +76,12 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
             "souther/runtime/DecimalMath#round(JLsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)"
                     + "Ljava/math/BigDecimal; setScale(ILjava/math/RoundingMode;)"
                     + "Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#subtract(Ljava/math/BigDecimal;Ljava/math/BigDecimal;)"
-                    + "Ljava/math/BigDecimal; subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
+            "souther/runtime/IntNarrowing#rounded(Ljava/math/BigDecimal;Ljava/math/RoundingMode;"
+                    + "Lsouther/runtime/WorkCheckpoint;Ljava/util/function/Supplier;)J"
                     + " longValueExact()J",
-            "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
+            "souther/runtime/IntNarrowing#rounded(Ljava/math/BigDecimal;Ljava/math/RoundingMode;"
+                    + "Lsouther/runtime/WorkCheckpoint;Ljava/util/function/Supplier;)J"
                     + " setScale(ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/RationalMath#toInt(Lsouther/runtime/RoundingMode;Lsouther/runtime/Rational;"
-                    + "Lsouther/runtime/WorkCheckpoint;)J longValueExact()J",
             "souther/runtime/Representations#canonicalNumber(Ljava/math/BigDecimal;"
                     + "Lsouther/runtime/WorkCheckpoint;)Ljava/math/BigDecimal; setScale(I)Ljava/math/BigDecimal;");
 
@@ -89,8 +97,9 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
     @Test
     void theWalkFindsDecimalMath() {
         assertTrue(askingWhatCanBeRefused().stream()
-                        .anyMatch(row -> row.startsWith("souther/runtime/DecimalMath#add(")),
-                "every Decimal sum is in DecimalMath, so a walk not finding it is finding nothing");
+                        .anyMatch(row -> row.startsWith(
+                                "souther/exact/ExactDecimals#sumWhereThereIsRoom(")),
+                "every Decimal sum is worked out there, so a walk not finding it is finding nothing");
     }
 
     private static List<String> askingWhatCanBeRefused() {

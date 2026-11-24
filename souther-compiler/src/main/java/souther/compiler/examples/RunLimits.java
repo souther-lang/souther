@@ -6,6 +6,7 @@ import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
+import souther.runtime.OutOfRoom;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -23,9 +24,11 @@ import java.util.Set;
 final class RunLimits {
 
     /**
-     * Whether {@code thrown} is, or carries, a run going past its steps, its depth or its stack.
-     * What it is wrapped in is looked through, since what the applied code ends with arrives as a
-     * failure of the call that ran it.
+     * Whether {@code thrown} is, or carries, a run going past its steps, its depth or its stack,
+     * or one short of the room the platform supplies ({@link OutOfRoom}): an answer a
+     * representation had no place to write, which a platform with more room writes. What it is
+     * wrapped in is looked through, since what the applied code ends with arrives as a failure of
+     * the call that ran it.
      */
     static boolean reached(Throwable thrown) {
         if (EvaluationContext.overspent(thrown) != null) {
@@ -33,7 +36,8 @@ final class RunLimits {
         }
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
-            if (each instanceof StackOverflowError || each instanceof StackExhaustedException) {
+            if (each instanceof StackOverflowError || each instanceof StackExhaustedException
+                    || each instanceof OutOfRoom) {
                 return true;
             }
         }
@@ -43,7 +47,8 @@ final class RunLimits {
     /**
      * Which figure of {@code policy} a run that {@link #reached} its limits went past, at the
      * number {@code policy} held it to: its steps, or how deep it called. None where what ran out
-     * was the host's stack, which no figure here was compared against, and none where the run was
+     * was the host's stack or the platform's room, which no figure here was compared against, and
+     * none where the run was
      * abandoned — what gave up on it is what names its figure.
      */
     static Optional<Figure> figureOf(Throwable thrown, EvaluationPolicy policy) {

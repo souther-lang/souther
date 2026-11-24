@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,7 +51,7 @@ class NormalReturnTest {
     }
 
     private static Core bodyOf(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
@@ -76,13 +77,19 @@ class NormalReturnTest {
     void aMatchAnswersWhereOneArmDoes() {
         assertTrue(answersConstructing("""
                 let pick (f, senior) = match f with
-                    | On  -> Answer(1)
-                    | Off -> unreachable "only On is passed"
+                    | On ->
+                        match f with
+                            | On  -> Answer(1)
+                            | Off -> unreachable "only On is passed here"
+                    | Off -> Answer(2)
                 """));
         assertFalse(answers("""
-                let pick (f, senior) = match f with
-                    | On  -> unreachable "not On"
-                    | Off -> unreachable "nor Off"
+                let pick (f, senior) = {
+                    let g: Flag = if senior then On else Off
+                    match g with
+                        | On  -> unreachable "not On"
+                        | Off -> unreachable "nor Off"
+                }
                 """));
     }
 

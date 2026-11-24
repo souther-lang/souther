@@ -45,24 +45,23 @@ class ATotalOverSomeOfTheElementsIsNoTotalOfThemAllTest {
     }
 
     /** What a filter kept is some of them, and no total of them all, whatever the walk answers of
-     *  each. */
+     *  each: the total of each element where the filter keeps it and nought where it does not. */
     @Test
     void whatAFilterKeptIsNoTotalOfThemAll() {
         String place = report(model(
                 "List.sum(List.map(l -> l.q, List.filter(l -> l.q > 5, ls)))"));
         assertFalse(place.contains("List.sum(ls[*].q)"), place);
-        assertTrue(place.contains("not read: comparison"), place);
+        assertTrue(place.contains("List.sum({if 1·q + -5 > 0 then 1·q + 0 else 0 | ls[*]})"),
+                place);
         String computed = report(model(
                 "List.sum(List.map(l -> 2 * l.q, List.filter(l -> l.q > 5, ls)))"));
-        assertFalse(computed.contains("| ls[*]}"), computed);
-        assertTrue(computed.contains("not read: comparison"), computed);
+        assertTrue(computed.contains("List.sum({if 1·q + -5 > 0 then 2·q + 0 else 0 | ls[*]})"),
+                computed);
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

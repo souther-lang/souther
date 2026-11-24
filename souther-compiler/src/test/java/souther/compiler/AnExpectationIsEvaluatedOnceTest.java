@@ -68,8 +68,7 @@ class AnExpectationIsEvaluatedOnceTest {
     }
 
     private static List<RowOutcome> rows(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(model);
         return compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), compilation.modules().get(0),
                         compilation.sourceIds().get(0)))

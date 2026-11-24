@@ -94,8 +94,8 @@ class EveryStatementAStatementHoldsIsAPartEveryReaderMeetsTest {
         Proposition.SomeReachable unsaid = new Proposition.SomeReachable(TermPath.of("t"),
                 TermPath.of("t"), List.of("children"), truth("t.a"), Optional.empty(), true);
 
-        assertNotEquals(one.key(), other.key());
-        assertNotEquals(one.key(), unsaid.key());
+        assertNotEquals(one.spelledOut(), other.spelledOut());
+        assertNotEquals(one.spelledOut(), unsaid.spelledOut());
     }
 
     /** A part nothing read where the node has nothing below is a part nothing read. */

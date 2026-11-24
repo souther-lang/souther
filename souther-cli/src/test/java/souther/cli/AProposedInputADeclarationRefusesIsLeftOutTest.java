@@ -24,6 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * written to tell the two lines apart is a further answer, and one a declaration can take away. A
  * sentence that lost its line with the input would say the rows tell the lines apart, which they do
  * not.
+ *
+ * <p>Asked of the report alone, where the input is the one stepping along the line arrives at. A
+ * report that generates rows names the row the boundary search found instead, and that search
+ * walks the region the declarations leave, so it never reaches an input they refuse.
  */
 class AProposedInputADeclarationRefusesIsLeftOutTest {
 
@@ -90,7 +94,7 @@ class AProposedInputADeclarationRefusesIsLeftOutTest {
         try {
             Path file = Files.createTempDirectory("souther-refused").resolve("m.sou");
             Files.writeString(file, source);
-            Ran ran = CliInProcess.run("examples", "--generate", file.toString());
+            Ran ran = CliInProcess.run("examples", file.toString());
             assertEquals(0, ran.code(), ran.err());
             return ran.out() + ran.err();
         } catch (IOException e) {

@@ -1,21 +1,31 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.AbortKind;
+import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.GetsPast;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -24,6 +34,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -59,6 +70,20 @@ import java.util.function.Predicate;
 public final class AffineForms {
 
     /**
+     * A list written in the source, and the environment its elements are read in.
+     *
+     * @param list the list
+     * @param at   where the names its elements read stand, which is where the list was reached
+     *             and not always where it was asked for
+     */
+    public record ListWrittenOut<E>(Core.ListLit list, E at) {
+
+        public ListWrittenOut {
+            Objects.requireNonNull(list, "a list written out is a list");
+        }
+    }
+
+    /**
      * The answers this walk asks its caller for: what depends on the caller's environment, and
      * nothing else.
      *
@@ -91,6 +116,18 @@ public final class AffineForms {
             return leafOf(e, at);
         }
 
+        /**
+         * What {@link #leafOf} comes to, with the stop it comes to where the caller has a rule
+         * for {@code e} and its reading stopped: the answer and the reason are one value, so a
+         * reader that has the answer has the reason and asks nothing later of anything else.
+         *
+         * <p>A reading with a stop to give overrides this. The default knows only a form or none.
+         */
+        default Leaf<A, E> leaf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            LinearForm<A> form = leafOf(e, at, inside);
+            return form == null ? new Leaf.None<>() : new Leaf.Form<>(form);
+        }
+
         @Override
         default Reading<A, E> oneAtATime() {
             return new OneAtATime<>(this);
@@ -113,9 +150,11 @@ public final class AffineForms {
          *
          * <p>Asked only after the arithmetic's own rule has refused, of the two forms it read: a
          * product with a constant on either side is the arithmetic's, and a caller never says it
-         * again.
+         * again. {@code operation} is the multiplication the forms are the factors of; where this
+         * answers a form the walk tells it {@link #composed} like any other operation.
          */
-        default LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
+        default LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                        LinearForm<A> right) {
             return null;
         }
 
@@ -129,6 +168,178 @@ public final class AffineForms {
          * {@code a}, and a run stops at {@code a + b} all the same.
          */
         default void composed(Core operation, LinearForm<A> form) {
+        }
+
+        /**
+         * {@code read}, the walk reading {@code value}, the value {@code name} was given, in
+         * {@code at}. A reader that tells of the operations composed ({@link #composed}) learns
+         * from it which of them a run works out to give the name its value, and so what an
+         * operation over the name is worked out after. A reader that has read that value in that
+         * environment already, as this reading would, may answer with what it came to then.
+         */
+        default Outcome<A, E> readingTheValueOf(BindingId name, Core value, E at,
+                                                Supplier<Outcome<A, E>> read) {
+            return read.get();
+        }
+
+        /**
+         * The same, with the forms of the operands the operation was composed from, in the order
+         * they are written. A reader that wants only the operation is told through
+         * {@link #composed(Core, LinearForm)}.
+         */
+        default void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
+            composed(operation, form);
+        }
+
+        /**
+         * That the walk composed {@code operation}, a product, into {@code form}, which this
+         * reading made of it ({@link #productOf}) from the forms of the operands. Told in place of
+         * {@link #composed} and not beside it, for the one operation the arithmetic composed none
+         * of. A reader with nothing to say of that one apart from the others leaves it as it is.
+         */
+        default void composedAsAProduct(Core operation, LinearForm<A> form,
+                                        List<LinearForm<A>> operands) {
+            composed(operation, form, operands);
+        }
+
+        /**
+         * That the walk read {@code node} as a form without telling of every operation a run
+         * works out for it: a library call it took as arithmetic over its arguments, a
+         * construction or a projection it read through, a quotient whose operands may not have
+         * room for it, a value read through several members that agree on a form and not on the
+         * operations that make it. A run may stop at such a node, and no {@link #composed} says
+         * where.
+         *
+         * <p>A caller that asks whether the operations it was told of are all a run works out
+         * asks it of this: no call, and they are. A call is not an operation that stops, and
+         * says only that the walk does not know.
+         */
+        default void unobserved(Core node) {
+        }
+
+        /** The same, of {@code node} read in {@code at}, for a reader that asks the node's owner
+         *  where working it out ends a run. */
+        default void unobserved(Core node, E at) {
+            unobserved(node);
+        }
+
+        /**
+         * That the walk read {@code e} as the number it folds to, the same on every run, or a
+         * carrier writes it as, and went no further into it. Either says what the number is
+         * ({@link FoldedValue}, {@link Carrier#literalOf}), following a name to the value it
+         * stands as; what working it out runs on the way there, a value bound and never read
+         * included, neither tells. A reader that does not ask is told nothing.
+         */
+        default void folded(Core e, E at) {
+        }
+
+        /**
+         * That the walk read {@code call}, an operation of the library, as {@code form}, the
+         * arithmetic over its arguments the library says it answers, and that a run stops at it
+         * where {@code where} says: it ends one only where its answer is past the ends of its
+         * type, or the library says no more than that it may end one. A reader that does not ask
+         * where is told it was {@link #unobserved} wherever it may end one.
+         */
+        default void answeredByTheLibrary(Core call, LinearForm<A> form,
+                                          WhereAnOperatorAnswers where) {
+            if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
+                unobserved(call);
+            }
+        }
+
+        /**
+         * That the walk read the body of {@code binding} without reading the name it binds on the
+         * way it took, though a run works the bound value out first, and working it out may end a
+         * run: on that way the value is read nowhere else. One the body read is read where the
+         * name is, by whatever reads that.
+         *
+         * <p>Told as a node read without telling of every operation, unless the reading reads the
+         * value and tells of what it works out.
+         */
+        default void bound(Core.LetIn binding, E at) {
+            unobserved(binding);
+        }
+
+        /**
+         * That the walk read {@code construct}, a newtype's construction, as {@code value}, the
+         * form of the number it wraps. Making it checks the clauses of the type, which stops a run
+         * where the number is not one they leave.
+         *
+         * <p>A reader that tells where each operation is worked out says here where the
+         * construction is, when the clauses leave a run of numbers and nothing else; one that does
+         * not know takes it as a node read without telling of every operation it works out.
+         */
+        default void constructed(Core.Construct construct, TypeView type, LinearForm<A> value,
+                                 E at) {
+            unobserved(construct, at);
+        }
+
+        /**
+         * Whether a call that adds up the numbers of a list written out is read as the sum of
+         * those numbers, and told as the one operation it is ({@link #totalled}). A reading that
+         * does not tell where each operation of a form is worked out has no use for it, and
+         * leaves such a call to be read as no form.
+         */
+        default boolean readsATotalOfWhatIsWrittenOut() {
+            return false;
+        }
+
+        /**
+         * The list written in the source that {@code container} stands at, with where its
+         * elements are read, or empty where it stands at any other container.
+         *
+         * <p>A reader that follows names and the helpers whose body answers a list says so for a
+         * list reached that way; one that does not takes only a list written at the place. Where
+         * a value stands says nothing of what a run works out to get there, so this is asked
+         * through {@link AffineForms#listWrittenOutBy}, which does.
+         */
+        default Optional<ListWrittenOut<E>> listItStandsAt(Core container, E at) {
+            return Core.withoutStanding(container) instanceof Core.ListLit list
+                    ? Optional.of(new ListWrittenOut<>(list, at)) : Optional.empty();
+        }
+
+        /**
+         * That the walk read {@code call}, which adds up the numbers of a list written out, as
+         * {@code total}, those numbers added, whose {@code elements} are worked out before it.
+         *
+         * <p>A run stops at such a call only where the total is no {@code Int}
+         * ({@link GetsPast.WhereTheTotalFits}): the library adds the numbers up exactly and holds
+         * only the last to the type, so no partial sum is an operation a run stops at, as it is
+         * of the sum written out. Told as that one operation, a reader that asks where each
+         * operation is worked out is told no more and no fewer than the call works out.
+         */
+        default void totalled(Core call, LinearForm<A> total, List<Core> elements) {
+            unobserved(call);
+        }
+
+        /**
+         * That the walk read {@code call}, the length of a list written out, as the number of its
+         * elements, which the list's shape says whatever the elements are. The call works out
+         * nothing of its own, but the list is built before it is counted, so the {@code elements}
+         * are worked out and a reader that asks where each operation is worked out is told what
+         * building them does.
+         */
+        default void counted(Core call, List<Core> elements, E at) {
+            unobserved(call);
+        }
+
+        /**
+         * Whether making {@code construct} ends no run: no clause is checked when it is made. A
+         * reader that does not know says it may.
+         */
+        default boolean makingEndsNoRun(Core.Construct construct) {
+            return false;
+        }
+
+        /**
+         * Whether making {@code construct} ends no run, given {@code wrapped}, the value its one
+         * field is given followed as far as it goes, or null where it has no one field. A clause
+         * checked when it is made ends none where the value written satisfies it, which is a
+         * property of the written value and of nothing a run does. A reader that does not know
+         * says what {@link #makingEndsNoRun} does.
+         */
+        default boolean makingEndsNoRunOver(Core.Construct construct, Core wrapped) {
+            return makingEndsNoRun(construct);
         }
 
         /**
@@ -203,6 +414,207 @@ public final class AffineForms {
     }
 
     /**
+     * The same, with what each name came to folded held in {@code folds}, which the caller keeps
+     * for every walk of readings that fold the names alike: a reading that reads parts of what it
+     * reads apart, each by a walk of its own, folds each name once and not once for each walk.
+     */
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
+                                               FoldedValue.Kept folds) {
+        return of(raw, at, reading, new Walk<>(new BindingWalk.Answers<>(), folds));
+    }
+
+    /**
+     * What the reading of a number read, told to whoever asks what the number was made of.
+     *
+     * <p>Told by the evaluations that decide the number — this walk and the fold ({@link
+     * FoldedValue}) — at the moment each reads a name or a place, and not worked out again from the
+     * expression afterwards. What was read is the one account of what the number was made of: an
+     * expression holds parts that nothing evaluated, and a reader walking it would count them, and
+     * an evaluation that goes on from a name does so past the place it was read at.
+     */
+    public interface Consumed<E> {
+
+        /**
+         * A name or a place, a field of something, was read at {@code expression}, in {@code at},
+         * and the evaluation went on from what it stands for: what that is made of is told as it is
+         * read.
+         */
+        void read(Core expression, E at);
+
+        /**
+         * The reading ended in a value a carrier writes, found by following the names from
+         * {@code expression}. Nothing was evaluated past it, so where it was written is for the
+         * reader to follow.
+         */
+        void written(Core expression, E at);
+    }
+
+    /** {@link #outcome(Core, Object, Reading)}, telling {@code told} where each part of the number
+     *  ended in a value. */
+    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
+                                               Consumed<E> told) {
+        return of(raw, at, new Noticing<>(reading, told), new Walk<>(told));
+    }
+
+    /**
+     * {@code of} telling {@code told} each name and field read through it: the one environment
+     * every evaluation of the number — this walk and the fold — reads names with, so that what
+     * either of them reads is told and nothing else is.
+     */
+    private record Noticing<A, E>(Reading<A, E> of, Consumed<E> told) implements Reading<A, E> {
+
+        @Override
+        public void noticed(Core place, E at) {
+            told.read(place, at);
+        }
+
+        @Override
+        public Reading<A, E> oneAtATime() {
+            return new Noticing<>(of.oneAtATime(), told);
+        }
+
+        @Override
+        public Symbols symbols() {
+            return of.symbols();
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return of.declarations();
+        }
+
+        @Override
+        public LinearForm<A> leafOf(Core e, E at) {
+            return of.leafOf(e, at);
+        }
+
+        @Override
+        public LinearForm<A> leafOf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leafOf(e, at, inside);
+        }
+
+        @Override
+        public Leaf<A, E> leaf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leaf(e, at, inside);
+        }
+
+        @Override
+        public E inside(Core.LetIn li, E at) {
+            return of.inside(li, at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<E> readThrough(Core.Read read, E at) {
+            return of.readThrough(read, at);
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<E>> alternativesOf(Core.Read read, E at) {
+            return of.alternativesOf(read, at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<E> taken(Core node, E at) {
+            return of.taken(node, at);
+        }
+
+        @Override
+        public Object standingOf(Core.Read read, E at) {
+            return of.standingOf(read, at);
+        }
+
+        @Override
+        public LinearForm<Core> takenAsAForm(Core node, E at) {
+            return of.takenAsAForm(node, at);
+        }
+
+        @Override
+        public LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                       LinearForm<A> right) {
+            return of.productOf(operation, left, right);
+        }
+
+        @Override
+        public void composed(Core operation, LinearForm<A> form) {
+            of.composed(operation, form);
+        }
+
+        @Override
+        public Outcome<A, E> readingTheValueOf(BindingId name, Core value, E at,
+                                               Supplier<Outcome<A, E>> read) {
+            return of.readingTheValueOf(name, value, at, read);
+        }
+
+        @Override
+        public void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands) {
+            of.composed(operation, form, operands);
+        }
+
+        @Override
+        public void composedAsAProduct(Core operation, LinearForm<A> form,
+                                       List<LinearForm<A>> operands) {
+            of.composedAsAProduct(operation, form, operands);
+        }
+
+        @Override
+        public void unobserved(Core node) {
+            of.unobserved(node);
+        }
+
+        @Override
+        public void unobserved(Core node, E at) {
+            of.unobserved(node, at);
+        }
+
+        @Override
+        public void answeredByTheLibrary(Core call, LinearForm<A> form,
+                                         WhereAnOperatorAnswers where) {
+            of.answeredByTheLibrary(call, form, where);
+        }
+
+        @Override
+        public void folded(Core e, E at) {
+            of.folded(e, at);
+        }
+
+        @Override
+        public void bound(Core.LetIn binding, E at) {
+            of.bound(binding, at);
+        }
+
+        @Override
+        public void constructed(Core.Construct construct, TypeView type, LinearForm<A> value,
+                                E at) {
+            of.constructed(construct, type, value, at);
+        }
+
+        @Override
+        public boolean readsATotalOfWhatIsWrittenOut() {
+            return of.readsATotalOfWhatIsWrittenOut();
+        }
+
+        @Override
+        public void totalled(Core call, LinearForm<A> total, List<Core> elements) {
+            of.totalled(call, total, elements);
+        }
+
+        @Override
+        public void counted(Core call, List<Core> elements, E at) {
+            of.counted(call, elements, at);
+        }
+
+        @Override
+        public Optional<ListWrittenOut<E>> listItStandsAt(Core container, E at) {
+            return of.listItStandsAt(container, at);
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, E at) {
+            return of.readsThrough(fa, at);
+        }
+    }
+
+    /**
      * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
      * the caller keeps for as long as it reads with {@code reading}.
      *
@@ -221,18 +633,50 @@ public final class AffineForms {
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
     private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 
-        /** What each name the folds met came to, kept by the caller beside what each name the walk
-         *  read came to — or null where nobody keeps it, and each fold is its own. */
+        /** What each name the folds met came to, kept for as long as the walk reads, beside what
+         *  each name the walk read came to: a fold at each part of the expression is one fold of
+         *  the names under it, not one for each part. */
         private final FoldedValue.Kept folds;
 
+        /** Who is told where the reading ended in a value, or null where nobody asked. */
+        private final Consumed<E> told;
+
+        /** How many times the walk has read each name, so that a binding can ask whether the
+         *  body it binds for read it on the way the walk took. */
+        private final Map<BindingId, Integer> namesRead = new HashMap<>();
+
         Walk() {
-            this.folds = null;
+            this.folds = new FoldedValue.Kept();
+            this.told = null;
+        }
+
+        Walk(Consumed<E> told) {
+            this.folds = new FoldedValue.Kept();
+            this.told = told;
         }
 
         Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept folds) {
             super(answered);
             this.folds = folds;
+            this.told = null;
         }
+
+        void written(Core expression, E at) {
+            if (told != null) {
+                told.written(expression, at);
+            }
+        }
+
+        /** That the walk read {@code name}. */
+        void read(BindingId name) {
+            namesRead.merge(name, 1, Integer::sum);
+        }
+
+        /** How many times the walk has read {@code name} so far. */
+        int timesRead(BindingId name) {
+            return namesRead.getOrDefault(name, 0);
+        }
+
     }
 
     /**
@@ -274,6 +718,53 @@ public final class AffineForms {
                 java.util.Objects.requireNonNull(at, "and was reading it in something");
                 Objects.requireNonNull(why, "and stopped for a reason");
             }
+
+            /**
+             * The stop this one comes to, through however many calls the library states the form of
+             * it was reached under: the expression the reading failed to take apart, and the one
+             * {@link Halt#nonAffineOperation} and {@link Halt#declinedFigure} are the reason of.
+             *
+             * <p>This stop's own {@link #node} is the call the reader wrote around it, which is
+             * where the stop is reported and is not what an author changes: the product inside
+             * {@code Decimal.round(2, HALF_UP, a * b)} is the stop, and the call around it took
+             * nothing of the reason.
+             */
+            public StoppedAt<A, E> firstStop() {
+                StoppedAt<A, E> at = this;
+                while (at.why() instanceof Halt.AnArgumentStopped<A, E>(var argument)) {
+                    at = argument;
+                }
+                return at;
+            }
+        }
+    }
+
+    /**
+     * What a caller says of an expression nothing here composes.
+     *
+     * <p>A stop is a third answer beside a form and none: the caller has a rule for the
+     * expression and its reading stopped, which is not the same as having no rule. The stop is at
+     * the expression asked about, so that it is reported where the author wrote it.
+     */
+    public sealed interface Leaf<A, E> {
+
+        /** The expression is this form: an atom, or a value read through. */
+        record Form<A, E>(LinearForm<A> form) implements Leaf<A, E> {
+
+            public Form {
+                Objects.requireNonNull(form, "a leaf that is a form has one");
+            }
+        }
+
+        /** The caller can say nothing of the expression. */
+        record None<A, E>() implements Leaf<A, E> {}
+
+        /** The caller has a rule for the expression, and reading by it stopped. */
+        record Stopped<A, E>(Outcome.StoppedAt<A, E> stop) implements Leaf<A, E> {
+
+            public Stopped {
+                Objects.requireNonNull(stop, "a leaf that stopped stopped somewhere");
+            }
         }
     }
 
@@ -301,8 +792,49 @@ public final class AffineForms {
                     ? Optional.of(operation) : Optional.empty();
         }
 
+        /**
+         * The figure of this compiler's work this stop comes to, through however many calls the
+         * library states the form of it was reached under — or empty where it is another stop.
+         */
+        default Optional<WhyUnread> declinedFigure() {
+            Halt<A, E> at = this;
+            while (at instanceof AnArgumentStopped<A, E>(var argument)) {
+                at = argument.why();
+            }
+            return at instanceof DeclinedAtAFigure<A, E>(var why) ? Optional.of(why)
+                    : Optional.empty();
+        }
+
+        /**
+         * Whether this stop comes to one where a run aborts ({@link NoNumberOnARun}), through
+         * however many calls the library states the form of it was reached under: every run that
+         * works the expression out stops there, and none gets past it.
+         */
+        default boolean abortsEveryRun() {
+            Halt<A, E> at = this;
+            while (at instanceof AnArgumentStopped<A, E>(var argument)) {
+                at = argument.why();
+            }
+            return at instanceof NoNumberOnARun<A, E>;
+        }
+
         /** No rule here for the expression, and the caller named it nothing. */
         record NoRule<A, E>() implements Halt<A, E> {}
+
+        /**
+         * A rule here for the expression, which the reading declined to apply for the work it
+         * comes to: the figure it stopped at is {@code why}'s.
+         */
+        record DeclinedAtAFigure<A, E>(WhyUnread why) implements Halt<A, E> {
+
+            public DeclinedAtAFigure {
+                Objects.requireNonNull(why, "a reading declined at a figure declined at one");
+                if (why.figure().isEmpty()) {
+                    throw new IllegalArgumentException(
+                            why + " is not a figure of this compiler's work");
+                }
+            }
+        }
 
         /**
          * A product of two values neither of which is a constant, or a quotient by one that is
@@ -335,8 +867,9 @@ public final class AffineForms {
         record ValuesDisagree<A, E>() implements Halt<A, E> {}
 
         /**
-         * An argument of a call the library says the form of did not compose; reported at the call,
-         * which is what an author wrote, and stopped for what stopped the argument.
+         * A part of a call did not compose — an argument of a call the library says the form of, or
+         * a part the caller reads a call through; reported at the call, which is what an author
+         * wrote, and stopped for what stopped the part.
          */
         record AnArgumentStopped<A, E>(Outcome.StoppedAt<A, E> argument) implements Halt<A, E> {
 
@@ -377,7 +910,7 @@ public final class AffineForms {
         // may have an atom for, and taking the stop as the answer here would put the leaf question
         // out of reach — which is a rule about what a name may stand for, not about arithmetic.
         Stop<A, E> stopped = new Stop<>();
-        LinearForm<A> composed = composed(e, at, reading, following, stopped);
+        LinearForm<A> composed = composed(e, Core.withoutStanding(raw), at, reading, following, stopped);
         if (composed != null) {
             return new Outcome.Composed<>(composed);
         }
@@ -400,15 +933,22 @@ public final class AffineForms {
         // so the leaf question is asked either way. Where it has none, what stopped the reading is
         // what was found inside the name rather than the name — that is the expression with no rule
         // here, and the one an author would have to change.
-        LinearForm<A> leaf = reading.leafOf(e, at,
+        Leaf<A, E> leaf = reading.leaf(e, at,
                 denoted instanceof Outcome.StoppedAt<A, E> inside ? inside : stopped.at);
-        if (leaf != null) {
-            return new Outcome.Composed<>(leaf);
+        if (leaf instanceof Leaf.Form<A, E>(var form)) {
+            return new Outcome.Composed<>(form);
         }
         // Nothing named it, so this is a stop — reported at the most particular expression that has
         // no rule here. A sum whose left term nothing reads is not what an author would change.
         if (stopped.at != null) {
             return stopped.at;
+        }
+        // A rule the caller has for the expression, which stopped, is the expression's own reason
+        // where no argument stopped on arithmetic no form says: that is what an author would
+        // change, and a figure of this compiler's work is lifted by nothing they write.
+        if (leaf instanceof Leaf.Stopped<A, E>(var stop)) {
+            Outcome.StoppedAt<A, E> argument = stoppedOnArithmetic(e, at, reading, following);
+            return argument != null ? argument : stop;
         }
         return denoted != null ? denoted : noRule(e, at, reading, following);
     }
@@ -421,13 +961,24 @@ public final class AffineForms {
      */
     private static <A, E> Outcome<A, E> noRule(Core e, E at, Reading<A, E> reading,
                                                Walk<A, E> following) {
+        Outcome.StoppedAt<A, E> argument = stoppedOnArithmetic(e, at, reading, following);
+        return argument != null ? argument
+                : new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
+    }
+
+    /**
+     * The stop at the call {@code e}, for the first argument of it that stopped on arithmetic no
+     * form says — or null where none did.
+     */
+    private static <A, E> Outcome.StoppedAt<A, E> stoppedOnArithmetic(
+            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
         for (Core argument : Terms.argsOf(e)) {
             if (of(argument, at, reading, following) instanceof Outcome.StoppedAt<A, E> inside
                     && inside.why().nonAffineOperation().isPresent()) {
                 return new Outcome.StoppedAt<>(e, at, new Halt.AnArgumentStopped<>(inside));
             }
         }
-        return new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
+        return null;
     }
 
     /** The first stop met inside what this walk composes, kept while the questions after it are
@@ -480,16 +1031,26 @@ public final class AffineForms {
         if (led == null || !following.enter(r.binding())) {
             return null;
         }
+        following.read(r.binding());
         Outcome<A, E> read = switch (led) {
             // Asked once per question. What a name comes to is the value it was given read in the
             // environment it was given in, and a second occurrence of the name is that same
             // question — so the walk holds the answer rather than composing the value again.
             case ValueStanding.Named.One<E, Reading<A, E>>(
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
-                    following.readingOf(r.binding(), one.value(), one.at(),
-                            () -> of(one.value(), one.at(), one.names(), following));
+                    ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FORM,
+                            one.value(), one.at(),
+                            () -> reading.readingTheValueOf(r.binding(), one.value(), one.at(),
+                                    () -> following.readingOf(r.binding(), one.value(),
+                                    readAs(r, at, one.at(), reading), () -> {
+                                        countANameRead();
+                                        return of(one.value(), one.at(), one.names(), following);
+                                    })));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
+                // Several values the name may stand for, each read apart from the operations the
+                // run works out to give it: which of them it is, is not said.
+                reading.unobserved(e, at);
                 Stop<A, E> stopped = new Stop<>();
                 LinearForm<A> agreed = commonForm(members, e, at, following, stopped);
                 yield agreed != null ? new Outcome.Composed<>(agreed) : stopped.at;
@@ -497,6 +1058,33 @@ public final class AffineForms {
         };
         following.leave(r.binding());
         return read;
+    }
+
+    /** Where a test counts the values of names this reads afresh rather than finds kept, and null
+     *  everywhere else. What a chain of names costs is not something an answer says. */
+    static long[] NAMES_READ;
+
+    private static void countANameRead() {
+        long[] counting = NAMES_READ;
+        if (counting != null) {
+            counting[0]++;
+        }
+    }
+
+    /**
+     * What tells the question about the name {@code r} apart from the same question asked
+     * elsewhere: what the reading says the name stands for where it is read
+     * ({@link ValueStanding.Names#standingOf}), and where it says nothing less than the
+     * environment, the environment the value is read in.
+     *
+     * <p>The first, because an environment a reading makes afresh at each step is a new object
+     * each time it is reached and the name in it is the same name: keyed on the object, a name
+     * reached by two ways would be read twice, and a chain of names that each reach the one before
+     * by two ways would read the bottom of it once for every way down.
+     */
+    private static <A, E> Object readAs(Core.Read r, E at, E readIn, Reading<A, E> reading) {
+        Object stands = reading.standingOf(r, at);
+        return stands == at ? readIn : stands;
     }
 
     /**
@@ -585,6 +1173,63 @@ public final class AffineForms {
         }
     }
 
+    /**
+     * A reading that says what a run works out as the walk composes a value: each operation, and
+     * what is worked out without being read as a part of the value.
+     *
+     * <p>Every way the walk has of telling of an operation is abstract here. The defaults of
+     * {@link Reading} take an operation to be told of by nobody, so a reading that wants every one
+     * and answers some of the hooks compiles and drops the rest; one that is a {@code RunTelling}
+     * is made to answer each, and to say, where it tells nothing, that it does and why.
+     *
+     * <p>What this holds is that each hook is answered, and not that every operation is told: a
+     * reading that answers a hook by telling nothing still leaves what it works out untold, and
+     * says so where it does.
+     */
+    public interface RunTelling<A, E> extends Reading<A, E> {
+
+        /** A total over a list written out, which the reading reads as the sum of those numbers
+         *  ({@link Reading#totalled}). */
+        @Override
+        void totalled(Core call, LinearForm<A> total, List<Core> elements);
+
+        /** A count of a list written out, whose elements are worked out as the list is built
+         *  ({@link Reading#counted}). */
+        @Override
+        void counted(Core call, List<Core> elements, E at);
+
+        /** An operation composed, with the forms of its operands ({@link Reading#composed}). */
+        @Override
+        void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands);
+
+        /** A product composed into a number of its own ({@link Reading#composedAsAProduct}). */
+        @Override
+        void composedAsAProduct(Core operation, LinearForm<A> form, List<LinearForm<A>> operands);
+
+        /** A call of the library read as arithmetic over its arguments
+         *  ({@link Reading#answeredByTheLibrary}). */
+        @Override
+        void answeredByTheLibrary(Core call, LinearForm<A> form, WhereAnOperatorAnswers where);
+
+        /** A value bound that the body read without reading the name: a run works it out first
+         *  all the same ({@link Reading#bound}). */
+        @Override
+        void bound(Core.LetIn binding, E at);
+
+        /** A node read without telling of every operation it works out
+         *  ({@link Reading#unobserved}). */
+        @Override
+        void unobserved(Core node);
+
+        /** A call that folds to a number ({@link Reading#folded}). */
+        @Override
+        void folded(Core e, E at);
+
+        /** A newtype's construction, whose clauses a run is held to ({@link Reading#constructed}). */
+        @Override
+        void constructed(Core.Construct construct, TypeView type, LinearForm<A> value, E at);
+    }
+
     /** {@code of} with no plurality in it, which is what the members of one are read with. */
     private record OneAtATime<A, E>(Reading<A, E> of) implements Reading<A, E> {
 
@@ -614,6 +1259,11 @@ public final class AffineForms {
         }
 
         @Override
+        public Leaf<A, E> leaf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leaf(e, at, inside);
+        }
+
+        @Override
         public E inside(Core.LetIn li, E at) {
             return of.inside(li, at);
         }
@@ -640,8 +1290,9 @@ public final class AffineForms {
         }
 
         @Override
-        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
-            return of.productOf(left, right);
+        public LinearForm<A> productOf(Core.Binary operation, LinearForm<A> left,
+                                       LinearForm<A> right) {
+            return of.productOf(operation, left, right);
         }
 
         @Override
@@ -705,16 +1356,34 @@ public final class AffineForms {
         };
     }
 
-    /** The product of two forms by the arithmetic's rule, and where that rule finds no form, by
-     *  what the caller's atoms say of it. */
-    private static <A, E> Terms.Operated<A> productAsRead(LinearForm<A> left, LinearForm<A> right,
-                                                          Reading<A, E> reading) {
-        Terms.Operated<A> product = Terms.product(left, right);
-        if (!(product instanceof Terms.Operated.NotLinear<A>)) {
-            return product;
+    /**
+     * The product {@code b} writes, composed by the arithmetic's rule and, where that rule finds no
+     * form, by what the caller's atoms say of it ({@link Reading#productOf}), and told of
+     * {@code named} as the walk composed it ({@link #binaryTold}).
+     *
+     * <p>A product the caller's atoms made is told in its own way
+     * ({@link Reading#composedAsAProduct}), here, where it is made: what a reading says of the
+     * operation is then what it made of it, whichever way the operation was written.
+     */
+    private static <A, E> LinearForm<A> productTold(
+            Core.Binary b, Core named, E at, Reading<A, E> reading, Walk<A, E> following,
+            Stop<A, E> stopped) {
+        LinearForm<A> left = formOf(b.left(), at, reading, following, stopped);
+        LinearForm<A> right = formOf(b.right(), at, reading, following, stopped);
+        if (left == null || right == null) {
+            return null;
         }
-        LinearForm<A> asked = reading.productOf(left, right);
-        return asked == null ? product : new Terms.Operated.Form<>(asked);
+        List<LinearForm<A>> operands = List.of(left, right);
+        Terms.Operated<A> product = Terms.product(left, right);
+        if (product instanceof Terms.Operated.NotLinear<A>) {
+            LinearForm<A> made = reading.productOf(b, left, right);
+            if (made != null) {
+                reading.composedAsAProduct(named, made, operands);
+                return made;
+            }
+        }
+        return told(named, operated(b, at, left, right, (_, _) -> product, stopped), reading,
+                operands);
     }
 
     /** Whether {@code call} is a floor remainder whose divisor is a form with a number of the
@@ -729,12 +1398,209 @@ public final class AffineForms {
                 && !composed.form().coefs().isEmpty();
     }
 
+    /**
+     * Where {@code operation}, an operator a walk composed and told a reading of
+     * ({@link Reading#composed}), answers, as the operator's own account says
+     * ({@link WhereAnOperatorAnswers}): a sum, a difference or a product as its operator and
+     * types say — written as an operator or as the library call that is one — and a negation as
+     * its type says. Every reading that asks where the operations
+     * it is told of answer asks it here.
+     */
+    public static WhereAnOperatorAnswers whereItAnswers(Core operation) {
+        return switch (Terms.asOperator(operation)) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type());
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> throw new IllegalArgumentException(
+                    "a walk composes an operator and nothing else: " + operation);
+        };
+    }
+
+    /** {@code e} as the operator it is where it is a library call written as a function — the
+     *  walk reads it as that, and tells the reading of the call — and {@code e} itself otherwise. */
+    public static Core asOperator(Core e) {
+        return Terms.asOperator(e);
+    }
+
     /** {@code form}, with the reading told {@code operation} came to it ({@link Reading#composed})
      *  — where it came to one. */
     private static <A, E> LinearForm<A> told(Core operation, LinearForm<A> form,
-                                             Reading<A, E> reading) {
+                                             Reading<A, E> reading, List<LinearForm<A>> operands) {
         if (form != null) {
-            reading.composed(operation, form);
+            reading.composed(operation, form, operands);
+        }
+        return form;
+    }
+
+    /** The sum, difference or product {@code b} writes, composed by {@code rule} and told of
+     *  {@code named}: the node the walk was asked about, which is {@code b} itself unless a call
+     *  is read as the operator it is. */
+    private static <A, E> LinearForm<A> binaryTold(
+            Core.Binary b, Core named, E at, Reading<A, E> reading, Walk<A, E> following,
+            Stop<A, E> stopped,
+            BiFunction<LinearForm<A>, LinearForm<A>, Terms.Operated<A>> rule) {
+        LinearForm<A> left = formOf(b.left(), at, reading, following, stopped);
+        LinearForm<A> right = formOf(b.right(), at, reading, following, stopped);
+        LinearForm<A> form = operated(b, at, left, right, rule, stopped);
+        return form == null ? null : told(named, form, reading, List.of(left, right));
+    }
+
+    /**
+     * {@code form}, what {@code call} was read as over its arguments, with the reading told where a
+     * run stops at the call ({@link Reading#answeredByTheLibrary}). A call that ends none is the
+     * arithmetic and nothing else. One whose owners say it ends a run only where its answer has
+     * no place stops where the form is past the ends of the type it answers; any other, where they
+     * do not say.
+     */
+    private static <A, E> LinearForm<A> answeredByTheLibrary(Core call, LinearForm<A> form,
+                                                             Reading<A, E> reading) {
+        reading.answeredByTheLibrary(call, form, whereTheLibraryAnswers(call, reading));
+        return form;
+    }
+
+    private static <A, E> WhereAnOperatorAnswers whereTheLibraryAnswers(Core call,
+                                                                       Reading<A, E> reading) {
+        return whereTheLibraryAnswers(call, reading.declarations());
+    }
+
+    /**
+     * Where {@code call} answers, where it is an operation the library says answers a form of what
+     * it is handed ({@link BoundOperationFacts#answersAFormOfItsArguments}), or computes what an
+     * operator does ({@link BoundOperationFacts#operatorComputedBy}), and that ends a run only
+     * where that answer has no place: between the ends of the type it answers. Null for any other
+     * call, which says nothing here of the arguments it ends a run on.
+     *
+     * <p>The one account of such a call for every reading that holds a run to where its operators
+     * answer, so that the place a run stops at is the same whichever reading asks.
+     */
+    public static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereAFormItIsHandedAnswers(
+            Core call, DeclarationAccess declarations) {
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        if (applied == null || (facts.answersAFormOfItsArguments(applied.operation()) == null
+                && facts.operatorComputedBy(applied.operation()) == null)) {
+            return null;
+        }
+        return whereTheLibraryAnswers(call, declarations)
+                instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held ? held : null;
+    }
+
+    /**
+     * Where {@code call}, an operation of the library, answers: everywhere where it ends no run,
+     * between the ends of the type it answers where its owners say it ends one only where its
+     * answer has no place, and otherwise not stated.
+     */
+    public static WhereAnOperatorAnswers whereTheLibraryAnswers(Core call,
+                                                               DeclarationAccess declarations) {
+        WhatARunMayEndFor.Endings own = WhatARunMayEndFor.itself(call);
+        if (own.endsNone()) {
+            return new WhereAnOperatorAnswers.Everywhere();
+        }
+        if (!(own instanceof WhatARunMayEndFor.Endings.Known(AbortSet kinds))
+                || !kinds.kinds().stream()
+                .allMatch(kind -> kind == AbortKind.REQUIRED_FORM_HAS_NO_PLACE)) {
+            return new WhereAnOperatorAnswers.NotStated("its owners say more than its answer"
+                    + " having no place ends a run");
+        }
+        Carrier answered = Carrier.ofValue(call.type(), declarations);
+        OrderedInterval ends = answered == null ? null : answered.extent();
+        BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
+        BigInteger greatest = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
+        return least == null || greatest == null
+                ? new WhereAnOperatorAnswers.NotStated("its type has no whole ends")
+                : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
+    }
+
+    /**
+     * The list {@code call} adds up, where it is a call that ends a run only where the total of
+     * the numbers it adds up is no {@code Int} ({@link GetsPast.WhereTheTotalFits}) and the list
+     * is written out; null otherwise.
+     */
+    private static <A, E> Optional<ListWrittenOut<E>> listAddedUpWrittenOut(
+            Core.PreservedCall call, E at, Reading<A, E> reading) {
+        if (!(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                instanceof GetsPast.WhereTheTotalFits(int operand))
+                || operand >= call.args().size()) {
+            return Optional.empty();
+        }
+        return listWrittenOutBy(call.args().get(operand), at, reading);
+    }
+
+    /**
+     * The list {@code container} is, where it is a list written out and reaching it works out
+     * nothing that may end a run apart from its elements, which the reading of the list tells of
+     * itself; empty otherwise.
+     *
+     * <p>Where a list stands is a question of values, and the standing of a {@code let} is the
+     * value its body ends at, which leaves out the initializer: it is worked out all the same. So
+     * the list is taken as written only where the container, as it is written, ends no run beyond
+     * its elements. A name the container reads is not asked: what it is bound to is worked out
+     * where it is bound, which the walk that reached the container has read.
+     */
+    public static <A, E> Optional<ListWrittenOut<E>> listWrittenOutBy(Core container, E at,
+                                                                      Reading<A, E> reading) {
+        Optional<ListWrittenOut<E>> written = reading.listItStandsAt(container, at);
+        if (written.isEmpty()) {
+            return written;
+        }
+        Set<Core> elements = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Core element : written.get().list().elements()) {
+            elements.add(Core.withoutStanding(element));
+        }
+        return ARowsRun.getsPastBeneathApart(container, elements,
+                reading.declarations().answers()) ? written : Optional.empty();
+    }
+
+    /** The list {@code call} counts, where it is {@code List.length} of a list written out; empty
+     *  otherwise. */
+    private static <A, E> Optional<ListWrittenOut<E>> listCountedWrittenOut(
+            Core.PreservedCall call, E at, Reading<A, E> reading) {
+        return call.args().size() == 1
+                && call.operation() instanceof ValueName.Stdlib.Operation operation
+                && NumericMeasures.counts(operation) == NumericMeasures.Counts.LIST
+                ? listWrittenOutBy(call.args().get(0), at, reading) : Optional.empty();
+    }
+
+    /**
+     * {@code call}, which adds up the numbers of {@code list}, read as the sum of the forms of its
+     * elements and told as the one operation it is ({@link Reading#totalled}); null where an
+     * element does not compose.
+     */
+    private static <A, E> LinearForm<A> totalOfWhatIsWrittenOut(Core call,
+                                                                ListWrittenOut<E> written, E at,
+                                                                Reading<A, E> reading,
+                                                                Walk<A, E> following,
+                                                                Stop<A, E> stopped) {
+        Core.ListLit list = written.list();
+        Stop<A, E> inside = new Stop<>();
+        LinearForm<A> total = LinearForm.constant(ExactRatio.ZERO);
+        for (Core element : list.elements()) {
+            LinearForm<A> value = formOf(element, written.at(), reading, following, inside);
+            if (value == null) {
+                return halted(call, at, new Halt.AnArgumentStopped<>(inside.at), stopped);
+            }
+            switch (total.plus(value)) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> held) -> total = held;
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> {
+                    return halted(call, at, new Halt.NotHeld<>(why), stopped);
+                }
+            }
+        }
+        reading.totalled(call, total, list.elements());
+        return total;
+    }
+
+    /**
+     * {@code form}, the quotient {@code division} came to, with the reading told when a run may
+     * still stop at it: the quotient is by a number that is not nought, which the form being one
+     * says, and stops for no other reason only where it is not of a {@code Rational}
+     * ({@link WhereAnOperatorAnswers}).
+     */
+    private static <A, E> LinearForm<A> quotientTold(Core.Binary division, LinearForm<A> form,
+                                                     E at, Reading<A, E> reading) {
+        if (form != null && !(WhereAnOperatorAnswers.ofAnOperator(division.op(), division.type())
+                instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
+            reading.unobserved(division, at);
         }
         return form;
     }
@@ -750,46 +1616,55 @@ public final class AffineForms {
 
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
      *  it or the rule it has does not compose. */
-    private static <A, E> LinearForm<A> composed(Core asPlaced, E at, Reading<A, E> reading,
-                                                 Walk<A, E> following,
+    private static <A, E> LinearForm<A> composed(Core asPlaced, Core named, E at,
+                                                 Reading<A, E> reading, Walk<A, E> following,
                                                  Stop<A, E> stopped) {
         Core e = Core.withoutStanding(asPlaced);
         LinearForm<A> written = literal(e, at, reading);
         if (written != null) {
+            following.written(e, at);
             return written;
+        }
+        if (e instanceof Core.PreservedCall call && reading.readsATotalOfWhatIsWrittenOut()) {
+            Optional<ListWrittenOut<E>> list = listAddedUpWrittenOut(call, at, reading);
+            if (list.isPresent()) {
+                return totalOfWhatIsWrittenOut(call, list.get(), at, reading, following, stopped);
+            }
+            Optional<ListWrittenOut<E>> counted = listCountedWrittenOut(call, at, reading);
+            if (counted.isPresent()) {
+                List<Core> elements = counted.get().list().elements();
+                reading.counted(call, elements, counted.get().at());
+                return LinearForm.constant(ExactRatio.of(elements.size()));
+            }
         }
         return switch (e) {
             // No number: the smallest Int negated is the run time's abort, and reading it as the
             // form of the operand negated would put a number there that no run has.
             case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) ->
                     halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
-            case Core.Neg n -> told(n, Terms.negate(formOf(n.operand(), at, reading, following,
-                    stopped)), reading);
-            case Core.Binary b when b.op() == BinOp.ADD -> told(b,
-                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> Terms.sum(left, right, false), stopped), reading);
-            case Core.Binary b when b.op() == BinOp.SUB -> told(b,
-                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> Terms.sum(left, right, true), stopped), reading);
+            case Core.Neg n -> {
+                LinearForm<A> operand = formOf(n.operand(), at, reading, following, stopped);
+                yield told(n, Terms.negate(operand), reading, operand == null ? List.of()
+                        : List.of(operand));
+            }
+            case Core.Binary b when b.op() == BinOp.ADD -> binaryTold(b, named, at, reading, following,
+                    stopped, (left, right) -> Terms.sum(left, right, false));
+            case Core.Binary b when b.op() == BinOp.SUB -> binaryTold(b, named, at, reading, following,
+                    stopped, (left, right) -> Terms.sum(left, right, true));
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two — unless the caller's atoms make it one (`Reading.productOf`).
-            case Core.Binary b when b.op() == BinOp.MUL -> told(b,
-                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped),
-                            (left, right) -> productAsRead(left, right, reading), stopped),
-                    reading);
+            case Core.Binary b when b.op() == BinOp.MUL ->
+                    productTold(b, named, at, reading, following, stopped);
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all
             // rather than a value whose fraction went somewhere the form could not say. Which
             // divisors are constant, and why `1 / x` is none of them, is `Terms.quotient`'s.
-            case Core.Binary b when b.op() == BinOp.DIV ->
+            case Core.Binary b when b.op() == BinOp.DIV -> quotientTold(b,
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped), Terms::quotient,
-                            stopped);
+                            stopped), at, reading);
             // An operation the library says answers arithmetic over what it was given is that
             // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,
             // and a rule about the arguments is a rule about the call. Composed here beside the
@@ -821,11 +1696,10 @@ public final class AffineForms {
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
-            case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                            reading.declarations().kinds(), reading.declarations().sums())
-                            .isWrapped() ->
-                    formOf(nd.values().get(0).value(), at, reading, following, stopped);
+            case Core.Construct nd -> {
+                TypeView made = newtypeMadeBy(nd, reading);
+                yield made == null ? null : construction(nd, made, at, reading, following, stopped);
+            }
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather
             // than as what kind of node was standing there: a construction without the field asked
@@ -837,6 +1711,21 @@ public final class AffineForms {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(fa, at, reading, following);
                 if (eliminated != null) {
+                    // A newtype's value is the target itself, so it is read as the target is: the
+                    // construction it stands at is told as any construction is, and the names, the
+                    // bindings and the constructions around it are read as the walk reads them
+                    // anywhere. Taking the value off what the target stands at instead would skip
+                    // whatever the walk does on the way there.
+                    if (isANewtypesValue(fa, reading)) {
+                        yield formOf(fa.target(), at, reading, following, stopped);
+                    }
+                    // Read off the construction that gave the value, whose other parts are worked
+                    // out all the same: untold where one of them can end a run.
+                    if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
+                            following, reading::makingEndsNoRunOver,
+                            reading.declarations().answers())) {
+                        reading.unobserved(e, at);
+                    }
                     yield commonForm(eliminated, e, at, following, stopped);
                 }
                 yield reading.readsThrough(fa, at)
@@ -851,6 +1740,9 @@ public final class AffineForms {
             case Core.TupleGet get -> {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(get, at, reading, following);
+                if (eliminated != null) {
+                    reading.unobserved(e, at);
+                }
                 yield eliminated == null ? null
                         : commonForm(eliminated, e, at, following, stopped);
             }
@@ -859,10 +1751,66 @@ public final class AffineForms {
             // what it holds is a number is not asked: a binding denotes what it was given whatever
             // kind of value that is, which is what makes the facts a walk recorded about the places
             // under it reach the step that reads them (#867).
-            case Core.LetIn li -> formOf(li.body(), reading.inside(li, at), reading, following,
-                    stopped);
+            case Core.LetIn li -> {
+                BindingId bound = li.binder() == null ? null : li.binder().binding();
+                int readBefore = bound == null ? 0 : following.timesRead(bound);
+                LinearForm<A> body = formOf(li.body(), reading.inside(li, at), reading, following,
+                        stopped);
+                // The value is worked out before the body, read or not, as the other parts of a
+                // construction read through are. One the body read on the way the walk took is
+                // read where its name is; one it did not — never read, or read only in an arm
+                // not taken — is read nowhere else. Where the body composed nothing the walk
+                // stopped in it, and what it stopped at is whoever reads that one's to answer for.
+                if (body != null && (bound == null || following.timesRead(bound) == readBefore)
+                        && !ARowsRun.getsPastBeneath(li.value(),
+                                reading.declarations().answers())) {
+                    reading.bound(li, at);
+                }
+                yield body;
+            }
             default -> null;
         };
+    }
+
+    /**
+     * The view of the type {@code nd} makes where that is a newtype, or null where it is a data
+     * of one field or more, whose construction is a value of its own.
+     */
+    private static <A, E> TypeView newtypeMadeBy(Core.Construct nd, Reading<A, E> reading) {
+        if (nd.values().isEmpty()) {
+            return null;
+        }
+        TypeView made = TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
+                reading.declarations().kinds(), reading.declarations().sums());
+        return made.isWrapped() ? made : null;
+    }
+
+    /**
+     * A newtype's construction read as the number it wraps, and told as the check it makes
+     * ({@link Reading#constructed}) after the operations of that number.
+     */
+    private static <A, E> LinearForm<A> construction(Core.Construct nd, TypeView made, E at,
+                                                     Reading<A, E> reading, Walk<A, E> following,
+                                                     Stop<A, E> stopped) {
+        LinearForm<A> wrapped = formOf(nd.values().get(0).value(), at, reading, following, stopped);
+        if (wrapped == null) {
+            reading.unobserved(nd, at);
+        } else {
+            reading.constructed(nd, made, wrapped, at);
+        }
+        return wrapped;
+    }
+
+    /**
+     * Whether {@code fa} reads the number a newtype wraps off a value of the newtype. That is a
+     * fact about the types alone, as {@link Location#isStep} has it: the value is the value the
+     * target is, whatever the target stands at.
+     */
+    private static <A, E> boolean isANewtypesValue(Core.FieldAccess fa, Reading<A, E> reading) {
+        return fa.field().equals("value")
+                && TypeView.asWritten(fa.target().type(), reading.symbols(),
+                        reading.declarations().kinds(), reading.declarations().sums())
+                        .isWrapped();
     }
 
     /**
@@ -893,12 +1841,14 @@ public final class AffineForms {
             // any expression ({@link #composed}).
             LinearForm<A> written = literal(here, at, reading);
             if (written != null) {
+                following.written(here, at);
                 form = written;
                 break;
             }
             List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                     ValueStanding.eliminated(here, at, reading, following);
             if (eliminated != null) {
+                reading.unobserved(here, at);
                 form = commonForm(eliminated, here, at, following, stop);
                 break;
             }
@@ -933,12 +1883,15 @@ public final class AffineForms {
 
     /** The number {@code e} folds to read in {@code at} with the reading's own names
      *  ({@link FoldedValue}), or null where it folds to none — with what each name came to kept
-     *  where the walk's caller keeps it. */
+     *  by the walk. */
     private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading,
                                                   Walk<A, E> following) {
-        return FoldedValue.number(following.folds == null
-                ? FoldedValue.of(e, at, reading, reading.symbols())
-                : FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
+        BigDecimal folded = FoldedValue.number(
+                FoldedValue.of(e, at, reading, reading.symbols(), following.folds));
+        if (folded != null) {
+            reading.folded(e, at);
+        }
+        return folded;
     }
 
     /**
@@ -952,11 +1905,14 @@ public final class AffineForms {
         if (folded != null) {
             return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
         }
-        LinearForm<A> leaf = reading.leafOf(p, at, stopped.at);
-        if (leaf != null) {
-            return new Outcome.Composed<>(leaf);
+        Leaf<A, E> leaf = reading.leaf(p, at, stopped.at);
+        if (leaf instanceof Leaf.Form<A, E>(var form)) {
+            return new Outcome.Composed<>(form);
         }
-        return stopped.at != null ? stopped.at
+        if (stopped.at != null) {
+            return stopped.at;
+        }
+        return leaf instanceof Leaf.Stopped<A, E>(var stop) ? stop
                 : new Outcome.StoppedAt<>(p, at, new Halt.NoRule<>());
     }
 
@@ -992,7 +1948,12 @@ public final class AffineForms {
         // once, and what the carrier takes apart is followed where the expression was written.
         Place place = carrier.literalOf(new ValueStanding.Standing<>(e, at, reading),
                 reading.symbols());
-        return place == null ? null : LinearForm.constant(Count.number(place).exactly());
+        if (place == null) {
+            return null;
+        }
+        // Taken by the value it stands as, as a fold is: what working it out runs is not run.
+        reading.folded(e, at);
+        return LinearForm.constant(Count.number(place).exactly());
     }
 
     /**
@@ -1018,7 +1979,7 @@ public final class AffineForms {
                 }
             }
         }
-        return form;
+        return answeredByTheLibrary(call, form, reading);
     }
 
     /**
@@ -1070,7 +2031,7 @@ public final class AffineForms {
                 }
             }
         }
-        return form;
+        return answeredByTheLibrary(call, form, reading);
     }
 
     /**

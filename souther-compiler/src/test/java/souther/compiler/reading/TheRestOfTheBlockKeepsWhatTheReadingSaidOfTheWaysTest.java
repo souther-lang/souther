@@ -2,6 +2,7 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
@@ -52,10 +53,7 @@ class TheRestOfTheBlockKeepsWhatTheReadingSaidOfTheWaysTest {
         Compilation compilation = Compilation.ofSource(MODEL.replace("CONDITION", condition),
                 "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Map<String, CoverageRead.Read> reads =
                 compilation.db().ask(new Adequacy.Meets("example.settle")).value();
         assertNotNull(reads.get("settle"), "the body is read");

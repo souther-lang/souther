@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.RuleReadingContext;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -351,6 +354,44 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         }
     }
 
+    /**
+     * A reading asked where a term runs a second time answers out of what it worked out the first
+     * time, whatever order the terms beside it arrive in — and the answer is the one a reading that
+     * never asked works out.
+     *
+     * <p>Kept per reading, so a reading made from it by fixing more is answered by what it holds.
+     */
+    @Test
+    void aQuestionAskedTwiceOfOneReadingPutsNothingOnTheSecondTime() {
+        Read read = read(FOUR, "take");
+        ReadQuantities region = (ReadQuantities) read.inputs().quantities(read.rules());
+        NumericTerm a = FOUR_TERMS.get(0);
+        NumericTerm b = FOUR_TERMS.get(1);
+        NumericTerm c = FOUR_TERMS.get(2);
+        NumericTerm d = FOUR_TERMS.get(3);
+        ReadQuantities fixed = region.fixing(Map.of(a, count(1)));
+        NumericDomain.FormProjection first = fixed.projectionOf(b, List.of(c, d));
+        NumericDomain.Bounds alone = fixed.runsBetween(b);
+
+        long before = ReadQuantities.stepsPutOn();
+        NumericDomain.FormProjection again = fixed.projectionOf(b, List.of(d, c, d));
+        NumericDomain.Bounds aloneAgain = fixed.runsBetween(b);
+
+        assertEquals(0, ReadQuantities.stepsPutOn() - before);
+        assertEquals(first, again);
+        assertEquals(alone, aloneAgain);
+        assertEquals(first, region.fixing(Map.of(a, count(1))).projectionOf(b, List.of(c, d)),
+                "a reading that never asked works out the same");
+        Map<NumericTerm, Place> more = new LinkedHashMap<>();
+        more.put(c, count(30));
+        more.put(d, count(0));
+        NumericDomain.FormProjection.Within narrowed = assertInstanceOf(
+                NumericDomain.FormProjection.Within.class,
+                fixed.fixing(more).projectionOf(b, List.of(c, d)));
+        assertEquals(Endpoint.inclusive(count(9)), narrowed.bounds().max(),
+                "a reading fixing more is answered by what it holds");
+    }
+
     private static ReadQuantities taken(ReadQuantities.Taking taking) {
         return ((ReadQuantities.Taking.Taken) taking).rules();
     }
@@ -609,7 +650,8 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             Map<souther.compiler.check.RuleKey, Count> settled =
                     Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
-                    name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
+                    name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY),
                     settled);
             Quantities fixed = asked.given(X, count(at));
 
@@ -633,7 +675,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      */
     @Test
     void aProofThatNamesAPositionIsSaidUnderTheParameter() {
-        Read read = read(NOTHING_AT_A_FIELD, "take");
+        Read read = readRefused(NOTHING_AT_A_FIELD, "take", List.of("E1013"));
 
         EmptyInput why = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
 
@@ -743,13 +785,23 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     }
 
     private static Read read(String source, String behavior) {
+        return read(ACompiledModel.answered(source), behavior);
+    }
+
+    /** The reading of a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static Read readRefused(String source, String behavior, List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusedFor, compilation);
+        return read(compilation, behavior);
+    }
+
+    private static Read read(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get(behavior), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()), rules);

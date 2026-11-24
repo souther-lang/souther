@@ -7,11 +7,12 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -46,9 +47,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * twice, and a call of one whose own body compares something: measured without them, the questions
  * below are answered by walks that never met a second copy of anything, and one of them is answered
  * by a walk that never met the absence it is about.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
 
     /** One helper called twice: one written comparison, two copies of it in the tree that runs. */
@@ -418,7 +423,8 @@ class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
      */
     private static List<Module> everyModule() {
         List<Module> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            Compilation compilation = model.answered();
             int before = out.size();
             modulesOf(compilation, out);
             assertTrue(out.size() > before,
@@ -438,8 +444,8 @@ class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
     }
 
     private static List<Module> modulesOf(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         List<Module> out = new ArrayList<>();
         modulesOf(compilation, out);
         assertTrue(!out.isEmpty(),

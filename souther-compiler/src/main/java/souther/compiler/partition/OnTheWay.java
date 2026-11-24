@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
 import souther.compiler.core.EnteredArm;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -10,11 +11,20 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * One condition on the way to a comparison, and what became of it.
@@ -45,6 +55,55 @@ import java.util.Optional;
  * sits, which is the rule {@link souther.compiler.reach.PathDecision} is written to as well.
  */
 public sealed interface OnTheWay {
+
+    /**
+     * Each of {@code entries}, and each condition inside an alternative of one or a statement of a
+     * count, given to {@code visit} once, in the order it is first met: the condition, then what is
+     * inside it.
+     *
+     * <p>The one walk down the conditions of a way, for every reader that wants each of them and
+     * not each way to it. A condition used on two sides of a connective is one object held in two
+     * places, and conditions made through a name used twice are two to the depth of the chain, so a
+     * reader that goes down them itself pays for every way. A reader whose answer for a condition
+     * differs by where it stands is not one that wants each of them, and goes down the way as the
+     * walk of its owner does ({@link WayToTheBorder#along}).
+     *
+     * @param met    the conditions already met, which are not visited again; kept by identity
+     * @param inside which of the conditions met are gone down into
+     */
+    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met, Consumer<OnTheWay> visit,
+                         Predicate<OnTheWay> inside) {
+        for (OnTheWay each : entries) {
+            if (!met.add(each)) {
+                continue;
+            }
+            visit.accept(each);
+            if (!inside.test(each)) {
+                continue;
+            }
+            switch (each) {
+                case OneOf several -> several.alternatives()
+                        .forEach(one -> eachOnce(one, met, visit, inside));
+                case Counted counted -> counted.statements().forEach(one -> {
+                    eachOnce(one.holding(), met, visit, inside);
+                    eachOnce(one.failing(), met, visit, inside);
+                });
+                // A narrowing's alternatives are the cases it leaves, each made afresh as a
+                // narrowing to that case; they state nothing the narrowing did not.
+                case Narrowed _, Declined _, TakenIn _, Settled _ -> { }
+            }
+        }
+    }
+
+    /** {@link #eachOnce(List, Set, Consumer, Predicate)} going down into every condition. */
+    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met, Consumer<OnTheWay> visit) {
+        eachOnce(entries, met, visit, _ -> true);
+    }
+
+    /** {@link #eachOnce(List, Set, Consumer)} with no condition met yet. */
+    static void eachOnce(List<OnTheWay> entries, Consumer<OnTheWay> visit) {
+        eachOnce(entries, Collections.newSetFromMap(new IdentityHashMap<>()), visit);
+    }
 
     /**
      * Which question a report about it asks for its place.
@@ -92,9 +151,72 @@ public sealed interface OnTheWay {
      * <p>What it asks is {@link RowDemand}'s answer and not a second arm here. A rule over numbers,
      * a rule over a carrier's own values and whatever a composer learns to build next are all
      * conditions a row has to pass, and a reader asking what the way took in asks one list.
+     *
+     * <p>And which elements the names in the condition stood for. The demand is said at
+     * positions, and two names for two elements of one container are one position, so two
+     * entries alike but for the names are two conditions until the way is put together
+     * ({@link ElementsOnTheWay}).
+     *
+     * <p><b>A record holding its hash, where {@link OneOf} is a class for its.</b> An entry is taken
+     * apart by what it holds at far more places than a choice is, by patterns that name the demand
+     * inside it, and a class would leave each of those to ask for the parts one at a time. So the
+     * hash is a component the rest decides, and nothing that reads an entry for what it is reads
+     * it: it is no part of what an entry is written as, and a pattern passes over it.
+     *
+     * @param hash worked out from the rest when it is made, whatever is handed in: an entry is a
+     *             member of the sets a way is compared by and is asked for its hash at every
+     *             lookup in them, and what it is made of is a tree of records down to where the
+     *             condition was written
      */
-    record TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand)
-            implements OnTheWay {}
+    record TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand,
+                   NamedElements named, @DecidedByTheRest int hash) implements OnTheWay {
+
+        public TakenIn {
+            Objects.requireNonNull(named, "the elements a condition was read of, or none");
+            // Folded as the record folds its components, so the entry hashes as it always has.
+            hash = (31 * Objects.hashCode(anchor) + Objects.hashCode(demand)) * 31
+                    + named.hashCode();
+        }
+
+        public TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand,
+                       NamedElements named) {
+            this(anchor, demand, named, 0);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        /** Written as the three things it is, and not the hash beside them. */
+        @Override
+        public String toString() {
+            return "TakenIn[anchor=" + anchor + ", demand=" + demand + ", named=" + named + "]";
+        }
+
+        /**
+         * What a composer is asked of a row for this: each count it writes a row toward where the
+         * demand has some beside the run's ({@link RowDemand.ForTheRun#composedAs}), and this as it
+         * is otherwise.
+         */
+        public List<TakenIn> forComposing() {
+            if (demand instanceof RowDemand.ForTheRun(var _, var _, var _, var _,
+                    Optional<RowDemand.ForTheRun.ComposedAs> composedAs) && composedAs.isPresent()) {
+                return composedAs.get().counts().stream()
+                        .map(count -> new TakenIn(anchor, count, named)).toList();
+            }
+            return List.of(this);
+        }
+
+        /** The rest compared, the hash first: two entries that differ almost always differ in
+         *  it. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof TakenIn that && hash == that.hash
+                    && Objects.equals(anchor, that.anchor) && Objects.equals(demand, that.demand)
+                    && named.equals(that.named));
+        }
+    }
 
     /**
      * A condition that says which values a position is one of, as the position it narrows.
@@ -129,12 +251,16 @@ public sealed interface OnTheWay {
      *                   each is one of its cases; only the ones some name of it crosses are kept
      * @param onItsOrder the places of its order the narrowing leaves out, one hole each; empty
      *                   where the position stands on no enumeration's order
+     * @param named      which elements the names in the scrutinee stood for, as a
+     *                   {@link TakenIn} keeps them
      */
     record Narrowed(ConditionReportAnchor anchor, TermPath position,
                     List<NameReach.Crossing> crossings,
-                    List<TakenConstraint.AwayFrom> onItsOrder) implements OnTheWay {
+                    List<TakenConstraint.AwayFrom> onItsOrder, NamedElements named)
+            implements OnTheWay {
 
         public Narrowed {
+            Objects.requireNonNull(named, "the elements a condition was read of, or none");
             if (position == null || !position.narrowsWhatItReaches()) {
                 throw new IllegalArgumentException(
                         "a narrowing on the way is a position read as one of its cases: " + position);
@@ -169,8 +295,8 @@ public sealed interface OnTheWay {
             List<List<OnTheWay>> out = new ArrayList<>();
             for (Refinement each : position.narrowing().atoms()) {
                 out.add(List.of(new Narrowed(anchor,
-                        DeclaredInput.narrowedTo(position, CasesLeft.of(each)), crossings,
-                        onItsOrder)));
+                        position.refine(CasesLeft.of(each)), crossings,
+                        onItsOrder, named)));
             }
             return List.copyOf(out);
         }
@@ -241,15 +367,46 @@ public sealed interface OnTheWay {
         private final List<List<OnTheWay>> alternatives;
         private final Optional<Proposition> stated;
         private final int hash;
+        /** The elements the names inside every alternative stood for, worked out once from the
+         *  alternatives as the hash is: no part of which condition this is. */
+        private final ElementsNamed elementsNamed;
 
         /**
-         * The condition {@code condition}, come out one of {@code alternatives}.
+         * The ways made, each kept while it is held somewhere. Every path through a condition of
+         * several ways reads the condition again, and what each reads is one of the same few
+         * conditions. Kept whole and not by slot: a way made again while an equal one is held is
+         * that one, so the ways inside one another are the same objects at every depth and an
+         * equality stops at them. Where one slot kept the newest of those that fell in it, a way
+         * pushed out was made again as a second equal object, and comparing two of them went down
+         * both through every way inside, as many ways as there are paths to it.
+         *
+         * <p>Held weakly both ways, as the propositions are kept: a way refers to the model it was
+         * read from, and a compile is done with it.
+         */
+        private static final Map<OneOf, WeakReference<OneOf>> MADE = new WeakHashMap<>();
+        /**
+         * The condition {@code condition}, come out one of {@code alternatives} — the one made
+         * before, where it is still held.
          *
          * @param alternatives what each alternative asks, in the order they are kept; two or more
          * @param stated       the statement read, where one proposition says it
          */
-        public OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                     List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
+        public static OneOf of(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                               List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
+            OneOf made = new OneOf(condition, anchor, alternatives, stated);
+            synchronized (MADE) {
+                WeakReference<OneOf> held = MADE.get(made);
+                OneOf kept = held == null ? null : held.get();
+                if (kept != null) {
+                    return kept;
+                }
+                MADE.put(made, new WeakReference<>(made));
+                return made;
+            }
+        }
+
+        private OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                      List<List<OnTheWay>> alternatives, Optional<Proposition> stated) {
             if (condition == null || stated == null) {
                 throw new IllegalArgumentException(
                         "a condition of several ways is some condition the reading met");
@@ -262,6 +419,16 @@ public sealed interface OnTheWay {
             this.alternatives = alternatives.stream().map(List::copyOf).toList();
             this.stated = stated;
             this.hash = Objects.hash(condition, anchor, this.alternatives, stated);
+            List<ElementsNamed> inside = new ArrayList<>();
+            this.alternatives.forEach(one -> one.forEach(each ->
+                    inside.add(ElementsOnTheWay.namedIn(each))));
+            this.elementsNamed = ElementsNamed.allOf(inside);
+        }
+
+        /** The elements the names inside every alternative stood for
+         *  ({@link ElementsOnTheWay#namedIn}). */
+        ElementsNamed elementsNamed() {
+            return elementsNamed;
         }
 
         public ConditionOccurrence condition() {
@@ -452,31 +619,35 @@ public sealed interface OnTheWay {
      *                  it, or none where it is no arm's. Beside the name and not in place of it: a
      *                  reader asking whether a condition is the entering of one particular arm
      *                  asks here, and the name is what tells the conditions apart
-     * @param ofAnAnswerAlone whether the condition names nothing but what a dependency answered.
-     *                  An answer is an unknown value no number of the input is related to, so such
-     *                  a condition narrows the way without relating any numbers of the input
+     * @param besideAnAnswer where the condition is about what a dependency answered, the positions
+     *                  of the input it names beside the answer — empty where it is about no answer
+     *                  or names something else. An answer is an unknown value no number of the
+     *                  input is related to, so such a condition narrows the way without relating
+     *                  any numbers of the input but those at the positions it names
      */
     record Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                    List<WhyNotTaken> whys, Optional<EnteredArm> arm, boolean ofAnAnswerAlone)
+                    List<WhyNotTaken> whys, Optional<EnteredArm> arm,
+                    Optional<List<TermPath>> besideAnAnswer)
             implements OnTheWay {
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         WhyNotTaken why) {
-            this(condition, anchor, List.of(why), Optional.empty(), false);
+            this(condition, anchor, List.of(why), Optional.empty(), Optional.empty());
         }
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         List<WhyNotTaken> whys) {
-            this(condition, anchor, whys, Optional.empty(), false);
+            this(condition, anchor, whys, Optional.empty(), Optional.empty());
         }
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         List<WhyNotTaken> whys, Optional<EnteredArm> arm) {
-            this(condition, anchor, whys, arm, false);
+            this(condition, anchor, whys, arm, Optional.empty());
         }
 
         public Declined {
             Objects.requireNonNull(arm, "an arm, or none");
+            Objects.requireNonNull(besideAnAnswer, "the positions beside an answer, or none");
             if (condition == null) {
                 throw new IllegalArgumentException(
                         "a condition this reading declined is some condition it met");
@@ -494,6 +665,30 @@ public sealed interface OnTheWay {
                 throw new IllegalArgumentException("a condition declined here is reported here: "
                         + condition + " reported at " + anchored);
             }
+        }
+
+        /**
+         * Whether the condition is about what a dependency answered and names no position of the
+         * input under any of {@code parameters}: then it narrows which answer a row stands the
+         * dependency in with, and leaves the values of those parameters as they were. No
+         * declaration relates one parameter to another, so the places it names leave theirs alone.
+         */
+        public boolean namesNoneOf(Set<String> parameters) {
+            return parametersNamed().map(named -> Collections.disjoint(named, parameters))
+                    .orElse(false);
+        }
+
+        /** The parameters the condition names a position of the input under, where it is about
+         *  what a dependency answered — and empty where it is not, and may name any. */
+        public Optional<Set<String>> parametersNamed() {
+            return besideAnAnswer.map(named -> named.stream().map(TermPath::head)
+                    .collect(Collectors.toUnmodifiableSet()));
+        }
+
+        /** Whether the condition is about what a dependency answered and names no position of the
+         *  input at all. */
+        public boolean namesNothingOfTheInput() {
+            return besideAnAnswer.map(List::isEmpty).orElse(false);
         }
     }
 }

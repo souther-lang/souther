@@ -12,7 +12,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reported as one whose side was not worked out, and never as a line with no place. Compiling it
  * raises nothing, and the measurement of it says so in the document's {@code notRead}.
  *
- * <p>A model whose own example computes the multiple aborts at run time, and that is a diagnostic
- * about the example — the report of the rule is the same.
+ * <p>A model whose own example computes the multiple is short of room at run time, and that is a
+ * diagnostic about the example — the report of the rule is the same.
  */
 class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
 
@@ -76,21 +75,23 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
      *
      * <p>Compiling reads the rule and measuring reads the values beside its line, which is where a
      * count too wide for the host was written out, so it is the measurement that is asked. The
-     * errors are read off the same compile: it answers everything a compile does and the
-     * measurement besides, so a rule that raised anything compiling would raise it here.
+     * errors are held to {@code codes} on the same compile: it answers everything a compile does
+     * and the measurement besides, so a rule that raised anything compiling would raise it here.
      */
-    private record Measured(List<String> errors, Set<String> notRead) {}
+    private record Measured(Set<String> notRead) {}
 
     private static Measured measured(String source) {
+        return measured(List.of(), source);
+    }
+
+    private static Measured measured(List<String> codes, String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        List<String> errors = compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList();
+        ACompiledModel.refusedWith(codes, compilation);
         Set<String> out = new LinkedHashSet<>();
         collect(JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()))), out);
-        return new Measured(errors, out);
+        return new Measured(out);
     }
 
     private static void collect(JsonNode node, Set<String> out) {
@@ -110,20 +111,17 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
     void aMultipleWhoseValuesBesideItsLineAreBeyondTheHostIsReportedAsASideNotWorkedOut() {
         Measured measured = measured(model(squarings(62), THE_GUARD, ""));
 
-        assertEquals(List.of(), measured.errors());
         Set<String> words = measured.notRead();
         assertTrue(words.contains(THE_SIDE), () -> "the side is what was not worked out: " + words);
         assertFalse(words.contains(THE_LINE), () -> "and the line has a place: " + words);
     }
 
-    /** The example aborts when it runs the multiple, which is its own diagnostic; the rule beside
-     *  it is reported the same. */
+    /** The example is short of room when it runs the multiple, which is its own diagnostic; the
+     *  rule beside it is reported the same. */
     @Test
-    void anExampleThatRunsTheMultipleIsRefusedAsAnExampleAndTheRuleIsReportedTheSame() {
-        Measured measured = measured(model(squarings(62), THE_GUARD, EXAMPLE));
+    void anExampleThatRunsTheMultipleIsShortOfRoomAndTheRuleIsReportedTheSame() {
+        Measured measured = measured(List.of("E1941"), model(squarings(62), THE_GUARD, EXAMPLE));
 
-        assertEquals(List.of("E1905"), measured.errors(),
-                "the example does not hold, and that is all it says");
         assertTrue(measured.notRead().contains(THE_SIDE));
     }
 
@@ -132,7 +130,6 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
         Measured measured =
                 measured(model(squarings(62), "if t62 * h.a.value <= 1.0m then Ok else No", ""));
 
-        assertEquals(List.of(), measured.errors());
         assertTrue(measured.notRead().contains(THE_SIDE));
     }
 
@@ -145,7 +142,6 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
                 "guard h.a.value <= 1.0m else Ok\n    guard t62 * h.a.value <= 1.0m else Ok\n    No"}) {
             Measured measured = measured(model(squarings(62), body, ""));
 
-            assertEquals(List.of(), measured.errors(), body);
             Set<String> words = measured.notRead();
             assertTrue(words.contains(THE_SIDE), () -> body + ": " + words);
             assertFalse(words.contains(THE_LINE), () -> body + ": " + words);
@@ -158,7 +154,6 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
     void aMultipleTheHostHasRoomForIsReportedNoSuchWay() {
         Measured measured = measured(model("", "guard 2.0m * h.a.value <= 1.0m else Ok\n    No", ""));
 
-        assertEquals(List.of(), measured.errors());
         Set<String> words = measured.notRead();
         assertFalse(words.contains(THE_SIDE), () -> "nothing was left unworked: " + words);
         assertFalse(words.contains(THE_LINE), () -> "and the line has a place: " + words);

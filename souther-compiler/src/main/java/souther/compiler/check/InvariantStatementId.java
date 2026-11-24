@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import java.util.List;
+
 /**
  * One statement of one conjunct of a declaration's clause, as the identity a statement carries
  * wherever it is recorded.
@@ -29,18 +31,19 @@ package souther.compiler.check;
  * row is owed for it once. Which reading arrived at it is {@link InvariantChecker.ReadingPlace}'s,
  * and a statement that held it would be a statement per position the value is carried to.
  *
- * @param part    the conjunct this is a statement of
- * @param ordinal which of that conjunct's statements it is, counted from zero over all of them
+ * <p><b>A statement can be inside another.</b> What a container states of every element is a
+ * predicate, and the predicate states things of its own; they are read of each element, in as many
+ * places as there are elements held, and each of them is still what one statement of the container
+ * says ({@link StatementNumber}).
+ *
+ * @param part   the conjunct this is a statement of
+ * @param number which of its statements it is, and which statements it is within
  */
-public record InvariantStatementId(PartId<RuleRef.Invariant> part, int ordinal) {
+public record InvariantStatementId(PartId<RuleRef.Invariant> part, StatementNumber number) {
 
     public InvariantStatementId {
-        if (part == null) {
+        if (part == null || number == null) {
             throw new IllegalArgumentException("a statement is some conjunct's");
-        }
-        if (ordinal < 0) {
-            throw new IllegalArgumentException(
-                    "a statement of a conjunct is counted from zero: " + ordinal);
         }
     }
 
@@ -49,8 +52,19 @@ public record InvariantStatementId(PartId<RuleRef.Invariant> part, int ordinal) 
         return part.rule();
     }
 
+    /** Which of the conjunct's statements it is, or of the statement it is within. */
+    public int ordinal() {
+        return number.ordinal();
+    }
+
+    /** The numbers of the statements this is within, the outermost first: none for a statement of
+     *  the conjunct itself. */
+    public List<Integer> inside() {
+        return number.inside();
+    }
+
     @Override
     public String toString() {
-        return part + "/" + ordinal;
+        return part + "/" + number;
     }
 }

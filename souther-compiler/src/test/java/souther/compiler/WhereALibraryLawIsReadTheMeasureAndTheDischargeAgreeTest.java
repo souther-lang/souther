@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a law of the library says something of a call, the reading of an input and the discharge of
@@ -78,6 +77,19 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             // A size read from one expression in two environments is two sizes.
             new Row("c + 5 - grown([c]) - grown([c, c])", 0, Set.of("4", "5"), true),
             new Row("c + 4 - grown([c]) - grown([c, c])", 0, Set.of("5", "6"), false),
+            // Some element of a list written out meeting a closure: the element written out meets
+            // it on every run, and the one that is c meets it only above 100, where the step's
+            // comparison draws its line.
+            new Row("if List.any(n -> n > 100, [c, 200]) then c else 0 - 1", 0,
+                    Set.of("100", "101", "4", "5"), true),
+            new Row("if List.any(n -> n > 100, [c]) then c else 0 - 1", 0,
+                    Set.of("100", "101"), false),
+            // How many a closure's answers hold added up, where each answers the same number of
+            // them: two for each of two elements is four.
+            new Row("c + 4 - List.length(List.flatMap(n -> [n, n], [c, c]))", 0,
+                    Set.of("4", "5"), true),
+            new Row("c + 3 - List.length(List.flatMap(n -> [n, n], [c, c]))", 0,
+                    Set.of("5", "6"), false),
             // A comparison answers one of three numbers by how the two stand.
             new Row("c + 1 + Int.compare(c, 0)", 0, Set.of("2", "3"), true),
             new Row("Int.compare(c, 0) + 4", 0, Set.of("0", "1"), true),
@@ -89,21 +101,25 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             // magnitude of a number at or above nought is that number.
             new Row("c - Int.abs(c)", 0, Set.of(), true),
             new Row("c - Int.abs(c - 2)", 0, Set.of(), false),
-            // A case of the magnitude and the arithmetic over it state one relation at two scales,
-            // c >= 0 and 2c >= 0, which is one line; two relations whose numbers are not one
-            // multiple of the other are two.
-            new Row("c + 5 - Int.abs(c)", 0, Set.of("-1", "0"), true),
+            // What selects a case of the magnitude, c >= 0, is the library's and no line of the
+            // author's, so the arithmetic over it owes no point at it.
+            new Row("c + 5 - Int.abs(c)", 0, Set.of(), true),
             new Row("if c < 0 then c + c + 7 else 5", 0, Set.of("-2", "-1", "0"), true),
             // A sign moved and scaled by numbers is still compared with a number, and the library's
             // bounds on it settle the comparison either way. Where they leave it, it is a relation
-            // of two rationals, which the measure draws no line on read or unread: that row is the
-            // discharge's control, a value the invariant refuses where the sign is above nought.
+            // of the two numbers it is the sign of, and both read it as they read a comparison of
+            // them written down: of two Rationals made of whole numbers too, which stand on no
+            // carrier and are read as the arithmetic they are.
             new Row("if Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) + 10 >= 12"
                     + " then 0 - 1 else c", 0, Set.of("4", "5"), true),
             new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 7"
                     + " then c else 0 - 1", 0, Set.of("4", "5"), true),
             new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 9"
-                    + " then c else 0 - 1", 0, Set.of(), false));
+                    + " then c else 0 - 1", 0, Set.of("0", "1"), false),
+            // The same relation where the discharge, reading it, settles the body: the sign of a
+            // number made of c is not below nought, and c is not below nought.
+            new Row("if Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 0"
+                    + " then c else 0 - 1", 0, Set.of("-1", "0", "4", "5"), true));
 
     /** {@code rows}, each a {@code helper} with the two behaviors that read it beside it. */
     private static String program(List<Row> rows) {
@@ -207,10 +223,7 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code()).toList() + "\n" + model);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static JsonNode reportOf(Compilation compilation) {

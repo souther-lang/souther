@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.About;
@@ -194,9 +195,10 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             // A rule filed at the position and read from end to end, which is the model stating
             // something rather than the position being short of anything.
                  About.ARuleWithoutALine _,
-            // A rule a run may stop in: what it says is a possibility beside the line it draws, so
-            // no reading of a position fell short of it.
-                 About.ARuleThatMayStopARun _,
+            // A step a run is shown to stop at, or one where whether a run stops is not resolved:
+            // what it says is of the step and not of a position, so no reading of a position fell
+            // short of it.
+                 About.AStepThatMayStopARun _, About.AStepWhoseStopIsNotShown _,
             // The values the position was read as, wider than its rules leave them: a fact about
             // the set and about no rule, and about a position that may well be measured.
                  About.APositionReadWiderThanItsRules _,
@@ -212,6 +214,8 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             // about how far a reading of a position got: the position was read, and what is short
             // is what the rows show of where the line falls.
                  About.ALineTheRowsDoNotTellFromAnother _,
+            // And the weight of a position in a total, which is about the rows for the same reason.
+                 About.ATiltOfADerivedValueNoRowShows _,
                  About.AnArmNoRowGoesThrough _, About.ARowAtAnArmAwaitsItsAnswer _,
             // A way through the body no row takes, and a combination of its decisions no row
             // makes: both are about the rows and not about how far any reading of a position got.
@@ -230,9 +234,7 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
     }
 
     private static AdequacyReport reportOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 }

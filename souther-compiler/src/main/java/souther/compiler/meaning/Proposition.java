@@ -1,18 +1,33 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PlacesMoved;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Text;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.semantics.StringContainment;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,8 +35,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * What a condition states, about the subjects it is finally about.
@@ -48,10 +66,195 @@ public sealed interface Proposition {
      * built again for every join a part goes into.
      *
      * <p>And what each of them hashes as. It is one of the values compared, so two equal
-     * propositions spell it alike, and a string keeps its hash; worked out from the parts instead, a
-     * hash walks the whole proposition each time one is used as a key.
+     * propositions spell it alike, and a spelling keeps its hash; worked out from the parts instead,
+     * a hash walks the whole proposition each time one is used as a key.
+     *
+     * <p>Held as the pieces it is put together from and not written out ({@link Spelling}): a
+     * proposition's spelling holds its parts', and written out at every level, a conjunction nested
+     * as deep as a model's rules nest holds the text of everything below it once for each level.
      */
-    String key();
+    Spelling spelling();
+
+    /**
+     * The spelling written out, for a reader of the text — a message, or a test asking what a
+     * statement says. It writes the text of every part below this one, so nothing that tells
+     * propositions apart, files them or orders them asks for it: {@link #spelling} is that.
+     */
+    default String spelledOut() {
+        return spelling().toString();
+    }
+
+    /** {@code opening} and the spellings of {@code parts} in a list, each part's held as it is. */
+    private static Spelling spellingOf(Spelling opening, List<Proposition> parts) {
+        List<Spelling> pieces = new ArrayList<>(2 * parts.size() + 1);
+        pieces.add(opening);
+        for (int at = 0; at < parts.size(); at++) {
+            if (at > 0) {
+                pieces.add(Spelling.SEPARATOR);
+            }
+            pieces.add(parts.get(at).spelling());
+        }
+        pieces.add(Spelling.CLOSE);
+        return Spelling.joined(pieces);
+    }
+
+    /**
+     * The spelling of {@link #denied}, for a reader that wants no more of it than that.
+     *
+     * <p>A denial is made whole to be asked its spelling, and a part's spelling is asked for every
+     * statement a reading projects; a proposition that spells its own denial from its spelling says
+     * so here and makes none.
+     */
+    default Spelling deniedSpelling() {
+        return denied().spelling();
+    }
+
+    /**
+     * The denial of the proposition holding this, once a reader has made it, kept for as long as
+     * that proposition is held.
+     *
+     * <p>A condition is stated where it holds and denied where it does not, so one statement is
+     * denied again wherever it is read, and a denial made afresh writes out every part again — the
+     * parts of a conjunction joined and ordered by their spellings, a comparison spelled from its
+     * form atom by atom. Kept here it is made once. A map from each statement to its denial would
+     * either let the denial go while the statement is still held or hold the two of them for ever,
+     * since a denial's denial may be the statement; held by the statement, the two are let go
+     * together once nothing else holds either.
+     *
+     * <p>What is kept is the statement's: while it is held, its denial is the one made first. Not
+     * the other way round. The denial's own cell keeps the denial's denial, which is equal to the
+     * statement and is the statement itself only where the statement is the equal one kept
+     * ({@link SharedPropositions#shared}) — a statement made directly has its denial's denial made
+     * as the one kept instead, and a denial held without its statement denies to that one.
+     *
+     * <p>Nothing a proposition is. What is kept is equal to what any other making would make, so
+     * every cell is equal to every other and hashes alike: a proposition compares and hashes as it
+     * would without one, whether its {@code equals} is written out or the record's own. Each kind
+     * holding one says so at the component ({@link DecidedByTheRest}), so a walk of what an answer
+     * is made of does not go into it.
+     *
+     * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
+     * asking at once may both make one, and both are handed the one kept first.
+     */
+    final class Denial {
+
+        private volatile Proposition kept;
+
+        Denial() {
+        }
+
+        /**
+         * The denial kept, or the one {@code denying} makes of {@code stated}, kept from now on.
+         *
+         * <p>Handed the proposition rather than asked to close over it, so what makes the denial
+         * holds nothing and is made once for the program, and a denial already kept is handed
+         * back without anything being made to ask for it.
+         */
+        <P extends Proposition> Proposition of(P stated, Function<P, Proposition> denying) {
+            Proposition held = kept;
+            if (held != null) {
+                return held;
+            }
+            Proposition made = denying.apply(stated);
+            synchronized (this) {
+                if (kept == null) {
+                    kept = made;
+                }
+                return kept;
+            }
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Denial;
+        }
+
+        @Override
+        public int hashCode() {
+            return 0;
+        }
+
+        /** Not the denial: its own cell may hold the proposition this is the cell of. */
+        @Override
+        public String toString() {
+            return "Denial";
+        }
+    }
+
+    /**
+     * Whether {@code again} says yes of some part, going down each part once ({@link
+     * StatementReading}).
+     *
+     * <p>The ways down the parts, for every reader outside this file: one handed a
+     * {@link StatementReading} is one that asks each statement once, however many statements hold
+     * it. {@link #partsHeld} is the owner's own.
+     */
+    default boolean anyPart(EachOnce<Boolean> again) {
+        for (Proposition part : partsHeld()) {
+            if (again.read(part)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code again} says yes of every part, going down each part once. */
+    default boolean everyPart(EachOnce<Boolean> again) {
+        for (Proposition part : partsHeld()) {
+            if (!again.read(part)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** {@code again} asked of each part, each once, in the order the parts are kept. */
+    default void eachPart(EachOnce<?> again) {
+        for (Proposition part : partsHeld()) {
+            again.read(part);
+        }
+    }
+
+    /** What {@code again} comes to of the parts, each part counted as often as it is held. */
+    default long sumOverParts(EachOnce<Long> again) {
+        long sum = 0;
+        for (Proposition part : partsHeld()) {
+            sum += again.read(part);
+        }
+        return sum;
+    }
+
+    /**
+     * What {@code again} comes to of each part, in the order the parts are kept, each read when it
+     * is asked for and not before: a reader whose answer is settled by the first part that fails
+     * stops there and does not read the rest.
+     */
+    default <R> Iterable<R> overParts(EachOnce<R> again) {
+        return () -> partsHeld().stream().map(again::read).iterator();
+    }
+
+    /** What {@code again} comes to of every part, in the order the parts are kept: for a reading
+     *  that makes a statement of what it comes to of all of them. */
+    default <R> List<R> allOverParts(EachOnce<R> again) {
+        List<Proposition> parts = partsHeld();
+        List<R> out = new ArrayList<>(parts.size());
+        for (Proposition part : parts) {
+            out.add(again.read(part));
+        }
+        return out;
+    }
+
+    /**
+     * What {@code again} comes to of the parts, put together one after another in the order they
+     * are kept from {@code none}: for a reading whose answer for a statement is made of its parts'.
+     */
+    default <R> R foldParts(R none, BinaryOperator<R> together, EachOnce<R> again) {
+        R out = none;
+        for (Proposition part : partsHeld()) {
+            out = together.apply(out, again.read(part));
+        }
+        return out;
+    }
 
     /**
      * The statements this one holds as parts of what it states, in the order it keeps them.
@@ -61,6 +264,11 @@ public sealed interface Proposition {
      * asks this for them, so a statement a kind comes to hold is one every such reader meets. Each
      * reading the parts off the components for itself, a part added to a kind was met by none of
      * them. What a count is taken over is a statement inside a number and not a part here.
+     *
+     * <p>For this file, which goes down them through {@link StatementReading}, and for a test. A
+     * reader elsewhere goes down the parts through {@link #anyPart}, {@link #everyPart},
+     * {@link #eachPart} or {@link #sumOverParts}: asked for here, the parts are a list a reader
+     * recurses into for every way down to each of them.
      */
     default List<Proposition> partsHeld() {
         return switch (this) {
@@ -68,14 +276,92 @@ public sealed interface Proposition {
             case Any any -> any.parts();
             case OnAnApplication applications -> applications.each();
             case SoManyHold counted -> counted.statements();
+            case OfTheWays ways -> List.of(ways.written());
             case Some some -> List.of(some.ofTheElement());
             case WhereItAnswers where -> List.of(where.answers(), where.states());
             case SomeReachable reached -> reached.noneBelow()
                     .map(none -> List.of(reached.atANode(), none))
                     .orElseGet(() -> List.of(reached.atANode()));
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _, Unread _, Carried _ -> List.of();
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Unread _, Carried _ -> List.of();
         };
+    }
+
+    /**
+     * This statement with each place held to a string or a number the source wrote put as the
+     * comparison of the place with it ({@link SameValue#asAComparison}), or this statement where
+     * none is.
+     *
+     * <p>A part nothing read the meaning of, where its operation's owner says what it would be
+     * said as ({@link Unread#couldBe}), is that statement: the one a guard takes of the same call,
+     * so a comparison over the count of what such a call chooses states what the call states.
+     *
+     * <p>The one place that says how a statement about a written value is read as a relation on
+     * the order its place stands on, which is what draws a line there. Every reader of lines asks
+     * this of the statement as a whole, so a written value is a comparison to all of them and
+     * wherever it stands in the statement. The value it is held to stays a value for a reader that
+     * asks which one: this is a second reading of the statement and does not replace it.
+     *
+     * <p>Asked of a statement whose counts were written out ({@link CountsWrittenOut}), and after
+     * that was done. A count of statements is left as it stands, and so is a statement over the
+     * ways of one and a search of a tree: what the first two come to is the statements their
+     * choices are written out as, which this is then asked of, and one that is not written out is
+     * past a figure, which no line is read of.
+     */
+    default Proposition withTheValuesItHoldsCompared() {
+        return StatementReading.<Proposition>over((each, again) ->
+                each.comparedAt(again)).read(this);
+    }
+
+    private Proposition comparedAt(StatementReading<Proposition> again) {
+        return switch (this) {
+            case SameValue same -> same.asAComparison() instanceof Compared compared
+                    ? compared : this;
+            case Unread unread -> unread.couldBe().isPresent()
+                    ? unread.couldBe().get().on(unread.holds()) : this;
+            case All all -> {
+                List<Proposition> parts = comparedEach(all.parts(), again);
+                yield parts == null ? this : all(parts);
+            }
+            case Any any -> {
+                List<Proposition> parts = comparedEach(any.parts(), again);
+                yield parts == null ? this : any(parts);
+            }
+            case OnAnApplication applications -> {
+                List<Proposition> each = comparedEach(applications.each(), again);
+                yield each == null ? this : onAnApplication(each);
+            }
+            case WhereItAnswers where -> {
+                Proposition answers = again.read(where.answers());
+                Proposition states = again.read(where.states());
+                yield answers == where.answers() && states == where.states() ? this
+                        : whereItAnswers(answers, states);
+            }
+            case Some some -> {
+                Proposition element = again.read(some.ofTheElement());
+                yield element == some.ofTheElement() ? this
+                        : new Some(some.container(), element, some.holds());
+            }
+            default -> this;
+        };
+    }
+
+    /** {@code parts}, each read so ({@link #withTheValuesItHoldsCompared}) through {@code again}
+     *  — or null where none of them is read as anything else. */
+    private static List<Proposition> comparedEach(List<Proposition> parts,
+                                                  StatementReading<Proposition> again) {
+        List<Proposition> out = null;
+        for (int at = 0; at < parts.size(); at++) {
+            Proposition part = parts.get(at);
+            Proposition compared = again.read(part);
+            if (out == null && compared != part) {
+                out = new ArrayList<>(parts.subList(0, at));
+            }
+            if (out != null) {
+                out.add(compared);
+            }
+        }
+        return out;
     }
 
     /**
@@ -88,6 +374,14 @@ public sealed interface Proposition {
      * without any part of it saying so.
      */
     default boolean mayTurnOnAnElementOf(DecisionSubject container) {
+        return StatementReading.<Boolean>over((stated, again) ->
+                stated.mayTurnOnAnElementOfAt(container, again)).read(this);
+    }
+
+    /** {@link #mayTurnOnAnElementOf}, of this statement alone, its parts read through
+     *  {@code again}. */
+    private boolean mayTurnOnAnElementOfAt(DecisionSubject container,
+                                           StatementReading<Boolean> again) {
         return switch (this) {
             case Always _, Carried _ -> false;
             case Unread unread -> !unread.fixed();
@@ -99,52 +393,69 @@ public sealed interface Proposition {
             case Truth truth -> mayBeAnElementOf(truth.of(), container);
             case InCases cases -> mayBeAnElementOf(cases.of(), container);
             case Present present -> mayBeAnElementOf(present.of(), container);
+            case InTheStrings(InTheStrings.Strings.AtAPosition(var at, var identity), var _,
+                    var _, var _) -> isAnElementOf(new DecisionSubject.AnInput(at, identity),
+                    container);
+            // A piece is whatever the statement it is read inside says it is, which is about the
+            // string and no container's element.
+            case InTheStrings _ -> false;
             case SameValue same -> mayBeAnElementOf(same.one(), container)
-                    || mayBeAnElementOf(same.other(), container);
+                    || (same.otherSubject() != null
+                            && mayBeAnElementOf(same.otherSubject(), container));
+            case StringInside inside -> mayBeAnElementOf(inside.inner(), container)
+                    || mayBeAnElementOf(inside.outer(), container);
             case LastToHold last -> isAnElementOf(last.position(), container);
             case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
-                    somePartMayTurnOnAnElementOf(container);
-            case Some some -> isAnElementOf(some.container(), container)
-                    || somePartMayTurnOnAnElementOf(container);
+                    anyPart(again);
+            case OfTheWays ways -> again.read(ways.written());
+            case Some some -> isAnElementOf(some.container(), container) || anyPart(again);
             // What it is written over is not what it is about, so it is taken to turn on an element
             // wherever it might, as a part nothing sees into is.
             case SomeReachable reached ->
                     isAnElementOf(new DecisionSubject.AnInput(reached.at()), container)
-                            || somePartMayTurnOnAnElementOf(container);
+                            || anyPart(again);
         };
     }
 
-    private boolean somePartMayTurnOnAnElementOf(DecisionSubject container) {
-        return partsHeld().stream().anyMatch(part -> part.mayTurnOnAnElementOf(container));
-    }
-
     /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
-     *  bound or a dependency answered is computed from something nothing here names, so it may. */
+     *  bound or a dependency answered is computed from something nothing here names, so it may.
+     *  A number of the input is asked of every place it is read off
+     *  ({@link NumericTerm#placesReadOff}): a product is filed under one of its factors, and the
+     *  other may be the element's. */
     private static boolean mayBeAnElementOf(Quantity quantity, DecisionSubject container) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(var term) ->
-                    isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
+            case DecisionAtom.OfTheInput(var term, var _) -> term.placesReadOff().stream()
+                    .anyMatch(at -> isAnElementOf(new DecisionSubject.AnInput(at), container));
             // What a recursion carries stands for any number, which may be any element's.
-            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.HowManyCarried _ ->
-                    true;
+            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.OfACall _,
+                 Quantity.HowManyCarried _, Quantity.TheKeptTotal _ -> true;
             case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
                     isAnElementOf(taken, container);
             case DecisionAtom.ComputedOverAnAnswer computed ->
                     isAnElementOf(computed.list(), container);
-            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
-                    .anyMatch(each -> mayBeAnElementOf(each, container));
+            // Made of numbers of the input and nothing else: it may be an element's where one of
+            // them may, asked of the answer for them once and not down every path to each.
+            case Quantity.WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf().stream()
+                    .anyMatch(term -> mayBeAnElementOf(new DecisionAtom.OfTheInput(term), container));
             // A piece of a string is whatever the statement it is read inside says it is, and
             // that statement is about the string and no container's element.
             case Quantity.CodePointsOfAPiece _ -> false;
             case Quantity.APieceOf piece -> mayBeAnElementOf(piece.string(), container);
+            case Quantity.ThePieceAt piece -> mayBeAnElementOf(piece.string(), container);
             case Quantity.IsAmongThePieces among -> mayBeAnElementOf(among.value(), container)
                     || mayBeAnElementOf(among.string(), container);
             case Quantity.HowManyMeet(DecisionSubject counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
+            case Quantity.HowManyMeetAcross(DecisionSubject counted, DecisionSubject _,
+                                            Proposition each) ->
+                    isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
             case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
                     .anyMatch(one -> one.mayTurnOnAnElementOf(container));
-            case Quantity.HowManyDifferent(DecisionSubject counted, DecisionSubject _) ->
+            case Quantity.HowManyDifferent(DecisionSubject counted, Quantity.TheValue _) ->
                     isAnElementOf(counted, container);
+            case Quantity.HowManyDifferentMeet(DecisionSubject counted, Quantity.TheValue _,
+                                               var meeting) -> isAnElementOf(counted, container)
+                    || meeting.statement().mayTurnOnAnElementOf(container);
             case Quantity.HowManyDifferentAcross(DecisionSubject counted, DecisionSubject _) ->
                     isAnElementOf(counted, container);
             case Quantity.HowManyDifferentBelow below ->
@@ -153,8 +464,8 @@ public sealed interface Proposition {
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     isAnElementOf(summed, container) || mayBeAnElementOf(each, container);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
-                    dividend.coefs().keySet().stream().anyMatch(term -> isAnElementOf(
-                            new DecisionSubject.AnInput(term.subjectPath()), container));
+                    dividend.coefs().keySet().stream()
+                            .anyMatch(each -> mayBeAnElementOf(each, container));
             case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
                     .anyMatch(term -> isAnElementOf(
                             new DecisionSubject.AnInput(term.subjectPath()), container));
@@ -185,26 +496,31 @@ public sealed interface Proposition {
             return new Always(!holds);
         }
 
+        private static final Spelling HOLDS = Spelling.of("true");
+        private static final Spelling FAILS = Spelling.of("false");
+
         @Override
-        public String key() {
-            return String.valueOf(holds);
+        public Spelling spelling() {
+            return holds ? HOLDS : FAILS;
         }
     }
 
     /**
      * A relation over quantities, held or failing.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record Compared(Relation relation, boolean holds, String key) implements Proposition {
+    record Compared(Relation relation, boolean holds, Spelling spelling,
+                    @DecidedByTheRest Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Compared(Relation relation, boolean holds) {
-            this(relation, holds, null);
+            this(relation, holds, null, null);
         }
 
         public Compared {
@@ -215,30 +531,51 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("counts held against nought are whether some"
                         + " element meets what is counted, and are written as that: " + relation);
             }
-            key = (holds ? "" : "!") + relation;
+            spelling = Spelling.denying(holds, relation.spelling());
+            denial = new Denial();
         }
 
         /** The spelling of the relation held, whichever way round this is: one for one relation. */
-        public String heldKey() {
-            return holds ? key : key.substring(1);
+        public Spelling heldSpelling() {
+            return holds ? spelling : spelling.denied();
+        }
+
+        /**
+         * The comparison failing, made once while this is held ({@link Denial}). Its spelling is
+         * put together from the form's, atom by atom, so made again for each reader it is spelled
+         * again and compared with the one kept a character at a time.
+         *
+         * <p>A comparison is made afresh by every reader that reads one, so many equal ones are held
+         * at once, each with a cell of its own. Asked for the first time, this is the denial of
+         * the equal one kept ({@link SharedPropositions#shared}), and the denial made is kept the
+         * same way, so equal comparisons share one denial. The denial's own denial is then the
+         * comparison kept, and a reader denying back and forth makes nothing more.
+         */
+        @Override
+        public Proposition denied() {
+            return denial.of(this, stated -> {
+                Proposition kept = SharedPropositions.shared(stated);
+                return kept != stated ? kept.denied()
+                        : SharedPropositions.shared(new Compared(stated.relation, !stated.holds));
+            });
         }
 
         @Override
-        public Proposition denied() {
-            return new Compared(relation, !holds);
+        public Spelling deniedSpelling() {
+            return spelling.denied();
         }
     }
 
     /**
      * A subject read for its truth, holding or failing.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Truth(DecisionSubject of, boolean holds, String key) implements Proposition {
+    record Truth(DecisionSubject of, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Truth(DecisionSubject of, boolean holds) {
@@ -249,7 +586,7 @@ public sealed interface Proposition {
             if (of == null) {
                 throw new IllegalArgumentException("a truth is a truth of something");
             }
-            key = (holds ? "" : "!") + of.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + of.spelled());
         }
 
         @Override
@@ -264,14 +601,14 @@ public sealed interface Proposition {
      * <p>The cases selected and not the fork that selected them: a match of three arms is three
      * propositions about one subject, one per arm.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record InCases(DecisionSubject of, CasesLeft cases, boolean holds, String key)
+    record InCases(DecisionSubject of, CasesLeft cases, boolean holds, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public InCases(DecisionSubject of, CasesLeft cases, boolean holds) {
@@ -282,7 +619,7 @@ public sealed interface Proposition {
             if (of == null || cases == null) {
                 throw new IllegalArgumentException("a case is some subject's, and some cases");
             }
-            key = (holds ? "" : "!") + of.spelled() + " is " + cases.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + of.spelled() + " is " + cases.spelled());
         }
 
         @Override
@@ -294,13 +631,13 @@ public sealed interface Proposition {
     /**
      * An optional subject holding a value, or not.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Present(DecisionSubject of, boolean holds, String key) implements Proposition {
+    record Present(DecisionSubject of, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Present(DecisionSubject of, boolean holds) {
@@ -311,7 +648,7 @@ public sealed interface Proposition {
             if (of == null) {
                 throw new IllegalArgumentException("a value is present at some subject");
             }
-            key = (holds ? "" : "!") + "present " + of.spelled();
+            spelling = Spelling.of((holds ? "" : "!") + "present " + of.spelled());
         }
 
         @Override
@@ -321,33 +658,217 @@ public sealed interface Proposition {
     }
 
     /**
-     * Two subjects holding the same value, or not — what a container holding a value asks of one
-     * of its elements.
+     * A string being one of the strings a pattern accepts, or not.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * <p>Of a string a position holds, or of a piece of one: which of them is {@code of}. What
+     * accepts says is the language and not the pattern that was written — the strings some piece
+     * of a split string is in a pattern are the strings of another language, and that one is
+     * what a statement about the string is read as. A statement and its denial hold the one
+     * language, so turning a statement over spells nothing again.
+     *
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, String key)
+    record InTheStrings(Strings of, StringsLanguage accepts, boolean holds, Spelling spelling)
             implements Proposition {
+
+        /** The string a statement of this kind is about. */
+        public sealed interface Strings {
+
+            String spelled();
+
+            /**
+             * The string that stands at a position of the input.
+             *
+             * <p>Of the input and of nothing a dependency answered: what the pieces of such a
+             * string are is read off the string, and a string that no row writes is no string a
+             * statement about its pieces divides.
+             */
+            record AtAPosition(TermPath at, ValueIdentity identity) implements Strings {
+
+                public AtAPosition {
+                    if (at == null || identity == null) {
+                        throw new IllegalArgumentException("a string stands at some position");
+                    }
+                }
+
+                /** The string at {@code at}, read through no name for an element. */
+                public AtAPosition(TermPath at) {
+                    this(at, ValueIdentity.AT_THE_POSITION);
+                }
+
+                @Override
+                public String spelled() {
+                    return at + identity.spelled();
+                }
+            }
+
+            /**
+             * The piece of a string that one statement about some piece is about.
+             *
+             * <p>Of the string {@code parted} says, where it says one: what a row reads the piece
+             * off, and what tells this piece from the piece of another string that the witness
+             * would also name, so the spelling carries it.
+             */
+            record OfAPiece(PieceWitness within, Optional<PartedString> parted)
+                    implements Strings {
+
+                public OfAPiece {
+                    Objects.requireNonNull(within, "a piece is of some statement about a piece");
+                    Objects.requireNonNull(parted, "the piece is of a string or of none");
+                }
+
+                @Override
+                public String spelled() {
+                    return "piece#" + within.spelled()
+                            + parted.map(of -> "(" + of.spelled() + ")").orElse("");
+                }
+            }
+        }
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
+        }
+
+        public InTheStrings(Strings of, StringsLanguage accepts, boolean holds) {
+            this(of, accepts, holds, null);
+        }
+
+        public InTheStrings {
+            if (of == null || accepts == null) {
+                throw new IllegalArgumentException("a string is one of the strings of a language");
+            }
+            spelling = Spelling.of((holds ? "" : "!") + of.spelled() + " in " + accepts.spelled());
+        }
+
+        @Override
+        public Proposition denied() {
+            return new InTheStrings(of, accepts, !holds);
+        }
+    }
+
+    /**
+     * A subject holding the same value as another subject, or as a value the source wrote, or not
+     * — what a container holding a value asks of one of its elements.
+     *
+     * <p>A value written stands at no position and is no {@link DecisionSubject}, which is a value
+     * a row controls, so it is the other side as an {@link Operand} and never the first. It is a
+     * {@link Value}, the thing it denotes and not the text it was written with.
+     *
+     * @param spelling spelled from the rest when it is made, whatever is handed in
+     */
+    record SameValue(DecisionSubject one, Operand<DecisionSubject> other, boolean holds,
+                     Spelling spelling) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return spelling.hashCode();
+        }
+
+        public SameValue(DecisionSubject one, Operand<DecisionSubject> other, boolean holds) {
+            this(one, other, holds, null);
         }
 
         public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
-            this(one, other, holds, null);
+            this(one, new Operand.At<>(other), holds, null);
         }
 
         public SameValue {
             if (one == null || other == null) {
-                throw new IllegalArgumentException("a sameness is of two subjects");
+                throw new IllegalArgumentException("a sameness is of a subject and what it is"
+                        + " against");
             }
-            key = one.spelled() + (holds ? " == " : " /= ") + other.spelled();
+            spelling = Spelling.of(one.spelled() + (holds ? " == " : " /= ") + switch (other) {
+                case Operand.At<DecisionSubject>(DecisionSubject subject) -> subject.spelled();
+                case Operand.Written<DecisionSubject>(Value value) -> value.identity();
+            });
+        }
+
+        /** The other subject, or null where the other is a value written. Read for every row a
+         *  statement is put to, so it allocates nothing. */
+        public DecisionSubject otherSubject() {
+            return other instanceof Operand.At<DecisionSubject>(DecisionSubject subject)
+                    ? subject : null;
+        }
+
+        /**
+         * What this states of a place against a string or a number the source wrote, as the
+         * comparison with it written with {@code ==} states it — or null where it is anything
+         * else.
+         *
+         * <p>The one statement read two ways: as a value the place is told apart at, which is how
+         * a container is asked to hold it, and as a relation on the order the place stands on,
+         * which is what draws a line there.
+         */
+        public Compared asAComparison() {
+            if (!(one instanceof DecisionSubject.AnInput(TermPath place, ValueIdentity identity))
+                    || !(other instanceof Operand.Written<DecisionSubject>(Value written))) {
+                return null;
+            }
+            // Which value at the place it is says which element of a container it is, so the
+            // relation is about the same value the sameness was.
+            DecisionAtom atom = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(place),
+                    identity);
+            Rel states = holds ? Rel.EQ : Rel.NE;
+            return switch (written) {
+                case Value.Text(String text) -> new Compared(
+                        new Relation.Ordered(atom, new Text(text), Rel.EQ), holds);
+                case Value.Number(var number) -> LinearForm.<Quantity>atom(atom)
+                        .minus(LinearForm.constant(ExactRatio.of(number)))
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var form)
+                        ? comparedAs(Relation.OneWay.of(form, states)) : null;
+                case Value.Truth _, Value.Case _ -> null;
+            };
+        }
+
+        private static Compared comparedAs(Relation.OneWay<Quantity> one) {
+            return new Compared(new Relation.Affine(one.form(), one.proposition()), one.holds());
         }
 
         @Override
         public Proposition denied() {
             return new SameValue(one, other, !holds);
+        }
+    }
+
+    /**
+     * One string standing inside another where {@code where} says, or not.
+     *
+     * <p>Both strings are values of the input or what an operation answers of them, so a string
+     * made of another by {@code String.lowercase} is held as that answer and keeps what it was
+     * made from; read down to the position, it would be a statement about a string nobody wrote.
+     * It relates the two, as {@link SameValue} does. Whether either position is divided by it is
+     * not said here: that follows from the values each position admits and from how the two
+     * depend on each other, and is read where the relation is projected onto the positions.
+     *
+     * @param inner the string looked for
+     * @param outer the string looked in
+     * @param spelling  spelled from the rest when it is made, whatever is handed in
+     */
+    record StringInside(Quantity inner, Quantity outer, StringContainment where, boolean holds,
+                        Spelling spelling) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return spelling.hashCode();
+        }
+
+        public StringInside(Quantity inner, Quantity outer, StringContainment where,
+                            boolean holds) {
+            this(inner, outer, where, holds, null);
+        }
+
+        public StringInside {
+            if (inner == null || outer == null || where == null) {
+                throw new IllegalArgumentException("a string inside another is of two strings");
+            }
+            spelling = Spelling.of(
+                    (holds ? "" : "!") + inner.spelled() + " " + where + " " + outer.spelled());
+        }
+
+        @Override
+        public Proposition denied() {
+            return new StringInside(inner, outer, where, !holds);
         }
     }
 
@@ -366,14 +887,14 @@ public sealed interface Proposition {
      *                  composed with
      * @param position  a place under the container's element, which an element is told apart
      *                  from the others by
-     * @param key       spelled from the rest when it is made, whatever is handed in
+     * @param spelling      spelled from the rest when it is made, whatever is handed in
      */
     record LastToHold(DecisionSubject container, DecisionSubject position, boolean holds,
-                      String key) implements Proposition {
+                      Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public LastToHold(DecisionSubject container, DecisionSubject position, boolean holds) {
@@ -384,7 +905,7 @@ public sealed interface Proposition {
             if (container == null || position == null) {
                 throw new IllegalArgumentException("a last is of a container's element by a place");
             }
-            key = (holds ? "last " : "not last ") + container + " by " + position;
+            spelling = Spelling.of((holds ? "last " : "not last ") + container + " by " + position);
         }
 
         @Override
@@ -396,21 +917,21 @@ public sealed interface Proposition {
     /**
      * What {@code states}, read only where {@code answers} holds: where it does not, an operation
      * the statement is read through answers nothing, and the run stops before the statement comes
-     * out either way. Made through {@link #whereItAnswers}.
+     * out either way. Made through {@link #whereItAnswers}, and nowhere else, as {@link All} is.
      *
      * <p>Holds where both do, and its denial is the denial of {@code states} where {@code answers}
      * holds — not the denial of both, which would say that a run which stopped came out the other
      * way. {@code answers} is where the statement is about anything at all, and so never one of
      * its lines: a row where it fails is no row of either side.
      *
-     * @param key spelled from the parts' own when it is made, whatever is handed in
+     * @param spelling spelled from the parts' own when it is made, whatever is handed in
      */
-    record WhereItAnswers(Proposition answers, Proposition states, String key)
+    record WhereItAnswers(Proposition answers, Proposition states, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public WhereItAnswers(Proposition answers, Proposition states) {
@@ -421,7 +942,7 @@ public sealed interface Proposition {
             if (answers == null || states == null) {
                 throw new IllegalArgumentException("a statement is read somewhere, of something");
             }
-            key = "where " + answers.key() + " [" + states.key() + "]";
+            spelling = Spelling.of("where ", answers.spelling(), " [", states.spelling(), "]");
         }
 
         @Override
@@ -431,15 +952,206 @@ public sealed interface Proposition {
     }
 
     /**
-     * Every part holding. Made through {@link #all}.
+     * What a statement over the ways its elements are kept comes to, held as how it is written out
+     * and written out where a reader asks for the cases.
      *
-     * @param key spelled from the parts' own when it is made, whatever is handed in
+     * <p>Written out, a statement over the ways is a case for each way, which grows with the ways
+     * and not with what is stated. Held as what the ways are and what states each, its key is
+     * spelled from those, so it is held, compared and filed at the size of that. What is held is
+     * all there is to the cases: written out again from it, they are the same however often and
+     * by whoever.
+     *
+     * @param ways  what the cases are written out from, shared by this and its denial
+     * @param holds whether the statement holds or its denial does
+     * @param spelling  spelled from the ways' own when it is made, whatever is handed in
      */
-    record All(List<Proposition> parts, String key) implements Proposition {
+    record OfTheWays(WaysToWrite ways, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof OfTheWays that
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling));
+        }
+
+        public OfTheWays(WaysToWrite ways, boolean holds) {
+            this(ways, holds, null);
+        }
+
+        public OfTheWays {
+            Objects.requireNonNull(ways, "a statement over the ways is written out from something");
+            spelling = holds ? ways.spelled() : Spelling.of("!", ways.spelled());
+        }
+
+        /** The statement written out: a case for each way, written once while the ways are held
+         *  by anything. */
+        public Proposition written() {
+            Proposition out = SharedPropositions.writtenOut(ways,
+                    () -> Conclusion.writtenOutOver(ways));
+            return holds ? out : out.denied();
+        }
+
+        @Override
+        public Proposition denied() {
+            return new OfTheWays(ways, !holds);
+        }
+    }
+
+    /**
+     * What the cases of a statement over the ways are written out from: which truths keep which
+     * elements, what each truth that decides a way states, the comparison read over the totals,
+     * and the elements the totals are taken over. Written out by {@link Conclusion#writtenOutOver},
+     * which numbers the parts nothing read the cases come to from {@code firstNumber} on, and has
+     * {@code numbersOwed} of them to number.
+     *
+     * <p>Only what the cases follow from, so that it is a value: alike where it is spelled alike,
+     * and the same cases come of it however often they are written out.
+     */
+    final class WaysToWrite {
+
+        private final KeptWays kept;
+        private final Map<Integer, Proposition> conditions;
+        private final Proposition reading;
+        private final List<LinearForm<Quantity>> forms;
+        private final Quantity.TheKeptTotal sum;
+        private final Optional<Quantity.TheKeptTotal> count;
+        private final int counted;
+        private final boolean fixed;
+        private final Optional<ModelOccurrence> where;
+        private final long firstNumber;
+        private final long numbersOwed;
+        private final Spelling spelled;
+
+        /**
+         * @param kept        which truths keep which elements
+         * @param conditions  what each truth that decides a way states
+         * @param reading     the comparison, read over the stand-ins for the totals
+         * @param forms       what the elements of the total come to, in the order they are written
+         * @param sum         the stand-in for the total
+         * @param count       the stand-in for how many a way keeps, where the reading met a count
+         * @param counted     how many elements the count is over, which follow those of the total
+         * @param fixed       whether a number that cannot be held is the same whatever the input
+         * @param where       the construct of the model the condition is, where it is known
+         * @param firstNumber the number of the first part nothing read the cases come to
+         * @param numbersOwed how many numbers the cases are written out with, at the most: a part
+         *                    nothing read is made at a way or at a step that joins two, and no
+         *                    more than once at either
+         */
+        public WaysToWrite(KeptWays kept, Map<Integer, Proposition> conditions,
+                           Proposition reading, List<LinearForm<Quantity>> forms,
+                           Quantity.TheKeptTotal sum, Optional<Quantity.TheKeptTotal> count,
+                           int counted, boolean fixed, Optional<ModelOccurrence> where,
+                           long firstNumber, long numbersOwed) {
+            this.kept = Objects.requireNonNull(kept, "the ways are of some elements");
+            this.conditions = Map.copyOf(conditions);
+            this.reading = Objects.requireNonNull(reading, "the ways are given their totals");
+            this.forms = List.copyOf(forms);
+            this.sum = Objects.requireNonNull(sum, "the ways keep a total");
+            this.count = Objects.requireNonNull(count, "the ways keep a count or none");
+            this.counted = counted;
+            this.fixed = fixed;
+            this.where = Objects.requireNonNull(where, "the condition is somewhere or not known");
+            this.firstNumber = firstNumber;
+            this.numbersOwed = numbersOwed;
+            this.spelled = spell();
+        }
+
+        KeptWays kept() {
+            return kept;
+        }
+
+        Map<Integer, Proposition> conditions() {
+            return conditions;
+        }
+
+        Proposition reading() {
+            return reading;
+        }
+
+        List<LinearForm<Quantity>> forms() {
+            return forms;
+        }
+
+        Quantity.TheKeptTotal sum() {
+            return sum;
+        }
+
+        Optional<Quantity.TheKeptTotal> count() {
+            return count;
+        }
+
+        int counted() {
+            return counted;
+        }
+
+        boolean fixed() {
+            return fixed;
+        }
+
+        Optional<ModelOccurrence> where() {
+            return where;
+        }
+
+        long firstNumber() {
+            return firstNumber;
+        }
+
+        long numbersOwed() {
+            return numbersOwed;
+        }
+
+        /** What these are made of, which tells them from others. */
+        Spelling spelled() {
+            return spelled;
+        }
+
+        /** Spelled with the reading's and each condition's spelling held as it is, so a statement
+         *  over the ways holds no second copy of what its conditions spell. */
+        private Spelling spell() {
+            List<Spelling> pieces = new ArrayList<>();
+            pieces.add(Spelling.of("ways " + kept.spelled() + "|"));
+            pieces.add(reading.spelling());
+            new TreeMap<>(conditions).forEach((truth, condition) -> {
+                pieces.add(Spelling.of("|" + truth + "="));
+                pieces.add(condition.spelling());
+            });
+            pieces.add(Spelling.of("|" + forms + "|" + sum + "|" + count + "|" + counted + "|"
+                    + fixed + "|" + where + "|" + firstNumber + "+" + numbersOwed));
+            return Spelling.joined(pieces);
+        }
+
+        /** Alike where they are spelled alike: the cases follow from what is spelled. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof WaysToWrite that
+                    && spelled.hashCode() == that.spelled.hashCode()
+                    && spelled.equals(that.spelled));
+        }
+
+        @Override
+        public int hashCode() {
+            return spelled.hashCode();
+        }
+    }
+
+    /**
+     * Every part holding. Made through {@link #all}, and nowhere else: joining the parts of one
+     * again gives it back, so a reader that changes none of them may hand it back as it is.
+     *
+     * @param spelling spelled from the parts' own when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
+     */
+    record All(List<Proposition> parts, Spelling spelling, @DecidedByTheRest Denial denial)
+            implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return spelling.hashCode();
         }
 
         /**
@@ -450,12 +1162,14 @@ public sealed interface Proposition {
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof All that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
-                    && parts.equals(that.parts));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling) && parts.equals(that.parts));
         }
 
+        private static final Spelling OPENING = Spelling.of("all[");
+
         public All(List<Proposition> parts) {
-            this(parts, null);
+            this(parts, null, null);
         }
 
         public All {
@@ -463,38 +1177,43 @@ public sealed interface Proposition {
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a conjunction is of two or more parts");
             }
-            key = "all" + parts.stream().map(Proposition::key).toList();
+            spelling = spellingOf(OPENING, parts);
+            denial = new Denial();
         }
 
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this,
-                    () -> any(parts.stream().map(Proposition::denied).toList()));
+            return denial.of(this,
+                    stated -> any(stated.parts.stream().map(Proposition::denied).toList()));
         }
     }
 
     /**
-     * Some part holding. Made through {@link #any}.
+     * Some part holding. Made through {@link #any}, and nowhere else, as {@link All} is.
      *
-     * @param key spelled from the parts' own when it is made, whatever is handed in
+     * @param spelling spelled from the parts' own when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record Any(List<Proposition> parts, String key) implements Proposition {
+    record Any(List<Proposition> parts, Spelling spelling, @DecidedByTheRest Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /** Both components, the spelling first, as {@link All} compares them. */
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof Any that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
-                    && parts.equals(that.parts));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling) && parts.equals(that.parts));
         }
 
+        private static final Spelling OPENING = Spelling.of("any[");
+
         public Any(List<Proposition> parts) {
-            this(parts, null);
+            this(parts, null, null);
         }
 
         public Any {
@@ -502,14 +1221,102 @@ public sealed interface Proposition {
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a disjunction is of two or more parts");
             }
-            key = "any" + parts.stream().map(Proposition::key).toList();
+            spelling = spellingOf(OPENING, parts);
+            denial = new Denial();
         }
 
+        /** Every part failing — which {@link #all} keeps as the cases of a condition where the
+         *  parts are cases of one ({@link #byTheCases}). */
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this,
-                    () -> all(parts.stream().map(Proposition::denied).toList()));
+            return denial.of(this,
+                    stated -> all(stated.parts.stream().map(Proposition::denied).toList()));
         }
+    }
+
+    /**
+     * {@code conjuncts} as the cases of the first condition some of them say what follows from,
+     * or null where none does.
+     *
+     * <p>A conjunct one part of which is the denial of a condition {@code X} says what holds
+     * where {@code X} does — {@code ¬X ∨ A} is {@code X → A} — and one a part of which is {@code X}
+     * says what holds where it does not. Where both are among them, {@code (¬X ∨ A) ∧ (X ∨ B) ∧ R}
+     * holds exactly where {@code ((X ∧ A) ∨ (¬X ∧ B)) ∧ R} does: one statement, which an
+     * {@code if} on {@code X}, the denial of the cases of {@code X} and the two implications
+     * written out each state, and which comes to one proposition whichever of them wrote it. Kept
+     * as the cases of {@code X}, several such statements are chosen once per case of it, where
+     * each implication apart would be a choice of its own, every combination of which is a way.
+     *
+     * <p>Only of a condition whose denial holds wherever it fails ({@link
+     * #deniedWhereverItFails}): the cases of one that may answer nothing, or hold on one
+     * application and fail on another, are not every row. A conjunct with both {@code X} and its
+     * denial among its parts holds on every row, and is left out. Two conjuncts that are each no
+     * more than {@code X} and its denial are left as they stand: what is said of them is that the
+     * two are asked at once, which is a reader's to say and not something to be worked out here.
+     */
+    private static Proposition byTheCases(List<Proposition> conjuncts) {
+        List<Set<Spelling>> partsOfEach = new ArrayList<>(conjuncts.size());
+        Set<Spelling> anywhere = new HashSet<>();
+        for (Proposition conjunct : conjuncts) {
+            Set<Spelling> keys = new HashSet<>();
+            disjunctsOf(conjunct).forEach(each -> keys.add(each.spelling()));
+            partsOfEach.add(keys);
+            anywhere.addAll(keys);
+        }
+        for (Proposition conjunct : conjuncts) {
+            for (Proposition against : disjunctsOf(conjunct)) {
+                if (!anywhere.contains(against.deniedSpelling())) {
+                    continue;
+                }
+                Proposition condition = against.denied();
+                if (!deniedWhereverItFails(condition)) {
+                    continue;
+                }
+                List<Proposition> whereItHolds = new ArrayList<>();
+                List<Proposition> whereItFails = new ArrayList<>();
+                List<Proposition> rest = new ArrayList<>();
+                boolean saysMore = false;
+                boolean everyRow = false;
+                for (int at = 0; at < conjuncts.size(); at++) {
+                    Proposition each = conjuncts.get(at);
+                    boolean holding = partsOfEach.get(at).contains(against.spelling());
+                    boolean failing = partsOfEach.get(at).contains(condition.spelling());
+                    if (holding && failing) {
+                        everyRow = true;
+                    } else if (holding) {
+                        whereItHolds.add(without(each, against));
+                        saysMore |= each instanceof Any;
+                    } else if (failing) {
+                        whereItFails.add(without(each, condition));
+                        saysMore |= each instanceof Any;
+                    } else {
+                        rest.add(each);
+                    }
+                }
+                if (whereItHolds.isEmpty() || whereItFails.isEmpty() || !saysMore) {
+                    if (everyRow) {
+                        return all(conjuncts.stream().filter(each -> !(disjunctsOf(each)
+                                .contains(against) && disjunctsOf(each).contains(condition)))
+                                .toList());
+                    }
+                    continue;
+                }
+                rest.add(any(List.of(all(List.of(condition, all(whereItHolds))),
+                        all(List.of(against, all(whereItFails))))));
+                return all(rest);
+            }
+        }
+        return null;
+    }
+
+    private static List<Proposition> disjunctsOf(Proposition stated) {
+        return stated instanceof Any any ? any.parts() : List.of(stated);
+    }
+
+    /** What {@code stated} holds beside {@code part}, which fails where nothing else holds. */
+    private static Proposition without(Proposition stated, Proposition part) {
+        return any(disjunctsOf(stated).stream()
+                .filter(each -> !each.spelling().equals(part.spelling())).toList());
     }
 
     /**
@@ -522,14 +1329,14 @@ public sealed interface Proposition {
      * the same container is never quantified twice inside one proposition: the two elements would be
      * one subject, and the proposition would say {@code x < x} where it was asked about two of them.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, String key)
+    record Some(DecisionSubject container, Proposition ofTheElement, boolean holds, Spelling spelling)
             implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Some(DecisionSubject container, Proposition ofTheElement, boolean holds) {
@@ -552,7 +1359,8 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a quantifier over " + container + " is of a"
                         + " statement answering on every element: " + ofTheElement);
             }
-            key = (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
+            spelling = Spelling.of((holds ? "some " : "no ") + container + " [",
+                    ofTheElement.spelling(), Spelling.CLOSE);
         }
 
         /**
@@ -570,47 +1378,45 @@ public sealed interface Proposition {
          * said of that node as it stands, and its containers are the ones spelled.
          */
         public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
-            return quantifiesOverInside(container, stated, List.of());
+            return StatementReading.InContext.<List<TermPath>, Boolean>over((each, rebound,
+                    again) -> quantifiesOverAt(container, each, rebound, again))
+                    .read(stated, List.of());
         }
 
-        /** {@link #quantifiesOver}, inside searches written of each of {@code rebound}. */
-        private static boolean quantifiesOverInside(DecisionSubject container, Proposition stated,
-                                                    List<TermPath> rebound) {
+        /** {@link #quantifiesOver}, of {@code stated} inside searches written of each of
+         *  {@code rebound}. */
+        private static boolean quantifiesOverAt(
+                DecisionSubject container, Proposition stated, List<TermPath> rebound,
+                StatementReading.InContext<List<TermPath>, Boolean> again) {
             return switch (stated) {
                 case Some some -> (some.container.equals(container)
                         && !reboundBy(some.container, rebound))
-                        || quantifiesOverInside(container, some.ofTheElement, rebound);
-                case All all -> all.parts().stream()
-                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
-                case Any any -> any.parts().stream()
-                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
+                        || again.read(some.ofTheElement, rebound);
+                case All _, Any _, OnAnApplication _, SoManyHold _ ->
+                        stated.anyPart(again.in(rebound));
                 case SomeReachable reached -> {
                     List<TermPath> inside = rebound;
                     if (reached.startsBelowWhereItWasWritten()) {
                         inside = new ArrayList<>(rebound);
                         inside.add(reached.writtenAt());
                     }
-                    yield quantifiesOverInside(container, reached.atANode(), inside)
+                    yield again.read(reached.atANode(), inside)
                             || reached.noneBelow()
-                                    .filter(each -> quantifiesOverInside(container, each, rebound))
+                                    .filter(each -> again.read(each, rebound))
                                     .isPresent();
                 }
-                case OnAnApplication applied -> applied.each().stream()
-                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
-                case SoManyHold counted -> counted.statements().stream()
-                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
-                case WhereItAnswers where ->
-                        quantifiesOverInside(container, where.answers(), rebound)
-                                || quantifiesOverInside(container, where.states(), rebound);
-                case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                     LastToHold _, Carried _, Unread _ -> false;
+                case OfTheWays ways -> again.read(ways.written(), rebound);
+                case WhereItAnswers where -> again.read(where.answers(), rebound)
+                        || again.read(where.states(), rebound);
+                case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                     SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
             };
         }
 
         /** Whether {@code container} is a place under the node a search around it was written
          *  of, which names the place under each node the search reaches. */
         private static boolean reboundBy(DecisionSubject container, List<TermPath> rebound) {
-            return container instanceof DecisionSubject.AnInput(TermPath at)
+            return container instanceof DecisionSubject.AnInput(TermPath at, var _)
                     && rebound.stream().anyMatch(at::isAtOrUnder);
         }
 
@@ -622,13 +1428,14 @@ public sealed interface Proposition {
         /** This quantifier with the parts it asks of its element, spelled once. */
         public ElementAsked elementAsked() {
             return new ElementAsked(this, switch (ofTheElement) {
-                case All all -> all.parts().stream().map(Proposition::key)
+                case All all -> all.parts().stream().map(Proposition::spelling)
                         .collect(Collectors.toUnmodifiableSet());
-                case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.key());
+                case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.spelling());
                 // One part, whatever it says: two spelled alike are one statement.
-                case Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _, Any _,
-                     Some _, Carried _, SomeReachable _, Unread _, OnAnApplication _,
-                     SoManyHold _, WhereItAnswers _ -> Set.of(ofTheElement.key());
+                case Compared _, Truth _, InCases _, Present _, InTheStrings _, SameValue _,
+                     StringInside _, LastToHold _, Any _, Some _, Carried _, SomeReachable _,
+                     Unread _, OnAnApplication _, SoManyHold _, WhereItAnswers _, OfTheWays _ ->
+                        Set.of(ofTheElement.spelling());
             });
         }
 
@@ -638,7 +1445,7 @@ public sealed interface Proposition {
          * @param quantifier the quantifier
          * @param parts      what it asks of its element, part by part; none where it asks nothing
          */
-        public record ElementAsked(Some quantifier, Set<String> parts) {
+        public record ElementAsked(Some quantifier, Set<Spelling> parts) {
 
             public ElementAsked {
                 Objects.requireNonNull(quantifier, "the parts are some quantifier's");
@@ -677,13 +1484,13 @@ public sealed interface Proposition {
      * and either way as far as anything here knows. Every concluding of a whole condition supposes
      * it ({@link Derivation.Supposing}), so no reader of what a condition states is handed one.
      *
-     * @param key spelled from the rest when it is made, whatever is handed in
+     * @param spelling spelled from the rest when it is made, whatever is handed in
      */
-    record Carried(ACarriedValue value, boolean holds, String key) implements Proposition {
+    record Carried(ACarriedValue value, boolean holds, Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Carried(ACarriedValue value, boolean holds) {
@@ -694,7 +1501,7 @@ public sealed interface Proposition {
             if (value == null) {
                 throw new IllegalArgumentException("a walk carried something");
             }
-            key = (holds ? "" : "!") + value;
+            spelling = Spelling.of((holds ? "" : "!") + value);
         }
 
         @Override
@@ -728,15 +1535,15 @@ public sealed interface Proposition {
      * @param through   the fields of a node whose elements are the nodes below it, in one order
      * @param noneBelow that the node at {@code at} has no node below it, where {@code at} is
      *                  {@code writtenAt} and the containers under it are measured
-     * @param key       spelled from the rest when it is made, whatever is handed in
+     * @param spelling      spelled from the rest when it is made, whatever is handed in
      */
     record SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
                          Proposition atANode, Optional<Proposition> noneBelow, boolean holds,
-                         String key) implements Proposition {
+                         Spelling spelling) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public SomeReachable(TermPath at, TermPath writtenAt, List<String> through,
@@ -757,9 +1564,10 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException("a search is of a statement answering on every"
                         + " node: " + atANode);
             }
-            key = (holds ? "reachable " : "unreachable ") + at + " from " + writtenAt + " through "
-                    + through + " [" + atANode.key() + "]"
-                    + noneBelow.map(none -> " none below [" + none.key() + "]").orElse("");
+            Spelling reached = Spelling.of((holds ? "reachable " : "unreachable ") + at + " from "
+                    + writtenAt + " through " + through + " [", atANode.spelling(), Spelling.CLOSE);
+            spelling = noneBelow.map(none -> Spelling.of(reached, " none below [", none.spelling(),
+                    Spelling.CLOSE)).orElse(reached);
         }
 
         @Override
@@ -774,6 +1582,76 @@ public sealed interface Proposition {
          */
         public boolean startsBelowWhereItWasWritten() {
             return at.isAtOrUnder(writtenAt) && !at.equals(writtenAt);
+        }
+
+        /**
+         * What the search asks of a node, said of a node some levels below the one it starts at,
+         * and the places a row writes at for it.
+         *
+         * @param meets  some node that deep meeting the statement moved to it: some element of the
+         *               field, of some element of which there is some element, and so on down
+         * @param places  the containers and elements on the way down and each place of the node
+         *                reached that the statement reads
+         * @param reached the node it is said of, which a place of the start node is moved to
+         */
+        public record NodeBelowMeeting(Proposition meets, List<TermPath> places,
+                                       TermPath reached) {}
+
+        /**
+         * The statement the search asks of a node, moved to a node {@code levels} below the one it
+         * starts at, by way of some node at each level between — or none where the search goes
+         * down several fields, asks something other than a comparison of numbers at the node's own
+         * places, or asks of a number that is no such number at the node moved to.
+         *
+         * <p>One depth of the nodes below and not what finding one below means: that is a node at
+         * some depth, and a row composed for a depth is a candidate for the case which a run then
+         * settles. The depth is the caller's to walk, and to stop walking at.
+         */
+        public Optional<NodeBelowMeeting> someNodeBelowMeetingIt(int levels) {
+            if (levels < 1 || through.size() != 1
+                    || !(atANode instanceof Compared(Relation.Affine affine, boolean asked, var _,
+                            var _))) {
+                return Optional.empty();
+            }
+            List<TermPath> containers = new ArrayList<>();
+            TermPath node = at;
+            for (int level = 0; level < levels; level++) {
+                TermPath container = node.then(through.getFirst());
+                containers.add(container);
+                node = container.element();
+            }
+            TermPath reached = node;
+            List<TermPath> places = new ArrayList<>(containers);
+            places.add(reached);
+            boolean[] strays = {false};
+            PlacesMoved moved = PlacesMoved.by(place -> {
+                TermPath to = place.movedFrom(at, reached);
+                strays[0] |= to == null;
+                return to == null ? place : to;
+            });
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))) {
+                    return Optional.empty();
+                }
+                // A number may be none where the places are put, which is the term's to say.
+                NumericTerm there = term.movedTo(moved);
+                if (there == null) {
+                    return Optional.empty();
+                }
+                coefs.put(new DecisionAtom.OfTheInput(there), each.getValue());
+                places.addAll(there.placesReadOff());
+            }
+            if (strays[0]) {
+                return Optional.empty();
+            }
+            Proposition meets = new Compared(new Relation.Affine(
+                    new LinearForm<>(affine.form().constant(), coefs), affine.proposition()),
+                    asked);
+            for (TermPath container : containers.reversed()) {
+                meets = new Some(new DecisionSubject.AnInput(container), meets, true);
+            }
+            return Optional.of(new NodeBelowMeeting(meets, List.copyOf(places), reached));
         }
 
         /**
@@ -808,32 +1686,60 @@ public sealed interface Proposition {
      * @param ordinal which unread part of the condition this is, in the order the reading met them
      * @param why     what stopped it, in the stopping reader's words
      * @param fixed   whether it is the same whatever the input, which is all that is known of it
-     * @param key     spelled from where and which it is when it is made, whatever is handed in
+     * @param couldBe what the part would be said as were there words for it, or none where there is
+     *                no such statement. Not a statement held as a part: a part nothing read the
+     *                meaning of is no statement a reading divides by, and a reader of the parts
+     *                that met it would read the string it is of. It is what a way through the body
+     *                may take of the part, which is what the statement makes certain, on whichever
+     *                side the way comes out
+     * @param spelling    spelled from where and which it is when it is made, whatever is handed in
      */
     record Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
-                  boolean holds, String key) implements Proposition {
+                  boolean holds, Optional<CouldBe> couldBe, Spelling spelling)
+            implements Proposition {
+
+        /**
+         * A string at a position of the input being one of the strings of a language, as a part
+         * that was nothing but read would have it, on the side the part holds.
+         *
+         * @param string  the string
+         * @param accepts the strings it is one of
+         */
+        public record CouldBe(InTheStrings.Strings.AtAPosition string, StringsLanguage accepts) {
+
+            /** The statement it is, as it stands where it {@code holds}. */
+            public Proposition on(boolean holds) {
+                return new InTheStrings(string, accepts, holds);
+            }
+        }
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
+                      boolean holds, Optional<CouldBe> couldBe) {
+            this(where, ordinal, why, fixed, holds, couldBe, null);
+        }
+
+        /** A part nothing could say as a statement. */
+        public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
                       boolean holds) {
-            this(where, ordinal, why, fixed, holds, null);
+            this(where, ordinal, why, fixed, holds, Optional.empty(), null);
         }
 
         public Unread {
-            if (where == null || why == null) {
+            if (where == null || why == null || couldBe == null) {
                 throw new IllegalArgumentException("an unread part stopped somewhere, for a reason");
             }
-            key = (holds ? "" : "!") + "unread " + where.map(String::valueOf).orElse("")
-                    + "#" + ordinal;
+            spelling = Spelling.of((holds ? "" : "!") + "unread "
+                    + where.map(String::valueOf).orElse("") + "#" + ordinal);
         }
 
         @Override
         public Proposition denied() {
-            return new Unread(where, ordinal, why, fixed, !holds);
+            return new Unread(where, ordinal, why, fixed, !holds, couldBe);
         }
     }
 
@@ -854,27 +1760,33 @@ public sealed interface Proposition {
      * reaches. Read for what can hold, that is a statement too many and never one too few; read for
      * what must, it would be a claim about a run that never happens. So a reader takes this only
      * for what can come out, and one that needs what must — what a path assumes, what a row is
-     * asked for — declines it.
+     * asked for — declines it. Which application states which is not held here; a reader standing
+     * on one application takes what that one states off the reading of the body made on it
+     * ({@link MeaningsOfABody#onTheApplication}).
      *
-     * @param key spelled from the statements' own when it is made, whatever is handed in
+     * @param spelling spelled from the statements' own when it is made, whatever is handed in
+     * @param denial   a new one when it is made, whatever is handed in
      */
-    record OnAnApplication(List<Proposition> each, String key) implements Proposition {
+    record OnAnApplication(List<Proposition> each, Spelling spelling,
+                           @DecidedByTheRest Denial denial) implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /** Both components, the spelling first, as {@link All} compares them. */
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof OnAnApplication that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
-                    && each.equals(that.each));
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling) && each.equals(that.each));
         }
 
+        private static final Spelling OPENING = Spelling.of("on an application[");
+
         public OnAnApplication(List<Proposition> each) {
-            this(each, null);
+            this(each, null, null);
         }
 
         public OnAnApplication {
@@ -883,13 +1795,14 @@ public sealed interface Proposition {
                 throw new IllegalArgumentException(
                         "a condition read on its applications states two or more things");
             }
-            key = "on an application" + each.stream().map(Proposition::key).toList();
+            spelling = spellingOf(OPENING, each);
+            denial = new Denial();
         }
 
         @Override
         public Proposition denied() {
-            return SharedPropositions.denied(this,
-                    () -> onAnApplication(each.stream().map(Proposition::denied).toList()));
+            return denial.of(this, stated ->
+                    onAnApplication(stated.each.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -917,28 +1830,31 @@ public sealed interface Proposition {
      * @param weights    how many times each of {@code statements} was written, in the same order
      * @param admitted   the counts this holds at, rising — none of them every count there is, and
      *                   not none
-     * @param key        spelled from the rest when it is made, whatever is handed in
+     * @param spelling       spelled from the rest when it is made, whatever is handed in
+     * @param denial         a new one when it is made, whatever is handed in
      */
     record SoManyHold(List<Proposition> statements, List<Integer> weights, List<Integer> admitted,
-                      String key) implements Proposition {
+                      Spelling spelling, @DecidedByTheRest Denial denial)
+            implements Proposition {
 
         @Override
         public int hashCode() {
-            return key.hashCode();
+            return spelling.hashCode();
         }
 
         /** Every component, the spelling first, as {@link All} compares them. */
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof SoManyHold that
-                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && spelling.hashCode() == that.spelling.hashCode()
+                    && spelling.equals(that.spelling)
                     && statements.equals(that.statements) && weights.equals(that.weights)
                     && admitted.equals(that.admitted));
         }
 
         public SoManyHold(List<Proposition> statements, List<Integer> weights,
                           List<Integer> admitted) {
-            this(statements, weights, admitted, null);
+            this(statements, weights, admitted, null, null);
         }
 
         public SoManyHold {
@@ -954,7 +1870,7 @@ public sealed interface Proposition {
                         + " row: " + statements);
             }
             for (int at = 1; at < statements.size(); at++) {
-                if (statements.get(at - 1).key().compareTo(statements.get(at).key()) >= 0) {
+                if (statements.get(at - 1).spelling().compareTo(statements.get(at).spelling()) >= 0) {
                     throw new IllegalArgumentException("statements are kept once, in the order of"
                             + " their keys: " + statements);
                 }
@@ -975,12 +1891,15 @@ public sealed interface Proposition {
                             + all + ": " + admitted);
                 }
             }
-            StringBuilder spelled = new StringBuilder("so many hold").append(admitted).append(" of [");
+            List<Spelling> spelled = new ArrayList<>(2 * statements.size() + 1);
+            spelled.add(Spelling.of("so many hold" + admitted + " of ["));
             for (int at = 0; at < statements.size(); at++) {
-                spelled.append(at == 0 ? "" : ", ").append(weights.get(at)).append('*')
-                        .append(statements.get(at).key());
+                spelled.add(Spelling.of((at == 0 ? "" : ", ") + weights.get(at) + "*"));
+                spelled.add(statements.get(at).spelling());
             }
-            key = spelled.append(']').toString();
+            spelled.add(Spelling.CLOSE);
+            spelling = Spelling.joined(spelled);
+            denial = new Denial();
         }
 
         /** How many the statements come to where every one of them holds. */
@@ -1003,8 +1922,8 @@ public sealed interface Proposition {
          */
         public static Proposition counting(List<Proposition> statements, List<Integer> weights,
                                            List<Integer> admitted) {
-            SortedMap<String, Proposition> kept = new TreeMap<>();
-            Map<String, Integer> weighed = new HashMap<>();
+            SortedMap<Spelling, Proposition> kept = new TreeMap<>();
+            Map<Spelling, Integer> weighed = new HashMap<>();
             int always = 0;
             for (int at = 0; at < statements.size(); at++) {
                 Proposition statement = statements.get(at);
@@ -1012,8 +1931,8 @@ public sealed interface Proposition {
                     always += holds ? weights.get(at) : 0;
                     continue;
                 }
-                kept.putIfAbsent(statement.key(), statement);
-                weighed.merge(statement.key(), weights.get(at), Integer::sum);
+                kept.putIfAbsent(statement.spelling(), statement);
+                weighed.merge(statement.spelling(), weights.get(at), Integer::sum);
             }
             int all = weighed.values().stream().mapToInt(Integer::intValue).sum();
             List<Integer> counts = new ArrayList<>();
@@ -1091,14 +2010,16 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            List<Integer> others = new ArrayList<>();
-            for (int count = 0; count <= weight(); count++) {
-                if (Collections.binarySearch(admitted, count) < 0) {
-                    others.add(count);
+            return denial.of(this, stated -> {
+                List<Integer> others = new ArrayList<>();
+                for (int count = 0; count <= stated.weight(); count++) {
+                    if (Collections.binarySearch(stated.admitted, count) < 0) {
+                        others.add(count);
+                    }
                 }
-            }
-            return SharedPropositions.denied(this,
-                    () -> SharedPropositions.shared(new SoManyHold(statements, weights, others)));
+                return SharedPropositions.shared(
+                        new SoManyHold(stated.statements, stated.weights, others));
+            });
         }
 
         /** Which way a count comes out, as far as what each statement can come out as says. */
@@ -1180,8 +2101,8 @@ public sealed interface Proposition {
      * kept once in one order, and one statement where every application states it.
      */
     static Proposition onAnApplication(List<Proposition> each) {
-        SortedMap<String, Proposition> kept = new TreeMap<>();
-        each.forEach(one -> kept.putIfAbsent(one.key(), one));
+        SortedMap<Spelling, Proposition> kept = new TreeMap<>();
+        each.forEach(one -> kept.putIfAbsent(one.spelling(), one));
         if (kept.isEmpty()) {
             throw new IllegalArgumentException("a condition is read on some application");
         }
@@ -1200,39 +2121,144 @@ public sealed interface Proposition {
     /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
      *  kept, or null where every part was read. */
     static WhyUnread firstStopIn(Proposition stated) {
-        List<WhyUnread> stops = new ArrayList<>(1);
-        stopsIn(stated, stops, true);
-        return stops.isEmpty() ? null : stops.getFirst();
+        return firstStops().read(stated).orElse(null);
+    }
+
+    /**
+     * A reading of whether every part of a statement nothing read stopped for being past the parts
+     * a step is concluded with ({@link WhyUnread.MorePartsThanAreConcluded}), which is so of a
+     * statement that has no such part.
+     *
+     * <p>Asked of the statements of one concluding, so that each is read once however many
+     * statements hold it.
+     */
+    static StatementReading<Boolean> stopsOnlyPastThePartsReading() {
+        return StatementReading.over(Proposition::stopsOnlyPastThePartsAt);
+    }
+
+    private static Boolean stopsOnlyPastThePartsAt(Proposition stated,
+                                                   StatementReading<Boolean> again) {
+        return switch (stated) {
+            case Unread unread -> unread.why() instanceof WhyUnread.MorePartsThanAreConcluded;
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                for (Proposition part : stated.partsHeld()) {
+                    if (!again.read(part)) {
+                        yield false;
+                    }
+                }
+                yield true;
+            }
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> true;
+        };
+    }
+
+    private static StatementReading<Optional<WhyUnread>> firstStops() {
+        return StatementReading.over(Proposition::firstStopAt);
+    }
+
+    /**
+     * Whether some relation of {@code stated} is over a number a call answers on a run
+     * ({@link Quantity.OfACall}): a statement the runs place, which says nothing of where the
+     * input has to stand, and so states less than one of the same condition read over the input.
+     */
+    public static boolean isOverWhatARunWorksOut(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::overWhatARunWorksOutAt).read(stated);
+    }
+
+    private static Boolean overWhatARunWorksOutAt(Proposition stated,
+                                                  StatementReading<Boolean> again) {
+        return switch (stated) {
+            case Compared compared -> compared.relation() instanceof Relation.Affine affine
+                    && affine.form().coefs().keySet().stream()
+                            .anyMatch(Quantity.OfACall.class::isInstance);
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                for (Proposition part : stated.partsHeld()) {
+                    if (again.read(part)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            case Always _, Unread _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
+        };
+    }
+
+    /** The figures counting how many times a condition is read that the parts of {@code stated}
+     *  nothing read stopped at, each once, each part asked once however many ways there are down
+     *  to it. */
+    public static Set<Figure> figuresOfReadingsIn(Proposition stated) {
+        Set<Figure> out = new LinkedHashSet<>();
+        StatementReading.<Boolean>over((part, again) -> figuresAt(part, again, out)).read(stated);
+        return Collections.unmodifiableSet(out);
+    }
+
+    /** Whether some part of {@code stated} stopped at such a figure, with each put into
+     *  {@code into}. */
+    private static Boolean figuresAt(Proposition stated, StatementReading<Boolean> again,
+                                     Set<Figure> into) {
+        return switch (stated) {
+            case Unread unread -> unread.why().countsReadings()
+                    && unread.why().figure().map(into::add).isPresent();
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                boolean stopped = false;
+                for (Proposition part : stated.partsHeld()) {
+                    stopped |= again.read(part);
+                }
+                yield stopped;
+            }
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
+        };
+    }
+
+    private static Optional<WhyUnread> firstStopAt(Proposition stated,
+                                                   StatementReading<Optional<WhyUnread>> again) {
+        return switch (stated) {
+            case Unread unread -> Optional.of(unread.why());
+            // Written out to be told: whether a number of some way cannot be held is not known of
+            // the parts it is made of, and is found where the cases are.
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> {
+                for (Proposition part : stated.partsHeld()) {
+                    Optional<WhyUnread> stop = again.read(part);
+                    if (stop.isPresent()) {
+                        yield stop;
+                    }
+                }
+                yield Optional.empty();
+            }
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> Optional.empty();
+        };
     }
 
     /** Why each part of {@code stated} nothing read stopped, in the order its parts are kept. */
     static List<WhyUnread> stopsIn(Proposition stated) {
         List<WhyUnread> out = new ArrayList<>();
-        stopsIn(stated, out, false);
+        stopsIn(stated, out, firstStops());
         return List.copyOf(out);
     }
 
-    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept, or the
-     *  first alone where {@code first}; whether one was added. */
-    private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
-        return switch (stated) {
-            case Unread unread -> into.add(unread.why());
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
-                 WhereItAnswers _ -> stopsIn(stated.partsHeld(), into, first);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
-                 LastToHold _, Carried _ -> false;
-        };
-    }
-
-    private static boolean stopsIn(List<Proposition> parts, List<WhyUnread> into, boolean first) {
-        boolean added = false;
-        for (Proposition part : parts) {
-            added |= stopsIn(part, into, first);
-            if (added && first) {
-                return true;
-            }
+    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept, a stop
+     *  as often as the ways down to it: they are what the answer lists. A part that holds none is
+     *  not gone down. */
+    private static void stopsIn(Proposition stated, List<WhyUnread> into,
+                                StatementReading<Optional<WhyUnread>> first) {
+        if (first.read(stated).isEmpty()) {
+            return;
         }
-        return added;
+        if (stated instanceof Unread unread) {
+            into.add(unread.why());
+            return;
+        }
+        for (Proposition part : stated.partsHeld()) {
+            stopsIn(part, into, first);
+        }
     }
 
     /**
@@ -1240,14 +2266,108 @@ public sealed interface Proposition {
      * which a map filed from a list says of the entry under a key.
      */
     static boolean saysTheLastToHold(Proposition stated) {
-        return switch (stated) {
-            case LastToHold _ -> true;
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
-                 WhereItAnswers _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::saysTheLastToHold);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
-                 Carried _ -> false;
-        };
+        return StatementReading.<Boolean>over((each, again) ->
+                each instanceof LastToHold || each.anyPart(again)).read(stated);
+    }
+
+    /**
+     * Every statement inside this of which element is the last of those holding a value, in the
+     * order they are met.
+     *
+     * <p>Each is a distinction of its own: a statement resting on two maps, each filed from a list,
+     * rests on two orders, and reading one the other way round leaves the other as it is. A reader
+     * that asks what an order decides asks it of one of these and not of the statement they are
+     * parts of.
+     */
+    default List<LastToHold> lastsToHold() {
+        return StatementReading.<List<LastToHold>>over((each, again) -> {
+            if (each instanceof LastToHold last) {
+                return List.of(last);
+            }
+            return each.foldParts(List.<LastToHold>of(), (so, more) -> more.isEmpty() ? so
+                    : so.isEmpty() ? more : Stream.concat(so.stream(), more.stream()).toList(),
+                    again);
+        }).read(this);
+    }
+
+    /**
+     * What it is for the entry {@code last} picks to be there: some element of the container, being
+     * the last of its key and the one the key is looked up by. The quantifier nearest {@code last}
+     * in {@code stated}, with what it says of an element cut down to those two parts.
+     *
+     * <p>A consequence of {@code stated} where it holds, and no rule's conclusion: it is what a
+     * row has to be for the statement to look anything up at all, since a statement over an empty
+     * container or an empty list of the things it looks up says nothing of any order. Each
+     * quantifier around {@code last} is kept, so that every list the statement quantifies over
+     * holds an element as well.
+     *
+     * <p>One order may be read in several places of {@code stated}, under the quantifiers of
+     * different lists. The statement looks the entry up if it does so in any of them, so the
+     * places are alternatives. Nothing where some place has no quantifier around {@code last}, or
+     * what is left of it would quantify a container twice: an alternative left out would ask of a
+     * row what the statement does not.
+     */
+    static Optional<Proposition> theEntryLookedUp(Proposition stated, LastToHold last) {
+        List<List<Some>> places = new ArrayList<>();
+        quantifiersAround(stated, last, List.of(), places);
+        if (places.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Proposition> alternatives = new ArrayList<>();
+        for (List<Some> chain : places) {
+            Optional<Proposition> alternative = entryUnder(chain, last);
+            if (alternative.isEmpty()) {
+                return Optional.empty();
+            }
+            alternatives.add(alternative.get());
+        }
+        return Optional.of(any(alternatives));
+    }
+
+    /** {@link #theEntryLookedUp} for the place of {@code last} inside {@code chain}, which is the
+     *  quantifiers around it, outermost first. */
+    private static Optional<Proposition> entryUnder(List<Some> chain, LastToHold last) {
+        if (chain.isEmpty()) {
+            return Optional.empty();
+        }
+        Some around = chain.getLast();
+        List<Proposition> parts = around.ofTheElement() instanceof All all
+                ? all.parts() : List.of(around.ofTheElement());
+        List<Proposition> kept = new ArrayList<>();
+        for (Proposition part : parts) {
+            if (part.equals(last) || (part instanceof SameValue same && same.holds())) {
+                kept.add(part);
+            }
+        }
+        if (kept.isEmpty() || Some.quantifiesOver(around.container(), all(kept))) {
+            return Optional.empty();
+        }
+        Proposition built = new Some(around.container(), all(kept), true);
+        for (int outer = chain.size() - 2; outer >= 0; outer--) {
+            if (Some.quantifiesOver(chain.get(outer).container(), built)) {
+                return Optional.empty();
+            }
+            built = new Some(chain.get(outer).container(), built, true);
+        }
+        return Optional.of(built);
+    }
+
+    /** Into {@code places}, the quantifiers {@code last} is inside of at each place it stands in
+     *  {@code stated}, outermost first. */
+    private static void quantifiersAround(Proposition stated, LastToHold last,
+                                          List<Some> enclosing, List<List<Some>> places) {
+        if (stated.equals(last)) {
+            places.add(enclosing);
+            return;
+        }
+        List<Some> here = enclosing;
+        if (stated instanceof Some some) {
+            here = new ArrayList<>(enclosing);
+            here.add(some);
+        }
+        for (Proposition part : stated.partsHeld()) {
+            quantifiersAround(part, last, here, places);
+        }
     }
 
     /**
@@ -1255,12 +2375,18 @@ public sealed interface Proposition {
      * something.
      */
     static boolean saysASearchReachesBelow(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::saysASearchReachesBelowAt)
+                .read(stated);
+    }
+
+    private static boolean saysASearchReachesBelowAt(Proposition stated,
+                                                     StatementReading<Boolean> again) {
         return switch (stated) {
             case SomeReachable _ -> true;
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
-                 Carried _, LastToHold _ -> false;
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _,
+                 OfTheWays _ -> stated.anyPart(again);
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, Unread _, Carried _, LastToHold _ -> false;
         };
     }
 
@@ -1273,10 +2399,14 @@ public sealed interface Proposition {
      * statement about it names.
      */
     static boolean aboutAnAnswer(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::aboutAnAnswerAt).read(stated);
+    }
+
+    private static boolean aboutAnAnswerAt(Proposition stated, StatementReading<Boolean> again) {
         return switch (stated) {
             case Always _, Unread _, Carried _ -> false;
             case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer;
-            case Compared(Relation relation, boolean _, String _) -> switch (relation) {
+            case Compared(Relation relation, boolean _, Spelling _, var _) -> switch (relation) {
                 case Relation.Affine affine -> affine.form().coefs().keySet().stream()
                         .anyMatch(Proposition::anAnswerIn);
                 case Relation.Ordered ordered -> anAnswerIn(ordered.term());
@@ -1284,81 +2414,15 @@ public sealed interface Proposition {
             case Truth truth -> truth.of() instanceof DecisionSubject.AnAnswer;
             case InCases cases -> cases.of() instanceof DecisionSubject.AnAnswer;
             case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
+            // Of the input, and of no answer.
+            case InTheStrings _ -> false;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
-                    || same.other() instanceof DecisionSubject.AnAnswer;
+                    || same.otherSubject() instanceof DecisionSubject.AnAnswer;
+            case StringInside inside -> anAnswerIn(inside.inner()) || anAnswerIn(inside.outer());
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
-                 WhereItAnswers _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
+                 WhereItAnswers _, OfTheWays _ -> stated.anyPart(again);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
-                    || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
-        };
-    }
-
-    /**
-     * Whether {@code stated} is about what a dependency answered and names nothing of the input
-     * beside it: what it asks of the answer relates no number of the input to anything.
-     *
-     * <p>What a dependency answered is a value nothing relates to the input, so such a statement
-     * narrows which answer a row stands the dependency in with and leaves the input's values as
-     * they were. A statement that names an input position, in a relation or as the key an
-     * element is looked for under, is not that.
-     */
-    static boolean aboutAnAnswerAlone(Proposition stated) {
-        return aboutAnAnswer(stated) && namesNothingOfTheInput(stated);
-    }
-
-    /**
-     * Whether {@code stated} is proved to name nothing of the input.
-     *
-     * <p>Proved, and so false for what is not known: a part nothing read, or one carried from
-     * elsewhere, may name a position of the input for all that was said of it, and a search is
-     * from a position of the input whatever it asks along the way.
-     */
-    private static boolean namesNothingOfTheInput(Proposition stated) {
-        return switch (stated) {
-            case Always _ -> true;
-            case Unread _, Carried _, SomeReachable _ -> false;
-            case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer
-                    && last.position() instanceof DecisionSubject.AnAnswer;
-            case Compared(Relation relation, boolean _, String _) -> switch (relation) {
-                case Relation.Affine affine -> affine.form().coefs().keySet().stream()
-                        .allMatch(Proposition::namesNothingOfTheInput);
-                case Relation.Ordered ordered -> namesNothingOfTheInput(ordered.term());
-            };
-            case Truth truth -> truth.of() instanceof DecisionSubject.AnAnswer;
-            case InCases cases -> cases.of() instanceof DecisionSubject.AnAnswer;
-            case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
-            case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
-                    && same.other() instanceof DecisionSubject.AnAnswer;
-            case Some some -> some.container() instanceof DecisionSubject.AnAnswer
-                    && some.partsHeld().stream().allMatch(Proposition::namesNothingOfTheInput);
-            case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
-                    stated.partsHeld().stream().allMatch(Proposition::namesNothingOfTheInput);
-        };
-    }
-
-    private static boolean namesNothingOfTheInput(Quantity quantity) {
-        return switch (quantity) {
-            case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
-                 DecisionAtom.ComputedOverAnAnswer _ -> true;
-            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                 Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
-                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
-                 Quantity.APieceOf _, Quantity.IsAmongThePieces _ -> false;
-            case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
-                    && namesNothingOfTheInput(count.ofTheElement());
-            case Quantity.HowManyHold held -> held.each().stream()
-                    .allMatch(Proposition::namesNothingOfTheInput);
-            case Quantity.HowManyDifferent different ->
-                    different.container() instanceof DecisionSubject.AnAnswer
-                            && different.ofTheElement() instanceof DecisionSubject.AnAnswer;
-            case Quantity.HowManyDifferentAcross across ->
-                    across.container() instanceof DecisionSubject.AnAnswer
-                            && across.ofTheOccurrence() instanceof DecisionSubject.AnAnswer;
-            case Quantity.HowManyDifferentBelow _ -> false;
-            case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
-                    && namesNothingOfTheInput(sum.ofTheElement());
+                    || some.anyPart(again);
         };
     }
 
@@ -1368,18 +2432,27 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _ -> true;
-            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _, Quantity.OfACall _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _,
-                 Quantity.APieceOf _, Quantity.IsAmongThePieces _ -> false;
+                 Quantity.APieceOf _, Quantity.ThePieceAt _, Quantity.IsAmongThePieces _,
+                 Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
+            case Quantity.HowManyMeetAcross count ->
+                    count.container() instanceof DecisionSubject.AnAnswer
+                            || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
                     .anyMatch(Proposition::aboutAnAnswer);
             case Quantity.HowManyDifferent different ->
                     different.container() instanceof DecisionSubject.AnAnswer
-                            || different.ofTheElement() instanceof DecisionSubject.AnAnswer;
+                            || different.ofTheElement().where() instanceof DecisionSubject.AnAnswer;
+            case Quantity.HowManyDifferentMeet different ->
+                    different.container() instanceof DecisionSubject.AnAnswer
+                            || different.ofTheElement().where()
+                                    instanceof DecisionSubject.AnAnswer
+                            || aboutAnAnswer(different.meeting().statement());
             case Quantity.HowManyDifferentAcross across ->
                     across.container() instanceof DecisionSubject.AnAnswer
                             || across.ofTheOccurrence() instanceof DecisionSubject.AnAnswer;
@@ -1504,7 +2577,7 @@ public sealed interface Proposition {
             return states;
         }
         // Where it answers is one region however many operations it was said of.
-        return states instanceof WhereItAnswers(Proposition inner, Proposition stated, String _)
+        return states instanceof WhereItAnswers(Proposition inner, Proposition stated, Spelling _)
                 ? new WhereItAnswers(all(List.of(answers, inner)), stated)
                 : new WhereItAnswers(answers, states);
     }
@@ -1521,7 +2594,7 @@ public sealed interface Proposition {
 
     /** Whether {@code stated} answers on no row ({@link #answersNowhere}). */
     static boolean answersNowhere(Proposition stated) {
-        return stated instanceof WhereItAnswers(Proposition answers, Proposition _, String _)
+        return stated instanceof WhereItAnswers(Proposition answers, Proposition _, Spelling _)
                 && answers instanceof Always(boolean everywhere) && !everywhere;
     }
 
@@ -1538,7 +2611,7 @@ public sealed interface Proposition {
         if (!holdsAnAnswering(stated)) {
             return null;
         }
-        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, Spelling _)) {
             Proposition inside = answeredWhere(states);
             return inside == null ? answers : all(List.of(answers, inside));
         }
@@ -1554,13 +2627,14 @@ public sealed interface Proposition {
      * values are one is stated once a count is made of it.
      */
     public static List<TermPath> positionsHeldEqual(Proposition stated) {
-        if (stated instanceof SameValue(DecisionSubject one, DecisionSubject other, boolean holds,
-                var _)) {
-            return holds && one instanceof DecisionSubject.AnInput(TermPath at)
-                    && other instanceof DecisionSubject.AnInput(TermPath alsoAt)
+        if (stated instanceof SameValue(DecisionSubject one, Operand<DecisionSubject> other,
+                boolean holds, var _)) {
+            return holds && one instanceof DecisionSubject.AnInput(TermPath at, var _)
+                    && other instanceof Operand.At<DecisionSubject>(
+                            DecisionSubject.AnInput(TermPath alsoAt, var _))
                     ? List.of(at, alsoAt) : null;
         }
-        if (!(stated instanceof Compared(Relation relation, boolean holds, var _))
+        if (!(stated instanceof Compared(Relation relation, boolean holds, var _, var _))
                 || !holds
                 || !(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
                 || rel != Rel.EQ || form.constant().signum() != 0 || form.coefs().size() != 2) {
@@ -1570,7 +2644,7 @@ public sealed interface Proposition {
         List<ExactRatio> weights = new ArrayList<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(
-                    NumericTerm.ValueOf(TermPath position)))) {
+                    NumericTerm.ValueOf(TermPath position), var _))) {
                 return null;
             }
             positions.add(position);
@@ -1600,17 +2674,23 @@ public sealed interface Proposition {
      * by side where the part that may answer nothing stands inside it.
      */
     public static Proposition whereItAnswersAtAll(Proposition stated) {
+        return StatementReading.<Optional<Proposition>>over(Proposition::answeredAtAllAt)
+                .read(stated).orElse(null);
+    }
+
+    private static Optional<Proposition> answeredAtAllAt(
+            Proposition stated, StatementReading<Optional<Proposition>> again) {
         if (!holdsAnAnswering(stated)) {
-            return null;
+            return Optional.empty();
         }
         // Where it answers may be written as a part and its denial side by side, which holds
         // where the part answers either way.
-        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
-            Proposition inside = whereItAnswersAtAll(states);
-            return inside == null ? whereItHolds(answers)
-                    : all(List.of(whereItHolds(answers), inside));
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, Spelling _)) {
+            Optional<Proposition> inside = again.read(states);
+            return Optional.of(inside.isEmpty() ? whereItHolds(answers)
+                    : all(List.of(whereItHolds(answers), inside.get())));
         }
-        return any(List.of(whereItHolds(stated), whereItHolds(stated.denied())));
+        return Optional.of(any(List.of(whereItHolds(stated), whereItHolds(stated.denied()))));
     }
 
     /**
@@ -1622,35 +2702,74 @@ public sealed interface Proposition {
      * the rows it answers on — never every row, where something in it answers nothing.
      */
     public static Proposition whereItHolds(Proposition stated) {
+        return StatementReading.<Proposition>over(Proposition::whereItHoldsAt).read(stated);
+    }
+
+    private static Proposition whereItHoldsAt(Proposition stated,
+                                              StatementReading<Proposition> again) {
         if (!holdsAnAnswering(stated)) {
             return stated;
         }
         return switch (stated) {
-            case WhereItAnswers(Proposition answers, Proposition states, String _) ->
-                    all(List.of(whereItHolds(answers), whereItHolds(states)));
-            case All all -> all(all.parts().stream().map(Proposition::whereItHolds).toList());
-            case Any any -> any(any.parts().stream().map(Proposition::whereItHolds).toList());
-            case OnAnApplication applied -> onAnApplication(applied.each().stream()
-                    .map(Proposition::whereItHolds).toList());
+            case WhereItAnswers(Proposition answers, Proposition states, Spelling _) ->
+                    all(List.of(again.read(answers), again.read(states)));
+            case All _ -> all(stated.allOverParts(again));
+            case Any _ -> any(stated.allOverParts(again));
+            case OnAnApplication _ -> onAnApplication(stated.allOverParts(again));
+            case OfTheWays ways -> again.read(ways.written());
             // What one of these holds of is read on every row, by its constructor.
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
                     "a count or a quantifier is of statements answering on every row: " + stated);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Unread _ -> stated;
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> stated;
         };
     }
 
     /** Whether some part of {@code stated} answers only where an operation does. */
     private static boolean holdsAnAnswering(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::holdsAnAnsweringAt).read(stated);
+    }
+
+    private static boolean holdsAnAnsweringAt(Proposition stated,
+                                              StatementReading<Boolean> again) {
         return switch (stated) {
             case WhereItAnswers _ -> true;
             // What one of these holds answers on every row, which its constructor saw to, so
             // nothing under it is walked again for each one it stands inside.
             case Some _, SoManyHold _, SomeReachable _ -> false;
-            case All _, Any _, OnAnApplication _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Unread _ -> false;
+            case All _, Any _, OnAnApplication _, OfTheWays _ -> stated.anyPart(again);
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
+        };
+    }
+
+    /**
+     * Whether the denial of {@code stated} holds on every row it fails, and on no row it holds:
+     * whether the two are the two cases of one statement, as a condition and its denial are where
+     * {@code c || !c} holds and {@code c && !c} does not.
+     *
+     * <p>Not every statement and its denial are. What is read through an operation that answers
+     * only on some rows ({@link WhereItAnswers}) holds nowhere it answers nothing, and neither does
+     * its denial. What a condition states on the applications of a closure ({@link
+     * OnAnApplication}) holds where some application's statement does and is denied where some
+     * application's denial is, so on two applications that differ both hold. And of a part nothing
+     * read ({@link Unread}) nothing is known, that among the rest. A quantifier, a count and a
+     * search are of statements every row answers, which their constructors saw to, and say on
+     * each row how many elements or nodes meet them: a number, holding or failing.
+     */
+    static boolean deniedWhereverItFails(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::deniedWhereverItFailsAt).read(stated);
+    }
+
+    private static boolean deniedWhereverItFailsAt(Proposition stated,
+                                                   StatementReading<Boolean> again) {
+        return switch (stated) {
+            case WhereItAnswers _, OnAnApplication _, Unread _ -> false;
+            case All _, Any _ -> stated.everyPart(again);
+            case OfTheWays ways -> again.read(ways.written());
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _, Some _, SoManyHold _,
+                 SomeReachable _ -> true;
         };
     }
 
@@ -1670,9 +2789,65 @@ public sealed interface Proposition {
         return joined(parts, false);
     }
 
+    /**
+     * Whether {@code one} is some element of a container meeting something, beside a part of
+     * {@code joined} saying the container holds something — or, joined by "and", whether it is no
+     * element meeting it beside one saying the container holds nothing.
+     *
+     * <p>Some element meeting anything holds only where there is an element, so beside the
+     * container holding something it adds nothing to an "or", and no element meeting it adds
+     * nothing to an "and" beside the container holding nothing. Kept, a condition comes out two
+     * ways by how it was spelt: {@code List.any(v -> true || v > 0, xs)} is the container holding
+     * something, and so is {@code !List.isEmpty(xs) || List.any(v -> v > 0, xs)}.
+     */
+    private static boolean saidByAContainerHolding(Proposition one, List<Proposition> joined,
+                                                   boolean every) {
+        if (!(one instanceof Some(DecisionSubject container, Proposition _, boolean holds,
+                Spelling _)) || holds == every) {
+            return false;
+        }
+        for (Proposition other : joined) {
+            if (holdsSomething(every ? other.denied() : other, container)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code stated} is that {@code container} holds something: how many it holds, as it
+     *  stands, above nought. */
+    private static boolean holdsSomething(Proposition stated, DecisionSubject container) {
+        if (!(stated instanceof Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
+                        boolean holds, Spelling _, var _))
+                || !holds || rel != Rel.GT || form.constant().signum() != 0
+                || form.coefs().size() != 1
+                || form.coefs().values().iterator().next().signum() <= 0) {
+            return false;
+        }
+        return switch (form.coefs().keySet().iterator().next()) {
+            case DecisionAtom.OfTheInput(NumericTerm.TakenOf size, var _) ->
+                    container instanceof DecisionSubject.AnInput(TermPath at, var _)
+                            && size.position().equals(at)
+                            && size.transformation() == ValueTransformation.NONE
+                            && countsWhatItHolds(size.operation(), size.arguments());
+            case DecisionAtom.TakenOfAnAnswer size -> size.of().equals(container)
+                    && countsWhatItHolds(size.operation(), size.arguments());
+            default -> false;
+        };
+    }
+
+    /** Whether {@code operation}, given {@code arguments} beside the value, takes how many the
+     *  value holds. */
+    private static boolean countsWhatItHolds(ValueName.Stdlib operation,
+                                             TakenArguments arguments) {
+        return arguments.equals(TakenArguments.NONE)
+                && DefaultBoundOperationFacts.get().takenAs(operation, arguments)
+                        instanceof TakenAs.HowManyItHolds;
+    }
+
     private static Proposition joined(List<Proposition> parts, boolean every) {
         // In the order of their spellings, a part whose spelling is already kept left out.
-        SortedMap<String, Proposition> kept = new TreeMap<>();
+        List<Proposition> kept = new ArrayList<>();
         for (Proposition part : parts) {
             List<Proposition> flat = switch (part) {
                 case All all when every -> all.parts();
@@ -1686,14 +2861,62 @@ public sealed interface Proposition {
                     }
                     continue;
                 }
-                kept.putIfAbsent(one.key(), one);
+                keptInOrder(kept, one);
+            }
+        }
+        if (kept.size() > 1 && kept.stream().anyMatch(Some.class::isInstance)) {
+            List<Proposition> joinedAsKept = List.copyOf(kept);
+            kept.removeIf(one -> saidByAContainerHolding(one, joinedAsKept, every));
+        }
+        if (every && kept.size() > 1) {
+            Proposition byCases = byTheCases(List.copyOf(kept));
+            if (byCases != null) {
+                return byCases;
             }
         }
         return switch (kept.size()) {
             case 0 -> new Always(every);
-            case 1 -> kept.firstEntry().getValue();
-            default -> SharedPropositions.shared(every ? new All(List.copyOf(kept.values()))
-                    : new Any(List.copyOf(kept.values())));
+            case 1 -> kept.getFirst();
+            default -> SharedPropositions.shared(every ? new All(List.copyOf(kept))
+                    : new Any(List.copyOf(kept)));
         };
+    }
+
+    /**
+     * {@code one} put among {@code kept}, which is in the order of its spellings with no two
+     * spelled alike, where its spelling puts it — left out where one spelled alike is kept.
+     *
+     * <p>Asked of the last first. Parts are mostly handed over in that order already — the parts of
+     * a conjunction this made, put through something that changes a few of them, or with one more
+     * beside them — and a part that goes after every one kept is placed by one comparison, where a
+     * search from the middle would take as many as the halvings. A part that does not is searched
+     * for.
+     */
+    private static void keptInOrder(List<Proposition> kept, Proposition one) {
+        Spelling spelled = one.spelling();
+        int last = kept.size() - 1;
+        int afterLast = last < 0 ? 1 : spelled.compareTo(kept.get(last).spelling());
+        if (afterLast > 0) {
+            kept.add(one);
+            return;
+        }
+        if (afterLast == 0) {
+            return;
+        }
+        int low = 0;
+        int high = last - 1;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            int against = spelled.compareTo(kept.get(middle).spelling());
+            if (against == 0) {
+                return;
+            }
+            if (against > 0) {
+                low = middle + 1;
+            } else {
+                high = middle - 1;
+            }
+        }
+        kept.add(low, one);
     }
 }

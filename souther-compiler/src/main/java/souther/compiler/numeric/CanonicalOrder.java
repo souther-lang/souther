@@ -8,7 +8,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
 /**
@@ -103,6 +105,19 @@ public interface CanonicalOrder<A> extends Comparator<A> {
             }
         }
         return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * The walk of {@code form}, which is {@code walk}: what the form works out from its own
+     * mapping in this order ({@link CanonicalForm#entriesIn}).
+     *
+     * <p>Asked here so that an order that keeps what it is asked ({@link ClosedStates#kept}) says
+     * the walk of a form once, however many readings take it: what settles a walk is the form and
+     * the order, and nothing else.
+     */
+    default List<Map.Entry<A, ExactRatio>> walkOf(CanonicalForm<A> form,
+                                                  Supplier<List<Map.Entry<A, ExactRatio>>> walk) {
+        return walk.get();
     }
 
     /**

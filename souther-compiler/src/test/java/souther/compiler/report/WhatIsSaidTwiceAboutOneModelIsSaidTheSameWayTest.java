@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -85,7 +86,7 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
         List<String> written = report().modules().get(0).incompleteness().written().stream()
                 .map(each -> each.fact().shown(rendering)).toList();
 
-        assertEquals(written, namedOnThePage(report().human(rendering)),
+        assertEquals(written, namedOnThePage(report().humanInEnglish(rendering)),
                 "the page a person reads and the document a build reads say what a module could"
                         + " not read in two orders, so one of them is not the order this compiler"
                         + " decided");
@@ -109,7 +110,7 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
     private static AdequacyReport report() {
         Compilation compilation = Compilation.ofSources(SOURCES, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1906", "E1906"), compilation);
         return AdequacyReport.of(compilation);
     }
 }

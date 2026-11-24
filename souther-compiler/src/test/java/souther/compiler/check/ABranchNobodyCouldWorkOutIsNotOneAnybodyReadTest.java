@@ -3,6 +3,8 @@ package souther.compiler.check;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -83,16 +85,12 @@ class ABranchNobodyCouldWorkOutIsNotOneAnybodyReadTest {
     }
 
     private static FieldDomains read(String model, String declared) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(model);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), declared));
         return FieldDomains.of(name,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     /**

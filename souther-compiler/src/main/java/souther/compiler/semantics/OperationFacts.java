@@ -7,11 +7,13 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What is true of the language's own operations, as somebody wrote it down.
@@ -74,8 +76,9 @@ public final class OperationFacts {
      * beside it would be a kind nothing validates until someone remembers — and the arrangement is
      * meant to make remembering unnecessary.
      */
-    private static final List<Declared> DECLARED =
-            withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared()));
+    private static final List<Declared> DECLARED = withWhereTheKeptElementsCameFrom(
+            withWhichElementAnAnswerHolds(
+                    withWhetherAnOptionHoldsAValue(withWhereThePiecesCameFrom(declared()))));
 
     /**
      * {@code declared}, with where the elements of each list put together of pieces came from
@@ -94,13 +97,38 @@ public final class OperationFacts {
                     ArgumentRef source, PieceOfAnElement piece)) {
                 out.add(new Declared(each.operation(), switch (piece) {
                     case THE_CLOSURES_ANSWER -> maps(source, SizeAgainstItsSource.SAME);
-                    case THE_ELEMENT_WHERE_IT_HOLDS -> keeps(source, SizeAgainstItsSource.AT_MOST);
+                    case THE_ELEMENT_WHERE_IT_HOLDS ->
+                            new OperationFact.KeepsTheElementsWhereItHolds(source);
                     // Any number for each, which is neither of the two counts a building can
                     // state, so the lineage stands alone and is no row the discharge reads.
                     case WHAT_THE_CLOSURE_ANSWERS -> new OperationFact.ElementsComeFrom(
                             new ElementLineage.InsideClosureResult<>(
                                     new ElementLineage.Source<>(source, 1)));
                 }));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code declared}, with where the elements of what an operation answers came from, and how
+     * many there are, stated from that it keeps the elements of its source where a closure holds
+     * of them: each is one of the source's, none of them twice, so no more than the source holds.
+     *
+     * <p>Stated from it and never beside it, for the reason where the pieces came from is. A list
+     * put together of pieces states it by its piece, so it is derived there first.
+     */
+    private static List<Declared> withWhereTheKeptElementsCameFrom(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>(declared);
+        for (Declared each : declared) {
+            ArgumentRef source = switch (each.fact()) {
+                case OperationFact.KeepsTheElementsWhereItHolds(ArgumentRef kept) -> kept;
+                case OperationFact.KeepsTheEntriesWhereItHolds(ArgumentRef kept) -> kept;
+                default -> null;
+            };
+            if (source != null) {
+                out.add(new Declared(each.operation(),
+                        keeps(source, SizeAgainstItsSource.AT_MOST)));
             }
         }
         return List.copyOf(out);
@@ -121,6 +149,29 @@ public final class OperationFacts {
                 out.add(new Declared(each.operation(), law(AnswerAspect.PRESENCE,
                         new LawProposition.Observed<>(new LawSubject.Argument<>(option),
                                 new SideAnswered(AnswerAspect.PRESENCE, true)))));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code declared}, with that the value an operation finds by a closure is an element of what
+     * it finds it among, or by the key it is filed under in, stated from that: the weaker statement
+     * of the stronger, as where the pieces came from is.
+     */
+    private static List<Declared> withWhichElementAnAnswerHolds(List<Declared> declared) {
+        List<Declared> out = new ArrayList<>(declared);
+        for (Declared each : declared) {
+            ArgumentRef source = switch (each.fact()) {
+                case OperationFact.AnswersAnElementWhereTheClosureHolds(ArgumentRef found) -> found;
+                case OperationFact.AnswersTheValueFiledUnder(var _, ArgumentRef container) ->
+                        container;
+                case OperationFact.AnswersTheElementAt(var _, ArgumentRef list) -> list;
+                case OperationFact.AnswersAnExtremeElementOf(ArgumentRef of, var _) -> of;
+                default -> null;
+            };
+            if (source != null) {
+                out.add(new Declared(each.operation(), new OperationFact.AnswersAnElementOf(source)));
             }
         }
         return List.copyOf(out);
@@ -172,8 +223,16 @@ public final class OperationFacts {
             // is what holds the four of them to it.
             about("List", "length", bounded(Rel.GE, 0)),
             about("String", "length", bounded(Rel.GE, 0)),
+            about("String", "length",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LONGEST_STRING)),
+            about("List", "length",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.MOST_ELEMENTS)),
             about("Set", "size", bounded(Rel.GE, 0)),
+            about("Set", "size",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.MOST_ELEMENTS)),
             about("Map", "size", bounded(Rel.GE, 0)),
+            about("Map", "size",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.MOST_ELEMENTS)),
 
             // And the ones every answer of which some value it could be given answers. A string of
             // any length is written by repeating a character; every hour of the day is an hour some
@@ -204,6 +263,15 @@ public final class OperationFacts {
             // a half — is not a bound on the result: it is read from the mode where a comparison
             // of the result is, and only where the mode is one case there (`roundsToAWholeNumber`
             // below).
+            // And of each element a list answers, where the list is the numbers between two:
+            // `rangeInclusive` holds none below its first argument or above its second.
+            about("List", "rangeInclusive", eachElementBounded(Rel.GE, at(0))),
+            about("List", "rangeInclusive", eachElementBounded(Rel.LE, at(1))),
+            // And which numbers those are, in which order: every one between the two, each once,
+            // from the first up. The bounds above and the size below say less than this and are
+            // still declared, for the readers that read them.
+            about("List", "rangeInclusive",
+                    new OperationFact.HoldsEachWholeNumberInTurn(at(0), at(1))),
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
@@ -219,6 +287,10 @@ public final class OperationFacts {
             // of the number at the step's edge.
             about("Decimal", "toInt", roundsToAWholeNumber(at(0), at(1))),
             about("Rational", "toInt", roundsToAWholeNumber(at(0), at(1))),
+            // A rounding at a scale is the same rounding of the number taken in steps of ten to
+            // the minus that scale, and answers a decimal, whichever number it rounds.
+            about("Decimal", "round", roundsToAStep(at(0), at(1), at(2))),
+            about("Rational", "toDecimal", roundsToAStep(at(0), at(1), at(2))),
 
             // A comparison answers a sign and answers it as one of three numbers. That it is one of
             // three is not what {@code StatesTheOrderOfItsArguments} says: that one says which
@@ -253,14 +325,18 @@ public final class OperationFacts {
             // than written down as numbers here, since what a temporal can be written as is already
             // answered — by {@code java.time} for a date, which is what the carrier's own ends are
             // read from, and by {@link souther.compiler.numeric.DateTimes} for a date-time.
-            about("Date", "year", bounded(Rel.GE, java.time.LocalDate.MIN.getYear())),
-            about("Date", "year", bounded(Rel.LE, java.time.LocalDate.MAX.getYear())),
-            about("Date", "year", new OperationFact.EndsAreWhereTheRepresentationStops()),
+            about("Date", "year",
+                    boundedByTheRepresentation(Rel.GE, ResultBound.Limit.EARLIEST_DATE_YEAR)),
+            about("Date", "year",
+                    boundedByTheRepresentation(Rel.LE, ResultBound.Limit.LATEST_DATE_YEAR)),
             about("DateTime", "minutesBetween", bounded(Rel.GE, -minutesAcrossEveryDateTime())),
             about("DateTime", "minutesBetween", bounded(Rel.LE, minutesAcrossEveryDateTime())),
             // A date-time counts seconds and a minute is sixty of them. The answer drops what is
             // left toward zero, so it is no form of the two and is stated through their difference.
             about("DateTime", "minutesBetween", countsWholeUnitsBetween(at(0), at(1), 60)),
+            // The date a date-time falls on: a date counts days, a date-time counts seconds, and a
+            // day is eighty-six thousand four hundred of them, floored toward the earlier day.
+            about("DateTime", "toDate", countsTheWholeUnitsOf(at(0), 86400)),
 
             // The operations that move a value by an amount, each stated through the measure that
             // counts two such values apart. Every one of them works on a local value, where a day
@@ -270,6 +346,13 @@ public final class OperationFacts {
             about("DateTime", "addMinutes", shifts("DateTime", "minutesBetween", at(1), at(0), 1)),
             about("DateTime", "addHours", shifts("DateTime", "minutesBetween", at(1), at(0), 60)),
             about("DateTime", "addDays", shifts("DateTime", "minutesBetween", at(1), at(0), 1440)),
+            // And the one that moves a date by months, which is no shift: how many days a month is
+            // turns on the month, so it is stated as the calendar move it is.
+            about("Date", "addMonths", new OperationFact.MovesADateByMonths(at(0), at(1),
+                    ValueName.Stdlib.operation("Date", "year"),
+                    ValueName.Stdlib.operation("Date", "month"),
+                    ValueName.Stdlib.operation("Date", "day"),
+                    ValueName.Stdlib.operation("Int", "floorMod"))),
 
             // The operations answering the order of their two arguments as the sign of a number.
             // The direction is not the same for all of them: `compare(a, b)` is positive where `a`
@@ -300,8 +383,8 @@ public final class OperationFacts {
             about("List", "distinct", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("List", "take", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("List", "drop", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
-            about("Set", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
-            about("Map", "filterEntries", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            about("Set", "filter", new OperationFact.KeepsTheElementsWhereItHolds(CONTAINER)),
+            about("Map", "filterEntries", new OperationFact.KeepsTheEntriesWhereItHolds(CONTAINER)),
             about("List", "distinctBy", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
             about("Map", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
             about("Set", "remove", keeps(at(1), SizeAgainstItsSource.AT_MOST)),
@@ -312,7 +395,7 @@ public final class OperationFacts {
             // And the two that put one value in what they are handed: a set holds it once, and a
             // map holds it under the key, in place of what was there.
             about("Set", "insert", putsIn(at(0), at(1))),
-            about("Map", "insert", putsIn(at(1), at(2))),
+            about("Map", "insert", putsInUnder(at(0), at(1), at(2))),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -361,6 +444,12 @@ public final class OperationFacts {
                     at(0))),
             // And the code points of one, each the number it is.
             about("String", "codePoints", new OperationFact.ListsTheCodePointsOf(at(0))),
+            // What the operator ++ comes to over two strings, and over two lists.
+            about("String", "append", new OperationFact.IsTheOperator(BinOp.CONCAT)),
+            about("List", "append", new OperationFact.IsTheOperator(BinOp.CONCAT)),
+            // Nothing between the strings joined is the strings put end to end.
+            about("String", "join", new OperationFact.AgreesWithAnotherWhereItIsGivenText(
+                    ValueName.Stdlib.operation("String", "concat"), 0, "")),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the
@@ -416,6 +505,10 @@ public final class OperationFacts {
                     some(CONTAINER, answers(false)).denied()),
                     iff(isTrue(the(CARRIED)), some(WALKED, answers(false)).denied()))),
             about("List", "find", law(AnswerAspect.PRESENCE, some(CONTAINER, answers(true)))),
+            // And what it finds, which the law of its presence does not say: the value is an
+            // element the closure holds of.
+            about("List", "find",
+                    new OperationFact.AnswersAnElementWhereTheClosureHolds(CONTAINER)),
             // And how many a filter keeps: as many elements as its closure holds of. A set's or a
             // map's filter puts each kept one in, and one put in is one more only where it was
             // not there: no element of a set is walked twice, and no key of a map, so what was
@@ -525,7 +618,15 @@ public final class OperationFacts {
             about("Option", "map", new OperationFact.AnswersTheClosureOnWhatItHolds(CONTAINER)),
             about("List", "max", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
             about("List", "min", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
-
+            // And which value they answer, which a law of presence does not say: the greatest or
+            // the least of the elements the list holds.
+            about("List", "max", new OperationFact.AnswersAnExtremeElementOf(at(0),
+                    OperationFact.AnswersAnExtremeElementOf.End.GREATEST)),
+            about("List", "min", new OperationFact.AnswersAnExtremeElementOf(at(0),
+                    OperationFact.AnswersAnExtremeElementOf.End.LEAST)),
+            about("List", "get", new OperationFact.AnswersTheElementAt(at(0), at(1))),
+            // A value filed under the key asked for, which is one of the values the map holds.
+            about("Map", "get", new OperationFact.AnswersTheValueFiledUnder(at(0), at(1))),
             // Two of them, either or both.
             about("List", "append", lemma(law(AnswerAspect.EMPTINESS,
                     any(holdsSomething(at(0)), holdsSomething(at(1)))))),
@@ -606,18 +707,11 @@ public final class OperationFacts {
             // taken is as many as were asked for where there are that many, and all of them where
             // there are fewer; what is dropped from is the rest. Walking a list, what is kept so
             // far stands so to what was walked.
-            about("List", "take", lemma(sizeInCases(
+            about("List", "take", lemmaOfWalkingToTake(sizeInCases(
                     sized(atLeast(number(at(0)), -1, 0), 0),
                     sized(all(atLeast(number(at(0)), 1, -1),
                             atLeast(sizeOf(at(1)), 1, number(at(0)), -1, 0)), number(at(0)), 0),
-                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)),
-                    equal(number(carried(0)), sizeOf(WALKED), 0),
-                    any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
-                            all(atLeast(number(at(0)), 1, -1),
-                                    atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
-                                    equal(sizeOf(carried(1)), number(at(0)), 0)),
-                            all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
-                                    equal(sizeOf(carried(1)), sizeOf(WALKED), 0))))),
+                    sized(atLeast(number(at(0)), 1, sizeOf(at(1)), -1, -1), sizeOf(at(1)), 0)))),
             about("List", "drop", lemma(sizeInCases(
                     sized(atLeast(number(at(0)), -1, 0), sizeOf(at(1)), 0),
                     sized(all(atLeast(number(at(0)), 1, -1),
@@ -633,6 +727,13 @@ public final class OperationFacts {
                                             number(at(0)))),
                             all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
                                     atLeast(sizeOf(carried(1)), -1, 0))))),
+            // What is taken and what is dropped, at one count over one list, are the whole list
+            // between them. Stated as a relation between the two answers, so that it holds
+            // wherever either one's size is read, which the cases of each read apart do not give
+            // where the other is only reached through what is built from it.
+            about("List", "take", lemmaOfWalkingToTake(related(equalToTheSum(sizeOf(at(1)),
+                    sizeOf(answerOf("List", "take", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("List", "drop", the(at(0)), the(at(1)))))))),
             // A pair for each element of the shorter: as many as the first where the second has
             // as many, and as many as the second where it has fewer.
             about("List", "zipShortest", lemma(sizeInCases(
@@ -789,6 +890,21 @@ public final class OperationFacts {
                             answerOf("Set", "insert", the(at(0)), the(at(1))))),
                     any(alike(the(ANY), the(at(0))),
                             isTrue(answerOf("Set", "contains", the(ANY), the(at(1)))))))),
+            // Put in is as many as the union with the one value alone, and taken out is as many as
+            // the difference from it. A map put in is the same with the one entry alone: the first
+            // map's value stands where both have the key, and the count is of keys.
+            about("Set", "insert", related(equal(
+                    sizeOf(answerOf("Set", "insert", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("Set", "union", the(at(1)),
+                            answerOf("Set", "singleton", the(at(0))))), 0))),
+            about("Set", "remove", related(equal(
+                    sizeOf(answerOf("Set", "remove", the(at(0)), the(at(1)))),
+                    sizeOf(answerOf("Set", "difference", the(at(1)),
+                            answerOf("Set", "singleton", the(at(0))))), 0))),
+            about("Map", "insert", related(equal(
+                    sizeOf(answerOf("Map", "insert", the(at(0)), the(at(1)), the(at(2)))),
+                    sizeOf(answerOf("Map", "union", the(at(2)),
+                            answerOf("Map", "singleton", the(at(0)), the(at(1))))), 0))),
             // A union holds exactly what either set held.
             about("Set", "union", related(iff(
                     isTrue(answerOf("Set", "contains", the(ANY),
@@ -836,8 +952,10 @@ public final class OperationFacts {
             about("String", "characters", new OperationFact.EveryElementOfItsAnswerIs(
                     new SideAnswered(AnswerAspect.EMPTINESS, true))),
             // A case mapping takes a code point that is not whitespace to some that are not, and
-            // takes whitespace to itself; the composition that follows it joins code points that
-            // are not whitespace into one that is not. Trimming takes off whitespace alone.
+            // takes whitespace to whitespace alone; the composition that follows it joins code
+            // points that are not whitespace into one that is not. Trimming takes off whitespace
+            // alone. Held to the run time's answers, of every code point, by
+            // WhatTheLibraryStatesOfACaseConversionAndWhitespaceIsWhatItAnswersTest.
             about("String", "lowercase", new OperationFact.KeepsWhetherItHoldsACodePointOf(
                     new CodePointClass.NotWhitespace(), at(0),
                     OperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy.THE_STRING)),
@@ -869,12 +987,11 @@ public final class OperationFacts {
                     new SideAnswered(AnswerAspect.TRUTH, false))))),
             about("Map", "containsKey", law(AnswerAspect.TRUTH,
                     some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))))),
-            about("String", "contains", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER)),
-            about("String", "startsWith", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER)),
-            about("String", "endsWith", unsaid(AnswerAspect.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER)),
+            about("String", "contains", law(AnswerAspect.TRUTH, inside(StringContainment.ANYWHERE))),
+            about("String", "startsWith",
+                    law(AnswerAspect.TRUTH, inside(StringContainment.AT_THE_START))),
+            about("String", "endsWith",
+                    law(AnswerAspect.TRUTH, inside(StringContainment.AT_THE_END))),
             about("String", "matches", unsaid(AnswerAspect.TRUTH,
                     Unsayable.A_STRING_MATCHING_A_PATTERN)),
             // No two elements coming to one answer of the closure is as many different answers as
@@ -921,7 +1038,7 @@ public final class OperationFacts {
 
             // Where a predicate reads its container, and which shapes of construction carry its
             // statement there.
-            about("List", "all", reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
+            about("List", "all", reads(CONTAINER, ElementShape.THAT_KEEP_THE_ELEMENTS)),
             about("List", "allDistinctBy",
                     reads(CONTAINER, ElementShape.PERMUTES, ElementShape.SUBSET)),
             about("List", "any", reads(CONTAINER, ElementShape.PERMUTES)),
@@ -947,6 +1064,15 @@ public final class OperationFacts {
             about("Decimal", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
             about("Decimal", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
             about("Decimal", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
+            // A Rational is on no carrier, so what these compute is said of the arithmetic over
+            // their arguments and is read where a call is taken as that arithmetic. A reader that
+            // gives the answer a meaning on a carrier finds none for it.
+            about("Rational", "fromInt", answers(form(at(0), 1))),
+            about("Rational", "fromDecimal", answers(form(at(0), 1))),
+            about("Rational", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
+            about("Rational", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
+            about("Rational", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
+            about("Rational", "divide", computes(new Arithmetic.TheOperator(BinOp.DIV))),
             about("Int", "truncatingDivide",
                     computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingQuotient())),
             about("Int", "truncatingRemainder",
@@ -1068,7 +1194,12 @@ public final class OperationFacts {
 
     /** The answer is {@code into} with {@code value} put in. */
     private static OperationFact putsIn(ArgumentRef value, ArgumentRef into) {
-        return new OperationFact.PutsAValueIn(value, into);
+        return new OperationFact.PutsAValueIn(value, into, Optional.empty());
+    }
+
+    /** The answer is {@code into} with {@code value} put in, filed under {@code key}. */
+    private static OperationFact putsInUnder(ArgumentRef key, ArgumentRef value, ArgumentRef into) {
+        return new OperationFact.PutsAValueIn(value, into, Optional.of(key));
     }
 
     /** The answer is keyed by keys {@code map} was keyed by. */
@@ -1082,7 +1213,11 @@ public final class OperationFacts {
     }
 
     private static OperationFact reads(ArgumentRef container, ElementShape... through) {
-        return new OperationFact.ReadsItsContainer(container, java.util.Set.of(through));
+        return reads(container, Set.of(through));
+    }
+
+    private static OperationFact reads(ArgumentRef container, Set<ElementShape> through) {
+        return new OperationFact.ReadsItsContainer(container, through);
     }
 
     private static OperationFact takenAs(TakenAs how) {
@@ -1176,6 +1311,20 @@ public final class OperationFacts {
                 Map.of(a, ExactRatio.ONE, b, ExactRatio.of(-1))));
     }
 
+    /** {@code stated} of {@code take}, proved of its body by what the walk of the list carries:
+     *  what is kept so far stands so to what was walked. The one account of that walk, so that
+     *  every lemma of {@code take} is proved over the same one. */
+    private static OperationFact lemmaOfWalkingToTake(OperationFact stated) {
+        return lemma(stated,
+                equal(number(carried(0)), sizeOf(WALKED), 0),
+                any(all(atLeast(number(at(0)), -1, 0), atLeast(sizeOf(carried(1)), -1, 0)),
+                        all(atLeast(number(at(0)), 1, -1),
+                                atLeast(sizeOf(WALKED), 1, number(at(0)), -1, 0),
+                                equal(sizeOf(carried(1)), number(at(0)), 0)),
+                        all(atLeast(number(at(0)), 1, sizeOf(WALKED), -1, -1),
+                                equal(sizeOf(carried(1)), sizeOf(WALKED), 0))));
+    }
+
     /**
      * {@code stated}, a law of an operation the library writes in the language or what it answers
      * beside what others answer, as the lemma it is: to be proved against the body, with what a
@@ -1237,6 +1386,12 @@ public final class OperationFacts {
     private static LawProposition<ArgumentRef> alike(LawSubject<ArgumentRef> one,
                                                      LawSubject<ArgumentRef> other) {
         return new LawProposition.Same<>(one, other, true);
+    }
+
+    /** The first argument standing inside the second where {@code where} says, as the string
+     *  operations that ask it take them. */
+    private static LawProposition<ArgumentRef> inside(StringContainment where) {
+        return new LawProposition.Inside<>(the(at(0)), the(at(1)), where, true);
     }
 
     /** {@code a} and {@code b} being the same number, {@code b} counted {@code plus} more. */
@@ -1451,16 +1606,28 @@ public final class OperationFacts {
                 new ResultBound<>(against, java.math.BigDecimal.valueOf(offset), rel, provided));
     }
 
+    /** Each element of the result stands against {@code against} as {@code rel} says. */
+    private static OperationFact eachElementBounded(Rel rel, ArgumentRef against) {
+        return new OperationFact.BoundsEachElementOfItsResult(
+                new ResultBound<>(against, BigDecimal.ZERO, rel, always()));
+    }
+
+    /** The result stops at the limit the language keeps, on the side {@code rel} says. */
+    private static OperationFact boundedByTheRepresentation(Rel rel, ResultBound.Limit limit) {
+        return new OperationFact.BoundsItsResult(new ResultBound<>(null, java.math.BigDecimal.ZERO,
+                rel, always(), new ResultBound.Origin.OfTheRepresentation(limit)));
+    }
+
     private static ResultBound.Provided<ArgumentRef> always() {
         return new ResultBound.Provided.Always<>();
     }
 
     private static ResultBound.Provided<ArgumentRef> aboveZero(ArgumentRef argument) {
-        return new ResultBound.Provided.ConstantAboveZero<>(argument);
+        return new ResultBound.Provided.ArgumentStands<>(argument, Rel.GT);
     }
 
     private static ResultBound.Provided<ArgumentRef> belowZero(ArgumentRef argument) {
-        return new ResultBound.Provided.ConstantBelowZero<>(argument);
+        return new ResultBound.Provided.ArgumentStands<>(argument, Rel.LT);
     }
 
     private static OperationFact countsWholeUnitsBetween(ArgumentRef from, ArgumentRef to,
@@ -1468,8 +1635,17 @@ public final class OperationFacts {
         return new OperationFact.CountsWholeUnitsBetween(from, to, perUnit);
     }
 
+    private static OperationFact countsTheWholeUnitsOf(ArgumentRef of, long perUnit) {
+        return new OperationFact.CountsTheWholeUnitsOf(of, perUnit);
+    }
+
     private static OperationFact roundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) {
-        return new OperationFact.RoundsToAWholeNumber(mode, value);
+        return new OperationFact.RoundsToAStep(null, mode, value);
+    }
+
+    private static OperationFact roundsToAStep(ArgumentRef scale, ArgumentRef mode,
+                                               ArgumentRef value) {
+        return new OperationFact.RoundsToAStep(scale, mode, value);
     }
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,

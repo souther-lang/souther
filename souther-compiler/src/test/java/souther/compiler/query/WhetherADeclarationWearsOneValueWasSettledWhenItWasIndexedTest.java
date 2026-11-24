@@ -1,16 +1,16 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclarationKind;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -205,14 +205,14 @@ class WhetherADeclarationWearsOneValueWasSettledWhenItWasIndexedTest {
      * such reading is cheapest to add.
      */
     @Test
-    void theReadersStillTakingThisOffADeclarationAreListed() throws IOException {
+    void theReadersStillTakingThisOffADeclarationAreListed() {
         List<Path> sources = REPOSITORY.mainJavaSources();
         assertTrue(sources.size() > 100,
                 () -> "the scan found only " + sources.size() + " sources, which is not the tree");
 
         List<String> calls = new ArrayList<>();
         for (Path source : sources) {
-            String code = withoutComments(Files.readString(source, StandardCharsets.UTF_8));
+            String code = withoutComments(RepositoryJavaSources.forThisFork().mainText(source));
             assertFalse(code.contains("import static souther.compiler.check.DeclarationNewtypes"),
                     () -> source.getFileName() + " takes the question under a bare name, which is a"
                             + " call site this counts by the spelling it is written in");
@@ -286,8 +286,9 @@ class WhetherADeclarationWearsOneValueWasSettledWhenItWasIndexedTest {
     private static Compilation compiling(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;
@@ -296,8 +297,8 @@ class WhetherADeclarationWearsOneValueWasSettledWhenItWasIndexedTest {
     private static void edit(Compilation c, String source) {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", source);
-        c.update(edited, Set.of());
-        c.answerEverything();
+        c.update(edited, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
                 + c.db().allReports());
     }

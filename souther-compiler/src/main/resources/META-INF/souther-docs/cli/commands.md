@@ -55,7 +55,7 @@ version itself:
 
 ```kotlin
 souther {
-    southerVersion = "0.4.0"
+    southerVersion = "0.5.0"
 }
 ```
 
@@ -106,7 +106,8 @@ derives is one, and no caller chooses which.
 
 `--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
 It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
-alone wants `souther examples --strict`, which refuses coverage findings and nothing else.
+alone wants `souther examples --strict`, which refuses coverage findings and the behaviors it left
+unmeasured.
 `compile --adequacy all --warnings error` and `examples --strict` refuse the same coverage findings.
 The default is `report`, which prints them and writes the classes.
 
@@ -478,12 +479,25 @@ diff.
 
 ```
 souther examples <file.sou>... [-cp|--class-path <path>] [--module <name>]
-                               [--behavior <name>] [--generate] [--strict]
+                               [--behavior <name>] [--generate] [--strict] [--to-the-end]
 ```
 
 Reports how well the `example` rows cover the model — which partitions, boundaries and branch arms
 no row reaches. `--generate` prints commented rows for what nothing covers, the points of a border
 among them, and `--strict` exits non-zero on a gap the report names.
+
+A behavior is left unmeasured where measuring it as written stops at a figure of the compiler's own
+in a condition this compiler can say how to change: what is past the figure would not be measured
+however long the run went on. The report says the figure and what to declare as a behavior, and
+every other behavior is measured. `--strict` exits non-zero on one left so, since
+nobody looked at what its rows cover. `--to-the-end` measures it as it is written.
+
+`--generate` also offers rows that try the inputs of the rows of called behaviors in their callers.
+These owe nothing: the header counts them apart as optional rows and a comment over each says
+`suggested input; no uncovered obligation`. The optional rows need not be completed for the model to
+be adequately covered. Whether it is is the adequacy verdict's to say, not the number of generated
+rows: a model can owe something that no row could be generated for, and one reported `undetermined`
+is not settled by an empty block.
 
 There is no `--adequacy` here. This command's whole output is the report, so everything is measured
 and there is nothing for `off`, `witness` or `all` to choose; and what the report marks as a gap is
@@ -506,9 +520,18 @@ found a gap; `not satisfied` (`not_satisfied` in the JSON) where one found a gap
 where nothing that could find a gap was asked about, or one of those measures could not be made. A
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
-refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy
-all --warnings error` refuses. It decides the exit status and no more: the report is the
+refuses `not_satisfied`, which is the same set of findings `compile --adequacy
+all --warnings error` refuses, and a behavior left unmeasured for its author to change, which that
+compile measures. It decides the exit status and no more: the report is the
 same whether or not it was written.
+
+`undetermined` is not, by itself, evidence that the model is inadequate. It means at least one
+measure that was asked for could not reach a conclusion, or was not made. For a rewrite, the
+compiler may have neither found a row that tells it apart nor proved there is none; for a point,
+it may not know whether a row is required; a rule it could not read leaves what depends on it open.
+A search that stopped at a figure of the compiler's own has not looked past it. That a row may exist
+is not that one does, and an empty `--generate` does not show that no further row is needed. Exit
+status 0 under `--strict` means no gap was established, not that every measure was completed.
 
 The report prints more findings than a build refuses over, and says which is which. A line under `!`
 is one of them; a line under `·` is something measured and named and not gated on — a class no row is
@@ -531,6 +554,32 @@ counts. The last line says how many are marked, which is the one sign a report n
 `--behavior` gives that a row of a behavior it does not show is all that covers something it does.
 In the JSON each behavior carries `rowsThatDoNotHold`, each row with its `failedAt`, and an
 obligation covered only by such rows carries `onlyWitnessedBy`.
+
+A number only a run works out, such as a sum over a list, has no rule saying where the input stands
+for the run to come to a point, so the compiler writes candidate rows, runs each and reads what the
+run came to. The candidates are the containers the comparison names each holding the same number
+of elements from 0 to 6, and the whole numbers it names outside a container all at one of
+{0, 1, -1, 2}. A comparison that names no container has no sizes among its candidates, and one
+that names no such number has no values; the report says which of these the point was tried at.
+A comparison that names neither has no candidate, and the report says that none was composed.
+
+The candidates themselves do not choose the values of a container's elements. They are what the
+declarations make of that many: a candidate list repeats one representative element unless the
+declarations require its elements to be distinct. With a `Points` newtype of `Int` whose lowest
+value is 0, every candidate list sums to 0.
+
+Where no candidate reaches the point, rows beside the ones that ran are made and run: a list with
+another element put in it, an element changed for a value a row of the module ran the element's
+type with, a whole number moved by one. The rows whose run came out nearest the point are looked
+beside first. So a total of 20 over `Points` of 0 to 12 is reached by a list of two elements unlike
+the candidates, where the module has a row with a `Points(10)` in it. How many such rows are made
+for one point is a figure of the compiler's, and a point that reached it says so.
+
+When nothing reaches the point, the report names this population, and a longer list, elements of
+other values or elements unlike one another may still reach it. That nothing reached a point does
+not make it unreachable. If it is reachable, a row written by hand with such elements settles it;
+if it is not, what settles it is proving that from the model's declarations. Running the same
+search again does neither.
 
 A position nothing the behavior states reads — not its body and not a clause of it — is owed no row
 at any of its classes, since a row at one of them gives the answer a row at any other gives. Its

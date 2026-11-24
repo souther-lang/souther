@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.meta.ModulePath;
@@ -57,8 +58,8 @@ class TheAritiesABodyAsksForAreTheBehaviorsItsExpansionReachesTest {
     private static Map<ValueName.Behavior, Integer> asksFor(String fn, InliningPolicy policy) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("values.sou", MODULE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
         return c.db().ask(new Bodies.BehaviorAritiesForBody("shop.values", fn, policy)).value();
@@ -120,8 +121,8 @@ class TheAritiesABodyAsksForAreTheBehaviorsItsExpansionReachesTest {
     private static Set<String> relation(Key<Set<ReachName.Declaration>> asked) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("values.sou", THROUGH_A_RECURSION);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
         Set<String> out = new TreeSet<>();
@@ -184,8 +185,7 @@ class TheAritiesABodyAsksForAreTheBehaviorsItsExpansionReachesTest {
         byId.put("values.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         c.answerEverything();
-        return c.db().allReports().stream()
-                .map(each -> each.report().diagnostic().code()).toList();
+        return c.errors().stream().map(each -> each.diagnostic().code()).toList();
     }
 
     /**

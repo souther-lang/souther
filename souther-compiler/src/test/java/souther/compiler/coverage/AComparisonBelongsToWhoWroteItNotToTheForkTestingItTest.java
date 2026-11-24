@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -96,7 +97,7 @@ class AComparisonBelongsToWhoWroteItNotToTheForkTestingItTest {
     }
 
     private static List<CoverageSites.Obligation> comparisonsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

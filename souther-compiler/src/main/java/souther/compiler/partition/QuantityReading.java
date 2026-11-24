@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,14 +38,40 @@ final class QuantityReading {
 
     private final Map<TermOrders, WhatATermRead> answers;
 
-    QuantityReading(Map<TermOrders, WhatATermRead> answers) {
-        if (answers == null || answers.isEmpty()) {
+    private QuantityReading(Map<TermOrders, WhatATermRead> answers) {
+        // No order kept, because nothing reads these in any order. What a reader wants is the entry
+        // for the orders it holds, and the one place an order is wanted is a message.
+        this.answers = Collections.unmodifiableMap(answers);
+    }
+
+    /**
+     * What {@code observation} reads of each of {@code quantity}'s terms, each on the orders the
+     * quantity reads it on.
+     *
+     * <p>The table is made here and held as it is made, so a reading is never one of a table
+     * someone else may still write to: a reading is made for every row asked at a quantity, and a
+     * copy of a table handed in would hash every term again. And asked of the quantity, which
+     * holds each term with its orders, so no term is ever read on another's.
+     */
+    static QuantityReading of(LinearQuantity quantity, BorderQuantity.Observation observation) {
+        List<NumericTerm> terms = quantity.terms();
+        if (terms.isEmpty()) {
             throw new IllegalArgumentException("a quantity is taken of at least one term, so a"
                     + " reading of one answers for at least one");
         }
-        // No order kept, because nothing reads these in any order. What a reader wants is the entry
-        // for the orders it holds, and the one place an order is wanted is a message.
-        this.answers = Map.copyOf(answers);
+        Map<TermOrders, WhatATermRead> answers = new HashMap<>();
+        for (NumericTerm term : terms) {
+            TermOrders orders = quantity.ordersOf(term);
+            // One entry per term, which the orders say they are of, so two could only meet where
+            // a quantity is taken of one term twice. Refused rather than let the second stand: a
+            // reading that kept one of them would answer for a term with what another one read.
+            if (answers.put(orders, WhatATermRead.ofTerm(orders, observation)) != null) {
+                throw new IllegalStateException(
+                        "a quantity is taken of each of its terms once, and this names " + orders
+                                + " among " + terms);
+            }
+        }
+        return new QuantityReading(answers);
     }
 
     /**

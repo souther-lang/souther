@@ -2,9 +2,8 @@ package souther.compiler.diag;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import souther.test.RepositoryJavaSources;
+
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -84,7 +83,7 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
             "souther/compiler/diag/DiagnosticRenderer.java picks Locale.ENGLISH");
 
     @Test
-    void everyPickOfADiagnosticLanguageIsOneOfTheNamedOnes() throws IOException {
+    void everyPickOfADiagnosticLanguageIsOneOfTheNamedOnes() {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
 
@@ -94,7 +93,7 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
             if (path.equals(RESOLVER)) {
                 continue;
             }
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             // Every way of picking is spelled with the word, so a file without it picks nothing and
             // the pattern is asked only of the rest.
             if (!text.contains("Locale")) {

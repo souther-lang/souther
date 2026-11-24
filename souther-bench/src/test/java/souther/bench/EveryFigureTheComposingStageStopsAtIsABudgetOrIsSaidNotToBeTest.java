@@ -56,10 +56,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
 
             // The calendar's cycle and the stretch of years a proof about it is made over: what has
             // to be looked at for an answer to hold of every year, not how far a search goes.
-            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.FIRST_YEAR",
-                    "where the four hundred years that stand for every year start"),
-            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.YEARS_OF_A_CYCLE",
+            Map.entry("souther.compiler.partition.PartsOfADateOverACycle.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over"),
+            Map.entry("souther.compiler.partition.PartsOfADateOverACycle.FIRST_YEAR",
+                    "the year the cycle is read from, which any year would be as well"),
+            Map.entry("souther.compiler.partition.PartsOfADateOverACycle.DAYS_OF_A_SHORT_YEAR",
+                    "how many days a year that is not a leap year has, which bounds how many years"
+                            + " a move reaches"),
             Map.entry("souther.compiler.partition.YearsAWayAllows.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over, which is as many years"
                             + " as a look from one year meets every pattern in"),
@@ -71,6 +74,42 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.WhatStatementsOfDatePartsLeaveAlone"
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
+            // Dates are looked for with at most this many choices of what their parts come to
+            // beside the years; past it, no dates are said to hold them, which claims nothing,
+            // and no search is begun.
+            Map.entry("souther.compiler.partition.DatesThatHoldEveryStatement.MOST_CHOICES",
+                    "how many choices of the parts beside the years a look for dates is begun"
+                            + " over"),
+
+            // How many steps of a date written as a move of another are followed to the date whose
+            // month it is the first of: the depth of an expression, which no search stops at.
+            Map.entry("souther.compiler.partition.Pullback.MOST_STEPS_TO_A_MONTH",
+                    "how deep a date written as moves of another is followed, which bounds the"
+                            + " expression and claims nothing of the model"),
+            // A way over more numbers than this is not asked for a row made of numbers that meet
+            // it, and nothing is then claimed of them; the numbers tried are each of a way that
+            // states at most this many, so no search stops at it.
+            Map.entry("souther.compiler.partition.AWitnessOfDifferences.MOST_NUMBERS",
+                    "how many numbers a way may state for a row to be made of them by trying"),
+
+            // A divisor past this is not searched, and the answer says so, which is no answer that
+            // the remainders cannot be met; every pair of the remainders below it is tried, so no
+            // search stops at it.
+            Map.entry("souther.compiler.partition.JointResidues.MOST_DIVISOR",
+                    "how large a divisor the pairs of remainders are all tried at"),
+
+            // A distance no assignment reaches, which a position with no class to move to is at.
+            Map.entry("souther.compiler.partition.NearestAssignments.UNREACHABLE",
+                    "no distance, which is what a position with no class to move to changes"
+                            + " a distance by"),
+
+            // How wide a region of rows is kept as a union of cells before it is read as the one
+            // cell that holds it. It widens and refuses nothing: every row the region had is still
+            // in it, a search of a wider region is still certified by what its run did, and a
+            // combination it makes inexact is said as one nothing showed to exist.
+            Map.entry("souther.compiler.partition.InteractionCells.Steering.MOST_CELLS",
+                    "how many cells a region holds before it is read as the one cell that holds"
+                            + " them all, which leaves out no row"),
 
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",
@@ -86,6 +125,8 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             // for #1232 and left where they are, which is why they are named rather than omitted.
             Map.entry("souther.compiler.partition.Generator.MOST_REPAIRS",
                     "the walk over which classes to settle a row at, not the row at an item"),
+            Map.entry("souther.compiler.partition.Generator.MOST_LOOKS",
+                    "how many assignments one search for a row looks at, passed over or built"),
             Map.entry("souther.compiler.partition.Generator.MOST_INTERPRETATIONS",
                     "how many readings of a row's values one run tries"),
             Map.entry("souther.compiler.partition.Generator.MOST_RUNS_PER_INTERPRETATION",
@@ -93,12 +134,107 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
                     "how many element-wise readings of one row a point is tried against"),
 
+            // Which candidates a row for a case of a statement is built from. The search for such
+            // a row says the rows it found and nothing of the cases it did not: a case with no row
+            // is not found, which is not out of reach, so there is no figure it came back with.
+            Map.entry("souther.compiler.partition.CaseCandidates.MOST_LEVELS_BELOW_THE_START",
+                    "how many levels below the start of a search a node meeting it is looked for"
+                            + " at, which bounds the candidates and claims nothing of the model"),
+            Map.entry("souther.compiler.partition.RowsARunIsTriedFor.MOST_ELEMENTS",
+                    "how many elements a candidate run for a number only a run works out holds"
+                            + " at most; a row past it is not one of the candidates, which the"
+                            + " population they are says, and claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_VALUES_OF_A_KIND",
+                    "how many distinct values of one kind the two copies of an element are given"
+                            + " between them; a case with no row is not found, which claims"
+                            + " nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CASES_OF_A_SUM",
+                    "how many cases of a sum the two copies of an element are given between"
+                            + " them; a case past it is not tried, and a case with no row is not"
+                            + " found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_TURNS_OF_A_VISIT",
+                    "how many of the turns of a round one container of a row is given in a visit,"
+                            + " so that the rewrites looked at are spread over the containers; a"
+                            + " turn is taken in a later visit, and a case with no row is not"
+                            + " found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_SITES_OF_A_CONTAINER",
+                    "how many sites in one container the two copies of an element are written"
+                            + " at, the elements held again before the pairs of elements; a site"
+                            + " past it is not tried, and a case with no row is not found, which"
+                            + " claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_VALUES_OF_A_CASE",
+                    "how many values of one case of a sum are listed, the first of every case"
+                            + " before the second of any; a value past it is not tried, and a case"
+                            + " with no row is not found, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_LEVELS_OF_FIELDS",
+                    "how many records down an element a field is looked for to be given another"
+                            + " value where the statement does not name one; a field past it is"
+                            + " not varied, which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_REWRITES_LOOKED_AT",
+                    "how many rewrites of one row are looked at for the order of a repeated key,"
+                            + " admitted by the decoder or not; a case with no row is not found,"
+                            + " which claims nothing of the model"),
+            Map.entry("souther.compiler.partition.KeyOrderCandidates.MOST_CANDIDATES",
+                    "how many rewrites of one row are run for the order of a repeated key; a case"
+                            + " with no row is not found, which claims nothing of the model"),
+
+            // How many ways a statement of cases is met in before it is not read as one. No search
+            // runs to it: a statement past it is read as anything else is that this takes no
+            // statement of, so nothing is claimed of the elements it keeps and no row is written
+            // for them.
+            Map.entry("souther.compiler.partition.KeptOccurrences.MOST_WAYS",
+                    "how many ways a statement of cases is met in for it to be read as one; past"
+                            + " it the statement claims nothing of the elements it keeps"),
+            // The same kind of figure, of the ways the elements of a list written out are kept
+            // for a total over it: past it the total is read by no way and the step over it is
+            // said not resolved, which claims nothing of whether a run stops there.
+            Map.entry("souther.compiler.partition.StopsOfABody.MOST_WAYS_OF_KEEPING",
+                    "how many ways of keeping the elements of a list written out a total is read"
+                            + " by; past it the step over the total is said not resolved"),
+
+            // Which rows a walk's rewrite is searched from first. Every row is grown from, the
+            // rest after the first ones are asked, so nothing is left untried by reaching it.
+            Map.entry("souther.compiler.partition.Generator.ROWS_GROWN_IN_TURN",
+                    "how many rows are grown from in turn before the others; the others follow,"
+                            + " so reaching it stops no search"),
+
             // A choice among rows that all stand at the item, which ends with one taken whatever
             // it comes to, so nothing is left owed for reaching it.
             Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
                     "how many rows meeting one requirement are looked through for one its arms"
                             + " answer differently on; reaching it stops no search, since a row"
-                            + " is taken either way")));
+                            + " is taken either way"),
+
+            // How many statements taking a number out of a way holds at once. No search runs to
+            // it: past it the lengths are not worked out, which is what any statement this does
+            // not take out leaves them.
+            Map.entry("souther.compiler.partition.LengthsPastTheWay.MOST_ROWS",
+                    "how many statements are held while the numbers a way ties a length to are"
+                            + " taken out; past it nothing is said of the lengths"),
+
+            // How long a way to a case is kept once worked out. No search stops at it: a way let
+            // go is worked out again, to the way it was.
+            Map.entry("souther.compiler.partition.WaysToACase.CASES_KEPT",
+                    "how many cases' ways are kept for the lines asking them; past it a way is"
+                            + " worked out again, and nothing is left unread"),
+
+            // How many truths of a case's parts are tried before a way is left unrefuted. No
+            // search stops at it: a way not refuted is searched for a row as any other is.
+            Map.entry("souther.compiler.partition.TheCaseALineDecidesIn.TRUTHS_TRIED",
+                    "how many truths of a case's parts are tried to refute a row at a point along"
+                            + " a way; past it the way is searched, and nothing is left unread"),
+
+            // How many remainders a point is told apart at one by one. No search stops at it:
+            // past it the point is asked as the remainders it stands at together.
+            Map.entry("souther.compiler.partition.Standing.REMAINDERS_TOLD_APART",
+                    "how many remainders a point is asked at one by one; past it they are asked"
+                            + " together, and nothing is left unread"),
+
+            // How many groups of a form a statement is told against one by one. No search stops
+            // at it: past it the groups are found by their form, and the same group is joined.
+            Map.entry("souther.compiler.partition.FormsHeld.LOOKED_THROUGH",
+                    "how many groups of statements of one form are told against one by one; past"
+                            + " it they are found by their form, and nothing is left unread")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

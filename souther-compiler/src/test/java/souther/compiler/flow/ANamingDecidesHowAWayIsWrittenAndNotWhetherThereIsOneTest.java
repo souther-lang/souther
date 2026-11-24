@@ -2,6 +2,7 @@ package souther.compiler.flow;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.conformance.ConformanceCorpus;
@@ -49,7 +50,7 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
      * a side the reading worked a value out for, a chain of them, an arm nothing reaches, and a
      * helper spliced in so that a position arrives under a name of its own.
      */
-    private static final List<String> WRITTEN = List.of("""
+    private static final List<Written> WRITTEN = List.of(new Written("""
             module example.fee
 
             data Amount = Int
@@ -62,8 +63,8 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
                 Answer(if a.value > 1 && unreachable "no large a reaches here"
                     then 0
                     else (if c.value > 3 then 1 else 0) + (if d.value > 4 then 10 else 0))
-            """,
-            """
+            """, List.of("E1307")),
+            new Written("""
             module example.chain
 
             data Amount = Int
@@ -76,8 +77,8 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
                 Answer(if a.value > 1 && a.value < 9 && b.value /= 0 then 1
                     else if a.value > 1 || b.value > 2 then 2
                     else 3)
-            """,
-            """
+            """, List.of()),
+            new Written("""
             module example.arms
 
             data On
@@ -94,8 +95,8 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
                         | On -> 1
                         | Off -> unreachable "an Off never arrives beside an On"
                     | Off -> 2)
-            """,
-            """
+            """, List.of()),
+            new Written("""
             module example.shipping
 
             data Total = Int
@@ -124,8 +125,8 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
             let shippingFee (total, member, delivery) =
                 Fee(baseFee(total, member) + expressFee(delivery))
-            """,
-            """
+            """, List.of()),
+            new Written("""
             module example.opposed
 
             data On
@@ -140,7 +141,7 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
                         || unreachable "the operator above never comes to false"
                     then 1
                     else 2
-            """);
+            """, List.of("E1307")));
 
     @Test
     void everyBodyIsReadTheSameWhateverItsWaysAreCalled() {
@@ -148,8 +149,8 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             bodiesOf(corpus).forEach(body -> compare(body, read));
         }
-        for (String source : WRITTEN) {
-            bodiesOf(source).forEach(body -> compare(body, read));
+        for (Written written : WRITTEN) {
+            bodiesOf(written).forEach(body -> compare(body, read));
         }
         // Not a measure of anything, and here so that a claim about what two readings agree on is not
         // quietly a claim about two readings that read nothing. What the shapes above were written
@@ -207,17 +208,26 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         });
     }
 
-    private static List<Core> bodiesOf(String source) {
-        return bodiesIn(Compilation.ofSource(source, "Main"), source);
+    private static List<Core> bodiesOf(Written written) {
+        return bodiesIn(Compilation.ofSource(written.source(), "Main"), written.refusedWith(),
+                written.source());
     }
+
+    /**
+     * A source and the codes it is refused with, where the refusal is at emission and the checked
+     * body, which is what is read, is there all the same: an abort standing as an operand has no
+     * stated type to take.
+     */
+    private record Written(String source, List<String> refusedWith) { }
 
     /** The corpus compiled and nothing measured: the bodies are what the checking hands on. */
     private static List<Core> bodiesOf(ConformanceCorpus corpus) {
         return bodiesIn(Compilation.ofSources(corpus.sources(), ModulePath.EMPTY),
-                corpus.toString());
+                corpus.refusedWith(), corpus.toString());
     }
 
-    private static List<Core> bodiesIn(Compilation compilation, String what) {
+    private static List<Core> bodiesIn(Compilation made, List<String> refusedWith, String what) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith, made);
         List<Core> out = new ArrayList<>();
         compilation.modules().forEach(module -> {
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

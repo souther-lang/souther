@@ -38,6 +38,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -241,6 +243,79 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     }
 
     /**
+     * A container chosen by cases is read once in each case, and the call is made where the value
+     * is one of them. An arm whose cases leave none in common with the call's position is one no
+     * value of the call takes, and is not held to the position; an arm that may take a value of
+     * the call, or reads another container, is.
+     */
+    @Test
+    void aMatchIsReadInTheArmsAValueOfTheCallCanTake() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
+        LawProposition.Observed<?> observed = (LawProposition.Observed<?>) some.ofTheElement();
+        TermPath inHot = S.refine(casesOf(HOT));
+        Derivation.TheCall call = callOf(LIST_ANY, some.container(), inHot);
+        Function<TermPath, Derivation> readAt = at -> new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(at),
+                new Derivation.OnTheSideALawNames(observed, truthAt(at.element())), true,
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        BiFunction<Derivation, Derivation, Derivation> inTwoCases = (hot, other) ->
+                new Derivation.ALawQuantifies(some, new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(casesAt(S, HOT), hot),
+                        new Derivation.MatchArms.Arm(casesAt(S, WARM), other))));
+        TermPath inWarm = S.refine(casesOf(WARM));
+        assertDoesNotThrow(() -> new Derivation.ByALaw(call, AnswerAspect.TRUTH,
+                inTwoCases.apply(readAt.apply(inHot), readAt.apply(inWarm))));
+        // The arm the call is made in is held to it.
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.TRUTH, inTwoCases.apply(readAt.apply(YS), readAt.apply(inWarm))));
+        // An arm that takes a value of the cases the call is made in is held to it too.
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some,
+                        new Derivation.MatchArms(List.of(
+                                new Derivation.MatchArms.Arm(casesAt(S, HOT, COLD),
+                                        readAt.apply(inWarm)))))));
+    }
+
+    /**
+     * An arm is left out only where the call's position narrows the very subject the arm selects:
+     * one written under a case of its holder, {@code r.q@Hot.flag}, and the one a match selects,
+     * {@code r.q.flag}, may be one value through a name the cases share, and neither is shown
+     * apart from the other. An arm that may take a value of the call is held to the call's
+     * position, whichever way the position says it narrows.
+     */
+    @Test
+    void anArmASharedNameMayTakeIsHeldToTheCallsPosition() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
+        LawProposition.Observed<?> observed = (LawProposition.Observed<?>) some.ofTheElement();
+        TermPath flag = TermPath.of("r").then("q").then("flag");
+        TermPath underACase = TermPath.of("r").then("q").refine(casesOf(HOT)).then("flag")
+                .refine(casesOf(WARM));
+        TermPath onTheSubject = flag.refine(casesOf(WARM));
+        Function<TermPath, Derivation> readAt = at -> new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(at),
+                new Derivation.OnTheSideALawNames(observed, truthAt(at.element())), true,
+                Optional.empty(), HowTheElementsAreAsked.NOT_SAID);
+        BiFunction<TermPath, TermPath, Derivation> readInTwoArms = (inWarm, inCold) ->
+                new Derivation.ALawQuantifies(some, new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(casesAt(flag, WARM), readAt.apply(inWarm)),
+                        new Derivation.MatchArms.Arm(casesAt(flag, COLD), readAt.apply(inCold)))));
+        // Narrowing the subject itself leaves the arm of another case out: it reads what it likes.
+        Derivation.TheCall onTheSubjectsPosition = callOf(LIST_ANY, some.container(), onTheSubject);
+        assertDoesNotThrow(() -> new Derivation.ByALaw(onTheSubjectsPosition, AnswerAspect.TRUTH,
+                readInTwoArms.apply(onTheSubject, YS)));
+        // Narrowing it under a case of its holder shows neither arm apart: each is held.
+        Derivation.TheCall underACasesPosition = callOf(LIST_ANY, some.container(), underACase);
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                underACasesPosition, AnswerAspect.TRUTH, readInTwoArms.apply(underACase, YS)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                underACasesPosition, AnswerAspect.TRUTH, readInTwoArms.apply(YS, underACase)));
+        assertDoesNotThrow(() -> new Derivation.ByALaw(underACasesPosition, AnswerAspect.TRUTH,
+                readInTwoArms.apply(underACase, underACase)));
+    }
+
+    /**
      * A lookup finding something across the lists of an outer list is a reading of the key the call
      * was handed: how often another key occurs is no reading of what {@code Map.get} states of
      * this one, though the two are counted the same way over the same lists.
@@ -332,10 +407,10 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     void aReadingOfANumberOfAnotherKindThanTheLawsIsRefused() {
         Derivation.TheCall call = callOfGet();
         Quantity differentInTheList = new Quantity.HowManyDifferent(new DecisionSubject.AnInput(B),
-                new DecisionSubject.AnInput(B.element()));
+                new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(B.element())));
         Quantity metInTheList = new Quantity.HowManyMeet(new DecisionSubject.AnInput(B), truth(B.element()));
         Quantity differentAtTheIndex = new Quantity.HowManyDifferent(new DecisionSubject.AnInput(A),
-                new DecisionSubject.AnInput(A.element()));
+                new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(A.element())));
         for (Derivation ofAnotherKind : List.of(readingOfGet(INDEX, differentInTheList),
                 readingOfGet(INDEX, metInTheList), readingOfGet(differentAtTheIndex, LENGTH))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
@@ -480,7 +555,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     @Test
     void aLawIsTheOneTheLibrarySettlesTheSideBy() {
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
-                new Derivation.TheCall(STRING_CONTAINS, Map.of()), AnswerAspect.TRUTH,
+                new Derivation.TheCall(STRING_MATCHES, Map.of()), AnswerAspect.TRUTH,
                 new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
                 new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.PRESENCE,
@@ -606,14 +681,17 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 (LawProposition.Observed<?>) other, new Derivation.PresentInASubject(
                         new DecisionSubject.AnInput(B.element())));
         assertEquals(true, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting, count,
-                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsIt)), call));
+                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsIt,
+                        Optional.empty())), call));
         // Counted as the reading says it was, and still not of the law's statement or container.
         Quantity countOfTheOther = new Quantity.HowManyMeet(new DecisionSubject.AnInput(B), new Proposition.Present(
                 new DecisionSubject.AnInput(B.element()), true));
         assertEquals(false, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting,
-                countOfTheOther, new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsTheOther)), call));
+                countOfTheOther, new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), meetsTheOther,
+                        Optional.empty())), call));
         assertEquals(false, Derivation.ByALaw.readsTheLaw(counting, countedAs(counting, count,
-                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(A), meetsIt)), call));
+                new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(A), meetsIt,
+                        Optional.empty())), call));
         // Every element settling the statement alike: all of the container, or none of it.
         LawProposition<DeclaredArgument> ofTheClosure = new LawProposition.Observed<>(
                 new LawSubject.WhatTheClosureAnswers<>(index), new SideAnswered(
@@ -633,7 +711,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             Map<LawNumber<?>, LinearForm<Quantity>> numbers = Map.of(
                     countingByTheClosure.form().coefs().keySet().iterator().next(), stated.count());
             Derivation read = Derivation.ALawComparison.of(countingByTheClosure, numbers, Map.of(),
-                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled())));
+                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled(),
+                            Optional.empty())));
             assertEquals(stated.reads(), Derivation.ByALaw.readsTheLaw(countingByTheClosure, read,
                     call), () -> "a count read as " + stated);
         }
@@ -691,7 +770,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static Derivation countedAs(LawProposition.Compared<DeclaredArgument> law,
                                         Quantity count, Derivation.AComparisonRead.Counted how) {
         return Derivation.ALawComparison.of(law, Map.of(law.form().coefs().keySet().iterator()
-                .next(), LinearForm.atom(count)), Map.of((Quantity.HowManyMeet) count, how),
+                .next(), LinearForm.atom(count)), Map.of(count, how),
                 List.of());
     }
 
@@ -713,8 +792,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             new ValueName.Stdlib.Operation("Set", "contains");
     private static final ValueName.Stdlib SET_INSERT =
             new ValueName.Stdlib.Operation("Set", "insert");
-    private static final ValueName.Stdlib STRING_CONTAINS =
-            new ValueName.Stdlib.Operation("String", "contains");
+    private static final ValueName.Stdlib STRING_MATCHES =
+            new ValueName.Stdlib.Operation("String", "matches");
     private static final ValueName.Stdlib STRING_SLICE =
             new ValueName.Stdlib.Operation("String", "slice");
     private static final ValueName.Stdlib INT_MIN = new ValueName.Stdlib.Operation("Int", "min");

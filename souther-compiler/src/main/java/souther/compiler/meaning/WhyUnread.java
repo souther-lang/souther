@@ -37,17 +37,32 @@ import java.util.Optional;
  */
 public sealed interface WhyUnread {
 
-    /** A part read more times than the reading of one condition makes along one way down. */
-    WhyUnread PAST_THE_READINGS = new MoreReadingsThanAreMade();
+    /** A part read more times than the reading of one condition makes along one way down, at the
+     *  figure declared: what a word for the reason says, which is the kind of a stop and not one
+     *  that was made. A stop made is {@link #pastTheReadings}. */
+    WhyUnread PAST_THE_READINGS = new MoreReadingsThanAreMade(
+            CompositionBudget.READINGS_OF_ONE_CONDITION.atDeclared());
 
-    /** A part read once more where the reading had made as many readings in all as it makes. */
-    WhyUnread PAST_THE_TOTAL_READINGS = new MoreTotalReadingsThanAreMade();
+    /** A part read once more where the reading had made as many readings in all as it makes, at
+     *  the figure declared: what a word for the reason says, which is the kind of a stop and not
+     *  one that was made. A stop made is {@link #pastTheTotalReadings}. */
+    WhyUnread PAST_THE_TOTAL_READINGS = new MoreTotalReadingsThanAreMade(
+            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.atDeclared());
 
     /** A part whose step states more parts, written out, than a step is concluded with. */
     WhyUnread PAST_THE_PARTS = new MorePartsThanAreConcluded();
 
+    /** A part whose statement is over more ways of keeping than are written out to find what it
+     *  comes to. */
+    WhyUnread PAST_THE_WAYS = new MoreWaysThanAreWrittenOut();
+
     /** A part about a container holding more than a walk writes out. */
     WhyUnread PAST_THE_ELEMENTS = new MoreElementsThanAreWrittenOut();
+
+    /** Whether this stopped for the reason {@code other} names, whatever figure each stopped at. */
+    default boolean isTheKindOf(WhyUnread other) {
+        return getClass() == other.getClass();
+    }
 
     /**
      * The figure of this compiler's work the part stopped at, or none where it stopped at none.
@@ -64,23 +79,36 @@ public sealed interface WhyUnread {
      */
     default Optional<Figure> figure() {
         return switch (this) {
-            case MoreReadingsThanAreMade _ ->
-                    Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
-            case MoreTotalReadingsThanAreMade _ ->
-                    Optional.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.figure());
+            case MoreReadingsThanAreMade(var stoppedAt) -> Optional.of(stoppedAt);
+            case MoreTotalReadingsThanAreMade(var stoppedAt) -> Optional.of(stoppedAt);
             case MorePartsThanAreConcluded _ ->
                     Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
+            case MoreWaysThanAreWrittenOut _ ->
+                    Optional.of(CompositionBudget.WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER.figure());
             case MoreElementsThanAreWrittenOut _ -> Optional.of(
                     WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(ElementsWrittenOut.MOST_WALKED));
             case AtNoPosition _, NoMeasureOfItsSize _, OutsideTheLinearFragment _,
                  NotArithmetic _, ANumberNotHeld _, NoNumberOnARun _,
                  TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,
                  NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
-                 CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
+                 ADateMovedByMonths _, APartOfADateMovedByMonths _,
+                 CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _,
+                 AnInvariantNotReached _, WhatACalledBehaviorAnswers _,
                  WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
                  CopiesStateDifferentThings _, NotMetByTheReading _,
                  WhichElementARunStopsAt _ -> Optional.empty();
         };
+    }
+
+    /**
+     * Whether the part stopped at a figure that counts how many times its condition is read. What
+     * takes a condition out of those is what a behavior does: its answer is one value, and a
+     * condition written in one is read once over its own inputs. A figure on how large a statement
+     * comes to is one on what is written, wherever it is written.
+     */
+    default boolean countsReadings() {
+        return this instanceof MoreReadingsThanAreMade
+                || this instanceof MoreTotalReadingsThanAreMade;
     }
 
     /** What a part of a condition is about stands at no position of the input. */
@@ -98,6 +126,10 @@ public sealed interface WhyUnread {
 
             /** The value a condition asks whether a container holds. */
             VALUE,
+
+            /** A string a condition asks whether it stands inside another, or whether another
+             *  stands inside it. */
+            STRING,
 
             /** The value a {@code match} chooses its arm by. */
             SCRUTINEE,
@@ -223,6 +255,33 @@ public sealed interface WhyUnread {
     }
 
     /**
+     * The date {@code operation} answers, a move of a date by months, where nothing here reads it:
+     * what the library states of it is where it lands in the calendar, and how many days that is
+     * from the date it moves turns on the month, so it is no form of that date. It could be read
+     * by the calendar's cases, and those are not projected onto the input here.
+     */
+    record ADateMovedByMonths(ValueName.Stdlib operation) implements WhyUnread {
+
+        public ADateMovedByMonths {
+            Objects.requireNonNull(operation, "a date is moved by an operation");
+        }
+    }
+
+    /**
+     * A number {@code measure} takes of what {@code madeBy}, a move of a date by months, answers,
+     * where this reads no such number: it reads the month a date at a place lands in, and the year
+     * the move lands in turns on the month as well, and the day on how long that month is.
+     */
+    record APartOfADateMovedByMonths(ValueName.Stdlib measure, ValueName.Stdlib madeBy)
+            implements WhyUnread {
+
+        public APartOfADateMovedByMonths {
+            Objects.requireNonNull(measure, "a number is taken by an operation");
+            Objects.requireNonNull(madeBy, "of a date an operation moved");
+        }
+    }
+
+    /**
      * How many of the code points of what {@code madeBy} answers are in a class, where that string
      * stands at no position: no law of {@code madeBy} says that count in terms of what it was
      * handed.
@@ -255,33 +314,11 @@ public sealed interface WhyUnread {
     record AnInvariantNotReached() implements WhyUnread {}
 
     /**
-     * What a behavior called by name answers turns, in its body read where the call stands, on
-     * something a call is not the place to say anything about.
+     * What a behavior called by name answers. The call is a value a run works out, as what a
+     * recursive helper answers is: what the behavior's body states is the behavior's own account,
+     * and no part of what its caller's body states of the input.
      */
-    record InACalledBody(What what) implements WhyUnread {
-
-        public InACalledBody {
-            Objects.requireNonNull(what, "the body turns on something");
-        }
-
-        /** What the called body's answer turns on, that the call cannot say. */
-        public enum What {
-
-            /**
-             * What one of its own dependencies answers. A row stands in the caller's dependencies
-             * and not the called behavior's, and which answer it is was named by an evaluation in
-             * that body, which each call makes afresh.
-             */
-            WHAT_ITS_DEPENDENCY_ANSWERS,
-
-            /** The behavior itself, reached again while its own answer is being read. */
-            ITSELF,
-
-            /** Nothing: the body of the behavior was not read, or it is called with some other
-             *  number of values than it takes. */
-            AN_ANSWER_NOT_READ
-        }
-    }
+    record WhatACalledBehaviorAnswers() implements WhyUnread {}
 
     /**
      * What a helper answers where the helper calls itself, so its body is not one expression to read
@@ -298,7 +335,19 @@ public sealed interface WhyUnread {
      * value the reading has to go into is not past it for being one: whether going in is past it
      * is the count's answer, made where the reading goes in.
      */
-    record MoreReadingsThanAreMade() implements WhyUnread {}
+    record MoreReadingsThanAreMade(Figure.Budget stoppedAt) implements WhyUnread {
+
+        public MoreReadingsThanAreMade {
+            Objects.requireNonNull(stoppedAt, "a stop at a figure holds the figure");
+        }
+    }
+
+    /** A part read more times than the reading of one condition makes along one way down, made
+     *  where that is reached: it holds the figure the compilation held the readings to. */
+    static WhyUnread pastTheReadings() {
+        return new MoreReadingsThanAreMade(
+                CompositionBudget.READINGS_OF_ONE_CONDITION.reached());
+    }
 
     /**
      * A part that would be read once more where the reading of what its condition means had made
@@ -309,7 +358,19 @@ public sealed interface WhyUnread {
      * <p>Its own reason and not that one, because the two are two figures: a reader told the
      * wrong one would raise a figure that stopped nothing.
      */
-    record MoreTotalReadingsThanAreMade() implements WhyUnread {}
+    record MoreTotalReadingsThanAreMade(Figure.Budget stoppedAt) implements WhyUnread {
+
+        public MoreTotalReadingsThanAreMade {
+            Objects.requireNonNull(stoppedAt, "a stop at a figure holds the figure");
+        }
+    }
+
+    /** A part read once more where the reading had made as many readings in all as the
+     *  compilation holds it to, made where that is reached. */
+    static WhyUnread pastTheTotalReadings() {
+        return new MoreTotalReadingsThanAreMade(
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.reached());
+    }
 
     /**
      * A step of the reading whose statement, written out with every part it holds as many times as
@@ -322,6 +383,17 @@ public sealed interface WhyUnread {
      * one another, however few readings it was made of.
      */
     record MorePartsThanAreConcluded() implements WhyUnread {}
+
+    /**
+     * A step of the reading whose statement is over more ways of keeping the elements of a
+     * container than are written out to find what it comes to. A figure of this compiler's work
+     * was reached, and nothing is said of the model.
+     *
+     * <p>Not {@link MorePartsThanAreConcluded}: that one says what the statement came to, and
+     * this says it was not written out to be counted. Ways that all state alike come to a few
+     * parts however many they are, so the number of ways says nothing of how many parts there are.
+     */
+    record MoreWaysThanAreWrittenOut() implements WhyUnread {}
 
     /**
      * A part about a container holding more occurrences than a walk writes out, counted at every

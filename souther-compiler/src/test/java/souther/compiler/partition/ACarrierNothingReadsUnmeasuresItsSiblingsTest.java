@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -50,7 +52,8 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Span = { a: Slot }
 
             data Wide
-            data Shape = Wide
+            data Narrow
+            data Shape = Wide | Narrow
 
             behavior classify : (s: Span) -> Shape
             let classify (s) = Wide
@@ -69,7 +72,8 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Span = { a: Slot, d: Day }
 
             data Wide
-            data Shape = Wide
+            data Narrow
+            data Shape = Wide | Narrow
 
             behavior classify : (s: Span) -> Shape
             let classify (s) = Wide
@@ -103,15 +107,16 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         Read read = read(source, "classify");
         Axis axis = read.partitioning().axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
-        String standing = read.partitioning().edgeIsKnownWritable(axis.term())
-                ? " writable" : " not known to be writable";
         return Partitions.bordersOf(axis, read.reading(),
                         read.reading().runsBetween(axis.term()), new LinesRead(),
                         (one, other) -> false).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
-                                + border.demand(role).criterion().asked(border.cut().of()).substring(2) + standing))
+                                + border.demand(role).criterion().asked(border.cut().of()).substring(2)
+                                + (read.partitioning().pointIsKnownWritable(axis.term(),
+                                        border.demand(role).criterion(), read.reading())
+                                        ? " writable" : " not known to be writable")))
                 .sorted().toList();
     }
 
@@ -119,14 +124,14 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                         souther.compiler.inputs.Quantities reading, RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get(behavior), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         return new Read(Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

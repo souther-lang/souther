@@ -93,6 +93,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_PATTERNS_PRODUCER =
             "souther/compiler/partition/Partitions$PatternForAWitness -> " + OWNER;
 
+    /** The question of strings a position admits that part into pieces of another type, which
+     *  takes the pattern of a piece as the rule's reading handed it out. */
+    private static final String STRINGS_IN_PIECES =
+            "souther/compiler/partition/Partitions$StringsPartedInto -> " + OWNER;
+
     /** What the rules about a position's strings came to, as that reading holds it. */
     private static final String THE_PATTERNS_STATED =
             "souther/compiler/partition/Partitions$PatternsStated -> " + OWNER;
@@ -174,6 +179,18 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_CHARACTER_MATCHED =
             "souther/compiler/partition/Pullback$ALawRead -> " + OWNER;
 
+    /**
+     * The law of a condition read over the counts of its arguments, asking which argument of a
+     * pattern matched against a string is the string.
+     *
+     * <p>Not a reader of what a rule means about a position. What the pattern accepts is the
+     * checker's, carried on the call, and how many code points its strings hold is read off that
+     * meaning where it stands ({@code LengthsOfAPattern}); this asks the table only where the
+     * subject stands, so that the length that is counted is the string's and not the pattern's.
+     */
+    private static final String THE_STRING_A_PATTERN_IS_MATCHED_AGAINST =
+            "souther/compiler/check/LawOverAtoms -> " + OWNER;
+
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
     private static final List<String> READING_ONE = List.of(
@@ -189,6 +206,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
             READS + "$Stated#subject()Lsouther/compiler/core/Core;",
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST,
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST + IN_A_DESCRIPTOR,
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST + "#of(Lsouther/compiler/core/Kernel;)L"
+                    + OWNER + ";",
+            THE_STRING_A_PATTERN_IS_MATCHED_AGAINST + "#subject()I",
             WHAT_A_RULE_STATES,
             WHAT_A_RULE_STATES + IN_A_DESCRIPTOR,
             WHAT_A_RULE_STATES + "$Reading",
@@ -246,12 +268,24 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             ONE_STATED_RULE,
             ONE_STATED_RULE + IN_A_DESCRIPTOR,
             ONE_STATED_RULE + "$StatedPattern",
+            // The strings that part into pieces of a type, which are met with what the position
+            // admits: the pattern of a piece is carried and asked what it means, and nothing is
+            // read of any clause here.
+            STRINGS_IN_PIECES,
+            STRINGS_IN_PIECES + IN_A_DESCRIPTOR,
+            STRINGS_IN_PIECES + "$StatedPattern",
+            STRINGS_IN_PIECES
+                    + "$StatedPattern#meaning()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,
             A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"
                     + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
                     + OWNER + "$Stated;",
             A_BODYS_RULES + "$Stated",
+            // Whether the table worked the rule's text out, which is whether it states anything:
+            // a rule it states nothing of is a relation between two strings where the call is
+            // read as one, and is read there. Asked of the table and never worked out here.
+            A_BODYS_RULES + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
             A_BODYS_RULES + "$WrittenText",
             A_BODYS_RULE,
             A_BODYS_RULE + IN_A_DESCRIPTOR,
@@ -266,7 +300,22 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_CHARACTER_MATCHED,
             A_CHARACTER_MATCHED + IN_A_DESCRIPTOR,
             A_CHARACTER_MATCHED + "#of(Lsouther/compiler/core/Kernel;)L" + OWNER + ";",
-            A_CHARACTER_MATCHED + "#subject()I");
+            // And a predicate applied to a piece of a string, which the table reads as it reads
+            // one applied to a position: what the predicate holds of is its answer, and the
+            // reading of the pieces takes it as it came.
+            A_CHARACTER_MATCHED + "#statedBy(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
+                    + OWNER + "$Stated;",
+            A_CHARACTER_MATCHED + "#subject()I",
+            A_CHARACTER_MATCHED + "$Reading",
+            A_CHARACTER_MATCHED + "$Reading$Accepting",
+            A_CHARACTER_MATCHED
+                    + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
+            A_CHARACTER_MATCHED + "$Stated",
+            A_CHARACTER_MATCHED + "$Stated#reading()L" + OWNER + "$Reading;",
+            A_CHARACTER_MATCHED + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
+            A_CHARACTER_MATCHED + "$Stated#subject()Lsouther/compiler/core/Core;",
+            A_CHARACTER_MATCHED + "$WrittenText");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

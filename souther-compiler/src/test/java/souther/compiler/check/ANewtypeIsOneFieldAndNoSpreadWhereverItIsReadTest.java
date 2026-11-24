@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -85,7 +86,8 @@ class ANewtypeIsOneFieldAndNoSpreadWhereverItIsReadTest {
     private static Hir.Module resolved() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", EVERY_FORM);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value();
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1009"), compilation);
+        return compilation.db().ask(new Names.Resolved("m")).value();
     }
 }

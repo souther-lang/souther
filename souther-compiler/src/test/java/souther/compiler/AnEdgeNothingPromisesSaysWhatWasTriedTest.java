@@ -48,10 +48,8 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
             .replace("ADMITTED", ARuleNoReadingTakesIn.A_VALUE_THE_NARROW_ONE_ADMITS);
 
     private static String report() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The line is still said, which is what keeps a discovered edge from disappearing. */

@@ -2,15 +2,13 @@ package souther.compiler.program;
 
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.diag.CompileException;
-import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,9 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Taken from the compilations {@link RepositoryModels} already answered, through the assembler's
  * entry for a compilation in hand, which asks the same verdict and makes the same snapshot as the
  * entry an output calls with sources.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class EveryModelTheRepositoryCarriesIsAProgramAnOutputReadsTest {
 
     /**
@@ -42,15 +44,15 @@ class EveryModelTheRepositoryCarriesIsAProgramAnOutputReadsTest {
     void everyModelTheLanguageAcceptsIsReadAsACheckedProgram() {
         List<String> read = new ArrayList<>();
         List<String> refused = new ArrayList<>();
-        for (Map.Entry<String, Compilation> corpus : RepositoryModels.byCorpus().entrySet()) {
+        for (RepositoryModels.Model model : RepositoryModels.byCorpus().values()) {
             try {
-                CheckedProgramAssembler.of(corpus.getValue());
-                read.add(corpus.getKey());
+                CheckedProgramAssembler.of(model.answered());
+                read.add(model.name());
             } catch (CompileException e) {
                 // The language refused it, so there is no program to read.
             } catch (IllegalStateException e) {
-                read.add(corpus.getKey());
-                refused.add(corpus.getKey() + ": " + e.getMessage());
+                read.add(model.name());
+                refused.add(model.name() + ": " + e.getMessage());
             }
         }
         assertEquals(List.of(), refused, "models the language accepts and the program API refuses");

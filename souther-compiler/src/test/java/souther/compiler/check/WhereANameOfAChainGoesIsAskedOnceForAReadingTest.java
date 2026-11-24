@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -53,9 +55,8 @@ class WhereANameOfAChainGoesIsAskedOnceForAReadingTest {
             source.append("data T").append(i).append(" = T").append(i - 1).append('\n')
                     .append("    invariant value >= ").append(i % 3).append('\n');
         }
-        Compilation compilation =
-                Compilation.ofSources(List.of(source.toString()), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source.toString()), ModulePath.EMPTY));
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model under test is a program that can be written");
@@ -69,7 +70,7 @@ class WhereANameOfAChainGoesIsAskedOnceForAReadingTest {
                 }, rules.bindings(), rules.written());
 
         FieldDomains.of(TypeSymbols.declared(new TypeKey("chain", "T" + length)),
-                RuleReadingContext.unshared(counting, policy));
+                RuleReadingContext.unshared(counting, policy, TestDay.TODAY));
         return asked.get();
     }
 }

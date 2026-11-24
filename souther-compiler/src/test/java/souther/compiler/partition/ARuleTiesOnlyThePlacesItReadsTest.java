@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -24,11 +25,9 @@ class ARuleTiesOnlyThePlacesItReadsTest {
 
     /** The word each place is left with by the one comparison in {@code source}, by its name. */
     private static Map<String, String> left(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> out = new LinkedHashMap<>();
         for (String line : report.lines().map(String::strip).toList()) {
             if (!line.contains("comparison@") || !line.contains("about `")) {
@@ -78,6 +77,15 @@ class ARuleTiesOnlyThePlacesItReadsTest {
     @Test
     void aRuleOfTheValueAroundBothTiesThem() {
         assertEquals(Map.of("x.a.v", NOT_READ, "x.b.v", NOT_READ),
+                left(pair(W + "data R = { a: W, b: W } invariant 2 * a.v <= b.v",
+                        "2 * x.a.v < x.b.v")));
+    }
+
+    /** {@code a <= b} holds at both values {@code a < b} changes between, so a row at the line
+     *  needs nothing of it and the two stay apart. */
+    @Test
+    void aRuleHoldingAtBothValuesTheComparisonChangesBetweenDoesNotTieThem() {
+        assertEquals(Map.of("x.a.v", RELATES),
                 left(pair(W + "data R = { a: W, b: W } invariant a.v <= b.v",
                         "x.a.v < x.b.v")));
     }
@@ -87,8 +95,8 @@ class ARuleTiesOnlyThePlacesItReadsTest {
     void aRuleBetweenTheTwoTiesThemForAComparisonThatCanHold() {
         assertEquals(Map.of("x.a", NOT_READ, "x.b", NOT_READ), left(pair("""
                 data R = { a: Int, b: Int }
-                    invariant a >= b
-                """, "x.a > x.b")));
+                    invariant 2 * a >= b
+                """, "2 * x.a > x.b")));
     }
 
     @Test
@@ -116,8 +124,8 @@ class ARuleTiesOnlyThePlacesItReadsTest {
     void aRuleBetweenTwoFieldsBelowOnePlaceTiesThem() {
         assertEquals(Map.of("x.a.id", NOT_READ, "x.a.owner", NOT_READ), left(pair(INNER + """
                 data R = { a: Inner }
-                    invariant a.id >= a.owner
-                """, "x.a.id > x.a.owner")));
+                    invariant 2 * a.id >= a.owner
+                """, "2 * x.a.id > x.a.owner")));
     }
 
     @Test

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -57,8 +59,8 @@ class WhatHasNoValueIsCountedFromWhatAModuleDeclaresTest {
     private static Compilation started(String text) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, text);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
         return c;
@@ -69,8 +71,8 @@ class WhatHasNoValueIsCountedFromWhatAModuleDeclaresTest {
     }
 
     private static void edited(Compilation c, String text) {
-        c.update(Map.of(ID, text), Set.of());
-        c.answerEverything();
+        c.update(Map.of(ID, text), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
     }
 
     /** A body written another way leaves the count where it was: it says nothing about which types

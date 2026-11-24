@@ -10,6 +10,7 @@ import souther.compiler.query.Scopes;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Position;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -70,12 +71,10 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
             new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                     ScopedDeclarations.kindsOf(symbols),
                     souther.compiler.query.ExampleExecutions.of(compilation.db(), "demo")
-                            .fieldTypes());
+                            .fieldTypes(), ValueOwnership.none());
 
     private static Compilation compiled(String module) {
-        Compilation c = Compilation.ofSource(module, "Main");
-        c.answerEverything();
-        return c;
+        return ACompiledModel.answered(module);
     }
 
     /** A value of {@code type}, as a helper would have answered with one: through its own decoder,
@@ -197,7 +196,8 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
         Symbols theirs = Scopes.derived(with.db(), "demo").value();
         NeutralForm and = new NeutralForm(theirs, ScopedDeclarations.sumsOf(theirs),
                 ScopedDeclarations.kindsOf(theirs),
-                souther.compiler.query.ExampleExecutions.of(with.db(), "demo").fieldTypes());
+                souther.compiler.query.ExampleExecutions.of(with.db(), "demo").fieldTypes(),
+                ValueOwnership.none());
         assertEquals(Map.of(), neutral.of(unit("Filed"), Position.UNREAD, "h"));
         assertEquals(Map.of(), and.of(value(with, "Filed", Map.of()), Position.UNREAD, "h"));
         // and each sum that does read it there still writes what it reads it under

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.FixtureTemplate;
 
@@ -164,7 +165,7 @@ class OneRequestIsAnsweredAlikeWhateverTheBuildMeasuresTest {
         // level, the comparison below would be moving two things and reporting one.
         compilation.observe(RowObservation.RECORD_ARMS);
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(RowObservation.RECORD_ARMS, Adequacy.observationAsked(compilation.db()),
                 "every build here reads its rows and records where they went, whatever it reports");
         linesRead.add(Adequacy.linesAskedOf(compilation.db()));

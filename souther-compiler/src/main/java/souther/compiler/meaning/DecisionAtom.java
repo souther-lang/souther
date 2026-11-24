@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.NumericTerm;
@@ -12,6 +13,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * One quantity a comparison of a decision is written over.
@@ -35,11 +37,27 @@ public sealed interface DecisionAtom extends Quantity {
         return new LinearForm<>(form.constant(), coefs);
     }
 
-    /** A number of the behavior's input. */
-    record OfTheInput(NumericTerm term) implements DecisionAtom {
+    /**
+     * A number of the behavior's input.
+     *
+     * @param identity which value at the term's position it is: two names for two elements of one
+     *                 container read one position, and are two numbers
+     */
+    record OfTheInput(NumericTerm term, ValueIdentity identity) implements DecisionAtom {
+
+        /** Whole where the input measures the term in whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return measuredWhole.test(term);
+        }
+
+        /** The number at {@code term}, read through no name for an element. */
+        public OfTheInput(NumericTerm term) {
+            this(term, ValueIdentity.AT_THE_POSITION);
+        }
 
         public OfTheInput {
-            if (term == null) {
+            if (term == null || identity == null) {
                 throw new IllegalArgumentException("a number of the input is some term");
             }
         }
@@ -50,8 +68,14 @@ public sealed interface DecisionAtom extends Quantity {
         }
 
         @Override
+        public Spelling spelling() {
+            return identity instanceof ValueIdentity.AtThePosition ? term.spelling()
+                    : Spelling.of(term.spelling(), identity.spelled());
+        }
+
+        @Override
         public String spelled() {
-            return term.toString();
+            return term + identity.spelled();
         }
 
         @Override
@@ -75,6 +99,13 @@ public sealed interface DecisionAtom extends Quantity {
      */
     record TakenOfAnAnswer(ValueName.Stdlib operation, TakenArguments arguments,
                            DecisionSubject.AnAnswer of, Type at) implements DecisionAtom {
+
+        /** Not shown: what the library takes of a value is the operation's own, and {@code at}
+         *  is the value's type and not the number's. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
 
         public TakenOfAnAnswer {
             if (operation == null || arguments == null || of == null || at == null) {
@@ -100,32 +131,48 @@ public sealed interface DecisionAtom extends Quantity {
     }
 
     /**
-     * What {@code operation} adds up of a computation that turns on where each element of a list a
-     * dependency answered stands: {@code List.sum(List.mapIndexed((i, x) -> i * x, answer))}.
+     * What {@code operation} adds up of a computation of each element of a list a dependency
+     * answered that is no form of the element's own numbers: one turning on where each element
+     * stands, {@code List.sum(List.mapIndexed((i, x) -> i * x, answer))}, or one choosing per
+     * element, {@code List.sum(List.map(x -> if x.active then x.q else 0, answer))}.
      *
      * <p>Held as one number and not as a form of the elements' own numbers
-     * ({@link Quantity.SumOver}), since the weight of an element is its position and no number the
-     * element holds. The position counts from nought in the order {@code direction} hands the
-     * answer's elements in — the order the answer lists them, or the opposite — so two such sums
-     * over one list that part only in the direction are two numbers.
+     * ({@link Quantity.SumOver}), since the weight of an element is its position or the test it
+     * meets and no number the element holds. The position counts from nought in the order
+     * {@code direction} hands the answer's elements in — the order the answer lists them, or the
+     * opposite — so two such sums over one list that part only in the direction are two numbers;
+     * a computation reading no position is of the elements in no order, and has none.
      *
      * @param list        the list the dependency answered
-     * @param computation what the closure made of an element, which reads the position
+     * @param computation what the closure made of an element
      * @param each        what one computed value stands as
+     * @param direction   the order the position counts in, where the computation reads it, and
+     *                    null where it does not
      */
     record ComputedOverAnAnswer(ValueName.Stdlib operation, DecisionSubject.AnAnswer list,
                                 ElementValue computation, Type each,
                                 TraversalDirection direction) implements DecisionAtom {
 
+        /** Whole where each value it adds up is counted in whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return Carrier.ofPrimitive(each) instanceof Carrier carrier
+                    && carrier.countsInWholeNumbers();
+        }
+
         public ComputedOverAnAnswer {
-            if (operation == null || list == null || computation == null || each == null
-                    || direction == null) {
+            if (operation == null || list == null || computation == null || each == null) {
                 throw new IllegalArgumentException("a computed total of an answer is some"
-                        + " operation's, of some list, handed in some direction");
+                        + " operation's, of some list");
             }
-            if (!computation.readsThePosition()) {
-                throw new IllegalArgumentException("{" + computation + "} turns on no element's"
-                        + " position, and its total is one of the elements' own numbers");
+            if (computation.readsThePosition() != (direction != null)) {
+                throw new IllegalArgumentException("{" + computation + "} is handed in an order"
+                        + " exactly where it turns on an element's position, and it is handed "
+                        + direction);
+            }
+            if (computation instanceof ElementValue.Affine) {
+                throw new IllegalArgumentException("{" + computation + "} is a form of the"
+                        + " elements' own numbers, and its total is one of theirs");
             }
         }
 
@@ -148,6 +195,12 @@ public sealed interface DecisionAtom extends Quantity {
 
     /** A number a dependency answered with, at the place inside its answer the body read. */
     record OfAnAnswer(DecisionSubject.AnAnswer at) implements DecisionAtom {
+
+        /** Not shown: nothing here says what the dependency answers with. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
 
         public OfAnAnswer {
             if (at == null) {

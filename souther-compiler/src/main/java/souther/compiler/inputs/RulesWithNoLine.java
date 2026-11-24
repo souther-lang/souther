@@ -1,12 +1,16 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
-import souther.compiler.check.RuleRef;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.types.ModelOccurrences;
+import souther.compiler.values.ValuesWithin;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What the readers found about the rules that came to no line here, and the rules among them
@@ -33,22 +37,42 @@ import java.util.Map;
  *                     asked of the reasons rather than read off this
  * @param unclassified the rules nothing worked out the questions of, each holding the measures it
  *                     leaves open
- * @param stopping     the rules a run reaching them may stop in: said beside the rules that came to
- *                     no line because it is what the same readers find of a rule, and apart from
- *                     them because it says nothing of whether the rule draws a line
+ * @param stopping     what is shown of a run stopping at each step of the body: that one does, or
+ *                     that whether one does is not resolved, each step once for each. Gathered by
+ *                     the same readers, and apart from the rules because a step is no rule and
+ *                     says nothing of whether a rule draws a line
  */
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
-                              List<RuleWhereARunMayStop> stopping) {
+                              List<WhatIsShownOfAStop> stopping,
+                              List<CasesAtARule<CaseExpansion.CameTo>> expanded,
+                              List<CasesAtARule<List<CaseExpansion.MultipliedHelper>>> costly) {
 
     /** Nothing found, which is what a reader with no rules to read hands on. */
     public static final RulesWithNoLine NONE =
-            new RulesWithNoLine(List.of(), List.of(), List.of());
+            new RulesWithNoLine(List.of(), List.of(), List.of(), List.of(), List.of());
 
     public RulesWithNoLine {
         reported = List.copyOf(reported);
         unclassified = List.copyOf(unclassified);
         stopping = List.copyOf(stopping);
+        expanded = List.copyOf(expanded);
+        costly = List.copyOf(costly);
+    }
+
+    /** The same, with no rule's cases told of beside a line that was read at a cost. */
+    public RulesWithNoLine(List<RuleWithoutALine> reported,
+                           List<StandingQuestion.Unclassified> unclassified,
+                           List<WhatIsShownOfAStop> stopping,
+                           List<CasesAtARule<CaseExpansion.CameTo>> expanded) {
+        this(reported, unclassified, stopping, expanded, List.of());
+    }
+
+    /** The same, with no rule's cases told of. */
+    public RulesWithNoLine(List<RuleWithoutALine> reported,
+                           List<StandingQuestion.Unclassified> unclassified,
+                           List<WhatIsShownOfAStop> stopping) {
+        this(reported, unclassified, stopping, List.of(), List.of());
     }
 
     /**
@@ -146,12 +170,48 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
-        private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
+        /** By the kind of finding and the rule, so that each rule has each said of it once. */
+        private final Map<List<Object>, WhatIsShownOfAStop> stopping = new LinkedHashMap<>();
+        private final Map<CasesAtARule.Key, CasesAtARule<CaseExpansion.CameTo>> expanded =
+                new LinkedHashMap<>();
+        private final Map<CasesAtARule.Key, CasesAtARule<List<CaseExpansion.MultipliedHelper>>>
+                costly = new LinkedHashMap<>();
 
-        /** A rule a run reaching it may stop in, which is what a report says of it. */
-        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
-            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt);
-            stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
+        /**
+         * What a rule's line not worked out because its cases were too many was told of those
+         * cases, beside the finding that says why it was not worked out.
+         */
+        public void expanded(RuleCitation cited, ModelOccurrences readAt,
+                             CaseExpansion expansion) {
+            expanded(CasesAtARule.of(cited, readAt, expansion.which(), expansion.line(),
+                    expansion.cutAt(), expansion.cameTo()));
+        }
+
+        /** The same, as another reader handed it on. */
+        public void expanded(CasesAtARule<CaseExpansion.CameTo> one) {
+            expanded.merge(one.key(), one, CasesAtARule::mergedWith);
+        }
+
+        /**
+         * What a rule's line that was read all the same, at a cost, was told of the cases it was
+         * read in: which helper's readings the cases choose among. Beside the line and no reason
+         * it was not read.
+         */
+        public void costly(RuleCitation cited, ModelOccurrences readAt,
+                           CaseExpansion.CostlyCase told) {
+            costly(CasesAtARule.of(cited, readAt, told.which(), told.line(), told.cutAt(),
+                    told.helpers()));
+        }
+
+        /** The same, as another reader handed it on. */
+        public void costly(CasesAtARule<List<CaseExpansion.MultipliedHelper>> one) {
+            costly.merge(one.key(), one, CasesAtARule::mergedWith);
+        }
+
+        /** One a reader already made, folded with what is said of the same step alike. */
+        public void stopped(WhatIsShownOfAStop one) {
+            stopping.merge(List.of(one.getClass(), one.at()), one,
+                    WhatIsShownOfAStop::mergedWith);
         }
 
         /** One more finding, which is what a report says about the rule at that place. */
@@ -187,6 +247,25 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         }
 
         /**
+         * The same, from a reader that knows which expressions the reading stopped at.
+         *
+         * <p>One question for each, since what makes two of them one includes where a reader is
+         * sent: two expressions that stopped one rule at one place with one limit are two things
+         * to look at, and one filed under the first would leave the second unsaid. The rule itself
+         * where the reading names none.
+         */
+        public void unclassified(RuleCitation cited, ModelOccurrences readAt,
+                                 FilingCoordinate at, BlockReason.RuleReadingStopped why,
+                                 Collection<RuleSite> stoppedAt) {
+            if (stoppedAt.isEmpty()) {
+                unclassified(cited, readAt, at, why);
+                return;
+            }
+            stoppedAt.forEach(sentTo -> asked(StandingQuestion.NothingClassifiesIt
+                    .of(cited, readAt, at, sentTo, why)));
+        }
+
+        /**
          * A rule that was classified and whose end this could not decide, and the finding beside
          * it.
          *
@@ -200,6 +279,23 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
                                          BlockReason.RuleReadingStopped why) {
             add(RuleWithoutALine.of(cited, readAt, at, why));
             asked(StandingQuestion.BoundaryUndetermined.of(cited, readAt, at, why));
+        }
+
+        /**
+         * A rule whose classes were shown over some of a position's values, and the finding
+         * beside it.
+         *
+         * <p>Both, for the reason {@link #boundaryUndetermined} gives: the finding tells a reader
+         * which values the classes do not hold, and the question holds the measure of classes open
+         * while any are left.
+         */
+        public void regionUndetermined(RuleCitation cited, ModelOccurrences readAt,
+                                       FilingCoordinate at, List<ValuesWithin> open,
+                                       BlockReason.OperationsNotShown operations) {
+            BlockReason.RelationShownOverARegion why =
+                    BlockReason.RelationShownOverARegion.of(open, operations);
+            add(RuleWithoutALine.of(cited, readAt, at, why));
+            asked(StandingQuestion.RegionUndetermined.of(cited, readAt, at, why));
         }
 
         /** One a reader already made, which is how the findings of two readings meet. */
@@ -221,14 +317,27 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         public void addAll(RulesWithNoLine other) {
             other.reported().forEach(this::add);
             other.unclassified().forEach(this::asked);
-            other.stopping().forEach(one ->
-                    stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith));
+            other.stopping().forEach(this::stopped);
+            other.expanded().forEach(this::expanded);
+            other.costly().forEach(this::costly);
         }
 
-        /** What this gathering came to, which is what a reader hands on. */
+        /** What this gathering came to, which is what a reader hands on. Each step's findings of a
+         *  stop carry one region that keeps its runs going, the region the readings that say one
+         *  of it say together, whichever of the findings each reading made: a reading that says
+         *  none there has said the declarations it asks at another step of what it reads, and
+         *  takes nothing from those said here. Whether it is said is asked where a report says it
+         *  ({@link WhatKeepsEveryRunGoing#said}), and not here: what is gathered here may be put
+         *  together with more, a reading of which may be what shows it. */
         public RulesWithNoLine found() {
+            Map<SourcePos, Optional<WhatKeepsEveryRunGoing>> kept = new LinkedHashMap<>();
+            stopping.values().forEach(one -> kept.merge(one.at(), one.keeping(),
+                    WhatKeepsEveryRunGoing::besideWhatIsSaidAtOneStep));
+            List<WhatIsShownOfAStop> stops = stopping.values().stream()
+                    .map(one -> one.keptBy(kept.get(one.at()))).toList();
             return new RulesWithNoLine(List.copyOf(reported.values()),
-                    List.copyOf(unclassified.values()), List.copyOf(stopping.values()));
+                    List.copyOf(unclassified.values()), stops,
+                    List.copyOf(expanded.values()), List.copyOf(costly.values()));
         }
     }
 }

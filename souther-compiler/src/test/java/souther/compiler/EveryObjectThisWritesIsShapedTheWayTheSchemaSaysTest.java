@@ -122,7 +122,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
      */
     @Test
     void aRuleWithNoLineIsWrittenWithWhereAnAuthorIsSent() {
-        JsonNode written = reportOf(Compilation.ofSource("""
+        JsonNode written = reportOf("""
                 module m
 
                 data Yes
@@ -130,9 +130,8 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                     invariant r = n >= 2 || Int.abs(n) >= 5
 
                 behavior f : (v: N) -> Yes
-                    constructs Yes
                 let f (v) = Yes
-                """, "Main"));
+                """);
         JsonNode unread = written.get("modules").get(0).get("behaviors").get(0)
                 .get("partition").get("notRead");
         assertNotNull(unread, "the model leaves a rule this could not turn into a line");
@@ -156,7 +155,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
      */
     @Test
     void aStoppedEntryTheDocumentWritesAlikeIsWrittenOnce() {
-        JsonNode written = reportOf(Compilation.ofSource("""
+        JsonNode written = reportOf("""
                 module m
 
                 data Yes
@@ -164,9 +163,8 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                     invariant r = n >= 2 || Int.abs(n) >= 5
 
                 behavior f : (v: N) -> Yes
-                    constructs Yes
                 let f (v) = Yes
-                """, "Main"));
+                """);
         JsonNode unanswered = written.get("modules").get(0).get("behaviors").get(0)
                 .get("partition").get("unanswered");
         assertNotNull(unanswered, "the model leaves a question nothing answered");
@@ -272,7 +270,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
      */
     @Test
     void soIsTheDocumentOfCombinationsOfWhichElementsAreKept() {
-        JsonNode document = reportOf(Compilation.ofSource("""
+        JsonNode document = reportOf("""
                 module m
 
                 data Row = { days: Int, pay: Int }
@@ -284,7 +282,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
 
                 example total
                     | (Row { days = 20, pay = 100 }, Row { days = 5, pay = 200 }) -> 100
-                """, "Main"));
+                """);
 
         assertEquals(List.of(), DocumentShape.of(document).wrong(),
                 "a document the schema shipped beside it refuses");
@@ -305,12 +303,11 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
     }
 
     private static JsonNode document() {
-        return reportOf(Compilation.ofSource(MODEL, "Main"));
+        return reportOf(MODEL);
     }
 
-    private static JsonNode reportOf(Compilation compilation) {
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+    private static JsonNode reportOf(String source) {
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
 }

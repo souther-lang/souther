@@ -2,11 +2,13 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.publish.RuleHandleProse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -90,7 +92,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         java.util.Map<String, List<souther.compiler.query.BorderAssessment>> borders =
                 // The searched reading, which is what the report is written from: whether a value
@@ -114,10 +116,12 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 out.add(point.role().againstTheLine()
                         ? "no row is at the " + point.role() + " point " + behavior + "/"
                                 + line.axis() + " = " + point.against()
-                                + " (" + RuleHandleProse.said(line.describe(places), names, null) + ")"
+                                + " (" + RuleHandleProse.said(line.describe(places), names,
+                                        Locale.ENGLISH, null) + ")"
                         : "no row is at an " + point.role() + " point of " + behavior + "/"
                                 + line.axis() + ", " + point.against()
-                                + " (" + RuleHandleProse.said(line.describe(places), names, null) + ")");
+                                + " (" + RuleHandleProse.said(line.describe(places), names,
+                                        Locale.ENGLISH, null) + ")");
             }
         }));
         return List.copyOf(out);

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
@@ -218,16 +220,17 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
         for (Edit edit : Edit.values()) {
             Map<String, String> byId = new LinkedHashMap<>();
             byId.put(ID, MODULE);
-            Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+            Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                    .writtenOn(TestDay.DATE);
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
+            ACompiledModel.compiles(c);
             assertTrue(c.db().allReports().isEmpty(),
                     () -> "the module compiles to begin with: " + said(c));
             IndexEdges.Snapshot before = IndexEdges.Snapshot.of(c.db());
 
-            c.update(Map.of(ID, edit.source()), Set.of());
+            c.update(Map.of(ID, edit.source()), Set.of(), TestDay.DATE);
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
+            ACompiledModel.refusedWith(edit.says(), c);
             assertEquals(edit.says(), codesFrom(c),
                     () -> "after " + edit + " the compiler said " + said(c));
 

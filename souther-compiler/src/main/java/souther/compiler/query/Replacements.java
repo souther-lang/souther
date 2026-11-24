@@ -1,10 +1,13 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.PathReachability;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.observe.ArmObservation;
@@ -23,11 +26,13 @@ import souther.compiler.observe.Verdict;
 import souther.compiler.partition.BodyReading;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.GenerationPlan;
+import souther.compiler.partition.InputsRowsRanWith;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RewriteSearch;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,6 +44,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * The rewrites of each behavior's body and whether its rows tell them from the body: what the
@@ -83,16 +89,35 @@ public final class Replacements {
             // where the rows went: those are the classes that carry any, and asking where none
             // were run would build them for nothing.
             ArmReplacements carried = ArmReplacements.NONE;
+            WalkRewrites walksCarried = WalkRewrites.NONE;
             if (byTarget.values().stream().anyMatch(Adequacy.RowReading::recordedArms)) {
                 EvaluationArtifact image = db.ask(
                         new Output.EvaluationLinked(name, ArmObservation.RECORD)).value();
-                if (image != null
-                        && image.probes() instanceof ProbeImage.Instrumented(var _, var held)) {
+                if (image != null && image.probes()
+                        instanceof ProbeImage.Instrumented(var _, var held, var walks)) {
                     carried = held;
+                    walksCarried = walks;
                 }
             }
             ArmReplacements inTheClasses = carried;
+            WalkRewrites walksInTheClasses = walksCarried;
+            // Read off the rows only when a body answering one value is asked about, which most
+            // modules never are.
+            Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule = new HashMap<>();
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
+                Supplier<InputsRowsRanWith> ranWith = new Supplier<>() {
+
+                    private InputsRowsRanWith read;
+
+                    @Override
+                    public InputsRowsRanWith get() {
+                        if (read == null) {
+                            read = inputsRowsRanWith(db, prepared.value(), behavior.name(),
+                                    ofTheModule);
+                        }
+                        return read;
+                    }
+                };
                 Sig sig = sigs.value().get(behavior.name());
                 Adequacy.RowReading reading =
                         Adequacy.RowReadings.readingFor(byTarget, behavior.name());
@@ -104,8 +129,13 @@ public final class Replacements {
                 Position at = Position.at(sig.outputType());
                 Predicate<ControlPlace.Arm> unreached =
                         Adequacy.unreachedIn(arrived, behavior.name(), checked);
-                return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
-                        row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
+                return ReplacementReading.of(behavior.name(), checked.plan(),
+                        Adequacy.armsOwedIn(inTheClasses, behavior.name(), checked),
+                        Adequacy.walksOwedIn(walksInTheClasses, arrived, behavior.name(),
+                                checked),
+                        row -> Adequacy.armsSeenIn(row, numbering),
+                        row -> Adequacy.walksSeenIn(row, numbering), unreached,
+                        Adequacy.walkedNoFurtherIn(rows, numbering), rows,
                         row -> stoppedAt.getOrDefault(RowRef.of(row),
                                 ReplacementDisposition.Met.AT_NO_FIGURE),
                         new ReplacementReading.Comparing() {
@@ -121,8 +151,60 @@ public final class Replacements {
                                 return Comparisons.verdict(stated, answered, types, at)
                                         instanceof Verdict.Held;
                             }
-                        });
+                        }, ranWith);
             });
+        }
+
+        /**
+         * What the rows ran with that a search for a row of {@code subject} can grow a list from:
+         * the rows of the behaviors it calls, wherever they are declared, and then the rows of
+         * the module.
+         *
+         * @param ofTheModule the rows of each behavior of this module, read once for all the
+         *                    subjects of the module
+         */
+        static InputsRowsRanWith inputsRowsRanWith(Db db, CheckSurface prepared,
+                String subject, Map<String, List<List<InputsRowsRanWith.Taken>>> ofTheModule) {
+            List<List<List<InputsRowsRanWith.Taken>>> called = new ArrayList<>();
+            for (ValueName.Behavior each : CalledBehaviors.of(db, prepared.name(), subject)) {
+                called.add(rowsOf(db, each.module(), each.name()));
+            }
+            List<List<List<InputsRowsRanWith.Taken>>> module = new ArrayList<>();
+            for (Hir.BehaviorDef each : prepared.behaviors()) {
+                module.add(ofTheModule.computeIfAbsent(each.name(),
+                        name -> rowsOf(db, prepared.name(), name)));
+            }
+            return InputsRowsRanWith.of(called, module);
+        }
+
+        /**
+         * The inputs the rows of one behavior were run with, a row at a time. A row whose inputs do
+         * not line up with the behavior's parameters holds nothing to take from, and a behavior no
+         * model of this compilation declares has no rows.
+         */
+        private static List<List<InputsRowsRanWith.Taken>> rowsOf(Db db, String module,
+                                                                  String behavior) {
+            Map<String, Adequacy.RowReading> byTarget =
+                    db.ask(new Adequacy.RowReadings(module)).value();
+            Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
+            Sig sig = sigs == null ? null : sigs.get(behavior);
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            if (byTarget == null || sig == null || !reading.present()) {
+                return List.of();
+            }
+            List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+            for (RowOutcome row : Adequacy.RowReadings.readingFor(byTarget, behavior).rowsSeen()) {
+                if (row.inputs().size() != sig.inputTypes().size()) {
+                    continue;
+                }
+                List<InputsRowsRanWith.Taken> inputs = new ArrayList<>();
+                for (int p = 0; p < row.inputs().size(); p++) {
+                    InputsRowsRanWith.takenAt(sig.inputTypes().get(p), row.inputs().get(p),
+                            reading.value(), inputs);
+                }
+                rows.add(inputs);
+            }
+            return rows;
         }
 
         /**
@@ -226,6 +308,28 @@ public final class Replacements {
         }
     }
 
+    /**
+     * Every rewrite of one behavior's body and what the rows came to about it, or nothing where the
+     * measure has no value for it.
+     */
+    public static Optional<ReplacementEvidence.Summary> summaryOf(Db db, String module,
+                                                                   String behavior) {
+        Map<String, ReplacementEvidence> all = db.ask(new Measured(module)).value();
+        ReplacementEvidence its = all == null ? null : all.get(behavior);
+        return its == null ? Optional.empty() : its.measured().made();
+    }
+
+    /**
+     * What tells a rewrite from the others of its body whose words read the same: the measure's
+     * own answer, which every surface that words a rewrite asks, so that a rewrite is told apart
+     * the same way on each.
+     */
+    public static Optional<ReplacementEvidence.ToldApartBy> toldApartBy(
+            Db db, String module, String behavior, ReplacementAsWritten rewrite) {
+        return summaryOf(db, module, behavior)
+                .flatMap(summary -> summary.toldApartBy(rewrite.replacement()));
+    }
+
     /** The replacement measure of every behavior of one module. */
     public record Measured(String name) implements Key<Map<String, ReplacementEvidence>> {
 
@@ -254,8 +358,8 @@ public final class Replacements {
                     case BodyReading.NoBody _ -> {
                         return ReplacementEvidence.noBody();
                     }
-                    case BodyReading.NotInElaboration _ -> {
-                        return ReplacementEvidence.bodyNotInEvaluation(named);
+                    case BodyReading.Unread why -> {
+                        return ReplacementEvidence.bodyNotRead(named, why);
                     }
                     case BodyReading.Read _ -> { }
                 }
@@ -276,7 +380,8 @@ public final class Replacements {
                 List<ReplacementReading.Account> accounts =
                         read == null ? null : read.get(named);
                 if (accounts == null) {
-                    return ReplacementEvidence.bodyNotInEvaluation(named);
+                    return ReplacementEvidence.bodyNotRead(named,
+                            new BodyReading.NotInElaboration());
                 }
                 Map<Replacement, Searched> searched = accounts.stream().anyMatch(each ->
                         each.standing() instanceof ReplacementReading.Standing.Open)
@@ -287,7 +392,7 @@ public final class Replacements {
                             each.reportAt(), outcomeOf(each.standing(),
                                     searched == null ? null : searched.get(each.replacement()))));
                 }
-                return ReplacementEvidence.measured(named, rewrites,
+                return ReplacementEvidence.measured(name, named, rewrites,
                         Adequacy.BranchCoverage.rowsBehind(observed));
             });
         }
@@ -349,6 +454,8 @@ public final class Replacements {
                         // that answered nothing, the host's stack.
                         case A_RUN_DID_NOT_COME_BACK ->
                                 ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
+                        case A_RULE_REFUSED_A_CANDIDATE ->
+                                ReplacementEvidence.Undecided.Why.A_RULE_REFUSED_A_CANDIDATE;
                         case NOTHING_RAN -> ReplacementEvidence.Undecided.Why.NOTHING_RAN;
                         // The measure's search is asked for on the measure's behalf, which no
                         // block's row limit stops ({@link RewriteSearch.For#THE_MEASURE}).

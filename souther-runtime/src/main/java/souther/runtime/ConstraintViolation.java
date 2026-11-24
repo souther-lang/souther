@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A constraint the model declared cannot be broken, broken while the domain ran — the abort of spec
  * §algebraic-types, §violation-destination, §jvm-abort. The model states one in two places and both
@@ -20,8 +22,48 @@ package souther.runtime;
 public final class ConstraintViolation extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
+    /** What broke, where it is a declared constraint; none for the other ends this class stands
+     *  for, which have a message and no constraint (a division by zero, a number past its range). */
+    private final transient @Nullable ConstraintFailure failure;
+
+    /** The construction that was refused, where this is a refused construction whose place the
+     *  generated code knew; none otherwise. */
+    private final transient @Nullable ConstructionSite site;
+
     public ConstraintViolation(String message) {
+        this(message, null, null);
+    }
+
+    private ConstraintViolation(String message, @Nullable ConstraintFailure failure,
+                                @Nullable ConstructionSite site) {
         super(message);
+        this.failure = failure;
+        this.site = site;
+    }
+
+    /**
+     * Where a construction stands in the source: the module whose code wrote it, and the line and
+     * column it starts at, both counted from one.
+     */
+    public record ConstructionSite(String module, int line, int column) {}
+
+    /**
+     * The construction that was refused, or none where this ends a run some other way or the code
+     * that refused it was not told where it stands.
+     */
+    public @Nullable ConstructionSite site() {
+        return site;
+    }
+
+    /**
+     * The constraint that was broken, or none where this ends a run for some other reason.
+     *
+     * <p>The carrier is one class for every end that is a constraint of the language's, so the class
+     * says that a run ended and not why. A caller that has to tell a broken invariant from a
+     * division by zero asks here, and is not left to read the message.
+     */
+    public @Nullable ConstraintFailure failure() {
+        return failure;
     }
 
     /**
@@ -32,7 +74,7 @@ public final class ConstraintViolation extends RuntimeException {
      * third origin is written, an overload it forgot would be an origin that aborts some other way.
      */
     public static ConstraintViolation notHeld(ConstraintFailure failure) {
-        return new ConstraintViolation(failure.toString());
+        return new ConstraintViolation(failure.toString(), failure, null);
     }
 
     /**
@@ -48,12 +90,27 @@ public final class ConstraintViolation extends RuntimeException {
      * abort is what happens on one side of it.
      */
     public static Object orThrow(Result<?, ?> r) {
+        return refused(r, null);
+    }
+
+    /**
+     * The same, for a construction written at {@code line} and {@code column} of {@code module}'s
+     * source: what a generated body calls, so the abort says which construction it was. A
+     * {@code module} of none, or a line of nought, is a construction the code generator had no
+     * place for, and the abort names none.
+     */
+    public static Object orThrow(Result<?, ?> r, @Nullable String module, int line, int column) {
+        return refused(r, module != null && line > 0
+                ? new ConstructionSite(module, line, column) : null);
+    }
+
+    private static Object refused(Result<?, ?> r, @Nullable ConstructionSite site) {
         if (r instanceof Result.Ok<?, ?> ok) {
             return ok.value();
         }
         Object failed = ((Result.Err<?, ?>) r).error();
         if (failed instanceof ConstraintFailure broken) {
-            throw notHeld(broken);
+            throw new ConstraintViolation(broken.toString(), broken, site);
         }
         // Nothing generated reaches here: the only results handed over are `__construct`'s. Said
         // rather than cast, because a cast would report a caller this was not written for as a

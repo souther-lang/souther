@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeReachName;
@@ -69,11 +70,12 @@ class NamesPutOnARecipeInTwoStepsAreTheNamesPutOnInOneTest {
     }
 
     private static final RepresentativeSource NOTHING_PRODUCIBLE =
-            new RepresentativeSource.NothingProducible("nothing writes one");
+            new RepresentativeSource.NothingProducible(new SearchMessage.Code("nothing writes one"));
 
     private static final RepresentativeSource NOT_ARRIVED_AT =
             new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
-                    Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)), "stopped");
+                    Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)),
+                    new SearchMessage.Code("stopped"));
 
     @Test
     void noNamesLeaveAValueAsItIs() {
@@ -114,6 +116,7 @@ class NamesPutOnARecipeInTwoStepsAreTheNamesPutOnInOneTest {
     @Test
     void aClassNothingReachedSaysWhatStoppedTheReaching() {
         assertThrows(IllegalArgumentException.class,
-                () -> new RepresentativeSource.NotArrivedAt(CompositionShortfall.NONE, "stopped"));
+                () -> new RepresentativeSource.NotArrivedAt(CompositionShortfall.NONE,
+                        new SearchMessage.Code("stopped")));
     }
 }

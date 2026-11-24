@@ -1,13 +1,18 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -34,6 +39,27 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
     Extreme LEAST = new Least();
 
     Extreme GREATEST = new Greatest();
+
+    /**
+     * Whether a choice keeping this end of two values stands at an end of a run only where both
+     * of them do: the lesser is at least a lower end where both are, and at most an upper end where
+     * either is; the greater is at most an upper end where both are, and at least a lower end where
+     * either is. {@link #boundsOf} takes the ends where either suffices, from the one value that
+     * reads as a constant.
+     *
+     * @param lowerEnd whether the end of the run is its lower end
+     */
+    default boolean bothMustStandAt(boolean lowerEnd) {
+        return (this instanceof Least) == lowerEnd;
+    }
+
+    /** The other end: what a number is the least of, its negation is the greatest of. */
+    default Extreme other() {
+        return switch (this) {
+            case Least _ -> GREATEST;
+            case Greatest _ -> LEAST;
+        };
+    }
 
     /**
      * The end a choice read in {@code cases} ({@link #casesOf}) keeps of two values, or null where
@@ -161,6 +187,56 @@ public sealed interface Extreme permits Extreme.Least, Extreme.Greatest {
             }
         }
         return List.copyOf(others);
+    }
+
+    /**
+     * The end {@code call} keeps of its two arguments, or null where it is no choice between two
+     * arguments that keeps one end of them.
+     */
+    public static Extreme keptBy(Core.PreservedCall call) {
+        if (call.args().size() != 2) {
+            return null;
+        }
+        // The cases answer the argument nodes themselves, which a literal or a call is no
+        // other expression for.
+        Core one = Core.withoutStanding(call.args().get(0));
+        Core other = Core.withoutStanding(call.args().get(1));
+        return keptBy(Choice.casesOf(call), e -> Core.withoutStanding(e) == one,
+                e -> Core.withoutStanding(e) == other);
+    }
+
+    /**
+     * The ends {@code call}, a choice between its two arguments that keeps one end of them, puts on
+     * its answer from those of them that read as constants: the greater is at least each of the
+     * two, so at least the greatest constant among them, and the lesser at most the least. No end
+     * where it is no such choice, or neither argument reads as a constant.
+     *
+     * @param constant what an argument reads as, or null where it reads as no constant
+     */
+    public static NumericDomain.Bounds boundsOf(Core.PreservedCall call,
+                                                Function<Core, BigDecimal> constant) {
+        Extreme kept = keptBy(call);
+        if (kept == null) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        BigDecimal end = null;
+        for (Core each : call.args()) {
+            BigDecimal at = constant.apply(each);
+            if (at != null && (end == null || switch (kept) {
+                case Greatest _ -> at.compareTo(end) > 0;
+                case Least _ -> at.compareTo(end) < 0;
+            })) {
+                end = at;
+            }
+        }
+        if (end == null) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        Endpoint stands = Endpoint.inclusive(Count.of(end));
+        return switch (kept) {
+            case Greatest _ -> new NumericDomain.Bounds(stands, null);
+            case Least _ -> new NumericDomain.Bounds(null, stands);
+        };
     }
 
     /** The one value {@code each} answers, or null where it answers arithmetic. */

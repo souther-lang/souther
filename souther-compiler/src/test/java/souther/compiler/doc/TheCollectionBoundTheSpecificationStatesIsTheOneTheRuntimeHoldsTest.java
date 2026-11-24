@@ -2,11 +2,13 @@ package souther.compiler.doc;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.abort.GetsPast;
 import souther.runtime.Capacity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +31,13 @@ class TheCollectionBoundTheSpecificationStatesIsTheOneTheRuntimeHoldsTest {
         String stated = "`+" + Capacity.MOST_ELEMENTS + "+` elements";
         assertTrue(paragraph().contains(stated),
                 "what-a-collection-holds does not state the bound as " + stated);
+    }
+
+    /** And the compiler reasons with the same number, which it holds apart from the run time
+     *  because a reasoning about a declaration names no backend's package. */
+    @Test
+    void theCompilerReasonsWithTheBoundTheRuntimeHolds() {
+        assertEquals(BigInteger.valueOf(Capacity.MOST_ELEMENTS), GetsPast.MOST_ELEMENTS);
     }
 
     /** The number is stated in the paragraph once: a second, different one would be a bound the

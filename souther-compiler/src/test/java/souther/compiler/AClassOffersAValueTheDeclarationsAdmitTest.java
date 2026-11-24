@@ -49,12 +49,12 @@ class AClassOffersAValueTheDeclarationsAdmitTest {
     private static String rowsFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         souther.compiler.query.Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("example.away"));
         assertNotNull(offering, "the model under test compiles");
         return GeneratedRows.of(offering, Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     /** The class away from the value the body singled out is offered a row, and the row builds. */
@@ -62,11 +62,11 @@ class AClassOffersAValueTheDeclarationsAdmitTest {
     void theClassAwayFromASingledStringIsOfferedARowThatBuilds() {
         String rows = rowsFor(AT_LEAST_ONE);
 
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("voucher=/= spring")),
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("voucher: /= spring at voucher")),
                 () -> "the class away from the singled value is offered a row:\n" + rows);
         // The note is what a class offered a value the declarations refuse comes to: the row is
         // composed, the construction fails, and a reader is told the combination was not reached.
-        assertFalse(rows.contains("no row for `voucher=/= spring`"), () -> rows);
+        assertFalse(rows.contains("no row for `voucher: /= spring at voucher`"), () -> rows);
         assertFalse(rows.contains("Voucher(\"\")"),
                 () -> "nothing of no length is a voucher:\n" + rows);
     }

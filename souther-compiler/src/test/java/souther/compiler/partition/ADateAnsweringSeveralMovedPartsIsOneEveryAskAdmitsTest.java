@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Today;
 import souther.compiler.semantics.TakenAs.DatePart;
 
 import java.time.LocalDate;
@@ -54,6 +55,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </pre>
  */
 class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
+
+    /**
+     * The day every search here is asked on, in 2000 — a leap year that starts a cycle of the
+     * calendar, which is what the cases were chosen around: what is told apart here is how one
+     * cycle is walked from the start of the day's year, and not which day that is.
+     */
+    private static final Today ASKED_ON = new Today(LocalDate.of(2000, 1, 1));
 
     /** The days a walk covers. A year asked for stands within a few years of this, and a move
      *  takes a date by under two of them. */
@@ -211,7 +219,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
             boolean somethingAnswers = !answering.isEmpty();
 
             TermRealizations.Search found =
-                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
+                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE, ASKED_ON);
 
             if (somethingAnswers) {
                 assertNotNull(found.on(),
@@ -236,10 +244,11 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
     }
 
     /** The first day a walk of one cycle starts at, where the asks are defined there. */
-    private static final long CYCLE_FROM = LocalDate.of(2000, 1, 1).toEpochDay();
+    private static final long CYCLE_FROM = ASKED_ON.firstOfItsYear();
 
     /** The days of one Gregorian cycle, counted with {@code java.time}. */
-    private static final long CYCLE = LocalDate.of(2400, 1, 1).toEpochDay() - CYCLE_FROM;
+    private static final long CYCLE =
+            LocalDate.ofEpochDay(CYCLE_FROM).plusYears(400).toEpochDay() - CYCLE_FROM;
 
     /** The month and the day of every date from a little before the cycle to a little after it,
      *  so a walk over all of them reads an array rather than the calendar. */
@@ -340,7 +349,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
             boolean somethingAnswers = first != null;
 
             TermRealizations.Search found =
-                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
+                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE, ASKED_ON);
 
             assertTrue(found.everyOne(), "a cycle is every day there is to ask: " + where);
             assertEquals(somethingAnswers, found.on() != null, where);
@@ -372,10 +381,11 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                 part(DatePart.MONTH, 3), part(DatePart.DAY, 1),
                 new TermRealizations.DatePartAsk(DatePart.DAY,
                         DateTranslation.none().thenAddDays(fourYears),
-                        new NumericSet.At(Count.of(2)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(2)))), Carrier.DATE, ASKED_ON);
 
         LocalDate first = null;
-        for (LocalDate on = LocalDate.of(2000, 1, 1); first == null; on = on.plusDays(1)) {
+        for (LocalDate on = LocalDate.ofEpochDay(CYCLE_FROM); first == null;
+                on = on.plusDays(1)) {
             if (on.getMonthValue() == 3 && on.getDayOfMonth() == 1
                     && on.plusDays(fourYears).getDayOfMonth() == 2) {
                 first = on;
@@ -403,7 +413,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
                 part(DatePart.MONTH, 3), part(DatePart.DAY, 1),
                 new TermRealizations.DatePartAsk(DatePart.DAY, late,
-                        new NumericSet.At(Count.of(2)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(2)))), Carrier.DATE, ASKED_ON);
 
         LocalDate first = null;
         for (LocalDate on = LocalDate.ofEpochDay(from); first == null; on = on.plusDays(1)) {
@@ -426,7 +436,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                         DateTranslation.none().thenAddDays(-1), new NumericSet.At(Count.of(2))),
                 new TermRealizations.DatePartAsk(DatePart.DAY,
                         DateTranslation.none().thenAddDays(-1), new NumericSet.At(Count.of(30)))),
-                Carrier.DATE);
+                Carrier.DATE, ASKED_ON);
 
         assertNull(found.on());
         assertTrue(found.everyOne());
@@ -439,11 +449,11 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         TermRealizations.Search leap = TermRealizations.dateAnsweringMovedParts(List.of(
                 new TermRealizations.DatePartAsk(DatePart.DAY, back,
                         new NumericSet.At(Count.of(29))),
-                part(DatePart.MONTH, 3), part(DatePart.DAY, 1)), Carrier.DATE);
+                part(DatePart.MONTH, 3), part(DatePart.DAY, 1)), Carrier.DATE, ASKED_ON);
         TermRealizations.Search common = TermRealizations.dateAnsweringMovedParts(List.of(
                 new TermRealizations.DatePartAsk(DatePart.DAY, back,
                         new NumericSet.At(Count.of(28))),
-                part(DatePart.MONTH, 3), part(DatePart.DAY, 1)), Carrier.DATE);
+                part(DatePart.MONTH, 3), part(DatePart.DAY, 1)), Carrier.DATE, ASKED_ON);
 
         assertEquals(LocalDate.of(2000, 3, 1), leap.on());
         assertEquals(LocalDate.of(2001, 3, 1), common.on());
@@ -459,10 +469,10 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         DateTranslation narrow = new DateTranslation(1, from, from + 40);
         TermRealizations.Search inside = TermRealizations.dateAnsweringMovedParts(List.of(
                 new TermRealizations.DatePartAsk(DatePart.DAY, narrow,
-                        new NumericSet.At(Count.of(9)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(9)))), Carrier.DATE, ASKED_ON);
         TermRealizations.Search outside = TermRealizations.dateAnsweringMovedParts(List.of(
                 new TermRealizations.DatePartAsk(DatePart.MONTH, narrow,
-                        new NumericSet.At(Count.of(5)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(5)))), Carrier.DATE, ASKED_ON);
 
         assertEquals(LocalDate.of(5000, 1, 8), inside.on());
         assertNull(outside.on());
@@ -472,7 +482,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                 LocalDate.MAX.toEpochDay() - LocalDate.of(2000, 1, 1).toEpochDay());
         TermRealizations.Search atTheEnd = TermRealizations.dateAnsweringMovedParts(List.of(
                 new TermRealizations.DatePartAsk(DatePart.MONTH, late,
-                        new NumericSet.At(Count.of(12)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(12)))), Carrier.DATE, ASKED_ON);
 
         assertNotNull(atTheEnd.on());
         assertEquals(12, atTheEnd.on().plusDays(late.offsetDays()).getMonthValue());
@@ -513,7 +523,8 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
     @Test
     void theFirstDayOfAYearOnAMovedDateIsTheDayBeforeItsFirstOfJanuary() {
         TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(
-                List.of(year(DateTranslation.none().thenAddDays(1), 2027)), Carrier.DATE);
+                List.of(year(DateTranslation.none().thenAddDays(1), 2027)), Carrier.DATE,
+                ASKED_ON);
 
         assertEquals(LocalDate.of(2026, 12, 31), found.on());
     }
@@ -523,7 +534,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
     void aDateWhoseYearIsOneAndWhoseYesterdaysIsAnotherIsTheFirstOfJanuary() {
         TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
                 year(DateTranslation.none(), 2000),
-                year(DateTranslation.none().thenAddDays(-1), 1999)), Carrier.DATE);
+                year(DateTranslation.none().thenAddDays(-1), 1999)), Carrier.DATE, ASKED_ON);
 
         assertEquals(LocalDate.of(2000, 1, 1), found.on());
     }
@@ -537,7 +548,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
                 year(DateTranslation.none().thenAddDays(-1), 2026),
                 new TermRealizations.DatePartAsk(DatePart.MONTH, DateTranslation.none(),
-                        new NumericSet.At(Count.of(1)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(1)))), Carrier.DATE, ASKED_ON);
 
         // Moved a day back it is in 2026, and it is in January: every date from the second of
         // January to the first of February answers both, and the first of them is offered.
@@ -550,7 +561,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
                 year(DateTranslation.none().thenAddDays(-1), 2026),
                 new TermRealizations.DatePartAsk(DatePart.DAY, DateTranslation.none(),
-                        new NumericSet.At(Count.of(17)))), Carrier.DATE);
+                        new NumericSet.At(Count.of(17)))), Carrier.DATE, ASKED_ON);
 
         assertEquals(LocalDate.of(2026, 1, 17), found.on());
     }
@@ -570,12 +581,14 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         DateTranslation back = DateTranslation.none().thenAddDays(-1);
 
         assertEquals(LocalDate.of(last, 12, 1), TermRealizations.dateAnsweringMovedParts(
-                List.of(year(back, last), part(DatePart.MONTH, 12)), Carrier.DATE).on());
+                List.of(year(back, last), part(DatePart.MONTH, 12)), Carrier.DATE,
+                ASKED_ON).on());
         assertEquals(LocalDate.of(last, 1, 31), TermRealizations.dateAnsweringMovedParts(
-                List.of(year(back, last), part(DatePart.DAY, 31)), Carrier.DATE).on());
+                List.of(year(back, last), part(DatePart.DAY, 31)), Carrier.DATE,
+                ASKED_ON).on());
         assertEquals(LocalDate.MAX, TermRealizations.dateAnsweringMovedParts(
                 List.of(year(back, last), part(DatePart.MONTH, 12), part(DatePart.DAY, 31)),
-                Carrier.DATE).on());
+                Carrier.DATE, ASKED_ON).on());
     }
 
     @Test
@@ -584,14 +597,16 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         DateTranslation on = DateTranslation.none().thenAddDays(1);
 
         assertEquals(LocalDate.MIN, TermRealizations.dateAnsweringMovedParts(
-                List.of(year(on, first), part(DatePart.MONTH, 1)), Carrier.DATE).on());
+                List.of(year(on, first), part(DatePart.MONTH, 1)), Carrier.DATE,
+                ASKED_ON).on());
         assertEquals(LocalDate.of(first, 1, 1), TermRealizations.dateAnsweringMovedParts(
-                List.of(year(on, first), part(DatePart.DAY, 1)), Carrier.DATE).on());
+                List.of(year(on, first), part(DatePart.DAY, 1)), Carrier.DATE,
+                ASKED_ON).on());
         // Moved a day on, the last of December is in the next year: the thirtieth is the last day
         // of the first year there is that answers.
         assertEquals(LocalDate.of(first, 12, 30), TermRealizations.dateAnsweringMovedParts(
                 List.of(year(on, first), part(DatePart.MONTH, 12), part(DatePart.DAY, 30)),
-                Carrier.DATE).on());
+                Carrier.DATE, ASKED_ON).on());
     }
 
     /** A shift of centuries is as exact as one of a day. */
@@ -600,7 +615,7 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         for (long days : new long[] {100_000, -100_000, 36_524_219, -36_524_219}) {
             TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(
                     List.of(year(DateTranslation.none().thenAddDays(days), 2010)),
-                    Carrier.DATE);
+                    Carrier.DATE, ASKED_ON);
 
             assertEquals(LocalDate.of(2010, 1, 1).minusDays(days), found.on(),
                     "moved by " + days);
@@ -611,7 +626,8 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
     @Test
     void aMoveOfAYearsDaysAcrossALeapDayIsNotAMoveOfAYear() {
         TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(
-                List.of(year(DateTranslation.none().thenAddDays(365), 2025)), Carrier.DATE);
+                List.of(year(DateTranslation.none().thenAddDays(365), 2025)), Carrier.DATE,
+                ASKED_ON);
 
         assertEquals(LocalDate.of(2024, 1, 2), found.on());
     }

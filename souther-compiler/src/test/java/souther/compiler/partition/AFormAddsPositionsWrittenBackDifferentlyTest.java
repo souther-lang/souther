@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -50,8 +52,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
             module example.mixed
 
             data Amount = Decimal
-                invariant value >= 0
-                invariant value <= 10
+                invariant value >= 0.0m
+                invariant value <= 10.0m
 
             data Steps = Int
                 invariant value >= 0
@@ -182,7 +184,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     /**
      * And the whole way through: a level of such a form comes back as a row.
      *
-     * <p>Through {@link BorderQuantity#standingAt} and {@link LevelRealizer} rather than asserted of
+     * <p>Through {@link BorderQuantity#searchGoalAt} and {@link LevelRealizer} rather than asserted of
      * the quantity, because what the single order was reaching was the search — which walked every
      * position over the values of whichever order it had been handed. A decimal position walked by
      * whole numbers finds a row at some levels and not at others, and which is which is nothing a
@@ -240,13 +242,13 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource(A_DECIMAL_AN_INT_AND_A_DATE, "Main");
+        Compilation compilation = ACompiledModel.answered(A_DECIMAL_AN_INT_AND_A_DATE);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(sigs.get("take"), context,
                         TypeCardinality.Counts.workedOutIn(context), Membership.none())
                 .quantities(rules).region();

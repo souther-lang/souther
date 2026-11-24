@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -52,7 +53,7 @@ class AComparisonWrittenOnceIsWatchedWhereverTheOperationEvaluatesItTest {
 
     @Test
     void oneRuleOfTheModelIsSeveralPlacesARunThroughItIsWatched() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

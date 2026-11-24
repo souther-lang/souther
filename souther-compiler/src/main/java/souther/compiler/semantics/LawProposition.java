@@ -98,6 +98,12 @@ public sealed interface LawProposition<A> {
         public LawProposition<A> denied() {
             return new Compared<>(form, states.denied());
         }
+
+        /** Whether every number it compares is how many some value holds: a statement for the
+         *  reader of numbers, which a proof over what operations answer is not handed. */
+        public boolean ofSizesOnly() {
+            return form.coefs().keySet().stream().allMatch(LawNumber.SizeOf.class::isInstance);
+        }
     }
 
     /**
@@ -115,6 +121,25 @@ public sealed interface LawProposition<A> {
         @Override
         public LawProposition<A> denied() {
             return new SomeElement<>(container, ofTheElement, !holds);
+        }
+    }
+
+    /**
+     * The string {@code inner} standing inside the string {@code outer} where {@code where} says —
+     * or, where {@code holds} is false, not.
+     */
+    record Inside<A>(LawSubject<A> inner, LawSubject<A> outer, StringContainment where,
+                     boolean holds) implements LawProposition<A> {
+
+        public Inside {
+            Objects.requireNonNull(inner, "a string inside another is one string");
+            Objects.requireNonNull(outer, "inside another string");
+            Objects.requireNonNull(where, "somewhere in it");
+        }
+
+        @Override
+        public LawProposition<A> denied() {
+            return new Inside<>(inner, outer, where, !holds);
         }
     }
 

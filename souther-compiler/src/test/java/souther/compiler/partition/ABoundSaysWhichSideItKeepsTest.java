@@ -2,11 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
@@ -179,7 +180,7 @@ class ABoundSaysWhichSideItKeepsTest {
     /** The one statement of the one part that clause was written in. */
     private static DeclaredLine aPart() {
         return new DeclaredLine.OfAStatement(
-                new InvariantStatementId(new PartId<>(aClause(), 0), 0));
+                AStatementOfAConjunct.numbered(new PartId<>(aClause(), 0), 0));
     }
 
     /** A clause whose two conjuncts leave the position one value. */
@@ -215,9 +216,7 @@ class ABoundSaysWhichSideItKeepsTest {
             """;
 
     private static Map<String, List<BorderAssessment>> boundariesOf(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");

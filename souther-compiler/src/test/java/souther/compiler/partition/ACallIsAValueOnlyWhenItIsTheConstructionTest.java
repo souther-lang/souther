@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -55,7 +56,7 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
 
     private static GuardThresholds.Guards read(String primitive, String written) {
         String source = model(primitive, written);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

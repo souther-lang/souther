@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.4.1</version>
+        <version>0.4.2-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-bench</artifactId>
@@ -51,6 +51,14 @@
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- The helper a test goes through to ask that a model compiles before it reads a report. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-compiler</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>

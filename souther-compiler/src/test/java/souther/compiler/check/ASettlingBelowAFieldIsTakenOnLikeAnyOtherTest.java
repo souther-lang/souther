@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
@@ -50,7 +52,7 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
     void aNameReachingBelowAFieldLeavesWhatAReadingUnderItLeaves() {
         Read read = read();
         FieldDomains base = FieldDomains.of(read.declared(),
-                RuleReadingContext.unshared(read.source(), read.policy()));
+                RuleReadingContext.unshared(read.source(), read.policy(), TestDay.TODAY));
 
         RuleKey below = RuleKey.of("interval").then("startsAt");
         // That the reading files a coordinate under the whole name, said as what a settling beside
@@ -58,7 +60,7 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
         // against is open. Asked first, because every comparison below would hold of a name the
         // rules say nothing about — two derivations agreeing that nothing is known is not this.
         assertTrue(FieldDomains.of(read.declared(),
-                        RuleReadingContext.unshared(read.source(), read.policy()),
+                        RuleReadingContext.unshared(read.source(), read.policy(), TestDay.TODAY),
                         Map.of(RuleKey.of("cap"), new Count(BigDecimal.valueOf(5))))
                         .at(below).bounds() != null,
                 "`" + below + "` is a name this record's rules reach, and settling `cap` beside it "
@@ -69,7 +71,8 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
             for (long at : new long[] {0, 1, 5}) {
                 Map<RuleKey, Count> settling = Map.of(settledAt, new Count(BigDecimal.valueOf(at)));
                 FieldDomains readUnder = FieldDomains.of(read.declared(),
-                        RuleReadingContext.unshared(read.source(), read.policy()), settling);
+                        RuleReadingContext.unshared(read.source(), read.policy(), TestDay.TODAY),
+                        settling);
                 FieldDomains.Composing takenOn = base.composing(FieldDomains.atValues(settling));
                 for (RuleKey asked : List.of(below, RuleKey.of("interval").then("endsAt"),
                         RuleKey.of("cap"), RuleKey.of("interval"))) {
@@ -98,7 +101,7 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
     void settlingTheNameBelowAFieldMovesWhatIsLeftBesideIt() {
         Read read = read();
         FieldDomains base = FieldDomains.of(read.declared(),
-                RuleReadingContext.unshared(read.source(), read.policy()));
+                RuleReadingContext.unshared(read.source(), read.policy(), TestDay.TODAY));
         RuleKey below = RuleKey.of("interval").then("startsAt");
         Map<RuleKey, Count> settling = Map.of(below, new Count(BigDecimal.valueOf(5)));
 
@@ -116,7 +119,7 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
                         ReadingPolicy policy) {}
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSource(NAMES_BELOW_A_FIELD, "Main");
+        Compilation compilation = ACompiledModel.answered(NAMES_BELOW_A_FIELD);
         String module = compilation.modules().get(0);
         RuleReadingSource source = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

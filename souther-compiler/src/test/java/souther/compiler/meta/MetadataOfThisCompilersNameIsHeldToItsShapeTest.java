@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.Compiler;
 import souther.compiler.jvm.ClassFileImage;
+import souther.test.RepositoryJavaSources;
 
 import org.junit.jupiter.api.Test;
 
@@ -255,7 +256,7 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
      * ending a compile again.
      */
     @Test
-    void oneFileInThisPackageReadsAClassFile() throws java.io.IOException {
+    void oneFileInThisPackageReadsAClassFile() {
         List<String> reading = new ArrayList<>();
         for (java.nio.file.Path source : souther.compiler.diag
                 .EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
@@ -264,7 +265,7 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
             if (!path.startsWith("souther/compiler/meta/")) {
                 continue;
             }
-            if (java.nio.file.Files.readString(source, java.nio.charset.StandardCharsets.UTF_8)
+            if (RepositoryJavaSources.forThisFork().mainText(source)
                     .contains("java.lang.classfile")) {
                 reading.add(path);
             }

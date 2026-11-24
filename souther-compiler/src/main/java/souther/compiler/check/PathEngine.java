@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -76,6 +77,8 @@ final class PathEngine {
     private final Terms terms;
     /** What a clause owes and what a guard settles. */
     private final Predicates predicates;
+    /** What a construction's clauses come to where it stands, read by these rules. */
+    private final ConstructionVerdicts verdicts;
 
     /** The one reading of what a declaration guarantees, which this reading owns and this walk is
      * one consumer of. */
@@ -88,6 +91,13 @@ final class PathEngine {
 
     /** One closure per question for as long as this engine is held ({@link #nothingKnown}). */
     private final ClosedStates closures = ClosedStates.kept();
+
+    /**
+     * Whether each state asked reaches nothing, for as long as this engine is held: every reader
+     * walking under it asks the states it was handed again from each place deciding whether to go
+     * on.
+     */
+    private final ReachabilityAnswers reachability = ReachabilityAnswers.kept();
 
     /** The environment a value's body is read in, which is the same for every build of it. */
     Denotations insideATemplate() {
@@ -119,11 +129,24 @@ final class PathEngine {
     PathEngine(RuleReadingContext ruleReading,
                Map<ValueName.Behavior, AssumedContract> contracts,
                Terms.Of reading, ValueTemplates templates) {
+        this(ruleReading, contracts, reading, templates, ElementBindings.NONE);
+    }
+
+    /**
+     * The same, over a tree whose walks the expansions that wrote it said what of
+     * ({@code elements}), which a list such a walk built is written out from.
+     */
+    PathEngine(RuleReadingContext ruleReading,
+               Map<ValueName.Behavior, AssumedContract> contracts,
+               Terms.Of reading, ValueTemplates templates, ElementBindings elements) {
         this.symbols = ruleReading.source().symbols();
         this.ruleReading = ruleReading;
-        this.terms = new Terms(reading, ruleReading, templates);
+        this.terms = new Terms(reading, ruleReading, templates, elements, reachability,
+                this::mostAnsweredForEveryArgument);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
+        this.verdicts = new ConstructionVerdicts(ruleReading.source().kinds(),
+                ruleReading.source().newtypes(), clauses, terms, predicates);
         this.guarantees = terms.guarantees();
         this.walk = terms.walk();
         this.contracts = Map.copyOf(contracts);
@@ -131,6 +154,11 @@ final class PathEngine {
 
     Symbols symbols() {
         return symbols;
+    }
+
+    /** Whether a state reaches nothing, as every reader under this engine asks it. */
+    ReachabilityAnswers reachability() {
+        return reachability;
     }
 
     /** The one reading of what a declaration guarantees, for a reader that wants the answer without
@@ -149,6 +177,10 @@ final class PathEngine {
 
     Predicates predicates() {
         return predicates;
+    }
+
+    ConstructionVerdicts verdicts() {
+        return verdicts;
     }
 
     /**
@@ -287,7 +319,41 @@ final class PathEngine {
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
         Known lawful = whatItsLawSaysOfTheArm(arm, scrutinee, taken.known(), at);
-        return new Entered(takingItsCases(arm, scrutinee, lawful, at), taken.at());
+        Known answered = whatTheValueItHoldsMeets(arm, scrutinee, lawful, at, taken.at());
+        return new Entered(takingItsCases(arm, scrutinee, answered, at), taken.at());
+    }
+
+    /**
+     * {@code k} with what is known of every element of the container the optional
+     * {@code scrutinee} answers an element of, taken of the value {@code arm} binds where it is
+     * taken because the answer holds one: {@code List.max(xs)} is {@code Some(x)} only for an
+     * {@code x} of {@code xs}, and {@code List.find(p, xs)} only for one with {@code p(x)}.
+     *
+     * <p>Of the value the arm binds and of no other. That the container holds something, or that
+     * some element meets the predicate, is the law of whether the answer holds a value, which
+     * {@link #whatItsLawSaysOfTheArm} reads, and it names no element. Which relations hold of every
+     * element is {@link Predicates#elementRelations}' to say, the one reading a closure handed an
+     * element is given them by, so the value found and the element a closure is handed are known by
+     * the same account. Read where the call was written, as the law's arguments are, and taken at
+     * the value where the arm enters it ({@code inside}).
+     */
+    private Known whatTheValueItHoldsMeets(Core.Case arm, Core scrutinee, Known k, Denotations at,
+                                           Denotations inside) {
+        if (arm.binder() == null || !Boolean.TRUE.equals(LawAtACall.presentWhereTaken(arm))) {
+            return k;
+        }
+        Terms.Given called = terms.originating(scrutinee, at, new HashSet<>());
+        if (called == null
+                || !(Core.withoutStanding(called.value()) instanceof Core.PreservedCall call)
+                || DischargeRules.elementAnsweredFrom(call) == null) {
+            return k;
+        }
+        Core.Read value = Terms.read(arm.binder(), arm.bindType(), arm.pos());
+        Known out = k;
+        for (ElementRelation relation : predicates.elementRelations(call, k, called.at())) {
+            out = predicates.instantiate(relation, value, out, inside);
+        }
+        return out;
     }
 
     /**
@@ -317,7 +383,7 @@ final class PathEngine {
         Known out = k;
         for (NumericConstraint each : certain) {
             out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
-                    terms.kindsOf(each.form()));
+                    terms.spacesOf(each.form()));
         }
         return out;
     }
@@ -330,10 +396,17 @@ final class PathEngine {
      * the value's type divides into less those, which this does not read, so it settles nothing; an
      * arm that binds the whole value selects nothing.
      *
+     * <p>Nothing is reached where the arm takes none of the leaves the value, read as it stands
+     * here, can be ({@link Terms#mayTake}): a scrutinee that is only one case of what was matched
+     * has the arms for the others entered by no run.
+     *
      * <p>Asked on its own as well, by a reader that wants to know whether the cases are what leave
      * the arm nothing, apart from what opening the value says.
      */
     Known takingItsCases(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        if (!terms.mayTake(arm, scrutinee, at)) {
+            return k.reachingNothing();
+        }
         CasesLeft selected = arm.pattern() == null ? null : CasesLeft.selectedBy(arm.pattern());
         FactSubject value = selected == null ? null : terms.subjectOf(scrutinee, at);
         return value == null ? k : settled(k.inCases(value, selected));
@@ -618,7 +691,7 @@ final class PathEngine {
             LinearForm<FactSubject> apart = field == null || value == null ? null
                     : Terms.add(field, value, true);
             if (apart != null && !apart.coefs().isEmpty()) {
-                out = out.taking(apart, Rel.EQ, Known.Held.OF_THE_VALUE, terms.kindsOf(apart));
+                out = out.taking(apart, Rel.EQ, Known.Held.OF_THE_VALUE, terms.spacesOf(apart));
             }
         }
         return out;
@@ -712,6 +785,46 @@ final class PathEngine {
     private boolean isACheckedProducer(Core e) {
         return e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
                 && reached.denotes() instanceof ValueName.Behavior;
+    }
+
+    /**
+     * {@code k} with what the values {@code carried} was read from carry: a size relates to the
+     * counts of what it was made of, and those say what the declarations of the type guarantee.
+     */
+    Known carrying(Known k, List<NumericConstraint> carried) {
+        Known out = k;
+        for (NumericConstraint each : carried) {
+            out = out.taking(each.form(), each.rel(), Known.Held.OF_THE_VALUE,
+                    terms.spacesOf(each.form()));
+        }
+        return out;
+    }
+
+    /**
+     * The most elements {@code answer}, the list {@code closure} answers, holds for every value of
+     * the type of its parameter ({@link AnswersForEveryArgument}).
+     *
+     * <p>Read of the parameter entered on its own, knowing what its type guarantees and nothing a
+     * path to an application of the closure says, so the bound is the closure's and not an
+     * application's. What the size of the answer carries is taken in on top of that, as a walk
+     * taking in the size of a list it goes over does.
+     */
+    private OptionalLong mostAnsweredForEveryArgument(Core answer, Core.Block closure,
+                                                      Denotations at) {
+        if (closure.params().isEmpty()) {
+            return OptionalLong.empty();
+        }
+        int element = closure.params().size() - 1;
+        Core.Read parameter = Terms.read(closure.params().get(element),
+                closure.paramTypes().get(element), closure.pos());
+        Entered entered = enter(parameter, nothingKnown(), at);
+        FactSubject size = terms.sizeOfWhatItHolds(answer, entered.at());
+        if (size == null) {
+            return OptionalLong.empty();
+        }
+        List<NumericConstraint> carried = terms.carriedBy(List.of(size));
+        return predicates.mostOf(LinearForm.atom(size), carrying(entered.known(), carried),
+                carried);
     }
 
     /**

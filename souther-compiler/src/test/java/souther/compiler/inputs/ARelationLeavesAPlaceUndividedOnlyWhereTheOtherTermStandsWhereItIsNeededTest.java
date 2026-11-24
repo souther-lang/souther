@@ -11,12 +11,19 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -258,8 +265,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                      long constant, Rel relation,
                                      WhatARelationLeavesUndivided.OnTheDifference... held) {
-        return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
-                relation, List.of(held), DATES, String::equals, GREATEST_INT);
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation, List.of(held), DATES, String::equals, GREATEST_INT,
+                WhatARelationLeavesUndivided.Operations.NONE, true);
     }
 
     /**
@@ -285,13 +293,419 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
         assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -300_000_000_000L, Rel.GT));
     }
 
+    private static Set<String> apartBesidesHoles(List<BigInteger> holes, long constant,
+                                                  Rel relation,
+                                                  WhatARelationLeavesUndivided.Operations operations,
+                                                  WhatARelationLeavesUndivided.OnTheDifference...
+                                                          held) {
+        return apartBesidesHoleValues(holes.stream().map(ExactRatio::of).toList(), constant,
+                relation, operations, held);
+    }
+
+    private static Set<String> apartBesidesHoleValues(
+            List<ExactRatio> holes, long constant, Rel relation,
+            WhatARelationLeavesUndivided.Operations operations,
+            WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return WhatARelationLeavesUndivided.ofTheirDifference(pair(1, -1, A_DATE),
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation,
+                List.of(held), DATES, String::equals, GREATEST_INT, operations, true, holes);
+    }
+
+    private static final long LEAST_DAY = LocalDate.MIN.toEpochDay();
+
+    /**
+     * A date kept away from a day takes every other day, and an order asks only for a partner on
+     * each side of the line: a hole farther from the ends than the program's own sums move them is
+     * the sole partner of no side, so what is left undivided is what it is with no hole. At an end,
+     * or within the constant of one, it may be the one value a side has, and nothing is shown.
+     */
+    @Test
+    void aHoleFarFromTheEndsOfTheValuesLeavesAnOrderAsItIsWithNone() {
+        Set<String> alone = apart(pair(1, -1, A_DATE), -14, Rel.GT);
+        assertEquals(Set.of("a", "b"), alone);
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        assertEquals(alone, apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, none));
+        assertEquals(alone, apartBesidesHoles(
+                List.of(BigInteger.valueOf(LEAST_DAY + 15), BigInteger.ONE), -14, Rel.GT, none));
+        for (long near : List.of(LEAST_DAY, LEAST_DAY + 1, LEAST_DAY + 14)) {
+            assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(near)), -14,
+                    Rel.GT, none), "a hole " + (near - LEAST_DAY) + " from the least day");
+        }
+        long greatest = LocalDate.MAX.toEpochDay();
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(greatest - 14)), -14,
+                Rel.GT, none));
+        assertEquals(alone, apartBesidesHoles(List.of(BigInteger.valueOf(greatest - 15)), -14,
+                Rel.GT, none));
+    }
+
+    /**
+     * No value of the other term is the one a hole keeps out when the relation is an order, but an
+     * equation asks for exactly one: it is read only with no hole. Nor is a hole beside a
+     * statement about the difference, which may leave a side of one value anywhere.
+     */
+    @Test
+    void aHoleBesideAnEquationOrAStatementAboutTheDifferenceLeavesNothingShown() {
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        List<BigInteger> hole = List.of(BigInteger.ZERO);
+        for (Rel equation : List.of(Rel.EQ, Rel.NE)) {
+            assertEquals(Set.of(), apartBesidesHoles(hole, -14, equation, none), equation::name);
+        }
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(List.of(), -14, Rel.GT, none,
+                held(1, 0, Rel.GE)), "the statement alone leaves the places undivided");
+        assertEquals(Set.of(), apartBesidesHoles(hole, -14, Rel.GT, none, held(1, 0, Rel.GE)));
+    }
+
+    /**
+     * A sum the program works out moves where a term's values stop: by its constant where it is
+     * over the one term weighed once, which a hole is kept that much farther from the ends than;
+     * and by an amount nothing here knows where it is over two terms or weighs one other than
+     * once, which no hole is passed beside.
+     */
+    @Test
+    void aHoleIsKeptFartherFromTheEndsThanTheSumsTheProgramWorksOutMoveThem() {
+        WhatARelationLeavesUndivided.Operations plusAThousand =
+                WhatARelationLeavesUndivided.Operations.read(List.of(sum(Map.of("a", 1L), 1000)),
+                        true);
+        WhatARelationLeavesUndivided.Operations overBoth =
+                WhatARelationLeavesUndivided.Operations.read(
+                        List.of(sum(Map.of("a", 1L, "b", 1L), 1)), true);
+        WhatARelationLeavesUndivided.Operations twice =
+                WhatARelationLeavesUndivided.Operations.read(List.of(sum(Map.of("a", 2L), 1)),
+                        true);
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT,
+                plusAThousand));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.valueOf(LEAST_DAY + 1014)),
+                -14, Rel.GT, plusAThousand));
+        assertEquals(Set.of("a", "b"), apartBesidesHoles(
+                List.of(BigInteger.valueOf(LEAST_DAY + 1015)), -14, Rel.GT, plusAThousand));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, overBoth));
+        assertEquals(Set.of(), apartBesidesHoles(List.of(BigInteger.ZERO), -14, Rel.GT, twice));
+    }
+
+    private static ExactRatio aHalf() {
+        return ExactRatio.of(1).dividedBy(ExactRatio.of(2)).orNull();
+    }
+
+    /**
+     * A hole is at a value, and whether the terms take that value is theirs to say. Terms whose
+     * values step by one take no value that is no whole number, so a hole at a half is no hole of
+     * theirs and nothing is asked of it — an equation is read as it is with none. Terms whose
+     * values are dense take the half, and holding them away from it is not read: nothing is shown,
+     * and not what is shown with no hole.
+     */
+    @Test
+    void aHoleAtAValueTheTermsTakeNoneOfIsNoHoleAndOneAtAValueTheyTakeIsNotDropped() {
+        WhatARelationLeavesUndivided.Operations none = WhatARelationLeavesUndivided.Operations.NONE;
+        for (Rel relation : List.of(Rel.GT, Rel.EQ, Rel.NE)) {
+            assertEquals(apart(pair(1, -1, A_DATE), -14, relation),
+                    apartBesidesHoleValues(List.of(aHalf()), -14, relation, none), relation::name);
+        }
+        assertEquals(Set.of(), apartBesidesHoleValues(
+                List.of(aHalf(), ExactRatio.of(LEAST_DAY)), -14, Rel.GT, none),
+                "a hole at the least day is a hole of the dates, beside a hole that is none");
+        List<WhatARelationLeavesUndivided.Term<String>> decimals = List.of(
+                new WhatARelationLeavesUndivided.Term<>(List.of("a"), ExactRatio.of(1),
+                        NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, "Decimal", true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN),
+                new WhatARelationLeavesUndivided.Term<>(List.of("b"), ExactRatio.of(-1),
+                        NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, "Decimal", true,
+                        Granularity.DENSE, NumericDomain.Bounds.OPEN));
+        WhatARelationLeavesUndivided.WhereTheRepresentationStops open =
+                new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
+                        NumericDomain.Bounds.OPEN);
+        Set<String> alone = WhatARelationLeavesUndivided.ofTheirDifference(decimals,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(-14)), Rel.GT, List.of(),
+                open, String::equals, GREATEST_INT, none, true, List.of());
+        assertFalse(alone.isEmpty(), "the dense terms are read with no hole, or nothing here asks");
+        for (ExactRatio hole : List.of(aHalf(), ExactRatio.ZERO)) {
+            assertEquals(Set.of(), WhatARelationLeavesUndivided.ofTheirDifference(decimals,
+                    WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(-14)), Rel.GT,
+                    List.of(), open, String::equals, GREATEST_INT, none, true, List.of(hole)),
+                    "a hole at " + hole + " beside dense terms, which read " + alone + " with none");
+        }
+    }
+
+    /** An operation over {@code coefs}, each weighed, working out a number that adds
+     *  {@code constant}, between the ends of an {@code Int}. */
+    private static WhatARelationLeavesUndivided.IntSum sum(Map<String, Long> coefs,
+                                                           long constant) {
+        Map<Object, ExactRatio> weighed = new LinkedHashMap<>();
+        coefs.forEach((term, weight) -> weighed.put(term, ExactRatio.of(weight)));
+        return new WhatARelationLeavesUndivided.IntSum(weighed, ExactRatio.of(constant),
+                BigInteger.valueOf(Long.MIN_VALUE), GREATEST_INT);
+    }
+
+    private static WhatARelationLeavesUndivided.Leaves leavesBesidesHoles(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, long constant,
+            Rel relation, List<BigInteger> holes,
+            WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return leavesBesidesHoleValues(terms, at, constant, relation,
+                holes.stream().map(ExactRatio::of).toList(), held);
+    }
+
+    private static WhatARelationLeavesUndivided.Leaves leavesBesidesHoleValues(
+            List<WhatARelationLeavesUndivided.Term<String>> terms, int at, long constant,
+            Rel relation, List<ExactRatio> holes,
+            WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return WhatARelationLeavesUndivided.leavesByTheirDifference(terms, at,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(constant)), relation,
+                List.of(held), String::equals, GREATEST_INT,
+                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true, holes);
+    }
+
+    /**
+     * What an order leaves a value of a term that takes a run of whole numbers is what it leaves
+     * with no hole when every hole is farther from each end of the runs than the line moves it,
+     * and one more: the runs the answer is made of start at those ends, and are asked at their
+     * first value, which a hole there would make a value the term never takes. Nearer than that,
+     * or beside an equation or a statement about the difference, nothing is shown.
+     */
+    @Test
+    void aHoleFarFromTheEndsOfTheRunsLeavesWhatAnOrderLeavesWithNone() {
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, run(0, 100), run(0, 100), null, true),
+                term("b", -1, run(0, 100), run(0, 100), null, true));
+        for (int at : List.of(0, 1)) {
+            WhatARelationLeavesUndivided.Leaves alone =
+                    leavesBesidesHoles(terms, at, 5, Rel.GT, List.of());
+            assertNotNull(alone, "the order leaves the value something with no hole");
+            assertEquals(alone, leavesBesidesHoles(terms, at, 5, Rel.GT,
+                    List.of(BigInteger.valueOf(50), BigInteger.valueOf(51))));
+            // Five and the one more the answer's runs ask: a hole must be more than six from an end.
+            for (long near : List.of(0L, 1L, 6L, 94L, 100L)) {
+                assertNull(leavesBesidesHoles(terms, at, 5, Rel.GT,
+                        List.of(BigInteger.valueOf(near))), "a hole at " + near);
+            }
+            for (long far : List.of(7L, 93L)) {
+                assertEquals(alone, leavesBesidesHoles(terms, at, 5, Rel.GT,
+                        List.of(BigInteger.valueOf(far))), "a hole at " + far);
+            }
+            assertNull(leavesBesidesHoles(terms, at, 5, Rel.EQ, List.of(BigInteger.valueOf(50))));
+            assertNull(leavesBesidesHoles(terms, at, 5, Rel.GT, List.of(BigInteger.valueOf(50)),
+                    held(1, 0, Rel.GE)));
+        }
+    }
+
+    /**
+     * Read of their difference, {@code a + K > b} over amounts from nought, {@code K} nine
+     * quintillion: an {@code a} past the greatest {@code Int} less {@code K} has no row computed,
+     * since {@code a + K} is past the type whatever {@code b} is. The answer says so, as a run
+     * whose line is the type's alone, and draws no line of the model on {@code a}; on {@code b}
+     * it draws the model's line at {@code K}, below which every {@code a} holds it, and the
+     * values from the greatest {@code Int} on are the type's alone, since the rows that hold the
+     * relation there are the ones no row computes.
+     */
+    @Test
+    void aValueNoRowIsComputedAtIsARunOfTheTypeAloneInTheReadingOfADifference() {
+        long k = 9_000_000_000_000_000_000L;
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, amounts, amounts, null, true),
+                term("b", -1, amounts, amounts, null, true));
+
+        WhatARelationLeavesUndivided.Leaves.Settled a =
+                (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
+                        .leavesByTheirDifference(terms, 0,
+                                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(k)),
+                                Rel.GT, List.of(), String::equals, GREATEST_INT,
+                                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true);
+        assertEquals(List.of(), a.linesOfTheModel());
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                ExactRatio.of(Long.MAX_VALUE - k + 1))), a.ofTheTypeAlone());
+
+        WhatARelationLeavesUndivided.Leaves.Settled b =
+                (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
+                        .leavesByTheirDifference(terms, 1,
+                                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(k)),
+                                Rel.GT, List.of(), String::equals, GREATEST_INT,
+                                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true);
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.LE, ExactRatio.of(k - 1))),
+                b.linesOfTheModel());
+        // At the greatest Int itself {@code a} would have to pass the greatest less K for the
+        // relation to hold, and no row computes {@code a + K} there: the rows computed fail it.
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                ExactRatio.of(Long.MAX_VALUE))), b.ofTheTypeAlone());
+    }
+
+    /**
+     * The same where {@code a} is what an operation answers and not the value at a place: every
+     * row that answers it past the greatest {@code Int} less {@code K} stands there, so those
+     * values are no end the type passes over, and nothing is shown.
+     */
+    @Test
+    void aValueNoRowIsComputedAtIsNoRunOfTheTypeWhereItIsNoPlace() {
+        long k = 9_000_000_000_000_000_000L;
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("a", 1, amounts, amounts, null, false),
+                term("b", -1, amounts, amounts, null, true));
+
+        assertNull(WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 0,
+                WhatARelationLeavesUndivided.Beside.just(ExactRatio.of(k)), Rel.GT, List.of(),
+                String::equals, GREATEST_INT,
+                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true));
+    }
+
+    /**
+     * Read of their difference, {@code t > w} where every row holds {@code t >= w}, both from
+     * nought: a {@code w} at the greatest {@code Int} has no {@code t} above it, which is where
+     * the type stops and no line of the model's. The answer keeps it as the type's line, and
+     * draws none of the model's on {@code w}.
+     */
+    @Test
+    void aValueOnlyTheOrdersEndKeepsFromAnOutcomeIsARunOfTheTypeAlone() {
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                term("t", 1, amounts, amounts, null, true),
+                term("w", -1, amounts, amounts, null, true));
+        WhatARelationLeavesUndivided.Leaves.Settled w =
+                (WhatARelationLeavesUndivided.Leaves.Settled) WhatARelationLeavesUndivided
+                        .leavesByTheirDifference(terms, 1,
+                                WhatARelationLeavesUndivided.Beside.just(ExactRatio.ZERO),
+                                Rel.GT, List.of(new WhatARelationLeavesUndivided.OnTheDifference(
+                                        ExactRatio.ONE, ExactRatio.ZERO, Rel.GE)),
+                                String::equals, GREATEST_INT,
+                                WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true);
+
+        assertEquals(List.of(), w.linesOfTheModel());
+        assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                ExactRatio.of(Long.MAX_VALUE))), w.ofTheTypeAlone());
+    }
+
+    /**
+     * Read of their difference, {@code w > t} where every row holds {@code w >= t}, {@code w}
+     * from nought to ten and {@code t} from nought: a {@code t} past ten has no {@code w} at all,
+     * so no row reaches it on either side, and nothing is shown of {@code t}. Held to ten as well,
+     * {@code t} is parted at ten, which no {@code w} is above.
+     */
+    @Test
+    void aValueNoRowOfEitherSideReachesIsNoValueLeftEitherWay() {
+        NumericDomain.Bounds amounts =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.OnTheDifference> atLeast =
+                List.of(new WhatARelationLeavesUndivided.OnTheDifference(ExactRatio.ONE,
+                        ExactRatio.ZERO, Rel.GE));
+        for (NumericDomain.Bounds held : List.of(amounts, run(0, 10))) {
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("w", 1, run(0, 10), run(0, 10), null, true),
+                    term("t", -1, held, held, null, true));
+            WhatARelationLeavesUndivided.Leaves t = WhatARelationLeavesUndivided
+                    .leavesByTheirDifference(terms, 1,
+                            WhatARelationLeavesUndivided.Beside.just(ExactRatio.ZERO), Rel.GT,
+                            atLeast, String::equals, GREATEST_INT,
+                            WhatARelationLeavesUndivided.Operations.NONE, Map.of(), true);
+            if (held == amounts) {
+                assertNull(t);
+            } else {
+                assertEquals(List.of(new WhatARelationLeavesUndivided.Line(Rel.GE,
+                        ExactRatio.of(10))), ((WhatARelationLeavesUndivided.Leaves.Settled) t)
+                        .linesOfTheModel());
+            }
+        }
+    }
+
+    /**
+     * {@code a + c - s - 5 >= 0} over decimals, {@code c} above five and below ten: held at a
+     * value it takes — a step inside its open end, at six — {@code c} leaves {@code a} against
+     * {@code s} one apart, and {@code s} stands at every {@code a} plus one and either side of
+     * it. The end itself, which {@code c} does not take, would hold nothing.
+     */
+    @Test
+    void aDecimalHeldStillStandsInsideAnEndItsRunLeavesOut() {
+        NumericDomain.Bounds aboveFive = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(5)),
+                Endpoint.exclusive(Count.of(10)));
+        NumericDomain.Bounds fromNought =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                dense("a", 1, run(0, 10)), dense("c", 1, aboveFive), dense("s", -1, fromNought));
+
+        assertEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(),
+                WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.of(-5), Rel.GE,
+                        String::equals, (one, other) -> true, Granularity.DENSE, null));
+    }
+
+    /**
+     * The same relation of decimals, worked out by a program that can stop a row at something no
+     * operation tells of: nothing is shown computed, so no term is left undivided and no run is
+     * taken to settle it, whatever the terms' ends say.
+     */
+    @Test
+    void aDenseTermIsShownNothingWhereTheProgramCanStopARowUntold() {
+        NumericDomain.Bounds aboveFive = new NumericDomain.Bounds(Endpoint.exclusive(Count.of(5)),
+                Endpoint.exclusive(Count.of(10)));
+        NumericDomain.Bounds fromNought =
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                dense("a", 1, run(0, 10)), dense("c", 1, aboveFive), dense("s", -1, fromNought));
+
+        assertNull(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.of(-5), Rel.GE,
+                String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
+                new WhatARelationLeavesUndivided.Operations(List.of(),
+                        WhatARelationLeavesUndivided.Told.SOME)));
+    }
+
+    /**
+     * {@code a >= b} with {@code a} from nought to ten and {@code b} held at five: the runs that
+     * settle it cover every value of {@code a}, so no value is left between them to be asked of
+     * the program. They are still runs of rows only where the program gets to the end of working
+     * them out, which a program that can stop a row untold does not show.
+     */
+    @Test
+    void aDenseRunFullySettledByTheFormStillNeedsComputedRows() {
+        List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                dense("a", 1, run(0, 10)), dense("b", -1, run(5, 5)));
+
+        assertNull(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
+                String::equals, (one, other) -> true, Granularity.DENSE, null, List.of(),
+                new WhatARelationLeavesUndivided.Operations(List.of(),
+                        WhatARelationLeavesUndivided.Told.SOME)));
+    }
+
+    /**
+     * {@code a + c - s >= 0} over {@code Int}s, {@code c} strictly between nought and two: held
+     * still at one, the whole number inside its ends, {@code c} leaves {@code a} against
+     * {@code s}. Where nothing says how the values of {@code c} are spaced, no value is shown
+     * between those ends — whole, it would take none strictly between nought and one — and the
+     * end it leaves out is no row to hold it at.
+     */
+    @Test
+    void aTermWhoseSpacingIsNotSaidIsHeldAtNoValue() {
+        List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
+        for (Granularity spacing : Arrays.asList(Granularity.DISCRETE, null)) {
+            long high = spacing == null ? 1 : 2;
+            NumericDomain.Bounds between = new NumericDomain.Bounds(
+                    Endpoint.exclusive(Count.of(0)), Endpoint.exclusive(Count.of(high)));
+            List<WhatARelationLeavesUndivided.Term<String>> terms = List.of(
+                    term("a", 1, run(0, 10), run(0, 10), null, true),
+                    new WhatARelationLeavesUndivided.Term<>(List.of("c"), ExactRatio.ONE, between,
+                            between, null, true, spacing, INTS),
+                    term("s", -1, INTS, INTS, null, true));
+            leaves.add(WhatARelationLeavesUndivided.leavesOf(terms, 0, ExactRatio.ZERO, Rel.GE,
+                    String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT));
+        }
+        assertEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(), leaves.get(0));
+        assertNotEquals(new WhatARelationLeavesUndivided.Leaves.Undivided(), leaves.get(1));
+    }
+
+    /** A decimal term at its place, taking every value of {@code run}, on an order with no end. */
+    private static WhatARelationLeavesUndivided.Term<String> dense(String place, long weight,
+                                                                  NumericDomain.Bounds run) {
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), run,
+                run, null, true, Granularity.DENSE, NumericDomain.Bounds.OPEN);
+    }
+
     /** A type with no end, as a decimal is, leaves every difference one some value is apart by. */
     @Test
     void aTypeWithNoEndLeavesEveryDifference() {
         assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
-                pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
+                pair(1, -1, A_DATE), WhatARelationLeavesUndivided.Beside.just(
+                        ExactRatio.of(-10_000_000_000_000L)), Rel.GT, List.of(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(
-                        NumericDomain.Bounds.OPEN), String::equals, GREATEST_INT));
+                        NumericDomain.Bounds.OPEN), String::equals, GREATEST_INT,
+                WhatARelationLeavesUndivided.Operations.NONE, true));
     }
 
     /**
@@ -311,6 +725,28 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     void twoWeightsMoveTwoValuesTogetherOnlyWhereOneIsTheOthersNegation() {
         assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), -14, Rel.LE));
         assertEquals(Set.of(), apart(pair(2, -1, A_DATE), -14, Rel.LE));
+    }
+
+    /**
+     * Weighed alike the two are about their sum, and read as the difference is: a sum no two dates
+     * come to is no outcome, and one the middle date reaches either side of is. Weighed alike but
+     * not by one, or one way and another by different amounts, they are neither.
+     */
+    @Test
+    void twoValuesWeighedAlikeAreReadByTheirSum() {
+        assertEquals(Set.of("a", "b"), apart(pair(1, 1, A_DATE), -14, Rel.EQ));
+        assertEquals(Set.of("a", "b"), apart(pair(-1, -1, A_DATE), 14, Rel.GT));
+        assertEquals(Set.of(), apart(pair(1, 1, A_DATE), -10_000_000_000_000L, Rel.EQ));
+        assertEquals(Set.of(), apart(pair(2, 1, A_DATE), -14, Rel.EQ));
+    }
+
+    /** What the way holds of the sum is where it has to come out both ways, as of a difference. */
+    @Test
+    void whatTheWayHoldsOfTheSumIsWhereItHasToComeOutBothWays() {
+        assertEquals(Set.of("a", "b"),
+                apart(pair(1, 1, A_DATE), -14, Rel.EQ, held(1, -10, Rel.GE)));
+        assertEquals(Set.of(),
+                apart(pair(1, 1, A_DATE), -14, Rel.GT, held(1, -14, Rel.EQ)));
     }
 
     /**
@@ -420,10 +856,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
             var a = term("a", weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
             var b = term("b", -weight, INTS, NumericDomain.Bounds.OPEN, "same", true);
             assertEquals(weight == 1 ? Set.of("a", "b") : Set.of(),
-                    WhatARelationLeavesUndivided.ofTheirDifference(List.of(a, b), ExactRatio.ZERO,
-                            Rel.LT, List.of(),
+                    WhatARelationLeavesUndivided.ofTheirDifference(List.of(a, b),
+                            WhatARelationLeavesUndivided.Beside.just(ExactRatio.ZERO), Rel.LT,
+                            List.of(),
                             new WhatARelationLeavesUndivided.WhereTheRepresentationStops(INTS),
-                            String::equals, GREATEST_INT),
+                            String::equals, GREATEST_INT,
+                            WhatARelationLeavesUndivided.Operations.NONE, true),
                     "Ints weighed " + weight);
         }
         assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), 0, Rel.LT));

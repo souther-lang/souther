@@ -5,18 +5,25 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.inputs.Requirements;
+import souther.compiler.reading.Decision;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one may sit in.
@@ -32,16 +39,16 @@ import java.util.Set;
  * reading that wrote a class down for each would keep the last. So a cell carries which classes each
  * position may hold, one condition narrows it, and a cell nothing is left at is not a combination.
  *
- * <p>A group is offered only where every condition it is made of narrows something. What a cell is
- * for is a row that takes the path to the meeting and settles each factor at the outcome the cell
- * names, and a condition with no classes to put a row at leaves both open: the row may go the other
- * way round the fork above, or take a different outcome of the factor, and either way it is offered
- * for a combination it does not sit in. A row already written reads the same way — the cell would be
- * taken for covered by a row that never reaches the operator. So the group goes, and what is left is
- * the pair space, which is where such a behavior already was.
+ * <p>What a combination is comes from the decisions it settles, and the classes only say where a
+ * search looks for a row that settles them. So a decision the classes cannot place never takes a
+ * combination away: it leaves the search region as wide as the classes cannot narrow it
+ * ({@link Steering}), and the combination is still asked for. A row is credited with a combination
+ * by what a run was seen doing ({@link CellSelection#certifying}) and never by where its values
+ * sit, so a wide region costs a search more candidates and costs no false credit.
  *
- * <p>A factor whose outcomes leave the same classes goes for the second half of the same reason: no
- * row can be steered from one to the other, so the cells over it are one row asked for several times.
+ * <p>A region is a union of cells. A condition about a name the cases of a sum share is a cell under
+ * each case, and the else of a conjunction is what is left outside it; one cell holds a product of
+ * class sets and neither is one.
  */
 public final class InteractionCells {
 
@@ -114,6 +121,111 @@ public final class InteractionCells {
         public boolean sameAs(Cell other) {
             return Arrays.deepEquals(allowed, other.allowed);
         }
+
+        /** The smallest cell holding every one of {@code cells}: each position the classes any of
+         *  them leaves open. */
+        static Cell hull(List<Cell> cells) {
+            boolean[][] open = new boolean[cells.getFirst().allowed.length][];
+            for (int i = 0; i < open.length; i++) {
+                open[i] = new boolean[cells.getFirst().allowed[i].length];
+                for (Cell each : cells) {
+                    for (int c = 0; c < open[i].length; c++) {
+                        open[i][c] |= each.allowed[i][c];
+                    }
+                }
+            }
+            return new Cell(open);
+        }
+    }
+
+    /**
+     * Where a search may look for a row that settles some decisions, and whether that is all the
+     * rows that do.
+     *
+     * <p>A union of cells, which may overlap: what a combination is comes from its decisions and
+     * not from how the region is cut, so the cells are only places to look.
+     *
+     * <p>Exact where every decision was read into classes, and otherwise a region that holds every
+     * row that settles them and maybe more. A search of it is still sound — a row is certified by
+     * what its run did — and its failure says nothing about whether the combination exists, which is
+     * why an approximate region never makes one impossible. A region with no cell left is
+     * impossible either way: what is wider than the rows that settle the decisions and holds none
+     * of them leaves none.
+     *
+     * @param cells the cells, none of which leaves a position nothing
+     * @param exact whether a row sits in one of them only where it settles the decisions
+     */
+    public record Steering(List<Cell> cells, boolean exact) {
+
+        /** The most cells a region is kept as; a wider union is read as the one cell that holds it
+         *  and is approximate. */
+        private static final int MOST_CELLS = 32;
+
+        public Steering {
+            cells = List.copyOf(cells);
+        }
+
+        static Steering exactly(Cell cell) {
+            return new Steering(List.of(cell), true);
+        }
+
+        /** Nothing said of the rows: every row, which is a region and not a fact. */
+        static Steering unsaid(List<Axis> axes) {
+            return new Steering(List.of(Cell.anything(axes)), false);
+        }
+
+        /** Rows in both, as a union of the cells they share. */
+        Steering and(Steering other) {
+            List<Cell> out = new ArrayList<>();
+            for (Cell mine : cells) {
+                for (Cell theirs : other.cells) {
+                    Cell both = mine.and(theirs);
+                    if (both != null && out.stream().noneMatch(both::sameAs)) {
+                        out.add(both);
+                    }
+                }
+            }
+            return bounded(out, exact && other.exact);
+        }
+
+        /** Rows in either. */
+        static Steering union(List<Steering> each) {
+            List<Cell> out = new ArrayList<>();
+            boolean exact = true;
+            for (Steering one : each) {
+                exact &= one.exact;
+                for (Cell cell : one.cells) {
+                    if (out.stream().noneMatch(cell::sameAs)) {
+                        out.add(cell);
+                    }
+                }
+            }
+            return bounded(out, exact);
+        }
+
+        private static Steering bounded(List<Cell> cells, boolean exact) {
+            return cells.size() > MOST_CELLS ? new Steering(List.of(Cell.hull(cells)), false)
+                    : new Steering(cells, exact);
+        }
+
+        /** Whether no row settles these decisions. */
+        boolean impossible() {
+            return cells.isEmpty();
+        }
+    }
+
+    /**
+     * One combination of a group: where to look for a row that makes it, as a way for each cell of
+     * its region, and whether the region is exact.
+     *
+     * <p>Every way holds a row to the same claims, so a combination made by a run is made whichever
+     * cell the row was looked for in.
+     */
+    public record Choice(List<CellSelection> ways, boolean exact) {
+
+        public Choice {
+            ways = List.copyOf(ways);
+        }
     }
 
     /**
@@ -129,7 +241,7 @@ public final class InteractionCells {
      * what the combination is, in the words the model states it in, and are what tells one
      * combination from every other.
      */
-    public record Placed(Cell cell, List<souther.compiler.coverage.ControlClaim> claims,
+    public record Placed(Steering steering, List<souther.compiler.coverage.ControlClaim> claims,
                          List<souther.compiler.reading.Condition> settles) {
 
         public Placed {
@@ -176,70 +288,95 @@ public final class InteractionCells {
         }
 
         /**
-         * The {@code index}th choice as a cell, or null where the factors it takes leave a position
-         * nothing.
+         * The {@code index}th choice as the cells a row for it is looked for in, or null where the
+         * factors it takes leave a position nothing.
          *
          * <p>Leaving a position nothing is not a combination the body refuses. There is no path
-         * through the body that takes both, so there is nothing there to ask for.
+         * through the body that takes both, so there is nothing there to ask for. Nor is a choice
+         * whose decisions state relations of the input's numbers that no value holds together:
+         * where the cells do not state the region, those relations are what says it is empty.
          */
-        public CellSelection at(int index) {
-            Cell cell = reach.cell();
+        public Choice at(int index) {
+            Steering steering = reach.steering();
             List<souther.compiler.coverage.ControlClaim> claims =
                     new ArrayList<>(reach.claims());
             int left = index;
             for (List<Placed> factor : byFactor) {
                 Placed taken = factor.get(left % factor.size());
-                cell = cell.and(taken.cell());
-                if (cell == null) {
+                steering = steering.and(taken.steering());
+                if (steering.impossible()) {
                     return null;
                 }
                 claims.addAll(taken.claims());
                 left /= factor.size();
             }
-            return new CellSelection(cell, claims);
+            if (!steering.exact() && !relationsLeaveAValue(settlesAt(index))) {
+                return null;
+            }
+            return new Choice(steering.cells().stream()
+                    .map(cell -> new CellSelection(cell, claims)).toList(), steering.exact());
         }
 
         /**
-         * Which decisions the {@code index}th choice is, or null where it is not a combination.
+         * Which decisions the {@code index}th choice is: the way in and the outcome taken at each
+         * factor, in the model's own words, as they were stated.
          *
-         * <p>The way in and the outcome taken at each factor, in the model's own words. This is
-         * what the combination is; the cell beside it is that projected into the classes a search
-         * steers by, and the claims are how a run is held to it. So a requirement is named here and
-         * certified there, and a reading of the classes that is off moves where a candidate is
-         * looked for without moving what is being asked for.
+         * <p>This is what the combination is; the cell beside it is that projected into the
+         * classes a search steers by, and the claims are how a run is held to it. So a requirement
+         * is named here and certified there, and a reading of the classes that is off moves where
+         * a candidate is looked for without moving what is being asked for.
          *
-         * <p>A set, because what a run has to have done is what it has to have done. Two choices
-         * that come to the same decisions ask one thing of a row, however the way in and the
-         * factors divided them up between them.
+         * <p>Handed as a list and not made a set here. What a run has to have done is a set — two
+         * choices that come to the same decisions ask one thing of a row, however the way in and
+         * the factors divided them up between them — and the caller makes it, with the hash of each
+         * decision it already holds. A set made here would hash every decision of every choice
+         * again, and a group of thousands of choices pays that thousands of times over for the
+         * same few decisions.
          *
-         * <p>Null under the same condition {@link #at} is, and read off it rather than worked out
-         * again: a choice whose factors leave a position nothing is no combination the body has a
-         * path to, and a requirement raised here that no cell answers would be one nothing could
-         * ever be steered to.
+         * <p>Not told whether the choice is a combination: that is {@link #at}'s answer, and a
+         * choice whose factors leave a position nothing is no combination the body has a path to.
          */
-        public java.util.Set<souther.compiler.reading.Condition> settledAt(int index) {
-            if (at(index) == null) {
-                return null;
-            }
-            java.util.LinkedHashSet<souther.compiler.reading.Condition> out =
-                    new java.util.LinkedHashSet<>(reach.settles());
+        public List<souther.compiler.reading.Condition> settlesAt(int index) {
+            List<souther.compiler.reading.Condition> out = new ArrayList<>(reach.settles());
             int left = index;
             for (List<Placed> factor : byFactor) {
                 out.addAll(factor.get(left % factor.size()).settles());
                 left /= factor.size();
             }
-            return java.util.Collections.unmodifiableSet(out);
+            return out;
         }
 
-        /** How many cells the group has from {@code from} on, which is what a stopped search left. */
-        public int left(int from) {
-            int left = 0;
-            for (int index = from; index < size(); index++) {
-                if (at(index) != null) {
-                    left++;
+        /**
+         * Whether the relations {@code settled} state of the input's numbers leave some value.
+         *
+         * <p>True is not a proof that one does: a relation of a shape no comparison states here
+         * is left out, which only leaves more. False is a proof, which is what lets a choice be
+         * dropped on it. Each number is taken as dense, so a gap whole numbers leave and decimals
+         * fill is not read as empty.
+         */
+        static boolean relationsLeaveAValue(List<souther.compiler.reading.Condition> settled) {
+            NumericDomain<NumericTerm> left = NumericDomain.top(NumericTerm.inOneOrder());
+            for (souther.compiler.reading.Condition each : settled) {
+                if (each instanceof souther.compiler.reading.Condition.Side side
+                        && side.form().isPresent()) {
+                    LinearForm<NumericTerm> form = side.form().get();
+                    Map<NumericTerm, NumberSpace> spaces = new HashMap<>();
+                    form.coefs().keySet().forEach(
+                            atom -> spaces.put(atom, NumberSpace.spacedOnly(Granularity.DENSE)));
+                    left = left.assume(form, side.states().orElseThrow().rel(), spaces);
                 }
             }
-            return left;
+            return !left.isBottom();
+        }
+
+        /** Whether the group has a combination at all, which stops at the first. */
+        public boolean hasACombination() {
+            for (int index = 0; index < size(); index++) {
+                if (at(index) != null) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -295,40 +432,15 @@ public final class InteractionCells {
      * <p>Two answers because they are two facts and the second used to be neither returned nor
      * recorded. A group dropped for its width claims arms, and what was not walked at those arms is
      * something a caller says rather than something a reader has to notice going missing.
+     *
+     * <p>No third for the groups the classes cannot narrow: they are offered, over the region the
+     * classes leave them, and a group is held back only for what the limit allows.
      */
-    public record Offered(List<Group> groups, List<NotOffered> notOffered,
-                          List<NotPlaced> notPlaced) {
+    public record Offered(List<Group> groups, List<NotOffered> notOffered) {
 
         public Offered {
             groups = List.copyOf(groups);
             notOffered = List.copyOf(notOffered);
-            notPlaced = List.copyOf(notPlaced);
-        }
-    }
-
-    /**
-     * A group the classes of the input do not place, which is why it was not offered.
-     *
-     * <p>Apart from {@link NotOffered}, which is a group the limit kept back and a wider run walks.
-     * Here a way of settling a factor, or the way to the meeting, narrows no position — the arm
-     * itself, where the ways into it are not ones a run is seen taking one of — or two ways of
-     * settling one factor leave the same classes; so no cell steers a row into one combination
-     * rather than another, and no run allows more of it. Said, because a group dropped without a
-     * word reads as combinations nobody owes.
-     *
-     * @param settles every condition a combination of this group could settle a value by, as
-     *                {@link NotOffered#settles} is
-     */
-    public record NotPlaced(Set<souther.compiler.reading.Condition> settles) {
-
-        public NotPlaced {
-            settles = Set.copyOf(settles);
-        }
-
-        /** Whether this group could have stated {@code settled}, as {@link NotOffered#mightState}
-         *  answers it. */
-        public boolean mightState(Set<souther.compiler.reading.Condition> settled) {
-            return settles.containsAll(settled);
         }
     }
 
@@ -354,7 +466,10 @@ public final class InteractionCells {
             return null;
         }
         Placed placed = placedBy(way.decisions(), axes);
-        if (placed == null) {
+        // One cell and exact, which is what a row is steered to an arm by: a way with a decision the
+        // classes do not state leaves the row free to go the other way round that fork.
+        if (placed == null || !placed.steering().exact()
+                || placed.steering().cells().size() != 1) {
             return null;
         }
         // What a run that arrived would be seen doing, beside what holds on the way. Asked for
@@ -367,7 +482,7 @@ public final class InteractionCells {
         if (!claims.contains(arrivesAt)) {
             claims.add(arrivesAt);
         }
-        return new CellSelection(placed.cell(), claims);
+        return new CellSelection(placed.steering().cells().getFirst(), claims);
     }
 
     /**
@@ -447,18 +562,8 @@ public final class InteractionCells {
             }
             TermPath at = narrowed.position().narrowedFrom().position();
             List<Refinement> left = narrowed.position().narrowing().atoms();
-            for (int axis = 0; axis < measured.size(); axis++) {
-                if (!(measured.get(axis).term() instanceof NumericTerm.ValueOf)
-                        || !measured.get(axis).path().equals(at)) {
-                    continue;
-                }
-                Cell said = Cell.anything(measured);
-                List<PartitionClass> classes = measured.get(axis).classes();
-                for (int c = 0; c < classes.size(); c++) {
-                    Refinement selects = classes.get(c).selects();
-                    said.allowed()[axis][c] = selects == null || left.contains(selects);
-                }
-                cell = cell.and(said);
+            for (int axis : caseAxesAt(measured, at)) {
+                cell = cell.and(onlyTheCases(measured, axis, left));
                 if (cell == null) {
                     return RowRegion.NONE;
                 }
@@ -472,17 +577,13 @@ public final class InteractionCells {
                              int mostCellsPerGroup) {
         List<Group> out = new ArrayList<>();
         List<NotOffered> held = new ArrayList<>();
-        List<NotPlaced> unplaced = new ArrayList<>();
         for (Interaction group : groups) {
-            // A group with no cell is one of two things: one whose decisions leave no row
-            // anywhere, which is no path and nothing owed, and one the classes cannot put a row
-            // in, which is said.
-            Placed reach = placedBy(group.reach(), axes);
+            // A group with no cell is one whose decisions leave no row anywhere, which is no path
+            // and nothing owed. One the classes cannot narrow is offered over a wider region.
+            Placed reach = group.reachStated() ? placedBy(group.reach(), axes)
+                    : new Placed(Steering.unsaid(axes.axes()), List.of(), List.of());
             List<List<Placed>> placed = reach == null ? null : factorsOf(group, axes);
             if (placed == null) {
-                if (classesDoNotPlace(group, axes)) {
-                    unplaced.add(new NotPlaced(conditionsOf(group)));
-                }
                 continue;
             }
             // Past the limit, and said so rather than dropped. What this costs is the combinations
@@ -494,62 +595,11 @@ public final class InteractionCells {
                 continue;
             }
             Group built = new Group(reach, placed);
-            if (built.left(0) > 0) {
+            if (built.hasACombination()) {
                 out.add(built);
             }
         }
-        return new Offered(out, held, unplaced);
-    }
-
-    /**
-     * Whether {@code group} has no cell because the classes do not place it: a decision on the way
-     * to it, or on a way of settling one of its factors, narrows no position; or two ways of
-     * settling one factor leave the same classes. Not where the decisions narrow every row away,
-     * which is a group no run makes.
-     */
-    private static boolean classesDoNotPlace(Interaction group, MeasuredInput.MeasuredAxes axes) {
-        if (narrowsNothing(group.reach(), axes)) {
-            return true;
-        }
-        for (Factor factor : group.factors()) {
-            List<Placed> outcomes = new ArrayList<>();
-            for (Outcome outcome : factor.outcomes()) {
-                if (narrowsNothing(outcome.holds(), axes)) {
-                    return true;
-                }
-                Placed at = placedBy(outcome.holds(), axes);
-                if (at != null && alreadyThere(outcomes, at)) {
-                    return true;
-                }
-                if (at != null) {
-                    outcomes.add(at);
-                }
-            }
-        }
-        return false;
-    }
-
-    /** Whether some decision of {@code made} narrows no position at all. */
-    private static boolean narrowsNothing(List<souther.compiler.reading.Decision> made,
-                                          MeasuredInput.MeasuredAxes axes) {
-        for (souther.compiler.reading.Decision each : made) {
-            if (admittedBy(each.constrains(), axes) == null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Every condition on the way to {@code group} and on every way of settling its factors. */
-    private static Set<souther.compiler.reading.Condition> conditionsOf(Interaction group) {
-        Set<souther.compiler.reading.Condition> out = new java.util.LinkedHashSet<>();
-        group.reach().forEach(each -> out.add(each.constrains()));
-        for (Factor factor : group.factors()) {
-            for (Outcome outcome : factor.outcomes()) {
-                outcome.holds().forEach(each -> out.add(each.constrains()));
-            }
-        }
-        return out;
+        return new Offered(out, held);
     }
 
     /**
@@ -607,7 +657,14 @@ public final class InteractionCells {
         return size;
     }
 
-    /** What each outcome of each factor leaves open, or null where the group is not one to offer. */
+    /**
+     * What each outcome of each factor leaves open, or null where the group is not one to offer.
+     *
+     * <p>An outcome whose decisions no value makes together is left out of its factor and is no
+     * reason to lose the others: the combinations of the outcomes some value does take, with those
+     * of the other factors, are owed as they were. A factor left with none is a value no run
+     * settles, so the group has no path and nothing is owed.
+     */
     private static List<List<Placed>> factorsOf(Interaction group,
                                                 MeasuredInput.MeasuredAxes axes) {
         List<List<Placed>> out = new ArrayList<>();
@@ -615,10 +672,12 @@ public final class InteractionCells {
             List<Placed> outcomes = new ArrayList<>();
             for (Outcome outcome : factor.outcomes()) {
                 Placed at = placedBy(outcome.holds(), axes);
-                if (at == null || alreadyThere(outcomes, at)) {
-                    return null;
+                if (at != null) {
+                    outcomes.add(at);
                 }
-                outcomes.add(at);
+            }
+            if (outcomes.isEmpty()) {
+                return null;
             }
             out.add(outcomes);
         }
@@ -634,14 +693,108 @@ public final class InteractionCells {
      * reading that owns them. Which decisions are here is decided once, so the claims cannot end up
      * being of a different set of them than the classes are.
      */
-    private static Placed placedBy(List<souther.compiler.reading.Decision> made,
-                                   MeasuredInput.MeasuredAxes axes) {
-        Cell cell = narrowedBy(
-                made.stream().map(souther.compiler.reading.Decision::constrains).toList(), axes);
-        return cell == null ? null
-                : new Placed(cell,
-                        made.stream().map(souther.compiler.reading.Decision::claims).toList(),
-                        made.stream().map(souther.compiler.reading.Decision::constrains).toList());
+    private static Placed placedBy(List<Decision> made, MeasuredInput.MeasuredAxes axes) {
+        Steering steering = Steering.exactly(Cell.anything(axes.axes()));
+        for (Decision each : made) {
+            steering = steering.and(steeringOf(each.constrains(), axes));
+            if (steering.impossible()) {
+                return null;
+            }
+        }
+        return new Placed(steering, made.stream().map(Decision::claims).toList(),
+                made.stream().map(Decision::constrains).toList());
+    }
+
+    /**
+     * Where a row that makes {@code condition} hold may be looked for.
+     *
+     * <p>Exact where the classes state it. A condition about a name the cases share is a cell under
+     * each case, which is what the row has to be for the name to stand there beside what the
+     * condition leaves of its position. Anything the classes do not state is every row, said not to
+     * be exact: no position a class of this run divides is what it is about.
+     */
+    static Steering steeringOf(souther.compiler.reading.Condition condition,
+                               MeasuredInput.MeasuredAxes axes) {
+        // An arm a run is seen at whichever way it came is the ways it came by: a union of what
+        // each way needs, and exact where every way is.
+        if (condition instanceof souther.compiler.reading.Condition.Arm arm
+                && !arm.comesOutBy().isEmpty()) {
+            List<Steering> ways = new ArrayList<>();
+            for (List<souther.compiler.reading.Condition> way : arm.comesOutBy()) {
+                Steering both = Steering.exactly(Cell.anything(axes.axes()));
+                for (souther.compiler.reading.Condition each : way) {
+                    both = both.and(steeringOf(each, axes));
+                }
+                ways.add(both);
+            }
+            return Steering.union(ways);
+        }
+        return switch (ConditionPlacement.of(condition, axes)) {
+            case ConditionPlacement.AtAPosition(int axis) -> {
+                Cell said = admittedAt(condition, axes.axes(), axis, standingOf(condition));
+                yield said == null ? Steering.unsaid(axes.axes()) : Steering.exactly(said);
+            }
+            case ConditionPlacement.UnderTheCases under -> underTheCases(condition, under, axes);
+            case ConditionPlacement.AtNoPosition _, ConditionPlacement.Unnamed _ ->
+                    Steering.unsaid(axes.axes());
+        };
+    }
+
+    private static Steering underTheCases(souther.compiler.reading.Condition condition,
+                                          ConditionPlacement.UnderTheCases under,
+                                          MeasuredInput.MeasuredAxes axes) {
+        List<Steering> eachCase = new ArrayList<>();
+        for (ConditionPlacement.UnderACase each : under.underEach()) {
+            Steering taken = takenBy(each.taken(), axes.axes());
+            Cell said = each.measured()
+                    ? admittedAt(condition, axes.axes(), each.axis(), each.at()) : null;
+            eachCase.add(taken.and(said == null ? Steering.unsaid(axes.axes())
+                    : Steering.exactly(said)));
+        }
+        return Steering.union(eachCase);
+    }
+
+    /**
+     * What a row has to be for a name to stand where a case puts it, as the cases of the sums it
+     * turns on. Not exact where a requirement is of a position no axis measures the value of.
+     */
+    private static Steering takenBy(Requirements taken, List<Axis> axes) {
+        Cell cell = Cell.anything(axes);
+        boolean exact = taken.crossings().isEmpty();
+        for (var each : taken.refinements().entrySet()) {
+            List<Integer> measuring = caseAxesAt(axes, each.getKey());
+            exact &= !measuring.isEmpty();
+            for (int axis : measuring) {
+                cell = cell.and(onlyTheCases(axes, axis, each.getValue().atoms()));
+                if (cell == null) {
+                    return new Steering(List.of(), true);
+                }
+            }
+        }
+        return new Steering(List.of(cell), exact);
+    }
+
+    /** The axes that measure which case of its sum the value at {@code at} is. */
+    private static List<Integer> caseAxesAt(List<Axis> axes, TermPath at) {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (axes.get(i).term() instanceof NumericTerm.ValueOf && axes.get(i).path().equals(at)) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
+    /** Every position open, and the one {@code axis} measures the classes that select one of the
+     *  cases {@code left} or select none. */
+    private static Cell onlyTheCases(List<Axis> axes, int axis, List<Refinement> left) {
+        Cell cell = Cell.anything(axes);
+        List<PartitionClass> classes = axes.get(axis).classes();
+        for (int c = 0; c < classes.size(); c++) {
+            Refinement selects = classes.get(c).selects();
+            cell.allowed()[axis][c] = selects == null || left.contains(selects);
+        }
+        return cell;
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */
@@ -659,15 +812,6 @@ public final class InteractionCells {
             }
         }
         return cell;
-    }
-
-    private static boolean alreadyThere(List<Placed> outcomes, Placed at) {
-        for (Placed each : outcomes) {
-            if (each.cell().sameAs(at.cell())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -711,7 +855,7 @@ public final class InteractionCells {
      */
     static Cell admittedAt(souther.compiler.reading.Condition condition, List<Axis> axes,
                            int axis, TermPath standing) {
-        switch (condition) {
+        return switch (condition) {
             case souther.compiler.reading.Condition.Case one -> {
                 // Every case the arm answers for. Where the axis is the union itself, its classes
                 // are the cases a value there can be, so a case the arm names and the axis has no
@@ -735,10 +879,10 @@ public final class InteractionCells {
                     if (at >= 0) {
                         cell.allowed()[axis][at] = true;
                     } else if (!ofTheUnion) {
-                        return null;
+                        yield null;
                     }
                 }
-                return cell;
+                yield cell;
             }
             case souther.compiler.reading.Condition.Side one -> {
                 // Which construct of the model the decision was about, since a rule is stated at
@@ -749,18 +893,16 @@ public final class InteractionCells {
                 ModelOccurrence states =
                         ModelOccurrence.statedAt(one.statedAt()).orElse(null);
                 if (states == null) {
-                    return null;
+                    yield null;
                 }
                 boolean onAVisit = one.visit().isPresent();
                 Cut line = cutAt(axes.get(axis), states, onAVisit);
-                return line == null ? null
+                yield line == null ? null
                         : sideOf(axes, axis, line, guardOf(line, states, onAVisit), one.held());
             }
             // A fork this reading could not name a position for narrows nothing.
-            case souther.compiler.reading.Condition.Arm _ -> {
-                return null;
-            }
-        }
+            case souther.compiler.reading.Condition.Arm _ -> null;
+        };
     }
 
     /** Everything open, and {@code axis} every class but {@code but}. */

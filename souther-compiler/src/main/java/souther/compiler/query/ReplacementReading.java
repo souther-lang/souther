@@ -4,6 +4,13 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NamedValue;
+import souther.compiler.coverage.NotCarriedReason;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.coverage.WalkRewrite;
+import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.coverage.WalkedNoFurther;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Disposition;
@@ -16,30 +23,37 @@ import souther.compiler.observe.ReplacedRun;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
+import souther.compiler.partition.InputsRowsRanWith;
 import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * What a behavior's written rows came to about each rewrite of its body a row could notice.
  *
- * <p>Two families of rewrite and no more. An arm answering as one of its siblings does is the
+ * <p>Three families of rewrite and no more. An arm answering as one of its siblings does is the
  * rewrite a fork invites; the body answering one value whatever it is given is the rewrite a body
- * with no fork in it invites, and the one rows that all answer alike cannot tell from it. Which
- * rewrites are asked about is fixed here and not read off how the body happens to be lowered, so a
- * change of the library under a body is not a change of what its rows are held to.
+ * with no fork of its own invites, and the one rows that all answer alike cannot tell from it; a
+ * walk stopping after one step, or handing each step the seed, is the rewrite a loop invites, and
+ * the one rows of fewer than two elements cannot tell from it.
  *
  * <p>A row is evidence against a rewrite where it comes out the other way under it: what it states
  * holds of one of the two bodies and fails of the other. A row wrong about both is evidence for
@@ -109,6 +123,37 @@ public final class ReplacementReading {
     private record Occurrences(ReplacementReportAnchor reportAt, ArmReplacements.Asked asked,
                                List<ArmProbe> probes) {}
 
+    /** The same for one rewrite of a walk, and what the bodies it stands in part strings at. */
+    private record WalkOccurrences(ReplacementReportAnchor reportAt, WalkRewrites.Asked asked,
+                                   List<WalkProbe> probes, Set<String> separators,
+                                   Set<NamedValue> named, Set<String> reads, Set<String> inputs,
+                                   Set<ValueName.Behavior> dependencies,
+                                   List<Optional<TermPath>> over) {}
+
+    /** What a body writes out on one side of a comparison, as a value a row holds. */
+    private static List<ObservedValue> observedOf(Collection<NamedValue> named) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (NamedValue each : named) {
+            out.add(switch (each) {
+                case NamedValue.Whole(var value) -> new ObservedValue.Integer(value);
+                case NamedValue.Fractional(var value) -> new ObservedValue.Decimal(value);
+                case NamedValue.Characters(var value) -> new ObservedValue.Text(value);
+                // A case stands for every value of it, which carries what the case holds.
+                case NamedValue.Case(var type) -> new ObservedValue.Unit(type);
+            });
+        }
+        return out;
+    }
+
+    /** The lists of the input the walk goes over at every place it is entered, or none where any
+     *  place goes over a list the input does not hold as it is. */
+    private static List<TermPath> listsWalked(List<Optional<TermPath>> over) {
+        if (over.stream().anyMatch(Optional::isEmpty)) {
+            return List.of();
+        }
+        return over.stream().flatMap(Optional::stream).distinct().toList();
+    }
+
     /**
      * What being the same answer means for the behavior: two values read in full, and a statement
      * against a value, both read with the declarations and at the behavior's answer.
@@ -124,9 +169,9 @@ public final class ReplacementReading {
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
      * came to about each: the siblings of each arm a row stating its answer went through, by
-     * {@code wentThrough}, in the order the plan numbered the arms, or, where no arm of the body has
-     * a rewrite that is another program, the body answering each value a row stating its answer
-     * came to.
+     * {@code wentThrough}, in the order the plan numbered the arms, and, where no arm the body owes
+     * a row through has a rewrite that is another program, the body answering each value a row
+     * stating its answer came to.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
      * it depends on what it answers, which is a question about the rows that go through it. The arms
@@ -147,14 +192,22 @@ public final class ReplacementReading {
      * <p>{@code stoppedAt} is how a row as written that came to no verdict was stopped, as the
      * run that met it said: at the figures it went past, and at whatever else stopped it. A
      * rewrite such a row leaves open is left open as the row was.
+     *
+     * <p>And each walk a row stating its answer entered, run as each way {@code walksCarried}
+     * says is another program ({@link WalkRewrites#askedOf}), {@code walkedNoFurther} being what
+     * the rows' runs showed of how far each walk went. A walk is no fork of the body's, so a body
+     * whose only loops are walks is asked about the values it answered as well.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
-                                   ArmReplacements carried,
+                                   ArmReplacements carried, WalkRewrites walksCarried,
                                    Function<RowOutcome, Set<ArmProbe>> wentThrough,
+                                   Function<RowOutcome, Set<WalkProbe>> entered,
                                    Predicate<ControlPlace.Arm> unreached,
+                                   WalkedNoFurther walkedNoFurther,
                                    List<RowOutcome> rows,
                                    Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
-                                   Comparing comparing) {
+                                   Comparing comparing,
+                                   Supplier<InputsRowsRanWith> ranWith) {
         // The rows that state their answer, which are the only evidence about a rewrite there is.
         // A row whose answer is owed ran, and what it ran to is an observation and not what the
         // model owes there — so it is evidence for neither the body nor the rewrite, on either side
@@ -170,19 +223,25 @@ public final class ReplacementReading {
         }
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, Occurrences> occurrences = new LinkedHashMap<>();
-        // Whether some arm of the body has a rewrite that is another program, which is what makes
-        // the body one with a fork as far as a rewrite goes: a fork every rewrite of which the
-        // source and the rules prove is the body under another spelling invites none, and the body
-        // is then asked about as one with no fork. Settled by the body and the rules, and never by
+        // Whether some arm the body owes a row through has a rewrite that is another program,
+        // which is what makes the body one with a fork as far as a rewrite goes: a fork every
+        // rewrite of which the source and the rules prove is the body under another spelling
+        // invites none, and the body is then asked about as one with no fork. An arm of a library
+        // operation's copy that the body owes nothing through is asked about its own rewrites
+        // below, and is no fork of the body's. Settled by the body and the rules, and never by
         // which arms the rows stating an answer reached.
         boolean forked = false;
-        for (CoverageSites.ArmSite site : plan.arms(behavior)) {
+        List<CoverageSites.ArmSite> arms = plan.arms(behavior);
+        ArmReplacements planned = plan.keepingTheArmsOf(behavior, plan.replacements());
+        for (CoverageSites.ArmSite site : arms) {
             if (site.place().probe().isEmpty()) {
                 continue;
             }
+            forked = forked || (site.owesARow() && !planned
+                    .askedOf(site.obligation().origin(), site.obligation().part(), unreached)
+                    .isEmpty());
             List<ArmReplacements.Asked> asked = carried.askedOf(site.obligation().origin(),
                     site.obligation().part(), unreached);
-            forked = forked || !asked.isEmpty();
             ArmProbe probe = site.place().probe().get();
             if (!reached.contains(probe)) {
                 continue;
@@ -206,16 +265,65 @@ public final class ReplacementReading {
         occurrences.forEach((replaced, at) -> out.add(new Account(
                 ReplacementAsWritten.OfAnArm.in(plan, replaced), at.reportAt(),
                 armStanding(replaced, at.asked(), at.probes(), stated, wentThrough,
-                        stoppedAt))));
-        // One answer only where no arm has a rewrite that is another program. Which family a body
-        // invites is the body's: one with a fork is asked about the fork, arm by arm, whichever of
-        // its arms the rows stating an answer happen to reach — read off what they reached
-        // instead, a body every row of which is waiting for its answer would be asked as though it
-        // had no fork, and its answers so far would be called rewrites. And not where the body
-        // answers one value already: every way to an answer that reads something, or that is
-        // another answer, closed by the rules.
+                        stoppedAt, ranWith))));
+        // The walks a row stating its answer entered, each rewrite once however many of its sites
+        // the rows entered. A walk no such row entered is no question for a row: one stands where
+        // an arm no row reaches stands, and is owed there.
+        Set<WalkProbe> walked = new HashSet<>();
+        for (RowOutcome row : stated) {
+            walked.addAll(entered.apply(row));
+        }
+        Map<Replacement.OfAWalk, WalkOccurrences> walkOccurrences = new LinkedHashMap<>();
+        for (CoverageSites.WalkSite site : plan.walks(behavior)) {
+            if (!walked.contains(site.index())) {
+                continue;
+            }
+            ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAWalk(site);
+            for (WalkRewrites.Asked each : walksCarried.askedOf(site.walk(), walkedNoFurther)) {
+                Replacement.OfAWalk replaced = new Replacement.OfAWalk(site.walk(), each.how());
+                WalkOccurrences at = walkOccurrences.computeIfAbsent(replaced,
+                        _ -> new WalkOccurrences(reportAt, each, new ArrayList<>(),
+                                new LinkedHashSet<>(), new LinkedHashSet<>(),
+                                new LinkedHashSet<>(), new LinkedHashSet<>(),
+                                new LinkedHashSet<>(), new ArrayList<>()));
+                if (!at.reportAt().equals(reportAt)) {
+                    throw new IllegalStateException(replaced + " is shown at " + at.reportAt()
+                            + " where one call reaches it and at " + reportAt + " where another"
+                            + " does");
+                }
+                at.probes().add(site.index());
+                at.separators().addAll(site.separators());
+                at.named().addAll(site.named());
+                at.reads().addAll(site.reads());
+                // A behavior is the same behavior from any body that reaches it.
+                at.dependencies().addAll(site.dependencies());
+                // A parameter of a helper is no parameter of this behavior.
+                if (site.body().equals(behavior)) {
+                    at.inputs().addAll(site.inputs());
+                }
+                // A list read in a helper is a parameter of the helper, which is no location of
+                // this behavior's input.
+                at.over().add(site.body().equals(behavior)
+                        ? site.over().map(names -> TermPath.of(names.getFirst())
+                                .then(names.subList(1, names.size())))
+                        : Optional.empty());
+            }
+        }
+        walkOccurrences.forEach((replaced, at) -> out.add(new Account(
+                new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
+                walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
+                        observedOf(at.named()), List.copyOf(at.reads()), List.copyOf(at.inputs()),
+                        List.copyOf(at.dependencies()), listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
+        // One answer only where no arm the body owes a row through has a rewrite that is another
+        // program; the arms of a library operation's copy are asked about above and do not count.
+        // Which family a body invites is the body's: one with a fork is asked about the fork, arm
+        // by arm, whichever of its arms the rows stating an answer happen to reach — read off what
+        // they reached instead, a body every row of which is waiting for its answer would be asked
+        // as though it had no fork, and its answers so far would be called rewrites. And not where
+        // the body answers one value already: every way to an answer that reads something, or that
+        // is another answer, closed by the rules.
         if (!forked && !plan.fromOneValue(behavior).provenAway(unreached)) {
-            out.addAll(oneAnswerAccounts(stated, comparing));
+            out.addAll(oneAnswerAccounts(stated, comparing, ranWith));
         }
         return List.copyOf(out);
     }
@@ -230,7 +338,8 @@ public final class ReplacementReading {
     private static Standing armStanding(Replacement.OfAnArm replaced, ArmReplacements.Asked asked,
                                         List<ArmProbe> where, List<RowOutcome> rows,
                                         Function<RowOutcome, Set<ArmProbe>> wentThrough,
-                                        Function<RowOutcome, ReplacementDisposition.Met> stoppedAt) {
+                                        Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
+                                        Supplier<InputsRowsRanWith> ranWith) {
         SequencedMap<Integer, Integer> replacing;
         switch (asked) {
             // Left unasked at the figure a fork was held to, or at what the JVM holds in one
@@ -241,15 +350,87 @@ public final class ReplacementReading {
             }
             case ArmReplacements.Asked.Runs(var rewrite) -> replacing = rewrite.replacing();
         }
+        return ranStanding(replaced, rows,
+                row -> where.stream().anyMatch(wentThrough.apply(row)::contains), stoppedAt,
+                decided -> new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
+                        replaced.with(), where, replacing, inputsOf(decided), ranWith.get()));
+    }
+
+    private static List<List<ObservedValue>> inputsOf(List<RowOutcome> rows) {
+        return rows.stream().map(RowOutcome::inputs).toList();
+    }
+
+    /**
+     * What the rows came to about one rewrite of a walk, asked of every row that entered the walk
+     * and states something, as a rewrite of an arm is of the rows through the arm.
+     */
+    private static Standing walkStanding(Replacement.OfAWalk replaced, WalkRewrites.Asked asked,
+                                         List<WalkProbe> where, List<String> separators,
+                                         List<ObservedValue> named, List<String> reads,
+                                         List<String> inputs,
+                                         List<ValueName.Behavior> dependencies,
+                                         List<TermPath> over, List<RowOutcome> rows,
+                                         Function<RowOutcome, Set<WalkProbe>> entered,
+                                         Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
+                                         Supplier<InputsRowsRanWith> ranWith) {
+        SequencedMap<Integer, WalkRewrite> replacing;
+        switch (asked) {
+            // Left unasked at what the JVM holds in one method, or at a step this compiler cannot
+            // run the walk rewritten with, which no run of it widens.
+            case WalkRewrites.Asked.NotRun(var _, var why) -> {
+                return new Standing.CannotBeAsked(
+                        ReplacementEvidence.Undecided.LeftOpen.of(List.of(wayOf(why))));
+            }
+            case WalkRewrites.Asked.Runs(var rewrite) -> replacing = rewrite.replacing();
+        }
+        return ranStanding(replaced, rows,
+                row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
+                decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
+                        replacing, inputsOf(decided),
+                        namedFirst(ValuesOfRareAnswersFirst.of(ranWith.get(), decided), named),
+                        separators, named, reads, inputs, dependencies, over));
+    }
+
+    /**
+     * What the rows ran with, with the values the body names first: a value an element of the list
+     * may be made of that the body compares with or tells a case by is where a step is told apart,
+     * whatever the rows answered. Stable, so what was first among the rest is.
+     */
+    private static InputsRowsRanWith namedFirst(InputsRowsRanWith ranWith,
+                                                List<ObservedValue> named) {
+        return ranWith.orderedBy(value -> named.stream().anyMatch(each ->
+                each.equals(value) || (caseOf(each) != null
+                        && caseOf(each).equals(caseOf(value)))) ? 0 : 1);
+    }
+
+    /** The case a value is, whether it holds anything or not; none for a value that is no case. */
+    private static TypeSymbol caseOf(ObservedValue value) {
+        return switch (value) {
+            case ObservedValue.Unit unit -> unit.type();
+            case ObservedValue.Constructed made -> made.type();
+            default -> null;
+        };
+    }
+
+    /**
+     * What the rows {@code through} holds of came to about {@code replaced}, a rewrite every such
+     * row was run again under; {@code lookingFor} is the rewrite as a search for a row telling it
+     * apart is put to it, from the inputs of the rows that came to a verdict.
+     */
+    private static Standing ranStanding(Replacement replaced, List<RowOutcome> rows,
+                                        Predicate<RowOutcome> through,
+                                        Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
+                                        Function<List<RowOutcome>, ReplacementOwed>
+                                                lookingFor) {
         RowOutcome shownBy = null;
         // How the rows left untold were stopped, each row one meeting: the figures, whatever no
         // figure decides — a run that stopped of its own accord, nothing that could run it, the
         // host's stack — and whether one row was held by figures alone. One such is enough to
         // leave the rewrite to a wider run: a row that comes back there may be the row that tells.
         ReplacementDisposition.Met untold = null;
-        List<List<ObservedValue>> seenThrough = new ArrayList<>();
+        List<RowOutcome> decided = new ArrayList<>();
         for (RowOutcome row : rows) {
-            if (where.stream().noneMatch(wentThrough.apply(row)::contains)) {
+            if (!through.test(row)) {
                 continue;
             }
             // A row that neither held nor failed of the body as written ran out or was given up
@@ -258,13 +439,12 @@ public final class ReplacementReading {
                 untold = alsoUntold(untold, stoppedAt.apply(row));
                 continue;
             }
-            seenThrough.add(row.inputs());
-            // Every rewrite of every arm a decided row went through was run, or is said to have
-            // run out, so one missing is this reading and the run disagreeing about what was
-            // carried — not something to read a reason off.
+            decided.add(row);
+            // Every rewrite of every arm a decided row went through and every walk it entered was
+            // run, or is said to have run out, so one missing is this reading and the run
+            // disagreeing about what was carried — not something to read a reason off.
             ReplacedRun run = row.replaced().stream()
-                    .filter(each -> each.fork().equals(replaced.fork())
-                            && each.part() == replaced.part() && each.with() == replaced.with())
+                    .filter(each -> each.replaced().equals(replaced))
                     .findFirst().orElseThrow(() -> new IllegalStateException("row `"
                             + row.identity().shown() + "` went through " + replaced
                             + " and carries no run of it: " + row.replaced()));
@@ -286,8 +466,7 @@ public final class ReplacementReading {
             return new Standing.CannotBeAsked(new ReplacementEvidence.Undecided.Way(
                     ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, untold));
         }
-        ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
-                replaced.with(), where, replacing, seenThrough);
+        ReplacementOwed lookFor = lookingFor.apply(decided);
         return shownBy != null
                 ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);
@@ -316,6 +495,16 @@ public final class ReplacementReading {
     }
 
     /**
+     * What a walk the classes carry no switch at leaves a rewrite as: open at what the JVM holds in
+     * one method, which a wider run does not widen.
+     */
+    static ReplacementEvidence.Undecided.Way wayOf(NotCarriedReason why) {
+        return ReplacementEvidence.Undecided.Way.atNoAllowance(switch (why) {
+            case NotCarriedReason.MethodTooLarge _ -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
+        });
+    }
+
+    /**
      * The body answering one value, once for each value a row stating its answer answered: each is
      * a program the body could be rewritten as, and two of them are two programs. Told apart by a
      * row that comes out the other way against the value than it did against its own answer.
@@ -329,8 +518,8 @@ public final class ReplacementReading {
      * anywhere inside is not one a body could be rewritten to answer, since nothing here knows what
      * it is.
      */
-    private static List<Account> oneAnswerAccounts(List<RowOutcome> rows,
-                                                   Comparing comparing) {
+    private static List<Account> oneAnswerAccounts(List<RowOutcome> rows, Comparing comparing,
+                                                   Supplier<InputsRowsRanWith> ranWith) {
         List<RowOutcome> answered = new ArrayList<>();
         List<ObservedValue> values = new ArrayList<>();
         for (RowOutcome row : rows) {
@@ -350,7 +539,7 @@ public final class ReplacementReading {
                         RowRef.of(answered.get(i)));
                 out.add(new Account(new ReplacementAsWritten.ByOneAnswer(rewrite),
                         new ReplacementReportAnchor.AtTheBehavior(),
-                        oneAnswerStanding(rewrite, rows, answered, values, comparing)));
+                        oneAnswerStanding(rewrite, rows, answered, values, comparing, ranWith)));
             }
         }
         return List.copyOf(out);
@@ -359,7 +548,8 @@ public final class ReplacementReading {
     /** What the rows came to about the body answering {@code rewrite}'s value always. */
     private static Standing oneAnswerStanding(Replacement.ByOneAnswer rewrite,
                                               List<RowOutcome> rows, List<RowOutcome> answered,
-                                              List<ObservedValue> values, Comparing comparing) {
+                                              List<ObservedValue> values, Comparing comparing,
+                                              Supplier<InputsRowsRanWith> ranWith) {
         ObservedValue always = rewrite.answer();
         boolean unread = false;
         for (RowOutcome row : rows) {
@@ -381,14 +571,15 @@ public final class ReplacementReading {
             return new Standing.CannotBeAsked(ReplacementEvidence.Undecided.Way.atNoAllowance(
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         }
+        ReplacementOwed.ByOneAnswer lookFor = new ReplacementOwed.ByOneAnswer(rewrite,
+                answered.stream().map(RowOutcome::inputs).toList(), ranWith.get());
         // A row whose own answer was another value is a run the rewrite answers differently.
         for (int i = 0; i < answered.size(); i++) {
             if (!comparing.same(values.get(i), always)) {
-                return new Standing.Unnoticed(RowRef.of(answered.get(i)),
-                        new ReplacementOwed.ByOneAnswer(rewrite));
+                return new Standing.Unnoticed(RowRef.of(answered.get(i)), lookFor);
             }
         }
-        return new Standing.Open(new ReplacementOwed.ByOneAnswer(rewrite));
+        return new Standing.Open(lookFor);
     }
 
     private ReplacementReading() {}

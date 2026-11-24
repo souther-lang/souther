@@ -1,8 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.meaning.WrittenLine;
+import souther.compiler.publish.PublishedRuleHandle;
+import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -82,6 +88,65 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
     }
 
     /**
+     * The lines one comparison draws in the order a reader that has nothing else to go on puts
+     * them in: by which of the comparison's lines it is (the arms its definition takes to it, in
+     * the source's own coordinates), then by what it says about its own value ({@link LineFacts}).
+     *
+     * <p>Total over the lines of one comparison, which is all it is asked of: two lines it puts
+     * together are the same line, the way the document tells two of them apart by the same things
+     * ({@code authoredLineId}). A line of a declaration's clause is ordered by where that clause is
+     * published and a comparison's line is not compared with one, so asked to, this refuses.
+     */
+    public static Comparator<AuthoredLine> inASteadyOrder() {
+        Comparator<WrittenLine> arms = WrittenLine.inASteadyOrder();
+        return (one, other) -> {
+            if (!one.which().rule().equals(other.which().rule())) {
+                throw new IllegalArgumentException("the lines of one comparison are ordered, and"
+                        + " these are of two rules: " + one.which().rule() + " and "
+                        + other.which().rule());
+            }
+            int order = arms.compare(armsOf(one.which()), armsOf(other.which()));
+            if (order != 0) {
+                return order;
+            }
+            int claim = Integer.compare(sideOf(one.facts()), sideOf(other.facts()));
+            if (claim != 0) {
+                return claim;
+            }
+            int holds = Boolean.compare(one.facts().holdsAtTheValue(),
+                    other.facts().holdsAtTheValue());
+            return holds != 0 ? holds
+                    : Boolean.compare(one.facts().singles(), other.facts().singles());
+        };
+    }
+
+    /** The arms a comparison's line is taken at: none where the comparison is its own line. */
+    private static WrittenLine armsOf(WhichLine which) {
+        return switch (which) {
+            case WhichLine.OfAComparison _ -> WrittenLine.THE_COMPARISON;
+            case WhichLine.OfAPartOfAComparison part -> part.part().line();
+            case WhichLine.OfADeclarationsLine _, WhichLine.OfAComparisonOfAPart _ ->
+                    throw new IllegalArgumentException(
+                            "only the lines a comparison draws are ordered by their arms: " + which);
+        };
+    }
+
+    /**
+     * Which way the value a line wrote belongs: nothing where the rule orders nothing, then below,
+     * then above. Spelled out, so that the order of the lines is a statement of this and does not
+     * move with the order the words of an enumeration are declared in.
+     */
+    private static int sideOf(LineFacts facts) {
+        return switch (facts.claim()) {
+            case ComparisonClaim.Singled _ -> 0;
+            case ComparisonClaim.Cut cut -> switch (cut.valueBelongs()) {
+                case BELOW -> 1;
+                case ABOVE -> 2;
+            };
+        };
+    }
+
+    /**
      * What a report calls this line where it has no place to point at.
      *
      * <p>The author's word for the rule where they wrote one and what the rule is where they did
@@ -98,10 +163,14 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * sentence with no place in it should read; a fold over both that lived on the rule would be one
      * word for a question only a caller writing a sentence has.
      */
-    public String saidWithoutAPlace() {
-        return said(switch (which.rule()) {
-            case RuleRef.Named it -> it.citedName();
-            case RuleRef.Written it -> "the " + it.whatItIs();
+    public SearchMessage toldWithoutAPlace() {
+        return told(switch (which.rule()) {
+            case RuleRef.Named it -> new SearchMessage.TheRuleCited(it.citedName());
+            case RuleRef.Written it -> switch (it) {
+                case RuleRef.Comparison _ -> new SearchMessage.TheComparison();
+                case RuleRef.Fork _ -> new SearchMessage.TheFork();
+                case RuleRef.Predicate _ -> new SearchMessage.ThePredicate();
+            };
         });
     }
 
@@ -112,19 +181,22 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * ({@link LineOrigin#describe}) — and what the narrowing adds is the same words either way. Said
      * in both places, the two spellings of one narrowing read as two.
      */
-    public String said(String rule) {
-        return rule + narrowing();
+    public SearchMessage told(SearchMessage rule) {
+        return narrowedWithin.isEmpty() ? rule
+                : new SearchMessage.RuleWithin(rule, named(narrowedWithin));
     }
 
     /**
-     * What this reading adds after the rule, which is nothing where no declaration took an end in.
+     * The sentence this reading says {@code handle} in, which is the handle alone where no
+     * declaration took an end in.
      *
-     * <p>The words on their own, for a reader putting them after a handle it renders itself. A rule
-     * has one spelling and it is not this one's to write, so what is offered here is the rest of the
-     * sentence rather than the whole of it.
+     * <p>The sentence and not its words: the handle is put into it by whoever renders handles. A
+     * rule has one spelling and it is not this one's to write.
      */
-    public String narrowing() {
-        return narrowedWithin.isEmpty() ? "" : " within " + naming(narrowedWithin);
+    public PublishedSentence.AroundAHandle around(PublishedRuleHandle handle) {
+        return narrowedWithin.isEmpty() ? PublishedSentence.AroundAHandle.alone(handle)
+                : new PublishedSentence.AroundAHandle(handle,
+                        new PublishedSentence.Around.Within(named(narrowedWithin)));
     }
 
     /**
@@ -139,9 +211,20 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
      * <p>{@code or} rather than {@code and}, because that is what the list means: any one of them
      * is as much the answer as the others, and the reading does not know which.
      */
-    public static String naming(List<TypeSymbol.AtModule> declarations) {
-        return declarations.stream().map(TypeSymbol::name)
-                .collect(java.util.stream.Collectors.joining(" or "));
+    public static SearchMessage named(List<TypeSymbol.AtModule> declarations) {
+        return eitherOf(declarations.stream().map(TypeSymbol::name).toList());
+    }
+
+    /** Pieces of code any one of which is the answer, said as such; nothing where there is none. */
+    static SearchMessage eitherOf(List<String> written) {
+        if (written.isEmpty()) {
+            return new SearchMessage.NothingSaid();
+        }
+        SearchMessage rest = new SearchMessage.Code(written.getLast());
+        for (int i = written.size() - 2; i >= 0; i--) {
+            rest = new SearchMessage.OrElse(written.get(i), rest);
+        }
+        return rest;
     }
 
     /**

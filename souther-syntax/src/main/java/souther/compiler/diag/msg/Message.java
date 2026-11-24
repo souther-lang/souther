@@ -14,10 +14,11 @@ package souther.compiler.diag.msg;
  * and a message cannot name none. Which rule it reports is read the same way ({@link MessageCodes}),
  * of the messages that report one.
  *
- * <p>Every message carries one of two roles and never both. A {@link Reported} is what a diagnostic
+ * <p>Every message carries one of three roles and never two. A {@link Reported} is what a diagnostic
  * is about: it names a rule, and {@code say} takes one. A {@link Supporting} is what is said
  * alongside — a hint, a secondary label — and it names no rule, because a diagnostic's code comes
- * from its subject and from nothing else. The two are disjoint so that being one is the same thing
+ * from its subject and from nothing else. A {@link Prose} is a line of a report, or a part of one,
+ * and belongs to no diagnostic at all. The three are disjoint so that being one is the same thing
  * as being usable as one.
  *
  * <p>The roles are declared outside this hierarchy, and a message is written as both a message and a
@@ -36,8 +37,9 @@ package souther.compiler.diag.msg;
  * messages rather than one entry that selects between two sentences.
  */
 public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage,
-        DataMessage, DeadBranchMessage, DeclarationMessage, ExampleMessage,
+        DataMessage, DeadBranchMessage, DeclarationMessage, ExampleMessage, GeneratedRowsMessage,
         HelperMessage, ImportMessage,
         InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
-        TypeMessage, UnreachableMessage, WrittenAtMessage {
+        ReasonMessage, ReportMessage, SearchMessage, TypeMessage, UnreachableMessage,
+        WrittenAtMessage {
 }

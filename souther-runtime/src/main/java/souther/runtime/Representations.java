@@ -92,8 +92,8 @@ public final class Representations {
             return stripped;
         }
         // in long, because a scale at the floor asks for more digits than an int can count
-        long spelledOut = (long) stripped.precision() - stripped.scale();
-        return spelledOut <= ExactDecimals.MAX_SPELT_OUT_DIGITS ? stripped.setScale(0) : stripped;
+        long allowed = ExactDecimals.MAX_SPELT_OUT_DIGITS + (long) stripped.scale();
+        return ExactDecimals.hasAtMostDigits(stripped, allowed) ? stripped.setScale(0) : stripped;
     }
 
     /** The members of an encoded array, in ascending order of their own external representation. */

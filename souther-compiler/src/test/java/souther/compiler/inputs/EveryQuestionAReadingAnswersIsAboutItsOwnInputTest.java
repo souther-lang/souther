@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -49,10 +50,14 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
     /** The questions that are about the reading itself and name no place in it. */
     private static final List<String> ABOUT_THE_WHOLE_READING = List.of("region", "emptiness");
 
+    /** The question of whether a term is of this input at all, which a term of another input is
+     *  answered no by, and refused by nothing. */
+    private static final String WHETHER_IT_IS_OF_THIS_INPUT = "answersFor";
+
     /** A reading of an input that takes one whole number, and nothing called {@code s}. */
     private static Quantities reading() {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()).quantities(RULES);
@@ -80,6 +85,11 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
             Object[] handed = foreignArgumentsFor(question);
             if (handed == null) {
                 other.add(question.getName());
+                continue;
+            }
+            if (question.getName().equals(WHETHER_IT_IS_OF_THIS_INPUT)) {
+                assertEquals(false, reading.answersFor(foreignTerm()),
+                        "a term of another input is no term of this one");
                 continue;
             }
             asked.add(question.getName());

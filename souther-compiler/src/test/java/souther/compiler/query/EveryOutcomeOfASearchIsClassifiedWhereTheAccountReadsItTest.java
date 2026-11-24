@@ -233,7 +233,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         souther.compiler.partition.Level.OfTheQuantity.of(1)),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
                 ItemAssessment.WritabilityProjection.UNPROVEN,
-                SearchOutcomes.each(List.of(stopped(), certified())));
+                SearchOutcomes.each(List.of(stopped(), certified())), false);
 
         assertTrue(owed.writabilityEvidence().has(
                         ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT),
@@ -250,7 +250,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static ItemAssessment.Attempt certified() {
         return ItemAssessment.Attempt.Built.certified(
                 new Generator.GeneratedRow(new Generator.Purpose.ForAPoint("p.x = 11"), List.of()),
-                WAY);
+                WAY, InputsOfTheBody.aRowOfNoInputsReadBack());
     }
 
     private static ItemAssessment.Attempt unverified() {

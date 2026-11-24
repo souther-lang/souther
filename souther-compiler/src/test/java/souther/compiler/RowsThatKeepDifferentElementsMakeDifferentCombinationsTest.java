@@ -165,7 +165,7 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
                     List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ %s ])))
                 """.formatted(elements));
 
-        assertEquals(1, behavior.evidence().interaction().asked().notJoined());
+        assertEquals(1, behavior.evidence().interaction().asked().notJoined().size());
         assertEquals(0, behavior.evidence().interaction().counted());
         assertTrue(behavior.weakenedBy().causes().stream()
                         .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),
@@ -222,7 +222,7 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
         InteractionEvidence evidence = behavior.evidence().interaction();
 
         assertEquals(1, evidence.asked().read(), "the sum is a meeting");
-        assertEquals(1, evidence.asked().notJoined(), "that was not joined");
+        assertEquals(1, evidence.asked().notJoined().size(), "that was not joined");
         assertEquals(0, evidence.counted(), "so no combination of it is claimed");
         assertEquals(MeasurementStatus.PARTIAL, behavior.status(),
                 () -> "and the behavior is short of a measurement: " + behavior.weakenedBy());
@@ -248,9 +248,7 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
     }
 }

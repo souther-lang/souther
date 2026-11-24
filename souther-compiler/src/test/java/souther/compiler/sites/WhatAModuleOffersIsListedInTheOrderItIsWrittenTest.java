@@ -1,5 +1,6 @@
 package souther.compiler.sites;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Region;
 import souther.compiler.meta.ModulePath;
@@ -41,7 +42,8 @@ class WhatAModuleOffersIsListedInTheOrderItIsWrittenTest {
     }
 
     private static List<String> offeredBy(String lib) {
-        Compilation compilation = Compilation.ofSources(List.of(lib), ModulePath.EMPTY);
+        Compilation compilation =
+                ACompiledModel.compiles(Compilation.ofSources(List.of(lib), ModulePath.EMPTY));
         Hir.Module resolved = compilation.db().ask(new Names.Resolved("lib")).value();
         SemanticSnapshot snapshot = SemanticSnapshot.of(compilation.db(), "lib")
                 .orElseThrow(() -> new AssertionError("lib has a snapshot"));

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.types.TypeKey;
@@ -136,10 +137,7 @@ class WhatAPublishedDeclarationSaysMovesWithWhatItSaysTest {
     /** What {@code demo} publishes about {@code declared}, over a compilation of {@code source}. */
     private static DeclarationMeaning published(String declared, String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), null);
-        compilation.answerEverything();
-        assertEquals(List.of(),
-                compilation.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                "this source is supposed to compile");
+        ACompiledModel.compiles(compilation);
         Db db = compilation.db();
         return ClauseReadings.meaningOf(db, "demo",
                 TypeSymbols.declared(new TypeKey("demo", declared)));

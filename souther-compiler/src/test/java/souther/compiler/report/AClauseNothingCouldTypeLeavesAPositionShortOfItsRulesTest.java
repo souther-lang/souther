@@ -1,11 +1,14 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,7 +43,7 @@ class AClauseNothingCouldTypeLeavesAPositionShortOfItsRulesTest {
     private static String reportOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1319"), compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -82,7 +85,7 @@ class AClauseNothingCouldTypeLeavesAPositionShortOfItsRulesTest {
     @Test
     void thisWitnessIsOneTheCompilerRefuses() {
         Compilation compilation = Compilation.ofSource(RULES_NEVER_ARRIVED_AT, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1319"), compilation);
         assertFalse(compilation.diagnostics().values().stream()
                         .flatMap(java.util.List::stream).toList().isEmpty(),
                 "a position whose rules never arrived takes a clause nothing could type");

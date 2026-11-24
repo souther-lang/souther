@@ -1,5 +1,6 @@
 package souther.exact;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Map;
@@ -86,10 +87,11 @@ public final class ExactArithmetic {
             numerator = numerator.negate();
             denominator = denominator.negate();
         }
-        if (numerator.bitLength() < Long.SIZE - 1 && denominator.bitLength() < Long.SIZE - 1) {
-            return canonical(numerator.longValue(), denominator.longValue(), twos, fives);
+        if (numerator.bitLength() < Long.SIZE && denominator.bitLength() < Long.SIZE
+                && numerator.longValue() != Long.MIN_VALUE) {
+            return canonical(numerator.longValue(), denominator.longValue(), twos, fives, null);
         }
-        BigInteger common = numerator.gcd(denominator);
+        BigInteger common = commonFactor(numerator, denominator);
         if (!common.equals(BigInteger.ONE)) {
             numerator = numerator.divide(common);
             denominator = denominator.divide(common);
@@ -110,66 +112,176 @@ public final class ExactArithmetic {
             denominator = denominator.shiftRight(inDenominator);
             twos = ExactPowers.added(twos, -inDenominator);
         }
-        // A five leaves no such mark, so it is one division each — bounded by the digits the number
-        // already has, so nothing here is amplified by the exponents: a power of ten held as a scale never
-        // reaches this loop at all.
-        while (true) {
-            BigInteger[] divided = numerator.divideAndRemainder(ExactPowers.FIVE);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            numerator = divided[0];
-            fives = ExactPowers.added(fives, 1);
-        }
-        while (true) {
-            BigInteger[] divided = denominator.divideAndRemainder(ExactPowers.FIVE);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            denominator = divided[0];
-            fives = ExactPowers.added(fives, -1);
-        }
+        // A five leaves no such mark, so the fives come off by division.
+        long[] taken = new long[1];
+        numerator = withoutFives(numerator, taken);
+        fives = ExactPowers.added(fives, taken[0]);
+        taken[0] = 0;
+        denominator = withoutFives(denominator, taken);
+        fives = ExactPowers.added(fives, -taken[0]);
         return new ExactParts(numerator, denominator, twos, fives);
     }
 
     /**
-     * The same canonical form, of a numerator and a positive denominator a long holds with a bit to
-     * spare, worked out in longs.
+     * The one canonical form of the value a written decimal is: its unscaled value times two and five
+     * to the negated scale, so the scale moves into the exponents and nothing is built.
+     *
+     * <p>A decimal whose unscaled value a long holds is read as one rather than through
+     * {@link BigDecimal#unscaledValue}, which makes a {@code BigInteger} of it every time it is asked.
+     * Whether a long holds it is asked by comparing with the least and the greatest long at a scale of
+     * nought, which reads the sizes of the two and counts no digits: a digit count of a large value is
+     * work that grows faster than the value does.
+     */
+    public static ExactParts canonical(BigDecimal written) {
+        long exponent = -(long) written.scale();
+        // Moved by its own scale, which leaves a scale of nought, so nothing is refused and the
+        // unscaled value is the whole number this is.
+        BigDecimal unscaled = written.scaleByPowerOfTen(written.scale());
+        if (unscaled.compareTo(LEAST_LONG) >= 0 && unscaled.compareTo(GREATEST_LONG) <= 0) {
+            return canonical(new ExactParts(unscaled.longValue(), 1, exponent, exponent));
+        }
+        return canonical(written.unscaledValue(), BigInteger.ONE, exponent, exponent);
+    }
+
+    private static final BigDecimal LEAST_LONG = BigDecimal.valueOf(Long.MIN_VALUE);
+
+    private static final BigDecimal GREATEST_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
+
+    /**
+     * The one canonical form of the value {@code parts} are, which is {@code parts} itself where they
+     * are in it already — as the product and the quotient of two canonical values are, and as a
+     * value handed back unchanged is — so that asking costs no new parts.
+     *
+     * @throws ExactRangeExceeded where the exponents the value comes to are past sixty-four bits
+     */
+    public static ExactParts canonical(ExactParts parts) {
+        if (parts.isZero()) {
+            return ExactParts.ZERO;
+        }
+        if (parts.inLongs() && parts.numeratorInALong() != Long.MIN_VALUE
+                && parts.denominatorInALong() != Long.MIN_VALUE) {
+            long numerator = parts.numeratorInALong();
+            long denominator = parts.denominatorInALong();
+            // Neither is the least long, so the negation of either is held.
+            return denominator < 0
+                    ? canonical(-numerator, -denominator, parts.twos(), parts.fives(), null)
+                    : canonical(numerator, denominator, parts.twos(), parts.fives(), parts);
+        }
+        return canonical(parts.numerator(), parts.denominator(), parts.twos(), parts.fives());
+    }
+
+    /**
+     * {@code of}, which is not nought, with every factor of five taken off, and how many were added
+     * to {@code taken}.
+     *
+     * <p>Five to each power of two is tried while it divides what is left, and then each of those
+     * powers once more from the largest down: a number holding {@code k} fives is divided about
+     * {@code 2·log k} times, each by a power no larger than what comes off. One five at a time, a
+     * whole number written out from a power of ten — a decimal rounded to a scale far from nought
+     * is one — would be divided once per digit, each time across all of its digits.
+     */
+    private static BigInteger withoutFives(BigInteger of, long[] taken) {
+        int levels = 0;
+        BigInteger power = ExactPowers.FIVE;
+        while (true) {
+            BigInteger[] divided = of.divideAndRemainder(power);
+            if (divided[1].signum() != 0) {
+                break;
+            }
+            of = divided[0];
+            taken[0] += 1L << levels;
+            levels++;
+            // A square with more bits than what is left cannot divide it.
+            if (2L * power.bitLength() - 1 > of.bitLength()) {
+                break;
+            }
+            power = power.multiply(power);
+        }
+        // Each power is squared up again rather than kept: the largest dominates the cost of all.
+        for (int i = levels - 1; i >= 0; i--) {
+            BigInteger[] divided = of.divideAndRemainder(fiveToTheTwoTo(i));
+            if (divided[1].signum() == 0) {
+                of = divided[0];
+                taken[0] += 1L << i;
+            }
+        }
+        return of;
+    }
+
+    /** Five to the power of two to the {@code level}. */
+    private static BigInteger fiveToTheTwoTo(int level) {
+        BigInteger power = ExactPowers.FIVE;
+        for (int i = 0; i < level; i++) {
+            power = power.multiply(power);
+        }
+        return power;
+    }
+
+    /**
+     * The same canonical form, of a numerator other than the least long and a positive denominator,
+     * worked out in longs.
      *
      * <p>Nearly every value the constraint algebra and a model's rationals make is this small, and
      * the steps are the ones above: the common factor off, then the twos where the bits stop, then
      * the fives one division each. In longs none of them allocates, where each division of a
-     * {@code BigInteger} answers a new one, and a remainder check answers two. The spare bit is what
-     * lets the magnitude of the numerator be taken without the least long, which has none.
+     * {@code BigInteger} answers a new one, and a remainder check answers two. The least long is left
+     * to the wide route because its magnitude is the one a long does not hold, and the numbers that
+     * bound an {@code Int} are the ones beside it, which this takes.
+     *
+     * @param handed the parts these four numbers came from, handed back where they are canonical
+     *               already, or null
      */
-    private static ExactParts canonical(long numerator, long denominator, long twos, long fives) {
-        long common = commonFactor(Math.abs(numerator), denominator);
-        numerator /= common;
-        denominator /= common;
+    private static ExactParts canonical(long numerator, long denominator, long twos, long fives,
+                                        ExactParts handed) {
+        // A division for each side is skipped where there is nothing to take off: most values are
+        // whole numbers, and a denominator of one has no factor of two or five to look for.
+        long common = denominator == 1 ? 1 : commonFactor(Math.abs(numerator), denominator);
+        if (common != 1) {
+            numerator /= common;
+            denominator /= common;
+        }
         int inNumerator = Long.numberOfTrailingZeros(numerator);
         if (inNumerator > 0) {
             numerator >>= inNumerator;
             twos = ExactPowers.added(twos, inNumerator);
         }
-        int inDenominator = Long.numberOfTrailingZeros(denominator);
-        if (inDenominator > 0) {
-            denominator >>= inDenominator;
-            twos = ExactPowers.added(twos, -inDenominator);
-        }
         while (numerator % 5 == 0) {
             numerator /= 5;
             fives = ExactPowers.added(fives, 1);
         }
-        while (denominator % 5 == 0) {
-            denominator /= 5;
-            fives = ExactPowers.added(fives, -1);
+        if (denominator != 1) {
+            int inDenominator = Long.numberOfTrailingZeros(denominator);
+            if (inDenominator > 0) {
+                denominator >>= inDenominator;
+                twos = ExactPowers.added(twos, -inDenominator);
+            }
+            while (denominator % 5 == 0) {
+                denominator /= 5;
+                fives = ExactPowers.added(fives, -1);
+            }
         }
-        return new ExactParts(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator),
-                twos, fives);
+        if (handed != null && handed.numeratorInALong() == numerator
+                && handed.denominatorInALong() == denominator
+                && handed.twos() == twos && handed.fives() == fives) {
+            return handed;
+        }
+        return new ExactParts(numerator, denominator, twos, fives);
+    }
+
+    /**
+     * The greatest common factor of two whole numbers of any size, which is one wherever either is.
+     *
+     * <p>The one place a gcd of these is taken. A whole number is a fraction over one and the ends of
+     * an integer type, the least and greatest long, are past the long route, so these come through
+     * here at every read of such a bound; and a gcd with one is not free — it walks the bits of the
+     * other.
+     */
+    public static BigInteger commonFactor(BigInteger a, BigInteger b) {
+        return a.equals(BigInteger.ONE) || b.equals(BigInteger.ONE) ? BigInteger.ONE : a.gcd(b);
     }
 
     /** The greatest common factor of two positive longs. */
-    private static long commonFactor(long a, long b) {
+    public static long commonFactor(long a, long b) {
         while (b != 0) {
             long rest = a % b;
             a = b;
@@ -193,11 +305,11 @@ public final class ExactArithmetic {
         return out;
     }
 
-    /** Whether both whole numbers of {@code parts} take the long route: a long holds each with a
-     *  bit to spare, as it does for {@link #canonical(long, long, long, long)}. */
+    /** Whether both whole numbers of {@code parts} take the long route of a sum, a product or a
+     *  quotient: a long holds each with a bit to spare, which the working of those is formed in. */
     private static boolean inLongs(ExactParts parts) {
-        return parts.numerator().bitLength() < Long.SIZE - 1
-                && parts.denominator().bitLength() < Long.SIZE - 1;
+        return parts.inLongs() && bits(parts.numeratorInALong()) < Long.SIZE - 1
+                && bits(parts.denominatorInALong()) < Long.SIZE - 1;
     }
 
     /** How many bits the magnitude of {@code whole} takes, which the long route holds below
@@ -234,7 +346,7 @@ public final class ExactArithmetic {
      * the distance still, and far past any that is built here. {@code whole} is not nought, so
      * nought says nothing but that this went wide.
      */
-    private static long raised(long whole, long twos, long fives) {
+    public static long raised(long whole, long twos, long fives) {
         if (Long.compareUnsigned(twos, Long.SIZE - 2) > 0
                 || Long.compareUnsigned(fives, FIVES.length - 1) > 0) {
             return 0;
@@ -317,8 +429,8 @@ public final class ExactArithmetic {
         if (!addedInALong(a.twos(), b.twos()) || !addedInALong(a.fives(), b.fives())) {
             return null;
         }
-        return crossed(a.numerator().longValue(), a.denominator().longValue(),
-                b.numerator().longValue(), b.denominator().longValue(),
+        return crossed(a.numeratorInALong(), a.denominatorInALong(),
+                b.numeratorInALong(), b.denominatorInALong(),
                 a.twos() + b.twos(), a.fives() + b.fives());
     }
 
@@ -339,8 +451,8 @@ public final class ExactArithmetic {
                 || !multipliesInALong(denominatorOne, denominatorTwo)) {
             return null;
         }
-        return new ExactParts(BigInteger.valueOf(numeratorOne * numeratorTwo),
-                BigInteger.valueOf(denominatorOne * denominatorTwo), twos, fives);
+        return new ExactParts(numeratorOne * numeratorTwo, denominatorOne * denominatorTwo,
+                twos, fives);
     }
 
     /** {@link #times}, in whole numbers of whatever size the operands are. */
@@ -348,8 +460,8 @@ public final class ExactArithmetic {
         if (a.isZero() || b.isZero()) {
             return ExactParts.ZERO;
         }
-        BigInteger acrossOne = a.numerator().gcd(b.denominator());
-        BigInteger acrossTwo = b.numerator().gcd(a.denominator());
+        BigInteger acrossOne = commonFactor(a.numerator(), b.denominator());
+        BigInteger acrossTwo = commonFactor(b.numerator(), a.denominator());
         try {
             return new ExactParts(
                     a.numerator().divide(acrossOne).multiply(b.numerator().divide(acrossTwo)),
@@ -391,8 +503,8 @@ public final class ExactArithmetic {
         }
         // The divisor turned over: its denominator above the line and its numerator, with its
         // sign, below it.
-        return crossed(a.numerator().longValue(), a.denominator().longValue(),
-                b.denominator().longValue(), b.numerator().longValue(),
+        return crossed(a.numeratorInALong(), a.denominatorInALong(),
+                b.denominatorInALong(), b.numeratorInALong(),
                 a.twos() - b.twos(), a.fives() - b.fives());
     }
 
@@ -404,8 +516,8 @@ public final class ExactArithmetic {
         if (a.isZero()) {
             return ExactParts.ZERO;
         }
-        BigInteger acrossOne = a.numerator().gcd(b.numerator());
-        BigInteger acrossTwo = a.denominator().gcd(b.denominator());
+        BigInteger acrossOne = commonFactor(a.numerator(), b.numerator());
+        BigInteger acrossTwo = commonFactor(a.denominator(), b.denominator());
         try {
             return new ExactParts(
                     a.numerator().divide(acrossOne).multiply(b.denominator().divide(acrossTwo)),
@@ -427,8 +539,10 @@ public final class ExactArithmetic {
         if (of.isZero()) {
             throw new IllegalArgumentException("nought has no reciprocal");
         }
-        return new ExactParts(of.denominator(), of.numerator(),
-                ExactPowers.negated(of.twos()), ExactPowers.negated(of.fives()));
+        long twos = ExactPowers.negated(of.twos());
+        long fives = ExactPowers.negated(of.fives());
+        return of.inLongs() ? new ExactParts(of.denominatorInALong(), of.numeratorInALong(), twos, fives)
+                : new ExactParts(of.denominator(), of.numerator(), twos, fives);
     }
 
     /**
@@ -464,7 +578,7 @@ public final class ExactArithmetic {
             for (ExactParts each : terms) {
                 total = total.isZero() ? each : plus(total, each);
             }
-            return canonical(total.numerator(), total.denominator(), total.twos(), total.fives());
+            return canonical(total);
         } catch (ExactFailure _) {
             return byScale(terms, SumWork.NOBODY_PAYS);
         }
@@ -551,8 +665,7 @@ public final class ExactArithmetic {
             }
             at.values().removeIf(ExactParts::isZero);
             ExactParts only = new NearestFirst(at, work).met();
-            return only == null ? ExactParts.ZERO
-                    : canonical(only.numerator(), only.denominator(), only.twos(), only.fives());
+            return only == null ? ExactParts.ZERO : canonical(only);
         } catch (ArithmeticException e) {
             throw ExactPowers.hostLimit(e);
         }
@@ -811,12 +924,12 @@ public final class ExactArithmetic {
                 ExactPowers.lessened(b.fives(), commonFives)));
         // The denominators' common factor off before either is multiplied out, and the sum's
         // common factor with its denominator after, so the fraction is no larger than it is.
-        BigInteger shared = a.denominator().gcd(b.denominator());
+        BigInteger shared = commonFactor(a.denominator(), b.denominator());
         BigInteger overA = a.denominator().divide(shared);
         BigInteger overB = b.denominator().divide(shared);
         BigInteger sum = here.multiply(overB).add(there.multiply(overA));
         BigInteger denominator = overA.multiply(b.denominator());
-        BigInteger common = sum.gcd(denominator);
+        BigInteger common = commonFactor(sum, denominator);
         if (common.signum() != 0 && !common.equals(BigInteger.ONE)) {
             sum = sum.divide(common);
             denominator = denominator.divide(common);
@@ -860,15 +973,15 @@ public final class ExactArithmetic {
         }
         long commonTwos = Math.min(a.twos(), b.twos());
         long commonFives = Math.min(a.fives(), b.fives());
-        long here = raised(a.numerator().longValue(),
+        long here = raised(a.numeratorInALong(),
                 a.twos() - commonTwos, a.fives() - commonFives);
-        long there = raised(b.numerator().longValue(),
+        long there = raised(b.numeratorInALong(),
                 b.twos() - commonTwos, b.fives() - commonFives);
         if (here == 0 || there == 0) {
             return null;
         }
-        long aDenominator = a.denominator().longValue();
-        long bDenominator = b.denominator().longValue();
+        long aDenominator = a.denominatorInALong();
+        long bDenominator = b.denominatorInALong();
         long shared = commonFactor(Math.abs(aDenominator), Math.abs(bDenominator));
         long overThis = aDenominator / shared;
         long overThat = bDenominator / shared;
@@ -901,8 +1014,7 @@ public final class ExactArithmetic {
         if (!addedInALong(commonTwos, twos)) {
             return null;
         }
-        return new ExactParts(BigInteger.valueOf(whole),
-                BigInteger.valueOf(overThis * bDenominator), commonTwos + twos, commonFives);
+        return new ExactParts(whole, overThis * bDenominator, commonTwos + twos, commonFives);
     }
 
     /** {@link #plus}, in whole numbers of whatever size the operands are. */
@@ -922,7 +1034,7 @@ public final class ExactArithmetic {
             BigInteger there = b.numerator().multiply(ExactPowers.powers(
                     ExactPowers.lessened(b.twos(), commonTwos),
                     ExactPowers.lessened(b.fives(), commonFives)));
-            BigInteger shared = a.denominator().gcd(b.denominator());
+            BigInteger shared = commonFactor(a.denominator(), b.denominator());
             BigInteger overThis = a.denominator().divide(shared);
             Summed sum = summed(
                     here.multiply(b.denominator().divide(shared)), there.multiply(overThis));
@@ -989,6 +1101,34 @@ public final class ExactArithmetic {
      * work pays for these as they come.
      */
     public static int compare(ExactParts a, ExactParts b, LongConsumer widened) {
+        // Only where nobody counts the brackets is the long route taken: a pair it settles can be one
+        // the brackets refine, and a caller paying for each bracket pays for the work the order takes
+        // at any width.
+        int settled = settledWithoutBrackets(a, b, widened == ExactOrder.NOBODY_ASKS);
+        if (settled != UNSETTLED) {
+            return settled;
+        }
+        int byMagnitude = ExactOrder.magnitudes(a, b, widened);
+        return a.signum() > 0 ? byMagnitude : -byMagnitude;
+    }
+
+    /**
+     * Where {@code a} stands against {@code b} where that is settled without refining a bracket — by
+     * equal parts, by sign, or by the magnitudes in longs — and {@link #UNSETTLED} where only the
+     * brackets settle it.
+     *
+     * <p>For a caller that keeps the orders it is asked for: what this settles costs nothing and
+     * makes nothing, and keeping it would cost more than asking again. What it leaves is the order
+     * {@link #compare(ExactParts, ExactParts)} works out from brackets built at every ask.
+     */
+    public static int compareWithoutBrackets(ExactParts a, ExactParts b) {
+        return settledWithoutBrackets(a, b, true);
+    }
+
+    /** What {@link #compareWithoutBrackets} answers where only the brackets settle the order. */
+    public static final int UNSETTLED = 2;
+
+    private static int settledWithoutBrackets(ExactParts a, ExactParts b, boolean inLongs) {
         if (a.equals(b)) {
             return 0;
         }
@@ -996,8 +1136,60 @@ public final class ExactArithmetic {
         if (bySign != 0) {
             return bySign;
         }
-        int byMagnitude = ExactOrder.magnitudes(a, b, widened);
+        int byMagnitude = inLongs ? magnitudesInLongs(a, b) : UNDECIDED;
+        if (byMagnitude == UNDECIDED) {
+            return UNSETTLED;
+        }
         return a.signum() > 0 ? byMagnitude : -byMagnitude;
+    }
+
+    /** What {@link #magnitudesInLongs} answers where the long route does not hold the pair. */
+    static final int UNDECIDED = 2;
+
+    /** The widest exponent whose difference from another is read as a long without checking. */
+    private static final long NEAR = 1L << 31;
+
+    /** Whether {@code exponent} is within {@link #NEAR} of nought — asked of its two ends and not of
+     *  its magnitude, which the least long has none of. */
+    private static boolean near(long exponent) {
+        return exponent >= -NEAR && exponent <= NEAR;
+    }
+
+    /**
+     * Where the magnitude of {@code a} stands against that of {@code b}, by cross-multiplying longs,
+     * or {@link #UNDECIDED} where the numbers do not fit them.
+     *
+     * <p>The order of {@code |n₁|·d₂·2^t₁·5^f₁} against {@code |n₂|·d₁·2^t₂·5^f₂}: dividing both by the
+     * lesser power of each prime leaves only the differences of the exponents, and where the side
+     * those raise is held by a long, each side is a product of two longs below two to the sixty-three,
+     * compared as the hundred and twenty-eight bits it is. So every long but the least is taken, and
+     * the numbers that bound an {@code Int} are ordered against ordinary ones without a bracket.
+     */
+    static int magnitudesInLongs(ExactParts a, ExactParts b) {
+        if (!a.inLongs() || !b.inLongs()
+                || a.numeratorInALong() == Long.MIN_VALUE || b.numeratorInALong() == Long.MIN_VALUE
+                || a.denominatorInALong() <= 0 || b.denominatorInALong() <= 0
+                || !near(a.twos()) || !near(b.twos()) || !near(a.fives()) || !near(b.fives())) {
+            return UNDECIDED;
+        }
+        long twosApart = a.twos() - b.twos();
+        long fivesApart = a.fives() - b.fives();
+        long mine = raisedUnlessByNothing(Math.abs(a.numeratorInALong()), Math.max(twosApart, 0),
+                Math.max(fivesApart, 0));
+        long theirs = raisedUnlessByNothing(Math.abs(b.numeratorInALong()), Math.max(-twosApart, 0),
+                Math.max(-fivesApart, 0));
+        if (mine == 0 || theirs == 0) {
+            return UNDECIDED;
+        }
+        long mineOver = b.denominatorInALong();
+        long theirsOver = a.denominatorInALong();
+        int byHigh = Long.compare(Math.multiplyHigh(mine, mineOver), Math.multiplyHigh(theirs, theirsOver));
+        return byHigh != 0 ? byHigh : Long.compareUnsigned(mine * mineOver, theirs * theirsOver);
+    }
+
+    /** {@code whole} itself where it is raised by no power, and {@link #raised} where it is. */
+    private static long raisedUnlessByNothing(long whole, long twos, long fives) {
+        return twos == 0 && fives == 0 ? whole : raised(whole, twos, fives);
     }
 
     /**
@@ -1039,6 +1231,12 @@ public final class ExactArithmetic {
      */
     public static boolean canBeWritten(BigInteger whole, BigInteger twos, BigInteger fives) {
         return ExactPowers.writable(whole, twos, fives);
+    }
+
+    /** {@link #canBeWritten(BigInteger, BigInteger, BigInteger)} of the numerator of {@code parts},
+     *  with two exponents at or above nought that a long holds. */
+    public static boolean canBeWritten(ExactParts parts, long twos, long fives) {
+        return ExactPowers.writable(parts.numeratorMagnitudeBits(), twos, fives);
     }
 
     /** An exponent negated, which the least long is not. */

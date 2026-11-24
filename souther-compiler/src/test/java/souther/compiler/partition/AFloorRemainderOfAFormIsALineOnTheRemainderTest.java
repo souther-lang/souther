@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.Towards;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -19,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -389,10 +392,13 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 .filter(reason -> reason == UndividedPosition.Reason.UNSUPPORTED_SYNTAX
                         || reason == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
                 .toList());
-        for (String spelled : List.of("Int.floorMod(a + b, 11) == c",
-                "2 * c == 2 * Int.floorMod(a + b, 11)")) {
-            assertEquals(List.of("-1", "11", "0"), bordersOf(parameters, spelled), spelled);
-        }
+        assertEquals(List.of("-1", "11", "0"),
+                bordersOf(parameters, "Int.floorMod(a + b, 11) == c"));
+        // Twice each side is another program over an unbounded {@code c}: {@code 2 * c} stops the
+        // run from half the greatest {@code Int}, so no line is drawn on a {@code c} that holds
+        // values the run stops at with the ones it does not.
+        List<String> twice = bordersOf(parameters, "2 * c == 2 * Int.floorMod(a + b, 11)");
+        assertFalse(twice.contains("-1") || twice.contains("11"), twice::toString);
     }
 
     /**
@@ -425,7 +431,8 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
      * the remainder is one at most, and against eleven less the remainder past it — is read
      * through to the end: the line on the digit and the remainder added to it are drawn, no
      * comparison of it is left as unread or as several lines held together, and a row at a line is
-     * what its label says.
+     * what its label says. Past the branch the remainder is two at least, so the digit is nine at
+     * most there and the line beyond it is at ten.
      */
     @Test
     void aCheckDigitAgainstABranchOnTheRemainderIsReadThroughToTheEnd() {
@@ -433,8 +440,11 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 "let r = Int.floorMod(a + b, 11)",
                 "guard c == (if r <= 1 then 0 else 11 - r) else No", "Ok"), "");
 
-        assertTrue(bordersOf(linesOf(compilation)).containsAll(List.of("0", "11", "12")),
+        assertTrue(bordersOf(linesOf(compilation)).containsAll(List.of("0", "10", "11")),
                 bordersOf(linesOf(compilation)).toString());
+        assertFalse(bordersOf(linesOf(compilation)).contains("12"),
+                () -> "no digit past the branch is eleven or ten: "
+                        + bordersOf(linesOf(compilation)));
         List<UndividedPosition.Reason> unread = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("f").notRead().stream()
                 .map(PartitionEvidence.NotRead::reason).toList();
@@ -477,9 +487,81 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 "c == Int.floorMod(9223372036854775807 * x, 11)"));
         // And where it is computed at them, the same form is: three times the number is.
         assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x, 11)"));
+        // Moved by a number, the sum with the number is worked out on every row, and it is asked
+        // at the values the rows are built at as it was written: it comes to a number an Int
+        // holds there, so the form is computed at them all the same.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("x: Int, c: Int",
                 "c == Int.floorMod(3 * x + 5, 11)"));
+        // And moved by a number that overflows at them, the sum is no row's: the quantity holds
+        // that number taken by the divisor, which is a small one, so only the sum as written
+        // says so.
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x + 9223372036854775807, 11)"));
+        assertEquals(List.of("0"), bordersOf("x: Int, c: Int",
+                "c == Int.floorMod(3 * x - 9223372036854775807 - 10, 11)"));
     }
 
+
+    /**
+     * A number the form is moved by is an operation over the other numbers of the form as well as
+     * the witness, and those stand at whatever value their rows put them at: {@code a + 5} stops
+     * at the greatest {@code Int} for {@code a} however {@code x} is chosen. So the operation is
+     * not the witness's to get past, the number {@code a} is not said to be left every remainder,
+     * and no line is drawn on the remainder — whether {@code a} is free or held where there is no
+     * row at all.
+     */
+    @Test
+    void aNumberBesideTheWitnessIsNotSaidToBeLeftEveryRemainderWhereTheFormIsMovedByAConstant() {
+        Compilation free = compiled("", "a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)");
+        assertEquals(List.of("0"), bordersOf(linesOf(free)));
+        assertTrue(notShownAt(free, "a"), () -> reasonsEach("a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + 5 + x, 11)").toString());
+        Compilation held = compiled("data Top = Int\n    invariant value == 9223372036854775807\n",
+                "a: Top, x: Int, c: Int", "c == Int.floorMod(a.value + 5 + x, 11)");
+        assertFalse(bordersOf(linesOf(held)).contains("11"));
+        assertFalse(bordersOf(linesOf(held)).contains("-1"));
+        // And with no number to move it by, the sum is the form itself and the lines are drawn.
+        assertEquals(List.of("-1", "11", "0"), bordersOf("a: Int, x: Int, c: Int",
+                "c == Int.floorMod(a + x, 11)"));
+    }
+
+    /**
+     * What the form comes to once it is cancelled is not what the run works out: the {@code y} of
+     * {@code x + M * y - M * y} is gone from the form and is in the products, which stop the run
+     * at every {@code y} but nought. The form is {@code x}, but {@code x} is not put through
+     * every remainder by any assignment of the numbers the run reads, so the proof is given up
+     * and no line is drawn on the remainder.
+     */
+    @Test
+    void aNumberTheFormCancelledIsStillOneTheRunStopsAt() {
+        String m = "9223372036854775807";
+        for (String form : List.of(
+                m + " * (x + y) - " + m + " * (x - y) + x - (" + m + " * y + " + m + " * y)",
+                "x + " + m + " * y - " + m + " * y")) {
+            List<String> borders = bordersOf("x: Int, y: Int, c: Int",
+                    "c == Int.floorMod(" + form + ", 11)");
+            assertEquals(List.of("0"), borders, form);
+        }
+        // A number only the cancelling reads is one the run stops at all the same: the product
+        // comes first, whatever is added after it, and there is no row for any x.
+        List<String> pinned = bordersOf(linesOf(compiled(
+                "data Top = Int\n    invariant value == " + m + "\n", "x: Int, y: Top, c: Int",
+                "c == Int.floorMod((" + m + " * y.value - " + m + " * y.value) + x, 11)")));
+        assertFalse(pinned.contains("11"), pinned::toString);
+        assertFalse(pinned.contains("-1"), pinned::toString);
+        // Nor is it drawn where the cancelled number could stop nothing: no assignment of it is
+        // chosen, so there is none to ask the run to get past.
+        assertEquals(List.of("0"), bordersOf("x: Int, y: Int, c: Int",
+                "c == Int.floorMod(x + y - y, 11)"));
+    }
+
+    private static boolean notShownAt(Compilation compilation, String place) {
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").notRead()
+                .stream().anyMatch(each -> each.at().equals(place) && each.reason()
+                        == UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE);
+    }
 
     /**
      * A number beside the remainder that is read off a place the form is read at is not apart from
@@ -517,6 +599,73 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     @Test
     void aRemainderAddedToANumberOfItsOwnFormIsNotRead() {
         assertEquals(List.of(), bordersOf("a: Int, b: Int", "a == Int.floorMod(a + b, 11)"));
+    }
+
+    /**
+     * A rule of the decision a remainder of a form decides is composed a row on each side: a pair
+     * whose form leaves a remainder that meets it, and one whose form leaves one that does not,
+     * each worked out here of the pair the row holds. Weighed and moved forms alike, and a
+     * remainder met by several values.
+     */
+    @Test
+    void eachRuleOfADecisionOnARemainderIsComposedARowThatTakesIt() {
+        record Case(String condition, BiPredicate<Long, Long> holds) {}
+        for (Case each : List.of(
+                new Case("Int.floorMod(3 * a - d + 2, 10) == 0",
+                        (a, d) -> Math.floorMod(3 * a - d + 2, 10L) == 0),
+                new Case("Int.floorMod(a - d, 7) >= 5",
+                        (a, d) -> Math.floorMod(a - d, 7L) >= 5),
+                new Case("2 * Int.floorMod(a + 4 * d, 9) < 3",
+                        (a, d) -> 2 * Math.floorMod(a + 4 * d, 9L) < 3))) {
+            Compilation compilation = compiled("a: Int, d: Int", each.condition());
+            List<Boolean> sides = new ArrayList<>();
+            Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("f")
+                    .generation().stream()
+                    .filter(found -> found.finding().about() instanceof About.ARuleNoRowTakes)
+                    .forEach(found -> {
+                        if (found.outcome() instanceof GenerationOutcome.Generated made) {
+                            made.candidates().forEach(row -> sides.add(each.holds().test(
+                                    Long.parseLong(row.inputs().get(0).text()),
+                                    Long.parseLong(row.inputs().get(1).text()))));
+                        }
+                    });
+            assertTrue(sides.contains(true) && sides.contains(false),
+                    () -> each.condition() + ": a row on each side, and not " + sides);
+        }
+    }
+
+    /**
+     * A remainder of what the code points of a formatted string come to less as many of one
+     * number as the string is long — a digit's value, summed — is written a row at each point of
+     * its line: thirteen digits whose values leave the remainder the point is for, worked out here
+     * of the string the row holds. The length is walked from the format's own, and what the code
+     * points come to is what the remainder leaves to be chosen.
+     */
+    @Test
+    void aRemainderOfADigitSumIsWrittenADigitStringAtEachPoint() {
+        Compilation compilation = compiled("data Code = String\n"
+                        + "    invariant String.matches(\"[0-9]{13}\", value)", "c: Code",
+                "Int.floorMod(List.sum(List.map((x) -> x - 48, String.codePoints(c.value))), 10)"
+                        + " == 0");
+        List<String> labels = new ArrayList<>();
+        for (Row row : certifiedRows(linesOf(compilation))) {
+            String text = row.inputs().get(0);
+            String digits = text.substring(text.indexOf('"') + 1, text.lastIndexOf('"'));
+            assertTrue(digits.matches("[0-9]{13}"), text);
+            long remainder = Math.floorMod(digits.chars().map(c -> c - '0').sum(), 10);
+            for (String label : row.labels()) {
+                if (label.contains(" = ")) {
+                    assertEquals(Long.parseLong(label.substring(label.lastIndexOf(' ') + 1)),
+                            remainder, label + " at " + text);
+                    labels.add(label.substring(label.lastIndexOf(' ') + 1));
+                } else if (label.contains(" < ")) {
+                    assertTrue(remainder > 1, label + " at " + text);
+                    labels.add("above");
+                }
+            }
+        }
+        assertEquals(List.of("0", "1", "above"), labels.stream().sorted().toList(),
+                "a row at the line, beside it and past it");
     }
 
     /** One row of a measurement: what each input was written as and what each point is for. */
@@ -610,10 +759,7 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                 """.formatted(prelude, parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), String.join("\n    ", body),
                 examples);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 
     private static List<String> bordersOf(String parameters, String condition) {

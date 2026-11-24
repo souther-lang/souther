@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -39,8 +40,8 @@ class ACaseChainPastTheWaysADecisionIsReadForStopsThereTest {
     void theDecisionStopsAtTheWaysItIsReadForAndSaysSo() {
         int calls = 32 - Integer.numberOfLeadingZeros(
                 CompositionBudget.PATHS_OF_A_DECISION_READ.maximum());
-        Compilation compilation = Compilation.ofSource(
-                ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest.model(calls), "Main");
+        Compilation compilation = ACompiledModel.answered(
+                ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest.model(calls));
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the chain under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("draw");

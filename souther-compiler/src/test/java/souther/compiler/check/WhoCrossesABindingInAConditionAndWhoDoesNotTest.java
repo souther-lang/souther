@@ -8,6 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.BinOp;
@@ -346,12 +347,11 @@ class WhoCrossesABindingInAConditionAndWhoDoesNotTest {
      *  wrote, which is the shape a reading crosses and a flat reader stops at. */
     @Test
     void theConditionTheAnalysisReadsIsTheBindingTheExpansionWrote() {
-        Compilation compilation = Compilation.ofSource(YEN + """
+        Compilation compilation = ACompiledModel.answered(YEN + """
                 let nonNeg (n: Int) = n >= 0
                 behavior f : (n: Int) -> Yen constructs Yen
                 let f (n) = Yen(if nonNeg(n) then n else 0)
-                """, "Main");
-        compilation.answerEverything();
+                """);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         AnalysisBody body = checked.analysisBodies().get("f");

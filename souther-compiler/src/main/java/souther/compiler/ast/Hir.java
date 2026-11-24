@@ -1397,16 +1397,13 @@ public interface Hir {
         }
     }
 
-    /** The kind of primitive Raw a single-value decoder reads / an encoder writes. */
-    enum RawKind { TEXT, INT, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT }
-
     // --- decoders ---
 
     sealed interface DecoderDef extends Hir permits PrimDecoder, ObjectDecoder, NewtypeDecoder {}
 
     /** A single-value decoder: reads one primitive {@code input} and constructs {@code result}
      *  from it. */
-    record PrimDecoder(RawKind from, Binder input, Construct result, SourcePos pos)
+    record PrimDecoder(LeafScalar from, Binder input, Construct result, SourcePos pos)
             implements DecoderDef {}
 
     /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */
@@ -2942,6 +2939,14 @@ public interface Hir {
          *  author applied would be dropped by a rewrite that has no opinion about it. */
         public Apply withArgs(List<Expr> args) {
             return new Apply(function, args, origin, applied, application, pos, region);
+        }
+
+        /** The same application with {@code f} applied to each argument and to nothing else, or
+         *  this one where every argument answered itself, so a comparison of the result with what
+         *  was handed in stops at an application that was not changed. */
+        public Apply mapArgs(UnaryOperator<Expr> f) {
+            List<Expr> mapped = each(args, f);
+            return mapped == args ? this : withArgs(mapped);
         }
 
         /**

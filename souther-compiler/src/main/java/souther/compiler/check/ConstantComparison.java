@@ -61,6 +61,17 @@ public sealed interface ConstantComparison {
     record Either(ConstantComparison first, ConstantComparison second)
             implements ConstantComparison {}
 
+    /** Whether {@code number} stands as this says: a statement of a number that is one number, the
+     *  same on every run, holds of it or does not. */
+    default boolean holdsOf(ExactRatio number) {
+        return switch (this) {
+            case Against(Rel rel, ExactRatio against) -> rel.holds(number.compareTo(against));
+            case Settled(boolean holds) -> holds;
+            case Both(var first, var second) -> first.holdsOf(number) && second.holdsOf(number);
+            case Either(var first, var second) -> first.holdsOf(number) || second.holdsOf(number);
+        };
+    }
+
     /**
      * The number standing {@code rel} to {@code against}, for a number that is between {@code least}
      * and {@code most}.

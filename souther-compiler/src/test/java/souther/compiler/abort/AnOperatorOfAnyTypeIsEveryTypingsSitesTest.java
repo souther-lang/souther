@@ -20,11 +20,11 @@ class AnOperatorOfAnyTypeIsEveryTypingsSitesTest {
                 AbortSites.ofAnOperatorOfAnyType(BinOp.ADD));
     }
 
-    /** {@code /} over a newtype answers a {@code Rational} and builds nothing. */
+    /** {@code /} over a newtype answers a {@code Rational} and builds nothing, and every quotient
+     *  but one by nought is a rational number. */
     @Test
     void aQuotientBuildsNothing() {
-        assertEquals(AbortSet.of(AbortKind.DIVISION_BY_ZERO,
-                        AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
+        assertEquals(AbortSet.of(AbortKind.DIVISION_BY_ZERO),
                 AbortSites.ofAnOperatorOfAnyType(BinOp.DIV));
     }
 

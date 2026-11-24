@@ -54,15 +54,12 @@ class WhatALookupAnswersComparedWithAConstantIsALineOnTheEntryTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<String> linesRead(String report) {
@@ -76,7 +73,7 @@ class WhatALookupAnswersComparedWithAConstantIsALineOnTheEntryTest {
         for (String model : List.of(AS_A_WHOLE, THROUGH_THE_DEFAULT)) {
             String report = report(measured(model));
 
-            assertFalse(report.contains("not read"), report);
+            assertFalse(NotRead.in(report), report);
             assertTrue(report.contains("measurement: complete"), report);
             assertEquals(linesRead(written), linesRead(report), report);
         }

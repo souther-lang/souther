@@ -20,7 +20,7 @@ import java.util.List;
  * conjunction is descended into, and what is left is a statement — which is what {@link ClauseExpr}
  * already decided when it read the clause's connectives once.
  */
-final class ConjunctStatements {
+public final class ConjunctStatements {
 
     private ConjunctStatements() {
     }
@@ -51,15 +51,79 @@ final class ConjunctStatements {
         }
     }
 
-    /** Every statement {@code conjunct} states, in the order a reading arrives at them. */
-    static List<Reached> of(ClauseExpr conjunct, PartId<RuleRef.Invariant> part) {
+    /**
+     * One statement of a conjunct before it is numbered: what it says, and the bindings a reading
+     * crossed to reach it.
+     *
+     * <p>For a reader that asks what a clause states and does not file the answer under a rule's
+     * part, which is the only thing a number is for.
+     */
+    public record Stated(ClauseExpr.Part said, List<ClauseExpr.Scoped> crossed) {
+
+        public Stated {
+            if (said == null) {
+                throw new IllegalArgumentException("a statement of a conjunct says something");
+            }
+            crossed = List.copyOf(crossed);
+        }
+    }
+
+    /**
+     * Every statement {@code part} states, in the order a reading arrives at them, each with the
+     * number the part was handed for it or, where it was handed none, the next number of its
+     * conjunct.
+     */
+    static List<Reached> of(Clauses.StatedPart part) {
+        List<Stated> stated = statedBy(part.of());
         List<Reached> out = new ArrayList<>();
-        reach(conjunct, part, new int[1], List.of(), out);
+        // Numbered here, before anything is made of it. Numbered where an end or a hand-over is
+        // written down instead, the number would say which of the outcomes this was rather than
+        // which of the statements.
+        if (!part.statements().isEmpty() && part.statements().size() != stated.size()) {
+            throw new IllegalStateException(part.id() + " states " + stated.size()
+                    + " statements here and was handed the numbers of " + part.statements().size());
+        }
+        for (int each = 0; each < stated.size(); each++) {
+            // The number the part was handed for it, or the next number of its conjunct. The one
+            // place a statement is given its identity, for the reading that reads a part and for
+            // the one that finds what it states of every element: two places each choosing between
+            // the number handed and the next one are two answers to which statement this is.
+            out.add(new Reached(new InvariantStatementId(part.id(), part.statements().isEmpty()
+                    ? StatementNumber.of(each) : part.statements().get(each)),
+                    stated.get(each).said(), stated.get(each).crossed()));
+        }
         return List.copyOf(out);
     }
 
-    private static void reach(ClauseExpr saidAs, PartId<RuleRef.Invariant> part, int[] statements,
-                              List<ClauseExpr.Scoped> crossed, List<Reached> out) {
+    /**
+     * The numbers of the statements a statement of a container comes to when it is said of every
+     * element, within it: as many as the walk finds in {@code shape}, which is what the reading of
+     * that part will number by.
+     *
+     * <p>Counted here, by the walk that numbers, so that how many there are is not a second answer.
+     */
+    static List<StatementNumber> numbersWithin(InvariantStatementId statement, ClauseExpr shape) {
+        int count = statedBy(shape).size();
+        List<StatementNumber> out = new ArrayList<>();
+        for (int each = 0; each < count; each++) {
+            out.add(statement.number().stating(each));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every statement {@code conjunct} states, in the order a reading arrives at them, as they are
+     * before they are numbered. The same walk {@link #of} numbers, so the two cannot disagree about
+     * what a conjunct states.
+     */
+    public static List<Stated> statedBy(ClauseExpr conjunct) {
+        List<Stated> out = new ArrayList<>();
+        reach(conjunct, List.of(), out);
+        return List.copyOf(out);
+    }
+
+    private static void reach(ClauseExpr saidAs, List<ClauseExpr.Scoped> crossed,
+                              List<Stated> out) {
         // A binding, which is where the environment a reading carries changes and the one shape
         // that is not a part. Whether a denial stands above it decides nothing: the denial is
         // carried to the leaves as the clause is read, so the body under a binding already states
@@ -67,7 +131,7 @@ final class ConjunctStatements {
         if (saidAs instanceof ClauseExpr.Scoped scoped) {
             List<ClauseExpr.Scoped> inside = new ArrayList<>(crossed);
             inside.add(scoped);
-            reach(scoped.body(), part, statements, inside, out);
+            reach(scoped.body(), inside, out);
             return;
         }
         // What one part states may be more than one rule: a part that names a rule is that rule's
@@ -79,17 +143,12 @@ final class ConjunctStatements {
         // it composes both. Asked together with how the whole stands, the denial is applied a
         // second time and a conjunction an author wrote as a denied choice is never descended into.
         if (saidAs instanceof ClauseExpr.Joined joined && joined.how() == ConditionJoin.BOTH) {
-            reach(joined.left(), part, statements, crossed, out);
-            reach(joined.right(), part, statements, crossed, out);
+            reach(joined.left(), crossed, out);
+            reach(joined.right(), crossed, out);
             return;
         }
         // A binding is crossed above and a conjunction is descended into, so what is left is a part
         // of the clause: a leaf, or a choice a reading takes whole.
-        //
-        // Numbered here, before anything is made of it. Numbered where an end or a hand-over is
-        // written down instead, the number would say which of the outcomes this was rather than
-        // which of the statements.
-        out.add(new Reached(new InvariantStatementId(part, statements[0]++),
-                (ClauseExpr.Part) saidAs, crossed));
+        out.add(new Stated((ClauseExpr.Part) saidAs, crossed));
     }
 }

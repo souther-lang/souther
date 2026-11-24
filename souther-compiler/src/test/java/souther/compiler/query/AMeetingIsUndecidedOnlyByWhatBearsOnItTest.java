@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
@@ -91,7 +92,12 @@ class AMeetingIsUndecidedOnlyByWhatBearsOnItTest {
      */
     @Test
     void aWideGroupLeavesTheBehaviorPartialAndTheOtherGroupsGapsDecided() {
-        AdequacyReport.BehaviorReport behavior = behaviorUnder(5);
+        Compilation compilation = made(5);
+        ACompiledModel.compiles(compilation);
+        List<AdequacyReport.BehaviorReport> behaviors =
+                AdequacyReport.of(compilation).modules().getFirst().behaviors();
+        assertEquals(1, behaviors.size(), "one behavior in the model");
+        AdequacyReport.BehaviorReport behavior = behaviors.getFirst();
 
         assertFalse(behavior.evidence().interaction().asked().notMeasured().isEmpty(),
                 "one group is wider than this walks");
@@ -112,19 +118,14 @@ class AMeetingIsUndecidedOnlyByWhatBearsOnItTest {
     /** And a build refuses over them, which is what being decided is for. */
     @Test
     void aBuildMayRefuseOverAGapTheWalkedGroupEstablished() {
-        assertTrue(AdequacyReport.of(compiled(5)).adequacyGaps().stream()
+        Compilation compilation = made(5);
+        ACompiledModel.compiles(compilation);
+        assertTrue(AdequacyReport.of(compilation).adequacyGaps().stream()
                         .anyMatch(each -> each.kind() == Adequacy.Kind.INTERACTION_UNCOVERED),
                 "a combination the rows leave unmade is one a strict build may refuse over");
     }
 
-    private static AdequacyReport.BehaviorReport behaviorUnder(int cellsPerGroup) {
-        List<AdequacyReport.BehaviorReport> behaviors =
-                AdequacyReport.of(compiled(cellsPerGroup)).modules().getFirst().behaviors();
-        assertEquals(1, behaviors.size(), "one behavior in the model");
-        return behaviors.getFirst();
-    }
-
-    private static Compilation compiled(int cellsPerGroup) {
+    private static Compilation made(int cellsPerGroup) {
         Compilation compilation = Compilation.ofSource(APART, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
@@ -132,8 +133,6 @@ class AMeetingIsUndecidedOnlyByWhatBearsOnItTest {
                                 Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
         return compilation;
     }
 }

@@ -55,11 +55,11 @@ class ALineAtAFineDecimalIsNamedWithoutWritingItOutTest {
         Ran ran = CliInProcess.run("examples", file.toString());
         String said = ran.out() + ran.err();
 
-        assertEquals(1, ran.code(), () -> "an example that does not hold fails the run:\n" + said);
+        assertEquals(1, ran.code(), () -> "an example short of room fails the run:\n" + said);
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
-        // Reached the example at all, so the absence above is of a failure and not of a run.
-        assertTrue(said.contains("This example does not hold"),
-                () -> "the run reports on the example:\n" + said);
+        // Reached the example at all, so the absence above is of a failure and not of a run. The
+        // example squares t31 into a scale no BigDecimal keeps, which is a shortage of the run.
+        assertTrue(said.contains("E1941"), () -> "the run reports on the example:\n" + said);
         assertTrue(said.length() < 100_000,
                 () -> "and says it in space that does not grow with the scale: " + said.length());
     }

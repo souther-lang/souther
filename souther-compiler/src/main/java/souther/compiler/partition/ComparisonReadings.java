@@ -4,9 +4,12 @@ import souther.compiler.check.ARecursion;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.CallArguments;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
@@ -15,32 +18,48 @@ import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
-import souther.compiler.types.BinOp;
+import souther.compiler.types.ApplicationsReadOn;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
+import souther.compiler.types.WrittenOwner;
+import souther.compiler.check.WhatARunMayEndFor;
+import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLines;
 import souther.compiler.types.ValueName;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.OperationLaw;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -97,11 +116,12 @@ import java.util.function.Supplier;
  * ({@link WithinOneApplication}).
  *
  * @param operationsStanding what this tree says of the forks the tree that runs names less of
+ * @param stops              whether a run stops at each step of the body it may stop at
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
                           List<OutcomeMet> outcomes, List<ForkDecided> decided,
-                          WhereTheOperationsStand operationsStanding) {
+                          WhereTheOperationsStand operationsStanding, StopsOfABody stops) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
@@ -184,15 +204,43 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *              it this reading does not answer for. Each part carries the reading it is read
      *              in, and the fork carries none of its own: a part is never read where the fork
      *              stands, which is a different place from where a helper or a closure wrote it
+     * @param assumed every condition on the way to the fork
+     * @param ways    the way the walk was on at each node of the condition
      */
     record ForkMet(ConstructOccurrence occurrence, Core condition, Citation at,
-                   List<Atom> atoms) {
+                   List<Atom> atoms, List<OnTheWay> assumed, WaysToNodes ways) {
 
         ForkMet {
-            if (occurrence == null || condition == null || at == null) {
+            if (occurrence == null || condition == null || at == null || ways == null) {
                 throw new IllegalArgumentException("a fork of the model is written somewhere");
             }
             atoms = List.copyOf(atoms);
+            assumed = List.copyOf(assumed);
+        }
+
+        /**
+         * Whether {@code part} of what this fork tests may be evaluated: some way the walk reached
+         * it on is not shown to hold no row of what the declarations leave.
+         *
+         * <p>Of the part and not of the atom it was read off. A part inside a closure is behind
+         * what the closure's own conditions say as much as one outside, and the atom is the call
+         * that holds the closure. A part the walk never reached — one read off a copy of a helper's
+         * body the walk did not enter — is asked of the way to the fork, which is a way it can
+         * only be reached on.
+         *
+         * <p>Asked of the way and not of the rows that arrive at places the rule is watched at, so
+         * a proof that the places could add is not used here: a part nothing proves unevaluated
+         * keeps what is owed of it.
+         */
+        boolean mayEvaluate(Core part, InputReading read) {
+            List<List<OnTheWay>> reached = ways.to(part);
+            for (List<OnTheWay> way : reached.isEmpty() ? List.of(assumed) : reached) {
+                if (Reachability.of(WayToTheBorder.forArrival(way), read.quantities().region())
+                        .leavesARow()) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
@@ -218,11 +266,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param unanswered empty where this reading answers for the whole of it: a comparison it read,
      *                   or a position of the input — a fork on such a part tests the values standing
      *                   there and its arms are their classes, so the question is the position's
+     * @param stoppedFor why the comparison this part is the whole of was not read to the end,
+     *                   where it was not: the stops of the parts of its statement nothing read.
+     *                   Empty where the reading of it never stopped, and then the parts left are
+     *                   left for what they are made of
      */
-    record Atom(Denotation at, List<Denotation> unanswered) {
+    record Atom(Denotation at, List<Denotation> unanswered, List<WhyUnread> stoppedFor) {
 
         Atom {
             unanswered = List.copyOf(unanswered);
+            stoppedFor = List.copyOf(stoppedFor);
         }
     }
 
@@ -247,10 +300,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   lines decides, or where a run stops in it, is put on the way at
      *                   ({@link #aCasePutOnTheWay}); nothing where it is one line that no run
      *                   stops in
-     * @param stopsWhere the rows on which a run stops in the comparison, as the conditions of the
-     *                   statement; nothing where no run does. Independent of the lines it draws
-     * @param metOn     which elements of the input a run makes the comparison on, where it stands
-     *                   inside closures an operation stopping at an answer applies to them
+     * @param worksOutOnEach what the comparison works out on each application of the closure it
+     *                   stands in, and where each is made ({@link Cutting#whatEachApplicationWorksOut});
+     *                   nothing where it is read once. Independent of the lines it draws
+     * @param stopsIn    what a run getting to the comparison works out, where it is read once,
+     *                   for where a run stops in it ({@link StopEvidence}); nothing where it is
+     *                   read on each application, or not read. Independent of the lines it draws
+     *                   and of what a row of them gets past
+     * @param onTheArms  what a run taking each arm of a choice the comparison is read through
+     *                   works out there, with where the arm is taken, where it is read once;
+     *                   none otherwise. Independent of the lines it draws
+     * @param applying   the applications of the closures the comparison stands in, which say which
+     *                   elements of the input a run makes the comparison on, where an operation
+     *                   stopping at an answer applies them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
      *                   wherever the body read is the one that runs. A helper's body read at a call
      *                   is not: it runs as the helper's own method, which every call shares, so
@@ -260,22 +322,111 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   read at a call of it
      * @param saidOnTheWay which copies of the model's code put each entry on these ways, told when
      *                   the ways were walked and of these ways alone
+     * @param witnesses  where a reading of the comparison asks for a row showing a count it reads
+     *                   takes every value beside how many its container holds: kept only for a
+     *                   count every row made of the witness gets past what a run works out before
+     *                   the comparison for ({@link WhatARunWorksOutBeforeACount})
+     * @param getsPast   what every operator a run works out up to the comparison, the comparison's
+     *                   own included, answering asks of a row: what a region can carry of it, and
+     *                   the places the rest ties together. A row that stops there is no row at the
+     *                   comparison, and the way's entries say nothing of it: they are what its
+     *                   conditions state, and an operator answering is none of them. Nothing
+     *                   where the comparison stands in a closure or a helper read at a call,
+     *                   whose applications are not one run
+     * @param readOn     which applications of the closures the comparison stands in read each
+     *                   line and relation it drew, beside them; nothing where it was read once
+     * @param first      what a run works out first in the comparison ({@link WorkedOutFirst}),
+     *                   worked out the first time it is asked: most comparisons are never asked it
+     * @param quotients  the quotients evaluating the comparison always works out, in the order
+     *                   it works them out ({@link QuotientsEveryRunWorksOut}): none for an
+     *                   application, which states no comparison to evaluate
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
-                   Optional<Condition> statedAsACondition, Optional<Proposition> stopsWhere,
-                   ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
-                   SaidOnTheWay saidOnTheWay) {
+                   Optional<Condition> statedAsACondition,
+                   Optional<List<Cutting.OnAnApplication>> worksOutOnEach,
+                   Optional<StopEvidence> stopsIn, List<StopEvidence.OnAnArm> onTheArms,
+                   ClosureApplications applying, ConstructOccurrence runsAs, CallContext context,
+                   SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
+                   DemandReading.Answered getsPast, List<ConstructionAsk> asks,
+                   ElementsNamed readsTheElements, LinesReadOn readOn,
+                   Supplier<WorkedOutFirst> first, List<Core.Binary> quotients,
+                   Supplier<Condition> asACondition) {
 
         Reading {
+            Objects.requireNonNull(asACondition, "the comparison as a condition, once asked");
             if (occurrence == null || statement == null || at == null
-                    || statedAsACondition == null || stopsWhere == null
-                    || metOn == null || runsAs == null || context == null
-                    || saidOnTheWay == null) {
+                    || statedAsACondition == null || worksOutOnEach == null
+                    || stopsIn == null || onTheArms == null || applying == null || runsAs == null
+                    || context == null
+                    || saidOnTheWay == null || witnesses == null || getsPast == null
+                    || asks == null || readsTheElements == null || readOn == null
+                    || first == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
+            asks = List.copyOf(asks);
+        }
+
+        /**
+         * What a run works out, and where ({@link #whatARunWorksOut}).
+         *
+         * @param stops     what the run works out
+         * @param madeWhere where the application of the closure the comparison stands in is
+         *                  made, or null where the comparison is not read on each application
+         * @param onAnArm   the arm of a choice it is worked out on, or null where it is worked
+         *                  out whichever arm is taken
+         */
+        record WorkedOutAt(StopEvidence stops, Proposition madeWhere,
+                           StopEvidence.OnAnArm onAnArm) {
+
+            WorkedOutAt {
+                Objects.requireNonNull(stops, "a run works something out");
+            }
+
+            /** Where the arm it is worked out on is taken, or null where it is worked out
+             *  whichever arm is taken. */
+            Proposition takenWhere() {
+                return onAnArm == null ? null : onAnArm.reached();
+            }        }
+
+        /**
+         * Every stop evidence a run getting to the comparison works out, each with where it is
+         * worked out: wherever the comparison is reached, on an application of the closure it
+         * stands in, on an arm of a choice it is read through, or on an arm an application takes.
+         * Asked of one place, so that whoever asks what a run works out of the evidence says it of
+         * all of it.
+         */
+        List<WorkedOutAt> whatARunWorksOut() {
+            List<WorkedOutAt> out = new ArrayList<>();
+            stopsIn.ifPresent(stops -> out.add(new WorkedOutAt(stops, null, null)));
+            // Where what it works out is not told in full, what every run works out first in it,
+            // before taking any arm, is told apart: a run gets there whichever arm it takes after.
+            if (stopsIn.isPresent() && !toldInFull(stopsIn.get().operations())) {
+                first.get().firstInIt().ifPresent(stops -> out.add(new WorkedOutAt(stops, null,
+                        null)));
+            }
+            worksOutOnEach.ifPresent(applications -> applications.forEach(one -> {
+                out.add(new WorkedOutAt(one.stops(), one.reached(), null));
+                one.handed().forEach(made -> out.add(new WorkedOutAt(made.stops(),
+                        made.madeWhere(), null)));
+                one.arms().forEach(arm -> out.add(new WorkedOutAt(arm.stops(),
+                        one.reached(), arm)));
+            }));
+            onTheArms.forEach(arm -> out.add(new WorkedOutAt(arm.stops(), null, arm)));
+            return out;
+        }
+
+        /** Which elements of the input a run makes the comparison on, as every application says. */
+        ElementsMetOn metOn() {
+            return applying.elementsMetOn();
+        }
+
+        /** Which elements a run makes the comparison on where a line is read by {@code by} of the
+         *  applications. */
+        ElementsMetOn metOn(ApplicationsReadOn by) {
+            return applying.elementsMetOn(by);
         }
 
         /**
@@ -283,9 +434,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * {@code put}, what the case puts on the way ({@link #aCasePutOnTheWay}).
          */
         List<OnTheWay> wayToACase(ReachingCuts.Stating put) {
+            return wayToACase(put.entries());
+        }
+
+        /**
+         * The way, and then {@code put}, entries some case puts on the way: as statements of the
+         * elements the comparison reads, as the way is ({@link ElementsOnTheWay}).
+         */
+        List<OnTheWay> wayToACase(List<OnTheWay> put) {
             List<OnTheWay> out = new ArrayList<>(assumed);
-            out.addAll(put.entries());
-            return List.copyOf(out);
+            out.addAll(put);
+            return ElementsOnTheWay.keptToOneElementEach(List.copyOf(out), readsTheElements);
         }
 
         /**
@@ -301,10 +460,35 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * @param read the reading of the input this comparison was read against
          */
         ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read) {
-            Condition statedAt = statedAsACondition.orElseThrow(() -> new IllegalArgumentException(
-                    "this comparison is one line no run stops in, and nothing of where one decides"
-                            + " is put on the way at it: " + decides));
-            return ReachingCuts.whereItDecides(statedAt, decides, read);
+            return ReachingCuts.whereItDecides(statedAt(), decides, read);
+        }
+
+        /**
+         * {@link #aCasePutOnTheWay(Proposition, InputReading)}, with what each part of a case
+         * chosen part by part asks taken from {@code eachPart} ({@link #aPartAsked}), and what
+         * follows from a statement at the members of a class from {@code followed} where a case
+         * read it before.
+         */
+        ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read,
+                                              Function<Proposition, ReachingCuts.Stating> eachPart,
+                                              RemaindersOfAnElement.Kept followed) {
+            return ReachingCuts.whereItDecides(statedAt(), decides, read, eachPart,
+                    followed);
+        }
+
+        /** What {@code part}, a part of a case, asks of a row put on the way at this comparison,
+         *  and nothing of what follows from it. */
+        ReachingCuts.Stating aPartAsked(Proposition part, InputReading read) {
+            return ReachingCuts.asked(statedAt(), part, read);
+        }
+
+        /**
+         * The condition what {@code decides} states is read at: the comparison's own where it is
+         * stated as one, and otherwise the comparison as a condition made where it is first asked,
+         * for what an arm or an application of it states.
+         */
+        private Condition statedAt() {
+            return statedAsACondition.orElseGet(asACondition);
         }
     }
 
@@ -348,6 +532,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * environment is a function of the program point — a binding met, an arm entered — and the
      * reading is one value for the whole of this walk. Put in it, the reading would be copied at
      * every step and asked of whichever copy a reader happened to hold.
+     *
+     * <p>{@code whole} is the behavior's own body and {@code within} the tree the walk is in: the
+     * body, a helper's body read at a call, or a value's template. A run on the way to a comparison
+     * in either may have worked out anything written in both, which is what is asked of where the
+     * way to it is not read.
+     *
+     * <p>{@code calledAt} is the call of the behavior's body a helper's body is read at, and the
+     * way to it: empty everywhere else.
      */
     private record Body(String behavior, InputReading read,
                         Arrivals answering, Templates templates,
@@ -355,14 +547,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         WhatConditionsState conditions, CallContext context, Core root,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
                         ForkDependencies.Gathered dependencies,
-                        WithinOneApplication.Gathered oneApplication) {
+                        WithinOneApplication.Gathered oneApplication,
+                        ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways,
+                        WhereARunMayStop constructions, Core whole, Core within,
+                        Optional<WayIn> calledAt, Optional<AtAConstruct> metOnly) {
 
-        /** The same reading, in the body of a recursive helper read at a call of it: its own
-         *  tree, and the copy that call makes of each construct in it. */
-        Body inside(Core helperBody, CallContext called, InputReads reads) {
+        /** The same reading, in the body of a recursive helper read at {@code at}, a call of it:
+         *  its own tree, and the copy that call makes of each construct in it. */
+        Body inside(Core helperBody, CallContext called, InputReads reads, WayIn at) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, outcomes,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
-                    dependencies, oneApplication);
+                    dependencies, oneApplication, witnesses, ways, constructions, whole,
+                    helperBody, Optional.of(at), metOnly);
         }
 
         /** That the walk met the fork at {@code occurrence} where it is now, as this reading's copy
@@ -394,9 +590,107 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * recorded, and what a run leaves arriving at its line, are read where the language's operations
      * are expanded — and this reads where they stand. A reading that took either would be one no
      * tree could make on its own.
+     *
+     * @param witnesses where a comparison's reading asks for a row showing a count it reads takes
+     *                  every value beside how many its container holds: found by running such a
+     *                  row, which is answered where a run is and handed in
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads) {
+                                 InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
+        return read(behavior, analysis, read, reads, witnesses, Optional.empty());
+    }
+
+    /** What is done at a construct that may state something, of a walk that reads nothing of what
+     *  any states ({@link #mayState}): handed the construct, the copy of it the walk met, the
+     *  applications of the closures it stands in and the names in force there. */
+    @FunctionalInterface
+    private interface AtAConstruct {
+
+        void met(Core e, ConstructOccurrence occurrence, ClosureApplications applying,
+                 InputReads reads, Body in);
+
+        /** Whether no construct met from here on is asked anything of, so the walk goes into none
+         *  of what is left. */
+        default boolean asksNoMore() {
+            return false;
+        }
+    }
+
+    /**
+     * A construct of the body that may state something a line is drawn from ({@link #mayState}),
+     * where the walk met it, and the applications of the closures it stands in.
+     *
+     * @param occurrence the construct, in the copy the walk met it in
+     * @param applying   the applications of the closures it stands in, every one of them
+     * @param through    the choices the values it is about are made through
+     */
+    record AConstructMet(ConstructOccurrence occurrence, ClosureApplications applying,
+                         List<AChoiceReadThrough> through) {
+
+        AConstructMet {
+            Objects.requireNonNull(occurrence, "a construct the walk met");
+            Objects.requireNonNull(applying, "inside some closures, or none");
+            through = List.copyOf(through);
+        }
+    }
+
+    /**
+     * The same walk of {@code body}, saying where each construct that may state something stands
+     * and on which applications, and reading nothing of what any of them states.
+     *
+     * <p>One walk and not a second one. Every way into a closure, an arm, a recursive helper and a
+     * template is taken by the one walk below, so what this meets is what {@link #of} meets, under
+     * the same applications; only what is done at a construct differs. What is read of each there
+     * — where its lines are drawn and where they decide — is most of what the walk costs, and is
+     * what a reader asking where the comparisons stand does not need.
+     *
+     * <p>So it meets more than {@link #of} reads: a comparison whose statement is carried past it,
+     * or an application that states nothing of its own, is met here and read as nothing there.
+     */
+    static List<AConstructMet> metOf(String behavior, AnalysisBody analysis, InputReading read,
+                           InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
+        List<AConstructMet> met = new ArrayList<>();
+        read(behavior, analysis, read, reads, witnesses, Optional.of(
+                (e, occurrence, applying, names, _) -> met.add(new AConstructMet(occurrence,
+                        applying, ChoicesAConditionIsReadThrough.of(e, names, read)))));
+        return List.copyOf(met);
+    }
+
+    /**
+     * The same walk, reading the conditions {@code stops} is of until one ends the measuring of the
+     * body: each as {@link #of} reads it, with no line drawn of it and nothing read on the way to
+     * it, which what it states does not turn on.
+     */
+    static void conditionsRead(String behavior, AnalysisBody analysis, InputReading read,
+                               InputReads reads, WhatStopsMeasuring stops) {
+        read(behavior, analysis, read, reads, ComparisonWitnesses.AtComparisons.NONE, Optional.of(
+                new AtAConstruct() {
+
+                    @Override
+                    public void met(Core e, ConstructOccurrence occurrence,
+                                    ClosureApplications applying, InputReads names, Body in) {
+                        ModelOccurrence.statedAt(occurrence).filter(stops::isTold).ifPresent(
+                                stands -> BooleanMeaning.asAComparison(e).ifPresent(comparison ->
+                                        stops.reading(stands, in.conditions()
+                                                .comparison(comparison, names, read).stated()
+                                                .proposition())));
+                    }
+
+                    @Override
+                    public boolean asksNoMore() {
+                        return stops.isShown();
+                    }
+                }));
+    }
+
+    /**
+     * The walk of {@code body}, reading what each construct states, or, where {@code metOnly} is
+     * held, handing each construct that may state something to it and reading nothing of it.
+     */
+    private static ComparisonReadings read(String behavior, AnalysisBody analysis,
+                                           InputReading read, InputReads reads,
+                                           ComparisonWitnesses.AtComparisons witnesses,
+                                           Optional<AtAConstruct> metOnly) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -411,7 +705,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior,
                         ConditionOccurrence.Reading.DIVIDING);
-        StatedHere stated = new StatedHere(behavior);
         WhatConditionsState conditions = WhatConditionsState.of(read);
         // Whether a node answers a value is asked of the tree it stands in: the body, or the
         // template of a value the body builds. A reading that follows a name given a build is in
@@ -421,13 +714,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         trees.add(body);
         trees.addAll(analysis.templatesAfterTheirBuilders());
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
+        StatedHere stated = new StatedHere(behavior, answering);
         ArmsNamed.Gathered armsNamed = new ArmsNamed.Gathered();
         ForkDependencies.Gathered dependencies = new ForkDependencies.Gathered();
         WithinOneApplication.Gathered oneApplication = new WithinOneApplication.Gathered();
+        WaysToNodes ways = new WaysToNodes();
+        WhereARunMayStop constructions = new WhereARunMayStop();
         walk(body, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
-                        oneApplication),
+                        oneApplication, witnesses, ways, constructions, body, body,
+                        Optional.empty(), metOnly),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -444,7 +741,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
-                        oneApplication),
+                        oneApplication, witnesses, ways, constructions, body, template,
+                        Optional.empty(), metOnly),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -452,12 +750,25 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         return new ComparisonReadings(readings, forks, numbering.metAt(), outcomes, decided,
                 new WhereTheOperationsStand(armsNamed.named(), dependencies.read(),
-                        oneApplication.read()));
+                        oneApplication.read()),
+                new StopsOfABody(constructions, conditions, read, templates.definitions()));
     }
 
-    /** How one build of a value was reached: what stood on the way to it, and whether what it
-     *  computes is read on the way to what the behavior answers with. */
-    private record Entry(List<OnTheWay> assumed, boolean live) { }
+    /** How one build of a value was reached: where it is and the tree it stands in, what stood on
+     *  the way to it, whether what it computes is read on the way to what the behavior answers
+     *  with, and the applications of the closures it stands inside. The build, its tree and the
+     *  applications are null in what every build stood under ({@link Templates#joined}). */
+    private record Entry(Core build, Core standsIn, List<OnTheWay> assumed, boolean live,
+                         ClosureApplications applying) { }
+
+    /** Where a run goes from the behavior's body into another body a comparison stands in: a
+     *  node of the behavior's body, and what stood on the way to it. */
+    private record WayIn(Core at, List<OnTheWay> way) {
+
+        WayIn {
+            way = List.copyOf(way);
+        }
+    }
 
     /**
      * The builds of values this walk met, by the template each is a build of.
@@ -469,18 +780,39 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static final class Templates {
 
         private final ValueTemplates held;
+        private final WhatARunMayEndFor.WithDefinitions endings;
         private final Map<Core, List<Entry>> entered = new IdentityHashMap<>();
 
         Templates(ValueTemplates held) {
             this.held = held;
+            this.endings = new WhatARunMayEndFor.WithDefinitions(held);
+        }
+
+        /** What working a part of this walk's trees out may end a run for, each build answered by
+         *  its template, worked out once for each template however many readings ask. */
+        WhatARunMayEndFor.WithDefinitions endings() {
+            return endings;
         }
 
         Core bodyOf(Core.MaterialisedValue build) {
             return held.bodyOf(build);
         }
 
-        void entered(Core template, List<OnTheWay> assumed, boolean live) {
-            entered.computeIfAbsent(template, _ -> new ArrayList<>()).add(new Entry(assumed, live));
+        /** The template of each value, as every reader of what a build works out asks it. */
+        ValueTemplates definitions() {
+            return held;
+        }
+
+        void entered(Core template, Core build, Core standsIn, List<OnTheWay> assumed,
+                     boolean live, ClosureApplications applying) {
+            entered.computeIfAbsent(template, _ -> new ArrayList<>())
+                    .add(new Entry(build, standsIn, assumed, live, applying));
+        }
+
+        /** Every build of {@code template} the walk met, each where it is, in which tree, and on
+         *  the way to it, in the order met. */
+        List<Entry> builds(Core template) {
+            return entered.getOrDefault(template, List.of());
         }
 
         /**
@@ -512,8 +844,930 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     }
                 }
             }
-            return new Entry(List.copyOf(common), live);
+            return new Entry(null, null, List.copyOf(common), live, null);
         }
+    }
+
+    /**
+     * What a run works out first in a comparison, in the behavior's own body, each part read as
+     * what evaluating it works out ({@link Pullback.OnTheInput#evaluating}).
+     *
+     * @param firstInIt what every run evaluating the comparison works out first, before it takes
+     *                  any arm in it: the steps that always run ({@link Evaluated#inOrder}), in
+     *                  order, each read whole where all of it is told and worked out on every run,
+     *                  and opened where it is not, nothing after that being first. Nothing where it
+     *                  works out no operation that way
+     */
+    record WorkedOutFirst(Optional<StopEvidence> firstInIt) {
+
+        static final WorkedOutFirst UNREAD = new WorkedOutFirst(Optional.empty());
+    }
+
+    /** What a run works out first in {@code e}, the node {@code statement} is stated at
+     *  ({@link WorkedOutFirst}). */
+    private static WorkedOutFirst workedOutFirst(Core e, Stated statement, Body in,
+                                                 InputReads reads) {
+        if (!in.context().equals(CallContext.OF_THE_BODY)
+                || !(statement instanceof Stated.AComparison(var comparison))) {
+            return WorkedOutFirst.UNREAD;
+        }
+        WhatARunMayEndFor.WithDefinitions endings = in.templates().endings();
+        Function<Denotation, StopEvidence> evaluating =
+                in.conditions().comparison(comparison, reads, in.read()).evaluating();
+        UndividedByARelation.Working first = firstIn(e, reads, evaluating, endings,
+                UndividedByARelation.Working.NO_STOPS);
+        return new WorkedOutFirst(first.operations().isEmpty() ? Optional.empty()
+                : Optional.of(StopEvidence.ofWhatIsToldOf(first)));
+    }
+
+    /** Whether {@code worked} tells every operation a run may stop in, and every run works each
+     *  out. */
+    private static boolean toldInFull(UndividedByARelation.Working worked) {
+        return worked.exact() && worked.onEveryRun() && !worked.aStopUntold();
+    }
+
+    /**
+     * What a run works out evaluating {@code part} after {@code earlier}: nothing where
+     * {@code endings} says it ends no run, a build answered by its template; a node that of itself
+     * ends no run is what its parts work out, and any other what {@code evaluating} tells of it —
+     * which reads numbers, and not what is made of them, such as a comparison of two. The arms of
+     * a choice are parts of it, each counted as worked out, which asks more of the value a stop is
+     * looked for at and never less.
+     */
+    private static UndividedByARelation.Working workedOut(Core part, InputReads reads,
+                                                          Function<Denotation, StopEvidence>
+                                                                  evaluating,
+                                                          WhatARunMayEndFor.WithDefinitions
+                                                                  endings,
+                                                          UndividedByARelation.Working earlier) {
+        if (endings.of(part).endsNone()) {
+            return earlier;
+        }
+        if (!WhatARunMayEndFor.itself(part).endsNone()) {
+            return evaluating.apply(new Denotation(part, reads)).operations().after(earlier);
+        }
+        UndividedByARelation.Working[] worked = {earlier};
+        Core.forEachChild(part, child -> worked[0] = workedOut(child, reads, evaluating,
+                endings, worked[0]));
+        return worked[0];
+    }
+
+    /**
+     * What every run evaluating {@code node} works out first, after {@code earlier}
+     * ({@link WorkedOutFirst#firstInIt}): each step that always runs, in order, and then the body
+     * of a {@code let}, which runs once its value has. Each is read whole where every part of it
+     * runs whenever it does and what it works out is told in full, and the first that is not is
+     * opened in its turn, with nothing after it.
+     */
+    private static UndividedByARelation.Working firstIn(Core node, InputReads reads,
+                                                        Function<Denotation, StopEvidence>
+                                                                evaluating,
+                                                        WhatARunMayEndFor.WithDefinitions
+                                                                endings,
+                                                        UndividedByARelation.Working earlier) {
+        List<Denotation> parts = new ArrayList<>();
+        for (Evaluated.Step step : Evaluated.inOrder(node)) {
+            if (!(step instanceof Evaluated.Step.Always(Core part))) {
+                break;
+            }
+            parts.add(new Denotation(part, reads));
+        }
+        // The body names the value as it was given, as the walk of the comparison reads it; a
+        // value built from a template holds no body here, and nothing after it is read.
+        if (parts.size() == Evaluated.inOrder(node).size()
+                && Core.withoutStanding(node) instanceof Core.LetIn let
+                && !(Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue)) {
+            parts.add(new Denotation(let.body(), reads.and(let.binder(), let.value())));
+        }
+        UndividedByARelation.Working worked = earlier;
+        for (Denotation part : parts) {
+            UndividedByARelation.Working read = runsWholeWhenever(part.value())
+                    ? workedOut(part.value(), part.at(), evaluating, endings,
+                            UndividedByARelation.Working.NO_STOPS)
+                    : null;
+            if (read == null || !toldInFull(read)) {
+                return firstIn(part.value(), part.at(), evaluating, endings, worked);
+            }
+            worked = read.after(worked);
+        }
+        return worked;
+    }
+
+    /** Whether every part of {@code e} runs whenever {@code e} does: each a step of it that always
+     *  runs ({@link Evaluated#inOrder}), or the body of a {@code let}, and so on down. */
+    private static boolean runsWholeWhenever(Core e) {
+        List<Core> run = new ArrayList<>();
+        for (Evaluated.Step step : Evaluated.inOrder(e)) {
+            if (step instanceof Evaluated.Step.Always(Core part)) {
+                run.add(part);
+            }
+        }
+        if (Core.withoutStanding(e) instanceof Core.LetIn let) {
+            run.add(let.body());
+        }
+        boolean[] whole = {true};
+        Core.forEachChild(e, child -> whole[0] &= run.stream().anyMatch(it -> it == child)
+                && runsWholeWhenever(child));
+        return whole[0];
+    }
+
+    /**
+     * What the run to {@code e}, the node a statement is stated at, asks of a row
+     * ({@link #gotPast}), the same for a comparison and for an application: what the run narrows,
+     * its ties, the operators left unsaid and owed, and what the applications before work out.
+     */
+    private static Past pastOf(BoundaryPolicy.Standing standing, Core e, Body in,
+                               InputReads reads) {
+        if (!(standing instanceof BoundaryPolicy.Standing.Admitted)
+                || !in.context().equals(CallContext.OF_THE_BODY)) {
+            return Past.NOTHING;
+        }
+        return gotPast(e, in, reads);
+    }
+
+    /**
+     * The ways a run gets into the tree a comparison stands in, as far as they are read.
+     *
+     * @param each  each way in that is read
+     * @param every whether {@code each} is every way a run gets to the comparison by
+     */
+    private record WaysIn(List<AWayIn> each, boolean every) {
+
+        static final WaysIn NOT_READ = new WaysIn(List.of(), false);
+
+        WaysIn {
+            each = List.copyOf(each);
+        }
+    }
+
+    /**
+     * One way a run goes from the behavior's body into the tree a comparison stands in.
+     *
+     * @param through         each tree the run goes through on the way, the behavior's body first,
+     *                        with where in it the run goes on into the next; none where the
+     *                        comparison stands in the body itself
+     * @param inner           the tree the comparison stands in, and how a run by this way runs it
+     * @param toTheComparison what stood on the way to the comparison by this way
+     */
+    private record AWayIn(List<Stretch> through, Inner inner, List<OnTheWay> toTheComparison) {
+
+        AWayIn {
+            through = List.copyOf(through);
+            toTheComparison = List.copyOf(toTheComparison);
+        }
+    }
+
+    /**
+     * A tree a run goes through on the way into another, and {@code at}, the node of it where it
+     * goes on into the next: a call of a function value or a helper, or a build of a value.
+     * {@code into} is what stood on the way to the tree by this way, and {@code carried} what the
+     * walk carried into it, so a way the walk met in it is this way's past what was carried.
+     */
+    private record Stretch(Core root, Core at, List<OnTheWay> into, List<OnTheWay> carried) {
+
+        Stretch {
+            into = List.copyOf(into);
+            carried = List.copyOf(carried);
+        }
+    }
+
+    /**
+     * The tree a comparison stands in, as one way in goes into it.
+     *
+     * @param root    the tree
+     * @param into    what stood on the way to it by this way
+     * @param carried what the walk carried into it ({@link Stretch})
+     * @param once    whether a run by this way runs the tree once before it gets to the
+     *                comparison: the behavior's body, a value's template a run builds once at most
+     *                ({@link #chainsInto}), a function value one call alone applies where its
+     *                applications are one made whatever the row is
+     *                ({@link ClosureApplications#oneMadeWhateverTheRow}). Otherwise an application
+     *                or a step before this one ran the tree whole, after the comparison as well
+     * @param inside  whether the tree is the body of a function value or a helper, every place
+     *                in which is met on each application ({@link ClosureApplications})
+     * @param reached whether a run that takes the way the walk carried to a place met on each
+     *                application gets there whatever the row is, by this way
+     */
+    private record Inner(Core root, List<OnTheWay> into, List<OnTheWay> carried, RunsOnce once,
+                         boolean inside, ReachedBy reached) {
+
+        Inner {
+            into = List.copyOf(into);
+            carried = List.copyOf(carried);
+        }
+    }
+
+    /** Whether a place inside the applications {@code applying} says is got to whatever the row
+     *  is, by one way in ({@link Inner#reached}). */
+    @FunctionalInterface
+    private interface ReachedBy {
+        boolean wheneverTheWayIs(ClosureApplications applying);
+    }
+
+    /** By any of the applications: there is one way in, and every application is made by it. */
+    private static final ReachedBy BY_ANY_APPLICATION =
+            applying -> applying.reachedWheneverTheWayIs(_ -> true);
+
+    /** Whether a run by one way in runs the tree a comparison stands in once before it gets to
+     *  the comparison, which stands inside the applications {@code applying} ({@link Inner}). */
+    @FunctionalInterface
+    private interface RunsOnce {
+        boolean once(ClosureApplications applying);
+    }
+
+    /** Run once whatever the applications: the behavior's body, or a value's template a run
+     *  builds once at most. */
+    private static final RunsOnce ONCE = _ -> true;
+
+    /** Run on each application or step, and so before this one as well, as far as is said. */
+    private static final RunsOnce ON_EACH = _ -> false;
+
+    /**
+     * Each way a run gets to {@code comparison} by, where {@code assumed} stood on the way to it
+     * as the walk carried it.
+     *
+     * <p>In the behavior's own body, outside every function value no call it is handed to
+     * applies, one: the body. In a function value bound by a name, one for each call the body
+     * makes handing it to an operation that applies it ({@link ClosureUses}) — every one of them
+     * only where nothing else uses it. In a helper's body read at a call, that call. In a value's
+     * template, one for each way to each build of it, through the builds of the template it is
+     * built in where that is another's ({@link #chainsInto}).
+     *
+     * <p>What stood on the way to the comparison by a way in is what stood on the way to where it
+     * goes in, and what stood on the way inside the tree past what the walk carried into it.
+     */
+    private static WaysIn waysIn(Core comparison, List<OnTheWay> assumed, Body in) {
+        Core body = in.whole();
+        if (in.context().equals(CallContext.OF_THE_BODY) && in.root() != null) {
+            WhatARunWorksOutBeforeACount.NotHanded notHanded =
+                    WhatARunWorksOutBeforeACount.notHandedOnTheWay(in.root(), comparison);
+            return notHanded == null
+                    ? new WaysIn(List.of(new AWayIn(List.of(), new Inner(in.root(), List.of(),
+                            List.of(), ONCE, false, BY_ANY_APPLICATION), assumed)), true)
+                    : byTheCallsApplying(notHanded, assumed, in);
+        }
+        if (in.context().equals(CallContext.OF_THE_BODY) && in.within() != body) {
+            Entry joined = in.templates().joined(in.within());
+            if (joined == null) {
+                return WaysIn.NOT_READ;
+            }
+            List<OnTheWay> inside = without(assumed, joined.assumed());
+            Chains chains = chainsInto(in.within(), in, Collections.newSetFromMap(
+                    new IdentityHashMap<>()));
+            List<AWayIn> each = new ArrayList<>();
+            for (Chain chain : chains.each()) {
+                each.add(new AWayIn(chain.through(), new Inner(in.within(), chain.way(),
+                        joined.assumed(), chains.once() ? ONCE : ON_EACH, false,
+                        BY_ANY_APPLICATION),
+                        union(chain.way(), inside)));
+            }
+            return new WaysIn(each, chains.every());
+        }
+        if (in.calledAt().isPresent()) {
+            WayIn call = in.calledAt().get();
+            return new WaysIn(List.of(new AWayIn(
+                    List.of(new Stretch(body, call.at(), List.of(), List.of())),
+                    new Inner(in.root(), call.way(), call.way(), ON_EACH, true,
+                            BY_ANY_APPLICATION),
+                    union(call.way(), without(assumed, call.way())))), true);
+        }
+        return WaysIn.NOT_READ;
+    }
+
+    /**
+     * The ways into {@code notHanded}'s function value a run on the way to {@code comparison}
+     * takes: each call applying it, where it is bound by a name. Every one of them only where
+     * nothing else uses it and the walk met each call on one way.
+     *
+     * <p>Where one call alone applies the function, every application is that call's, so a place
+     * inside it is got to by the call where one of them is made whatever the row is. Where
+     * several do, which call made an application is not said ({@link InputReads#handingCall}),
+     * and a place is got to by one of them only where the call applies the function on every run
+     * that gets to it — the first element of a container written with some, as an operation
+     * applying it to each in turn does — and every application gets there whatever the row is.
+     */
+    private static WaysIn byTheCallsApplying(WhatARunWorksOutBeforeACount.NotHanded notHanded,
+                                             List<OnTheWay> assumed, Body in) {
+        Core.Block closure = notHanded.closure();
+        Optional<List<OnTheWay>> made = in.constructions().madeOn(closure);
+        ClosureUses uses = in.atTheRoot().usesOf(closure);
+        if (notHanded.above() == null
+                || !(Core.withoutStanding(notHanded.above()) instanceof Core.LetIn)
+                || made.isEmpty() || uses == null) {
+            return WaysIn.NOT_READ;
+        }
+        List<OnTheWay> inside = without(assumed, made.get());
+        boolean alone = uses.applications().size() == 1 && !uses.usedElsewhere();
+        boolean every = !uses.usedElsewhere();
+        List<AWayIn> each = new ArrayList<>();
+        for (ClosureUses.Application applied : uses.applications()) {
+            Core call = Core.withoutStanding(applied.call());
+            Optional<List<OnTheWay>> way = in.constructions().handingOn(call);
+            if (way.isEmpty()) {
+                every = false;
+                continue;
+            }
+            ReachedBy reached = alone ? BY_ANY_APPLICATION
+                    : applying -> appliedWhateverTheRow(applied)
+                            && applying.everyOneReachedWheneverTheWayIs();
+            each.add(new AWayIn(List.of(new Stretch(in.whole(), call, List.of(), List.of())),
+                    new Inner(closure.body(), way.get(), made.get(),
+                            alone ? ClosureApplications::oneMadeWhateverTheRow : ON_EACH, true,
+                            reached),
+                    union(way.get(), inside)));
+        }
+        return new WaysIn(each, every);
+    }
+
+    /** Whether the call making {@code applied} applies the function on every run that gets to
+     *  it: to the first element of a container written with some, which an operation applying
+     *  it to each in turn applies it to before anything else. */
+    private static boolean appliedWhateverTheRow(ClosureUses.Application applied) {
+        return elementsWrittenOut(applied) > 0;
+    }
+
+    /** How many elements the container {@code applied} walks was written with, where it is
+     *  written out and walked by an operation applying the function to each in turn from the
+     *  first; nought otherwise. */
+    private static int elementsWrittenOut(ClosureUses.Application applied) {
+        return EACH_IN_TURN.contains(applied.applied())
+                && Core.withoutStanding(applied.container()) instanceof Core.ListLit written
+                ? written.elements().size() : 0;
+    }
+
+    /**
+     * Each way a run gets to the template {@code template}: by each build of it, and where the
+     * build stands in another template, by each way to that one, through the build. {@code on}
+     * holds the templates the ways are being read through, so a template built inside itself is a
+     * way not read.
+     *
+     * @return the ways, whether they are every way — not where a build stands in a template no
+     *         way to which is read — and whether a run builds the template once at most: where it
+     *         is built in one place, made there once ({@link #builtOnce}), and that place is the
+     *         behavior's body or a template built once. Built in two, or made on each application
+     *         of a closure, a run may build it again, and the first build ran it whole before the
+     *         next
+     */
+    private static Chains chainsInto(Core template, Body in, Set<Core> on) {
+        List<Entry> builds = in.templates().builds(template);
+        if (builds.isEmpty() || !on.add(template)) {
+            return new Chains(List.of(), false, false);
+        }
+        boolean every = true;
+        boolean once = builds.size() == 1 && builtOnce(builds.getFirst());
+        List<Chain> out = new ArrayList<>();
+        for (Entry build : builds) {
+            if (build.standsIn() == in.whole()) {
+                out.add(new Chain(List.of(new Stretch(build.standsIn(), build.build(), List.of(),
+                        List.of())), build.assumed()));
+                continue;
+            }
+            Entry outer = in.templates().joined(build.standsIn());
+            if (outer == null) {
+                every = false;
+                continue;
+            }
+            Chains around = chainsInto(build.standsIn(), in, on);
+            every &= around.every();
+            once &= around.once();
+            for (Chain way : around.each()) {
+                List<Stretch> through = new ArrayList<>(way.through());
+                through.add(new Stretch(build.standsIn(), build.build(), way.way(),
+                        outer.assumed()));
+                out.add(new Chain(through, union(way.way(),
+                        without(build.assumed(), outer.assumed()))));
+            }
+        }
+        on.remove(template);
+        return new Chains(out, every, once);
+    }
+
+    /**
+     * Whether a run that works the tree {@code build} stands in out once makes the build once at
+     * most: where it stands inside no function value, or where the applications of those it
+     * stands inside are one made whatever the row is
+     * ({@link ClosureApplications#oneMadeWhateverTheRow}). A build written once inside a closure is
+     * made on each application of it, and one written once is not one made.
+     */
+    private static boolean builtOnce(Entry build) {
+        return !WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(build.standsIn(),
+                build.build()) || build.applying().oneMadeWhateverTheRow();
+    }
+
+    /** The ways to a template ({@link #chainsInto}), whether they are every one, and whether a
+     *  run builds it once at most. */
+    private record Chains(List<Chain> each, boolean every, boolean once) {}
+
+    /** One way to a template: the trees a run goes through to its build, and what stood on the
+     *  way to the build. */
+    private record Chain(List<Stretch> through, List<OnTheWay> way) {}
+
+    /**
+     * Each way a run gets to {@code site}, a step a run may stop at that the walk met on
+     * {@code assumed} inside the applications {@code applying}, as far as each is read
+     * ({@link WaysToASite}): the ways into the tree it stands in ({@link #waysIn}), each with what
+     * a run by it works out before the step.
+     *
+     * <p>What a run works out before it is, in each tree it goes through, everything before where
+     * it goes on and what it is handed there ({@link WhatARunWorksOutBeforeACount#workedOutGoingIn}),
+     * and in the step's own tree everything before the step and what the step is worked out of
+     * ({@link WhatARunWorksOutBeforeACount#workedOutBeforeASite}) — where a run by the way runs
+     * that tree once before it gets there. Otherwise an application or a step before this one may
+     * have run any of it on another value, and what comes first is not read. The way is read whole
+     * only where what a run meets is on the way the walk carried. Each way holds an element by
+     * the name the step reads it through ({@link ElementsOnTheWay}), as the way to a comparison
+     * does.
+     */
+    private static WaysToASite waysToASite(Core site, List<OnTheWay> assumed,
+                                           ClosureApplications applying, Body in,
+                                           InputReads reads) {
+        WaysIn ways = waysIn(site, assumed, in);
+        ElementsNamed readsTheElements = reads.elementsNamedIn(site, in.newtypes());
+        List<WaysToASite.Reach> each = new ArrayList<>();
+        for (AWayIn way : ways.each()) {
+            Inner inner = way.inner();
+            boolean outside = way.through().stream().noneMatch(stretch ->
+                    WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(stretch.root(),
+                            stretch.at()));
+            Supplier<Boolean> read = () -> outside
+                    && (!(inner.inside() || WhatARunWorksOutBeforeACount.goesIntoAFunctionValue(
+                            inner.root(), site)) || inner.reached().wheneverTheWayIs(applying));
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> goingIn =
+                    new Pullback.Once<>(() -> {
+                        WhatARunWorksOutBeforeACount.BeforeAConstruction past =
+                                WhatARunWorksOutBeforeACount.BeforeAConstruction.NOTHING;
+                        for (Stretch stretch : way.through()) {
+                            Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> going =
+                                    in.constructions().workedOutGoingIn(stretch.root(),
+                                            stretch.at());
+                            if (going.isEmpty()) {
+                                return Optional.empty();
+                            }
+                            past = past.then(going.get());
+                        }
+                        return Optional.of(past);
+                    });
+            Supplier<Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>> before = () ->
+                    !inner.once().once(applying) ? Optional.empty() : goingIn.get().flatMap(past ->
+                            WhatARunWorksOutBeforeACount.workedOutBeforeASite(inner.root(), site)
+                                    .map(past::then));
+            each.add(new WaysToASite.Reach(ElementsOnTheWay.keptToOneElementEach(
+                    way.toTheComparison(), readsTheElements), new Pullback.Once<>(before),
+                    goingIn, new Pullback.Once<>(read), () -> outside));
+        }
+        return new WaysToASite(each, ways.every());
+    }
+
+    /** {@code way} and then every entry of {@code more} it does not hold. */
+    private static List<OnTheWay> union(List<OnTheWay> way, List<OnTheWay> more) {
+        List<OnTheWay> out = new ArrayList<>(way);
+        for (OnTheWay each : more) {
+            if (!out.contains(each)) {
+                out.add(each);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Every entry of {@code way} that {@code carried} does not hold, in order. */
+    private static List<OnTheWay> without(List<OnTheWay> way, List<OnTheWay> carried) {
+        return way.stream().filter(each -> !carried.contains(each)).toList();
+    }
+
+    /** Whether {@code e} is a call handed a function value by a name: where a run goes into the
+     *  value's body, if the call applies it. */
+    private static boolean handsAFunctionValueByAName(Core e, InputReads reads, Body in) {
+        if (!(Core.withoutStanding(e) instanceof Core.Call)
+                && !(Core.withoutStanding(e) instanceof Core.PreservedCall)) {
+            return false;
+        }
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied == null) {
+            return false;
+        }
+        for (Core arg : applied.args()) {
+            if (Core.withoutStanding(arg) instanceof Core.Read
+                    && Core.withoutStanding(reads.standing(arg, in.symbols(), in.newtypes())
+                            .value()) instanceof Core.Block) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What the run to a comparison asks, as one walk of the parts it works out reads it.
+     *
+     * <p>The two together, from the one answer of each part: what a region can carry of it narrows
+     * the rows, and what each construction among the parts asks is what a report says, and a
+     * walk made twice would choose its parts twice. Of the parts the run always works out up to the
+     * comparison — up to the application it is reached in, where it is in a closure — and not of
+     * the comparison's own working out, which is the relation it states and not something the run
+     * to it meets.
+     *
+     * @param answered what the run asks of a row ({@link DemandReading.Answered})
+     * @param asks     what each construction among the parts asks of the run that works it out
+     */
+    private record Past(DemandReading.Answered answered, List<ConstructionAsk> asks) {
+
+        static final Past NOTHING = new Past(DemandReading.Answered.NOTHING, List.of());
+
+        Past {
+            asks = List.copyOf(asks);
+        }
+    }
+
+    /**
+     * What a region can carry of every operator a run works out up to {@code comparison}
+     * answering ({@link Reading#getsPast}), read of each part the run always works out, with the
+     * names as they stand at the comparison.
+     *
+     * <p>Of a comparison in a closure, what the run works out up to the application it is reached
+     * in, and apart from that what the applications before work out
+     * ({@link DemandReading.PriorApplications}) — the call applying the closure read whole, the
+     * comparison apart, which is the relation's own working out wherever it is applied. A region
+     * carries only what the run up to the application narrows: what only the applications before
+     * narrow holds of a run that makes them and of no other, so it is owed with them as a stop on
+     * the places it names.
+     *
+     */
+    private static Past gotPast(Core comparison, Body in, InputReads reads) {
+        Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
+        Set<Core> made = callsMakingWhatTheComparisonReads(in.root(), comparison);
+        made.addAll(ofTheRelation);
+        WhatARunWorksOutBeforeACount.FirstApplication first =
+                WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(), comparison);
+        boolean afterApplications = first != null && !first.entered().isEmpty();
+        List<Core> whole = WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison);
+        if (!afterApplications) {
+            return workedOut(whole, comparison, ofTheRelation, made, in, reads);
+        }
+        Past upToIt = workedOut(first.parts(), comparison, ofTheRelation, made, in, reads);
+        DemandReading.Answered upTo = upToIt.answered();
+        DemandReading.Answered before =
+                workedOut(whole, comparison, ofTheRelation, made, in, reads).answered();
+        List<DemandReading.Tie> ties = new ArrayList<>(before.tied());
+        for (TakenConstraint each : before.narrowing()) {
+            if (!upTo.narrowing().contains(each)) {
+                ties.add(DemandReading.Tie.by(each));
+            }
+        }
+        // The call applying the closure is read whole, the comparison apart, so the closures the
+        // comparison stands inside are those it says. What the applications before ask is asked
+        // of a run that makes them, so what is asked is what the run up to this one asks.
+        return new Past(upTo.after(new DemandReading.PriorApplications(
+                walkedOneAfterAnother(first.entered(), reads),
+                new DemandReading.Answered(List.of(), ties, before.unsaid(), before.owed(),
+                        before.before())))
+                .alsoNeedingToGetToTheRelation(before.relationStands()), upToIt.asks());
+    }
+
+    /**
+     * What each call of {@code entered} walks, where each applies its closure to the elements of
+     * what it walks one after another from the first, as far as every one of them or until one
+     * answers some way — or empty where one is not shown to.
+     */
+    private static Optional<List<DemandReading.PriorApplications.WalkedOver>> walkedOneAfterAnother(
+            List<WhatARunWorksOutBeforeACount.Applying> entered, InputReads reads) {
+        List<DemandReading.PriorApplications.WalkedOver> out = new ArrayList<>();
+        for (WhatARunWorksOutBeforeACount.Applying each : entered) {
+            ClosureUses uses = reads.usesOf(each.closure());
+            ClosureUses.Application applied = uses == null || uses.usedElsewhere() ? null
+                    : uses.applications().stream()
+                            .filter(one -> Core.withoutStanding(one.call())
+                                    == Core.withoutStanding(each.call()))
+                            .findFirst().orElse(null);
+            if (applied == null || !EACH_IN_TURN.contains(applied.applied())) {
+                return Optional.empty();
+            }
+            out.add(new DemandReading.PriorApplications.WalkedOver(applied.container(), reads));
+        }
+        return Optional.of(out);
+    }
+
+    /** The ways of applying a closure that apply it to the first element, and to the others one
+     *  after another. */
+    private static final Set<HowAClosureIsApplied> EACH_IN_TURN = Set.of(
+            HowAClosureIsApplied.TO_EVERY_ELEMENT, HowAClosureIsApplied.UNTIL_ONE_HOLDS,
+            HowAClosureIsApplied.UNTIL_ONE_FAILS);
+
+    /** What a region can carry of every operator of {@code parts} answering, and what each
+     *  construction among them asks ({@link #gotPast}). */
+    private static Past workedOut(List<Core> parts, Core comparison, Set<Core> ofTheRelation,
+                                  Set<Core> made, Body in, InputReads reads) {
+        DemandReading.Answered out = DemandReading.Answered.NOTHING;
+        List<ConstructionAsk> asks = new ArrayList<>();
+        for (Core part : parts) {
+            boolean ofTheRelationItself = part == comparison || ofTheRelation.contains(part);
+            boolean holdsIt = part != comparison && standsIn(comparison, part);
+            Pullback.OperatorsAnswer operators = holdsIt
+                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, made,
+                            reads, in.read())
+                    : ofTheRelationItself
+                    ? in.conditions().whereTheRelationsOwnOperatorsAnswer(part, reads, in.read())
+                    : made.contains(Core.withoutStanding(part))
+                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, null, made, reads,
+                            in.read())
+                    : in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
+            DemandReading.Answered ofIt = operators.answers().isPresent()
+                    ? DemandReading.regionAnswered(operators.answers().get(), in.read())
+                            .atTheEndsOfARepresentation(operators.atTheEnds()
+                                    .map(ends -> DemandReading.regionAnswered(ends, in.read())
+                                            .narrowing())
+                                    .orElse(List.of()))
+                    : DemandReading.Answered.NOTHING;
+            if (ofTheRelationItself) {
+                out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
+            } else {
+                out = out.and(ofIt.and(DemandReading.Answered.leavingUnsaid(operators,
+                        in.root())));
+                asks.addAll(operators.asks());
+            }
+        }
+        return new Past(out, asks);
+    }
+
+    /**
+     * The values {@code root} binds to the names {@code comparison} reads, by way of others or
+     * not: the terms of what it relates, so the arithmetic in them is its relation's as the
+     * arithmetic written in it is — the same relation, whether a term is written there or under a
+     * name.
+     *
+     * <p>By way of a name an arm binds to part of what it matches, and of one a closure binds to
+     * what the call applying it walks, as much as of one a {@code let} binds: each holds a value
+     * made of those, which the comparison then reads.
+     */
+    private static Set<Core> valuesTheComparisonReads(Core root, Core comparison) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (root != null) {
+            boundTo(root, namesTheComparisonReads(root, comparison, madeOfIn(root)), out);
+        }
+        return out;
+    }
+
+    /**
+     * The calls that make what the comparison reads of the elements of what each makes, and the
+     * answers of their closures: where a call makes each element of what its closure answers on it
+     * alone ({@link PieceOfAnElement#THE_CLOSURES_ANSWER}), the element is that answer, so the
+     * arithmetic in it is the relation's as the arithmetic written in the comparison is. What is
+     * made of the elements by accumulating, or kept by a test, is no term of the comparison.
+     */
+    private static Set<Core> callsMakingWhatTheComparisonReads(Core root, Core comparison) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (root == null) {
+            return out;
+        }
+        Map<BindingId, List<Core>> madeOf = madeOfIn(root);
+        Set<BindingId> names = namesTheComparisonReads(root, comparison, madeOf);
+        ReadOnTheWay way = ReadOnTheWay.of(root, comparison, names, madeOf);
+        for (BindingId name : names) {
+            for (Core source : madeOf.getOrDefault(name, List.of())) {
+                if (Core.withoutStanding(source) instanceof Core.PreservedCall call) {
+                    BoundOperationFacts.Assembled assembled = DefaultBoundOperationFacts.get()
+                            .assembles(call.declared().operation());
+                    if (assembled != null
+                            && assembled.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER
+                            && Core.withoutStanding(CallArguments.of(assembled.closure(), call))
+                                    instanceof Core.Block closure) {
+                        out.add(call);
+                        answerTheComparisonReads(closure.body(), way.fieldsReadOf(name), root,
+                                out);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the comparison reads on its way: the comparison, and what each name it reads is made
+     * of or bound to ({@link #namesTheComparisonReads}). The fields it reads of a name are those
+     * read there, and nowhere else in the body: a field another comparison reads is none of this
+     * one's.
+     *
+     * @param path    the comparison, and what each name it reads is made of or bound to
+     * @param aliases the names made of the whole of another, each by the read of that other they
+     *                are made of: what such a name reads of its fields is read of that other
+     */
+    private record ReadOnTheWay(List<Core> path, Map<Core, List<BindingId>> aliases) {
+
+        static ReadOnTheWay of(Core root, Core comparison, Set<BindingId> names,
+                               Map<BindingId, List<Core>> madeOf) {
+            List<Core> path = new ArrayList<>(List.of(comparison));
+            Map<Core, List<BindingId>> aliases = new IdentityHashMap<>();
+            for (BindingId name : names) {
+                Set<Core> bound = Collections.newSetFromMap(new IdentityHashMap<>());
+                boundTo(root, Set.of(name), bound);
+                List<Core> sources = new ArrayList<>(madeOf.getOrDefault(name, List.of()));
+                sources.addAll(bound);
+                for (Core source : sources) {
+                    path.add(source);
+                    if (Core.withoutStanding(source) instanceof Core.Read whole) {
+                        aliases.computeIfAbsent(whole, _ -> new ArrayList<>()).add(name);
+                    }
+                }
+            }
+            return new ReadOnTheWay(path, aliases);
+        }
+
+        /**
+         * The fields of {@code name} read on the way, by the names of them, and those read of a
+         * name bound to the whole of it; null where it is read as a whole any other way.
+         */
+        Set<String> fieldsReadOf(BindingId name) {
+            Set<String> fields = new HashSet<>();
+            for (Core node : path) {
+                Core here = Core.withoutStanding(node);
+                if (here instanceof Core.Read read && name.equals(read.binding())
+                        && aliases.containsKey(here)) {
+                    for (BindingId alias : aliases.get(here)) {
+                        Set<String> through = fieldsReadOf(alias);
+                        if (through == null) {
+                            return null;
+                        }
+                        fields.addAll(through);
+                    }
+                    continue;
+                }
+                if (readsWhole(name, here, fields)) {
+                    return null;
+                }
+            }
+            return fields;
+        }
+    }
+
+    /**
+     * What {@code body}, the body of a closure making each element of its answer, answers that the
+     * comparison reads, added to {@code out}: the answer, or of a construction the fields in
+     * {@code fields} — all of them where that is null — and the values the {@code let}s on the way
+     * to it bind that those read.
+     */
+    private static void answerTheComparisonReads(Core body, Set<String> fields, Core root,
+                                                 Set<Core> out) {
+        List<Core.LetIn> lets = new ArrayList<>();
+        Core answer = body;
+        while (Core.withoutStanding(answer) instanceof Core.LetIn let) {
+            lets.add(let);
+            answer = let.body();
+        }
+        List<Core> read = new ArrayList<>();
+        if (Core.withoutStanding(answer) instanceof Core.Construct construct && fields != null) {
+            for (Core.FieldValue each : construct.values()) {
+                if (fields.contains(each.field())) {
+                    read.add(each.value());
+                }
+            }
+        } else if (!(Core.withoutStanding(answer) instanceof Core.Construct)) {
+            read.add(answer);
+        } else {
+            construct(answer).values().forEach(each -> read.add(each.value()));
+        }
+        Set<BindingId> names = new HashSet<>();
+        for (Core each : read) {
+            out.add(each);
+            out.add(Core.withoutStanding(each));
+            names.addAll(WhatABodyReads.namesReadBy(root, each));
+        }
+        for (Core.LetIn let : lets.reversed()) {
+            if (let.binder() != null && names.contains(let.binder().binding())) {
+                out.add(let.value());
+                out.add(Core.withoutStanding(let.value()));
+                names.addAll(WhatABodyReads.namesReadBy(root, let.value()));
+            }
+        }
+    }
+
+    private static Core.Construct construct(Core e) {
+        return (Core.Construct) Core.withoutStanding(e);
+    }
+
+    /** Whether {@code e} reads {@code name} as a whole, the fields it reads of it added to
+     *  {@code fields}. */
+    private static boolean readsWhole(BindingId name, Core e, Set<String> fields) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.FieldAccess access
+                && Core.withoutStanding(access.target()) instanceof Core.Read read
+                && name.equals(read.binding())) {
+            fields.add(access.field());
+            return false;
+        }
+        if (node instanceof Core.Read read) {
+            return name.equals(read.binding());
+        }
+        boolean[] whole = {false};
+        Core.forEachChild(node, child -> whole[0] = whole[0] || readsWhole(name, child, fields));
+        return whole[0];
+    }
+
+    private static Map<BindingId, List<Core>> madeOfIn(Core root) {
+        Map<BindingId, List<Core>> madeOf = new HashMap<>();
+        bindingsIn(root, madeOf);
+        return madeOf;
+    }
+
+    /** The names {@code comparison} reads, and those read by what each is made of. */
+    private static Set<BindingId> namesTheComparisonReads(Core root, Core comparison,
+                                                         Map<BindingId, List<Core>> madeOf) {
+        Set<BindingId> read = new HashSet<>(WhatABodyReads.namesReadBy(root, comparison));
+        Deque<BindingId> left = new ArrayDeque<>(read);
+        while (!left.isEmpty()) {
+            for (Core source : madeOf.getOrDefault(left.pop(), List.of())) {
+                for (BindingId more : WhatABodyReads.namesReadBy(root, source)) {
+                    if (read.add(more)) {
+                        left.push(more);
+                    }
+                }
+            }
+        }
+        return read;
+    }
+
+    /** Whether {@code node} is {@code e} or under it, by the node it is. */
+    private static boolean standsIn(Core node, Core e) {
+        if (e == node) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || standsIn(node, child));
+        return found[0];
+    }
+
+    /**
+     * What each name {@code e} binds is made of: an arm's binding, of what the arm matches; a
+     * closure's parameter, of what else the call applying the closure is handed.
+     */
+    private static void bindingsIn(Core e, Map<BindingId, List<Core>> madeOf) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.Match match) {
+            for (Core.Case arm : match.cases()) {
+                if (arm.binding().binder() != null) {
+                    madeOf.computeIfAbsent(arm.binding().binder().binding(),
+                            _ -> new ArrayList<>()).add(match.scrutinee());
+                }
+            }
+        }
+        AnOperationApplied applied = AnOperationApplied.of(node);
+        if (applied != null) {
+            for (Core arg : applied.args()) {
+                if (Core.withoutStanding(arg) instanceof Core.Block closure) {
+                    for (Core.Binder param : closure.params()) {
+                        for (Core other : applied.args()) {
+                            if (other != arg) {
+                                madeOf.computeIfAbsent(param.binding(), _ -> new ArrayList<>())
+                                        .add(other);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Core.forEachChild(node, child -> bindingsIn(child, madeOf));
+    }
+
+    private static void boundTo(Core e, Set<BindingId> names, Set<Core> out) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.LetIn li && li.binder() != null
+                && names.contains(li.binder().binding())) {
+            out.add(li.value());
+            out.add(Core.withoutStanding(li.value()));
+        }
+        Core.forEachChild(node, child -> boundTo(child, names, out));
+    }
+
+    /**
+     * {@code assessed}, where the reading of a comparison in this body stopped, as the line a
+     * row's run places it on ({@link ComparisonAssessment#onItsRuns}): a run through a body is what
+     * works its numbers out, and a reading of a body is the one place that is so. Otherwise
+     * {@code assessed} as it is.
+     *
+     * <p>Of a comparison of the model only: one written into a copy the model states nothing
+     * about has no line to be one of.
+     */
+    private static ComparisonAssessment onItsRunsWhereUnread(
+            String behavior, StatedComparison comparison, ConstructOccurrence stands,
+            Citation where, ComparisonAssessment assessed, InputReading read,
+            ComparisonWitnesses.AtAComparison witnesses) {
+        Optional<ModelOccurrence> which = ModelOccurrence.statedAt(stands);
+        if (which.isEmpty()) {
+            return assessed;
+        }
+        // Whole, or in each case the statement is read in: the line is the same number in every
+        // case, and which case a row is in tells its points apart.
+        if (assessed instanceof ComparisonAssessment.Several several) {
+            return several.eachPart(part -> List.of(
+                    part.line() instanceof ComparisonAssessment.Unread placed
+                            && placed.where() == WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT
+                    ? part.placedByTheRunsAs(ComparisonAssessment.onItsRuns(behavior, comparison,
+                            which.get(), where, placed, read, witnesses, part.id().line().line()))
+                    : part));
+        }
+        if (!(assessed instanceof ComparisonAssessment.Unread unread)
+                || unread.where() != WhereAReadingStopped.IN_WHAT_A_RUN_WORKS_OUT) {
+            return assessed;
+        }
+        return ComparisonAssessment.onItsRuns(behavior, comparison, which.get(), where, unread,
+                read, witnesses);
     }
 
     /**
@@ -528,31 +1782,93 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              LiveFlow flow, List<OnTheWay> assumed, boolean live,
                              List<Reading> out, List<ForkMet> forks,
                              ConditionNumbering numbering) {
+        // Here and nowhere inside: what a step enters around what it walks, it leaves after it.
+        if (in.metOnly().filter(AtAConstruct::asksNoMore).isPresent()) {
+            return;
+        }
         Symbols symbols = in.symbols();
-        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), in.stated());
+        // The way this node is reached on, for whoever asks whether a part of a fork's condition is
+        // evaluated at all.
+        in.ways().reached(e, assumed);
+        // And, of a step of the behavior's own body or of a value's template, for whoever asks
+        // whether a run stops there; and of a call handed a function value by a name, where a run
+        // goes into the body of the function value. A step of a helper that calls itself, read
+        // where this body calls it, is one a run of this body gets to through that call, by the
+        // way into it.
+        if (in.metOnly().isEmpty() && (in.context().equals(CallContext.OF_THE_BODY)
+                || in.calledAt().isPresent())) {
+            in.constructions().met(e, assumed, reads, applying,
+                    () -> waysToASite(e, assumed, applying, in, reads), in.within());
+        }
+        if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)
+                && in.root() != null && handsAFunctionValueByAName(e, reads, in)) {
+            in.constructions().handing(Core.withoutStanding(e), assumed);
+        }
+        // The one place the readings part: what is done at a construct. Where no line is drawn, it
+        // is handed on and no line of it is drawn; everything else in this walk,
+        // every way it takes into what lies below, is the same for each. A construct the policy
+        // refuses where nothing it computes is read on the way to the answer is no line either
+        // reading draws, and the policy says so to both ({@link BoundaryPolicy#refuses}).
+        StatedAt stated;
+        if (in.metOnly().isPresent()) {
+            ConstructOccurrence written = mayState(e);
+            if (written != null && BoundaryPolicy.refuses(live).isEmpty()) {
+                in.metOnly().get().met(e, in.context().of(written), applying, reads, in);
+            }
+            stated = null;
+        } else {
+            stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), applying,
+                    in.stated());
+        }
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
             // Inside a helper's body read at a call, it is the copy that call makes.
             ConstructOccurrence stands = in.context().of(stated.written());
             Citation where = Citation.of(e.pos());
+            // A count is read over rows made of a witness only past what a run works out before
+            // the comparison, which is asked of the behavior's own body: a helper's names are
+            // its own, and none of them is a parameter of the behavior. Which call each count
+            // was read off is the reading of the comparison's to say; an application states no
+            // comparison read here, and names none.
+            Supplier<Map<Quantity.HowManyMeet, Core>> readOff =
+                    stated.statement() instanceof Stated.AComparison(var comparison)
+                            ? () -> in.conditions().comparison(comparison, reads, in.read())
+                                    .readOff()
+                            : Map::of;
+            // Which elements the comparison reads, by the names that stand for them.
+            ElementsNamed readsTheElements = reads.elementsNamedIn(e, in.newtypes());
+            ComparisonWitnesses.AtAComparison witnesses = WhatARunWorksOutBeforeACount.past(
+                    in.context().equals(CallContext.OF_THE_BODY) ? in.root() : null, e, reads,
+                    readOff, in.read().domain().parameterReads(), in.witnesses().at(stands))
+                    .madeOnEveryElementOf(madeOnEvery(applying, readsTheElements, in));
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
-            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(live)
-                    .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
-                    .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            switch (stated.statement()) {
-                                case Stated.AComparison(var comparison) ->
-                                        ComparisonAssessment.of(in.behavior(), comparison, where,
-                                                in.read(), reads, applying, null,
-                                                in.answering(), false, in.conditions(),
-                                                Optional.of(stands.lineage()
-                                                        .expansionProjection()));
-                                case Stated.AnApplication(var _, var answered) ->
-                                        ComparisonAssessment.ofAnApplication(in.behavior(),
-                                                answered, where, in.read());
-                            }));
+            // And which applications read each line it draws, beside it.
+            LinesReadOn readOn = LinesReadOn.NONE;
+            BoundaryPolicy.Standing standing;
+            Optional<NotABoundary> refused = BoundaryPolicy.refuses(live);
+            if (refused.isPresent()) {
+                standing = new BoundaryPolicy.Standing.Refused(refused.get());
+            } else {
+                switch (stated.statement()) {
+                    case Stated.AComparison(var comparison) -> {
+                        ComparisonAssessment.Assessed assessed = ComparisonAssessment.ofEach(
+                                in.behavior(), comparison, where, in.read(), reads, applying,
+                                Set.of(), in.answering(), false, in.conditions(),
+                                Optional.of(stands.lineage().expansionProjection()), witnesses);
+                        readOn = assessed.readOn();
+                        standing = new BoundaryPolicy.Standing.Admitted(onItsRunsWhereUnread(
+                                in.behavior(), comparison, stands, where, assessed.assessment(),
+                                in.read(), witnesses));
+                    }
+                    case Stated.AnApplication(var _, var answered) ->
+                            standing = new BoundaryPolicy.Standing.Admitted(
+                                    ComparisonAssessment.ofAnApplication(in.behavior(), answered,
+                                            where, in.read(), witnesses));
+                }
+            }
             // Where a run stops in it, which is no part of the lines it draws. Only a comparison
             // the policy admits is read, and an application states no comparison to stop in.
             Optional<Proposition> stopsWhere = standing instanceof BoundaryPolicy.Standing.Admitted
@@ -560,10 +1876,42 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     ? Optional.ofNullable(Cutting.whereTheRunStops(comparison, in.read(), reads,
                             applying, in.conditions()))
                     : Optional.empty();
-            out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    statedAsACondition(e, standing, stopsWhere, reads, in, numbering), stopsWhere,
-                    applying.elementsMetOn(), stated.written(), in.context(),
-                    numbering.saidOnTheWay(List.of(assumed))));
+            // And what each application of the closure it stands in works out, likewise.
+            Optional<List<Cutting.OnAnApplication>> worksOutOnEach =
+                    standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Cutting.whatEachApplicationWorksOut(comparison, in.read(), applying,
+                            in.conditions())
+                    : Optional.empty();
+            // And what a run getting to it works out, where it is read once.
+            Optional<StopEvidence> stopsIn = worksOutOnEach.isEmpty()
+                    && standing instanceof BoundaryPolicy.Standing.Admitted
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? Optional.of(in.conditions().comparison(comparison, reads, in.read()).stops()
+                            .get())
+                    : Optional.empty();
+            // And what a run taking each arm of a choice it is read through works out there.
+            List<StopEvidence.OnAnArm> onTheArms = stopsIn.isPresent()
+                    && stated.statement() instanceof Stated.AComparison(var comparison)
+                    ? in.conditions().comparison(comparison, reads, in.read()).onTheArms().get()
+                    : List.of();
+            // What a line of it is looked for beside is the way as statements of the elements the
+            // comparison reads: a condition on the way read of another element of one of its
+            // containers is about a value the line is not.
+            ElementsOnTheWay.Kept besideIt = ElementsOnTheWay.keptToOneElementEach(assumed,
+                    readsTheElements, numbering.saidOnTheWay(List.of(assumed)));
+            Past past = pastOf(standing, e, in, reads);
+            out.add(new Reading(stands, stated.statement(), where, reads, besideIt.way(), standing,
+                    statedAsACondition(e, standing, stopsWhere, worksOutOnEach, reads, in,
+                            numbering),
+                    worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
+                    besideIt.said(), witnesses,
+                    past.answered(), past.asks(), readsTheElements, readOn,
+                    new Pullback.Once<>(() -> workedOutFirst(e, stated.statement(), in, reads)),
+                    stated.statement() instanceof Stated.AComparison
+                            ? QuotientsEveryRunWorksOut.in(e) : List.of(),
+                    new Pullback.Once<>(() -> Condition.of(e, reads, in.symbols(), in.newtypes(),
+                            numbering))));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -585,31 +1933,42 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Inside a closure whose applications are said, what the left came to is a statement
             // about each application, so it goes onto what each is reached under and not onto the
             // way every application shares.
-            case Core.Binary both when both.op() == BinOp.AND -> {
+            case Core.Binary both when both.op().stopsWhenItsAnswerIsSettled() -> {
+                boolean runsWhenLeftIs = both.op().rightRunsWhenLeftIs();
                 walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
-                walk(both.right(), in, reads, applying.taking(both.left(), true, in.read()), flow,
-                        applying.saysWhatStandsInIt() ? assumed
+                boolean readsNothing = in.metOnly().isPresent();
+                walk(both.right(), in, reads,
+                        readsNothing ? applying.takingNothingRead()
+                                : applying.taking(both.left(), runsWhenLeftIs, in.read()), flow,
+                        (readsNothing || applying.saysWhatStandsInIt()) ? assumed
                                 : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
-                                        numbering), true, in.read(), assumed, in.conditions(),
-                                        numbering),
-                        live, out, forks, numbering);
-            }
-            case Core.Binary either when either.op() == BinOp.OR -> {
-                walk(either.left(), in, reads, applying, flow, assumed, live, out, forks,
-                        numbering);
-                walk(either.right(), in, reads, applying.taking(either.left(), false, in.read()),
-                        flow,
-                        applying.saysWhatStandsInIt() ? assumed
-                                : taking(Condition.of(either.left(), reads, symbols,
-                                        in.newtypes(), numbering), false, in.read(), assumed,
+                                        numbering), runsWhenLeftIs, in.read(), assumed,
                                         in.conditions(), numbering),
                         live, out, forks, numbering);
+            }
+            // Where only where each construct stands is asked, the condition is walked for the
+            // constructs in it and read for nothing: what it states is what the arms are entered
+            // under, and no application told of is told by that.
+            case Core.If iff when in.metOnly().isPresent() -> {
+                in.ways().enteringACondition();
+                walk(iff.cond(), in, reads, applying, flow, assumed, live, out, forks, numbering);
+                in.ways().leavingACondition();
+                Choice.Decides then = Choice.Decides.ofCondition(iff, true);
+                Choice.Decides els = Choice.Decides.ofCondition(iff, false);
+                walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
+                        applying.takingNothingRead().choosing(then, symbols, in.newtypes(), null),
+                        flow, assumed, live, out, forks, numbering);
+                walk(iff.els(), in, reads.choosing(els, symbols, in.newtypes()),
+                        applying.takingNothingRead().choosing(els, symbols, in.newtypes(), null),
+                        flow, assumed, live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
             // of it. A comparison inside a condition is not below the fork: it runs to decide it.
             case Core.If iff -> {
+                in.ways().enteringACondition();
                 walk(iff.cond(), in, reads, applying, flow, assumed, live, out, forks, numbering);
+                in.ways().leavingACondition();
                 // Read once, whichever arm is being entered. Reaching the `then` and reaching the
                 // `els` are two things one condition says, and a second reading for the second arm
                 // would name that one condition twice.
@@ -649,11 +2008,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     for (Denotation part : ConditionSkeleton.atoms(iff.cond(),
                             WhatNamesStandFor.in(reads, in.read()))) {
                         Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
-                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read(), in.stated())));
+                        atoms.add(statedElsewhere(atom, in.read(), in.stated()));
                     }
                     forks.add(new ForkMet(in.context().of(iff.occurrence()), iff.cond(),
                             Citation.of(iff.pos()),
-                            atoms));
+                            atoms, assumed, in.ways()));
                 }
                 // And which positions what it turns on may read, under the copy of the fork this
                 // reading is of: the one thing the reading of the runs is told of a fork on what an
@@ -689,7 +2048,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 Core given = let.value();
                 if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
                     given = in.templates().bodyOf(build);
-                    in.templates().entered(given, assumed, live && flow.reads(let));
+                    in.templates().entered(given, build, in.within(), assumed,
+                            live && flow.reads(let), applying);
                 } else {
                     walk(let.value(), in, reads, applying, flow, assumed,
                             live && flow.reads(let), out, forks, numbering);
@@ -714,7 +2074,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // reading's to say ({@link ArmsNamed}).
             case Core.Match match -> {
                 if (reads.pathOf(match.scrutinee(), in.newtypes())
-                        instanceof PathResolution.At(TermPath at)) {
+                        instanceof ValuesAt.At(TermPath at)) {
                     List<souther.compiler.reading.Condition.Case> cases = new ArrayList<>();
                     for (Core.Case arm : match.cases()) {
                         cases.add(souther.compiler.reading.Condition.Case.of(at, arm));
@@ -728,10 +2088,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     Core.Case arm = match.cases().get(part);
                     Choice.Decides taken = Choice.Decides.ofCase(match, arm);
                     int which = part;
+                    boolean readsNothing = in.metOnly().isPresent();
                     walk(arm.body(), in, reads.choosing(taken, symbols, in.newtypes()),
-                            applying.choosing(taken, symbols, in.newtypes(), on ->
+                            applying.choosing(taken, symbols, in.newtypes(),
+                                    readsNothing ? null : on ->
                                     in.conditions().arm(match, which, on).proposition()), flow,
-                            entering(match, arm, part, in.read(), reads, assumed, numbering),
+                            readsNothing ? assumed
+                                    : entering(match, arm, part, in.read(), reads, assumed,
+                                            numbering),
                             live, out, forks, numbering);
                 }
             }
@@ -754,11 +2118,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Denotation seed = new Denotation(seeded.seed(), reads);
                         in.oneApplication().entering(seeded.step(),
                                 shortOfEachElement(seeded.step(), inside, in));
-                        ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
-                                inside.entering(into, symbols, in.newtypes()),
-                                through.into(seeded.step(), into, inside, in.read())
-                                        .carryingIntoTheFirst(seeded.accumulator(), seed),
-                                flow, assumed, live, out, forks, numbering));
+                        ScopeStep.forEachChild(seeded.step(), (body, into) -> {
+                            ClosureApplications applied = through.into(seeded.step(), into,
+                                            inside, in.read(), in.metOnly().isEmpty())
+                                    .carryingIntoTheFirst(seeded.accumulator(), seed);
+                            if (body == seeded.step().body() && in.metOnly().isEmpty()) {
+                                in.constructions().appliedOn(seeded.step(), applied);
+                            }
+                            walk(body, in, inside.entering(into, symbols, in.newtypes()),
+                                    applied, flow, assumed, live, out, forks, numbering);
+                        });
                         in.oneApplication().leaving();
                     });
             // A helper that calls itself over a list the input holds, read where the call stands:
@@ -772,7 +2141,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         walk(child, in, reads.entering(step, symbols, in.newtypes()),
                                 applying.entering(step, symbols, in.newtypes()), flow, assumed,
                                 live, out, forks, numbering));
-                walk(over.step(), in.inside(over.body(), over.context(), over.reads()),
+                walk(over.step(), in.inside(over.body(), over.context(), over.reads(),
+                                new WayIn(Core.withoutStanding(call), assumed)),
                         over.reads(),
                         over.applying(), LiveFlow.of(over.body()), assumed, live, out, forks,
                         numbering.within(over.context()));
@@ -783,15 +2153,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // And what its answer may turn on, read on each application: where an operation's own
             // body forks on what the closure answers, that is what the fork turns on
             // ({@link ForkDependencies}).
+            //
+            // An element one arm of another closure wrote exists only where that arm was taken, so
+            // a run handed it is on the way that arm is: what entering the arm states goes onto the
+            // way in here, as it does onto the way of what is written inside the arm.
             case Core.Block block -> {
+                if (in.metOnly().isEmpty() && in.context().equals(CallContext.OF_THE_BODY)) {
+                    in.constructions().made(block, assumed);
+                }
                 in.oneApplication().entering(block, shortOfEachElement(block, reads, in));
+                boolean readsNothing = in.metOnly().isPresent();
+                List<OnTheWay> handed = readsNothing ? assumed
+                        : past(assumed, writtenUnder(block, reads, in, numbering));
                 ScopeStep.forEachChild(block, (child, step) -> {
-                    ClosureApplications applied = applying.into(block, step, reads, in.read());
-                    if (child == block.body()) {
+                    ClosureApplications applied =
+                            applying.into(block, step, reads, in.read(), !readsNothing);
+                    if (child == block.body() && !readsNothing) {
                         answeredBy(block, applied, in);
+                        in.constructions().appliedOn(block, applied);
                     }
                     walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
-                            assumed, live, out, forks, numbering);
+                            child == block.body() ? handed : assumed, live, out, forks,
+                            numbering);
                 });
                 in.oneApplication().leaving();
             }
@@ -800,17 +2183,20 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // stands for what was built, so a comparison written over that name is one over the
             // positions the construction was given.
             case Core.IfConstructed attempt -> {
+                in.constructions().tested(attempt.construct());
                 walk(attempt.construct(), in, reads, applying, flow, assumed, live, out, forks,
                         numbering);
                 List<Choice.Arm> arms = Choice.of(attempt).arms();
                 for (int part = 0; part < arms.size(); part++) {
                     Choice.Arm arm = arms.get(part);
                     int which = part;
+                    boolean readsNothing = in.metOnly().isPresent();
                     walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
-                            applying.choosing(arm.decidedBy(), symbols, in.newtypes(), on ->
+                            applying.choosing(arm.decidedBy(), symbols, in.newtypes(),
+                                    readsNothing ? null : on ->
                                     in.conditions().arm(attempt, which, on).proposition()), flow,
-                            past(assumed, numbering.said(
-                                    ReachingCuts.attempting(attempt, part, arm.answers().pos(),
+                            readsNothing ? assumed
+                                    : past(assumed, numbering.said(attempting(attempt, part,
                                             in.read(), reads, numbering))),
                             live, out, forks, numbering);
                 }
@@ -821,6 +2207,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             applying.entering(step, symbols, in.newtypes()), flow, assumed,
                             live, out, forks, numbering));
         }
+        // What it is worked out of is walked, so a step it is comes after them, as a run takes it.
+        in.constructions().walkedPast(e);
     }
 
     /** The uses of {@code block}, where {@code reads} are the names, that are not an operation
@@ -857,6 +2245,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              ClosureApplications applying) { }
 
     /**
+     * The elements a run that answers and goes through a comparison standing inside
+     * {@code applying} once is shown to make it on every one of ({@link
+     * ClosureApplications.MadeOnEvery}) — none where that is not shown.
+     *
+     * <p>Only in the body the reading was handed: a helper's body is run by every call of it, so
+     * a run recorded there may be another call's. And only where the comparison reads the
+     * innermost of those elements through a name for it and in no other way ({@code reads}): a
+     * name a closure binds stands for each element it is handed, and what is read of the
+     * container some other way is no element the closure was handed.
+     */
+    private static List<TermPath> madeOnEvery(ClosureApplications applying, ElementsNamed reads,
+                                              Body in) {
+        List<TermPath> elements = applying.madeOnEvery().elements().orElse(List.of());
+        if (elements.isEmpty() || !in.context().equals(CallContext.OF_THE_BODY)) {
+            return List.of();
+        }
+        ElementsNamed.Slot innermost = ElementsNamed.Slot.innermostOf(elements.getLast());
+        return innermost != null && reads.named().containsKey(innermost)
+                && !reads.unnamed().contains(innermost) ? elements : List.of();
+    }
+
+    /**
      * {@code call} read as a call of a helper that walks a list the input holds by its head and
      * calls itself on the rest — or null where it is no such call, or one this reading reads no
      * further.
@@ -879,7 +2289,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static Recursion recursionAt(Core.Call call, Body in, InputReads reads,
                                          ClosureApplications applying) {
         if (in.root() == null || !in.context().equals(CallContext.OF_THE_BODY)
-                || !(applying instanceof ClosureApplications.Outside(var metOn))
+                || !(applying instanceof ClosureApplications.Outside(var metOn, var _))
                 || !(AnOperationApplied.of(call) instanceof AnOperationApplied(
                         ValueName.Helper helper, List<Core> args))) {
             return null;
@@ -889,7 +2299,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         RecursionOverAList walk = recursion == null ? null : recursion.walk().orElse(null);
         if (walk == null || buildsAValue(recursion.body().body())
                 || !(reads.pathOf(args.get(walk.walked()), in.newtypes())
-                        instanceof PathResolution.At(TermPath list))) {
+                        instanceof ValuesAt.At(TermPath list))) {
             return null;
         }
         Way made = wayTo(in.root(), call, in.atTheRoot(), in);
@@ -914,7 +2324,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return new Recursion(recursion.body().body(), walk.some().body(), called, step,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
-                        metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied())))));
+                        metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
+                        List.of(), List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN,
+                        List.of(), Optional.empty()))));
     }
 
     /**
@@ -944,8 +2356,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (e == target) {
             return new Way(WhereAnApplicationIsMade.nothingAsked());
         }
-        if (e instanceof Core.Binary both
-                && (both.op() == BinOp.AND || both.op() == BinOp.OR)) {
+        if (e instanceof Core.Binary both && both.op().stopsWhenItsAnswerIsSettled()) {
             Way left = wayTo(both.left(), target, reads, in);
             if (left != null) {
                 return left;
@@ -956,7 +2367,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
             Proposition leftAnswered =
                     in.conditions().truth(both.left(), reads, in.read()).proposition();
-            return right.past(both.op() == BinOp.AND ? leftAnswered : leftAnswered.denied());
+            return right.past(both.op().rightRunsWhenLeftIs() ? leftAnswered
+                    : leftAnswered.denied());
         }
         if (e instanceof Core.Block) {
             return holds(e, target) ? Way.NOT_READ : null;
@@ -1034,7 +2446,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                    WhatConditionsState conditions, CallContext context,
                                    ConditionNumbering numbering) {
         switch (condition) {
-            case Condition.OfOneConstruct one -> out.add(new OutcomeMet(one, assumed,
+            // Beside the way as statements of the elements the condition reads, as a line is.
+            case Condition.OfOneConstruct one -> out.add(new OutcomeMet(one,
+                    ElementsOnTheWay.keptToOneElementEach(assumed,
+                            one.elementsNamed(read.rules().newtypes())),
                     holding != null ? holding
                             : ReachingCuts.stating(condition, read, true, conditions).entries(),
                     failing != null ? failing
@@ -1054,17 +2469,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * The comparison {@code e} as a condition, where its statement is several lines or a run
-     * stops in it: what where each line decides, or where the run stops, is put on the way at —
-     * nothing where it is one line that no run stops in, or draws none.
+     * The comparison {@code e} as a condition, where its statement is several lines, a run stops
+     * in it, or it stands in a closure some application of which is made on some rows and not
+     * others: what where each line decides, where the run stops, or where the application is
+     * made, is put on the way at — nothing where it is one line that no run stops in, or draws
+     * none.
      */
-    private static Optional<Condition> statedAsACondition(Core e, BoundaryPolicy.Standing standing,
-                                                          Optional<Proposition> stopsWhere,
-                                                          InputReads reads, Body in,
-                                                          ConditionNumbering numbering) {
+    private static Optional<Condition> statedAsACondition(
+            Core e, BoundaryPolicy.Standing standing, Optional<Proposition> stopsWhere,
+            Optional<List<Cutting.OnAnApplication>> worksOutOnEach, InputReads reads, Body in,
+            ConditionNumbering numbering) {
         return standing instanceof BoundaryPolicy.Standing.Admitted admitted
                 && (admitted.read() instanceof ComparisonAssessment.Several
-                        || stopsWhere.isPresent())
+                        || stopsWhere.isPresent()
+                        || worksOutOnEach.orElse(List.of()).stream().anyMatch(one ->
+                                !(one.reached() instanceof Proposition.Always(boolean holds)
+                                        && holds)))
                 ? Optional.of(Condition.of(e, reads, in.symbols(), in.newtypes(), numbering))
                 : Optional.empty();
     }
@@ -1078,7 +2498,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * written apart they would agree by having been derived alike — until one of them learned to
      * read a shape of condition the other did not.
      */
-    private static List<OnTheWay> taking(Condition condition, boolean holding,
+    static List<OnTheWay> taking(Condition condition, boolean holding,
                                          souther.compiler.inputs.InputReading read,
                                          List<OnTheWay> assumed, WhatConditionsState conditions,
                                          ConditionNumbering numbering) {
@@ -1091,6 +2511,74 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         List<OnTheWay> out = new ArrayList<>(assumed);
         out.addAll(stated);
         return List.copyOf(out);
+    }
+
+    /**
+     * What entering the arm that wrote the element {@code block} is handed states, where the
+     * closure is applied over one container that is no option, and one arm of a choice the
+     * container's own closure is wrote every element of it ({@link Pullback#writtenByOneArm}) —
+     * nothing otherwise. Read where that arm stands, under the name its closure gives the element
+     * it walks, as a walk into that arm reads it.
+     *
+     * <p>Only of the arm, and only where no other arm writes: an element two arms write exists
+     * where either was taken, and neither alone is on the way.
+     *
+     * <p>Only of an attempt's arm, which the walk into the arm puts on the way every application
+     * shares. What an {@code if}'s condition came to inside a closure whose applications are said
+     * goes onto what each application is reached under, and not onto that way, so it is not put on
+     * it here either.
+     */
+    private static List<OnTheWay> writtenUnder(Core.Block block, InputReads reads, Body in,
+                                               ConditionNumbering numbering) {
+        List<InputReads.AppliedOver> appliedOver = reads.containersAppliedOver(block);
+        if (appliedOver.size() != 1 || appliedOver.getFirst().anOption()) {
+            return List.of();
+        }
+        Denotation container = appliedOver.getFirst().container();
+        Pullback.WrittenByOneArm written = Pullback.writtenByOneArm(container, in.symbols(),
+                in.newtypes());
+        if (written == null) {
+            return List.of();
+        }
+        Core.Block step = written.assembled().step();
+        List<InputReads> inside = new ArrayList<>();
+        ScopeStep.forEachChild(step, (child, into) -> {
+            if (child == step.body()) {
+                inside.add(container.at().entering(into, in.symbols(), in.newtypes()));
+            }
+        });
+        if (inside.size() != 1) {
+            return List.of();
+        }
+        return Core.withoutStanding(written.choice()) instanceof Core.IfConstructed attempt
+                ? numbering.said(onTheAttempt(attempt, written.arm(), in.read(),
+                        inside.getFirst(), numbering))
+                : List.of();
+    }
+
+    /** What the walk entering arm {@code part} of {@code attempt} states
+     *  ({@link ReachingCuts#attempting}, {@link ConditionNumbering#walkedInto}). */
+    private static ReachingCuts.Stating attempting(Core.IfConstructed attempt, int part,
+                                                   InputReading read, InputReads reads,
+                                                   ConditionNumbering numbering) {
+        return numbering.walkedInto(attempt, part, reads,
+                () -> statingTheAttempt(attempt, part, read, reads, numbering));
+    }
+
+    /** The same, for a way on that arm the walk does not enter it by
+     *  ({@link ConditionNumbering#referredTo}). */
+    private static ReachingCuts.Stating onTheAttempt(Core.IfConstructed attempt, int part,
+                                                     InputReading read, InputReads reads,
+                                                     ConditionNumbering numbering) {
+        return numbering.referredTo(attempt, part, reads,
+                () -> statingTheAttempt(attempt, part, read, reads, numbering));
+    }
+
+    private static ReachingCuts.Stating statingTheAttempt(Core.IfConstructed attempt, int part,
+                                                          InputReading read, InputReads reads,
+                                                          ConditionNumbering numbering) {
+        return ReachingCuts.attempting(attempt, part,
+                Choice.of(attempt).arms().get(part).answers().pos(), read, reads, numbering);
     }
 
     /** The same, for what standing inside one arm of a fork establishes ({@link
@@ -1124,6 +2612,39 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
                                      StatedHere here) {
+        return statedAt(e, names, null, here);
+    }
+
+    /**
+     * The same, where {@code applying} are the applications of the closures {@code e} stands
+     * inside, which an application of an operation is read on each of; null where it is asked
+     * only whether {@code e} states something.
+     */
+    private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
+                                     ClosureApplications applying, StatedHere here) {
+        ConstructOccurrence written = mayState(e);
+        if (written == null) {
+            return null;
+        }
+        Optional<StatedComparison> compared = BooleanMeaning.asAComparison(e);
+        if (compared.isPresent()) {
+            return here.carriesPast(e, compared.get(), names) ? null
+                    : new StatedAt(written, new Stated.AComparison(compared.get()));
+        }
+        Cutting.Read answered = here.ofAnApplication((Core.PreservedCall) e, names, applying);
+        return answered == null ? null
+                : new StatedAt(written, new Stated.AnApplication(e, answered));
+    }
+
+    /**
+     * The construct {@code e} is, where it is one the source wrote that may state something a
+     * line is drawn from: a comparison, or an application of one of the language's operations
+     * answering a truth or whether it holds a value; null where it is not.
+     *
+     * <p>Asked by both readings of a body ({@link #statedAt}, {@link #metOf}), so the constructs
+     * one reads and the other says stand somewhere are told by one answer.
+     */
+    private static ConstructOccurrence mayState(Core e) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -1132,16 +2653,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (written == null || !written.isWritten()) {
             return null;
         }
-        Optional<StatedComparison> compared = BooleanMeaning.asAComparison(e);
-        if (compared.isPresent()) {
-            return here.carriesPast(e, compared.get(), names) ? null
-                    : new StatedAt(written, new Stated.AComparison(compared.get()));
+        if (BooleanMeaning.asAComparison(e).isPresent()) {
+            return written;
         }
-        Cutting.Read answered = e instanceof Core.PreservedCall call
+        return e instanceof Core.PreservedCall call
                 && (Type.BOOL.equals(call.type()) || statesWhetherItHoldsAValue(call))
-                ? here.ofAnApplication(call, names) : null;
-        return answered == null ? null
-                : new StatedAt(written, new Stated.AnApplication(e, answered));
+                ? written : null;
     }
 
     /**
@@ -1167,24 +2684,29 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static final class StatedHere {
 
         /** A construct, by the node it is, under a reading of its names, by what that holds. */
-        private record Asked(Core node, InputReads reads) {
+        private record Asked(Core node, InputReads reads, boolean onEveryElement) {
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof Asked that && node == that.node && reads.equals(that.reads);
+                return other instanceof Asked that && node == that.node && reads.equals(that.reads)
+                        && onEveryElement == that.onEveryElement;
             }
 
             @Override
             public int hashCode() {
-                return System.identityHashCode(node) * 31 + reads.hashCode();
+                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 31
+                        + Boolean.hashCode(onEveryElement);
             }
         }
 
         private final String behavior;
-        private final Map<Asked, Optional<Cutting.Read>> applications = new HashMap<>();
+        /** Whether an expression answers a value, of the trees the body is made of. */
+        private final Arrivals answering;
+        private final Map<Asked, Optional<Cutting.AppliedOn>> applications = new HashMap<>();
 
-        StatedHere(String behavior) {
+        StatedHere(String behavior, Arrivals answering) {
             this.behavior = behavior;
+            this.answering = answering;
         }
 
         /**
@@ -1213,25 +2735,84 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * positions it came from.
          */
         Cutting.Read ofAnApplication(Core.PreservedCall application,
-                                     Supplier<WhatNamesStandFor> names) {
+                                     Supplier<WhatNamesStandFor> names,
+                                     ClosureApplications applying) {
             WhatNamesStandFor standing = names.get();
-            return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
+            // Inside a closure whose applications are said, it is read on each application, as a
+            // comparison there is: what each application is handed is what the application states
+            // of, and what stands before it in the closure is what each is reached under, where
+            // its lines decide. One reading under the names every application shares has neither.
+            if (applying instanceof ClosureApplications.Each(var made)
+                    && made.stream().anyMatch(ClosureApplications.Application::isMadeOnSomeRow)) {
+                return Cutting.ofAnApplicationOnEach(made, one -> appliedOn(application,
+                        WhatNamesStandFor.in(one.reads(), standing.read()),
+                        one.metOn().levels().isEmpty()));
+            }
+            Cutting.AppliedOn applied = appliedOn(application, standing, false);
+            return applied == null ? null : applied.read();
+        }
+
+        /**
+         * What {@code application}, whose statement {@code stated} has a part nothing read, says
+         * as the comparison its law holds of an element or a key with a value, read as a
+         * comparison the source writes is — or nothing where its law holds no such comparison,
+         * and what stopped is something else.
+         */
+        private Optional<Cutting.AppliedOn> unreadAsItsLawComparison(
+                Core.PreservedCall application, Pullback.Pulled stated,
+                WhatNamesStandFor standing, boolean onEveryElement) {
+            Pullback.LawComparison law = Pullback.lawComparisonOf(application, standing.reads(),
+                    standing.read());
+            if (law == null) {
+                return Optional.empty();
+            }
+            Cutting.Read read = Cutting.ofALawComparison(behavior, law.comparison(),
+                    standing.read(), law.reads(), answering,
+                    WhatConditionsState.of(standing.read()), onEveryElement,
+                    Optional.of(application.occurrence().lineage().expansionProjection()));
+            return read == null ? Optional.empty()
+                    : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
+                            stated.proposition()));
+        }
+
+        /** What {@code application} reads as under the names {@code standing} holds, or null where
+         *  it states nothing of its own. {@code onEveryElement} is whether a run that gets to the
+         *  closure it stands in makes it on every element the closure is handed. */
+        private Cutting.AppliedOn appliedOn(Core.PreservedCall application,
+                                            WhatNamesStandFor standing, boolean onEveryElement) {
+            return applications.computeIfAbsent(
+                    new Asked(application, standing.reads(), onEveryElement), _ -> {
                 // Whether an optional holds a value is what it states, as a truth is what it
                 // answers.
                 WhatConditionsState state = WhatConditionsState.of(standing.read());
-                Pullback.Pulled stated = Type.BOOL.equals(application.type())
+                Pullback.Pulled stated = (Type.BOOL.equals(application.type())
                         ? state.truth(application, standing.reads(), standing.read())
-                        : state.presence(application, standing.reads(), standing.read());
+                        : state.presence(application, standing.reads(), standing.read()))
+                        .forTheLines();
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
-                if (!itsOwn || Proposition.leavesSomethingUnread(stated.proposition())) {
-                    return Optional.empty();
+                if (Proposition.leavesSomethingUnread(stated.proposition())) {
+                    // Where what stopped is the comparison of the element or key the call's law
+                    // holds against the value it was handed, that comparison is the application's
+                    // own and says why at the places it compares. What stopped elsewhere in what
+                    // the application states is a fork's to say.
+                    return itsOwn
+                            ? unreadAsItsLawComparison(application, stated, standing, onEveryElement)
+                            : Optional.empty();
                 }
-                return Optional.ofNullable(Cutting.ofAnApplication(behavior, application,
+                if (!itsOwn) {
+                    return Optional.of(new Cutting.AppliedOn(null, stated.meaning().how(),
+                            stated.proposition()));
+                }
+                Cutting.Read read = Cutting.ofAnApplication(behavior, application,
                         stated.proposition(), standing.read(), standing.reads(),
                         WrittenLines.of(stated.meaning().how(),
                                 application.occurrence().lineage().expansionProjection(),
-                                Optional.empty(), Optional.empty())));
+                                Optional.empty(), Optional.empty()),
+                        stated.workingOfRelation());
+                return read == null ? Optional.empty()
+                        : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
+                                stated.proposition()));
             }).orElse(null);
         }
     }
@@ -1340,7 +2921,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * <p><b>Answered as the parts nobody else states, and not as whether somebody states one.</b>
      * What an operation's answer turns on is as many things as the closure states
-     * ({@link WhatAForkTests#partsOfTheAnswer}): a closure answering
+     * ({@link WhatAForkTests#partsRead}): a closure answering
      * {@code p.age > 18 && List.contains(0, p.tags)} states a comparison and something nothing here
      * reads, and the fork around the operation states the second whoever owns the first. Answered
      * as "something in there is owned", the second went with the first — which is the same partial
@@ -1352,24 +2933,113 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * {@code xs} holds something, and the comparison draws both. A statement with a part nobody
      * read leaves that part where it was read off, as any other part is.
      */
-    private static List<Denotation> statedElsewhere(Denotation atom, InputReading read,
-                                                    StatedHere here) {
+    private static Atom statedElsewhere(Denotation atom, InputReading read, StatedHere here) {
         StatedAt whole = statedAt(atom.value(), () -> WhatNamesStandFor.in(atom.at(), read), here);
-        if (whole != null && switch (whole.statement()) {
-            case Stated.AnApplication _ -> true;
-            case Stated.AComparison(var comparison) -> !Proposition.leavesSomethingUnread(
-                    WhatConditionsState.of(read).comparison(comparison, atom.at(), read)
-                            .stated().proposition());
-        }) {
-            return List.of();
+        List<WhyUnread> stoppedFor = List.of();
+        if (whole != null) {
+            switch (whole.statement()) {
+                case Stated.AnApplication _ -> {
+                    return new Atom(atom, List.of(), List.of());
+                }
+                case Stated.AComparison(var comparison) -> {
+                    Proposition stated = WhatConditionsState.of(read)
+                            .comparison(comparison, atom.at(), read).stated().proposition();
+                    if (!Proposition.leavesSomethingUnread(stated)) {
+                        return new Atom(atom, List.of(), List.of());
+                    }
+                    stoppedFor = Proposition.stopsIn(stated);
+                }
+            }
         }
-        List<Denotation> left = new ArrayList<>();
-        for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
+        return switch (WhatAForkTests.partsRead(atom.value(),
                 WhatNamesStandFor.in(atom.at(), read))) {
+            case WhatAForkTests.PartsRead.Complete(var parts, var pieces) ->
+                    new Atom(atom, unowned(parts, pieces, atom, read, here), stoppedFor);
+            // A comparison states the atom, and its own reading was stopped at a figure: the
+            // comparison reader says so, at the places the comparison names. The fork is offered
+            // no part, because the parts of a proposition the figure cut depend on where it was
+            // cut, and so would what the fork says.
+            case WhatAForkTests.PartsRead.Incomplete _ when whole != null ->
+                    new Atom(atom, List.of(), List.of());
+            // Nothing states the atom, so there is no reader to leave it to, and which of its
+            // parts nobody answers for is what the figure took away. The atom is left whole to
+            // the fork, with what stopped its answer.
+            case WhatAForkTests.PartsRead.Incomplete(var stops) ->
+                    new Atom(atom, List.of(atom), stops);
+        };
+    }
+
+    /**
+     * Whether {@code e} is a clause a declaration wrote — the rule a type states of its values,
+     * reached through an attempt to build one — and not a part of the body being read.
+     *
+     * <p>Such a clause is answered for already: by the declaration, which states it of the type,
+     * and by the attempt, whose two arms are the run that builds the value and the run that
+     * cannot. A fork over the attempt that kept the clause would state the same rule a second
+     * time, at the positions the clause was reached through. Nothing the examples owe is dropped
+     * here: what they owe of the arms is the arms' own.
+     */
+    private static boolean writtenByADeclaration(Core e) {
+        ConstructOccurrence written = switch (Core.withoutStanding(e)) {
+            case Core.Binary binary -> binary.occurrence();
+            case Core.PreservedCall call -> call.occurrence();
+            default -> null;
+        };
+        return written != null && written.isWritten()
+                && !(written.origin().owner() instanceof WrittenOwner.Body);
+    }
+
+    /** Every comparison the source wrote in {@code e}, into {@code into}. */
+    private static void comparisonsIn(Core e, List<Core> into) {
+        Core written = Core.withoutStanding(e);
+        if (written instanceof Core.Binary && BooleanMeaning.asAComparison(written).isPresent()) {
+            into.add(written);
+        }
+        Core.forEachChild(written, child -> comparisonsIn(child, into));
+    }
+
+    /**
+     * Whether {@code part} is what a behavior the body calls answers, itself or by a name given
+     * it: a call no row stands in. The rule that decides it is written in that behavior, which
+     * states it in its own account, so a fork over it states no rule of its own. What a
+     * dependency a row stands in answered is the decision table's, and is asked there.
+     */
+    private static boolean answeredByABehaviorCalled(Denotation part, InputReading read) {
+        Denotation stands = part.at().standing(part.value(), read.symbols(), read.newtypes());
+        return AnOperationApplied.of(Core.withoutStanding(stands.value()))
+                instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Behavior behavior
+                && !stands.at().standsIn(behavior);
+    }
+
+    /** The {@code parts} that none of the readers answers for: a comparison of the model, a
+     *  position of the input, another fork, or a behavior the body calls. */
+    private static List<Denotation> unowned(List<Denotation> parts,
+                                            WhatAForkTests.ReadAsPieces pieces, Denotation atom,
+                                            InputReading read, StatedHere here) {
+        // The container of some piece being a value is stated by the comparisons written in the
+        // atom, where every one of them has its owner.
+        List<Core> comparisons = new ArrayList<>();
+        comparisonsIn(atom.value(), comparisons);
+        boolean piecesAreTheirs = !pieces.containers().isEmpty() && !comparisons.isEmpty()
+                && comparisons.stream().allMatch(comparison -> statedAt(comparison,
+                        () -> WhatNamesStandFor.in(atom.at(), read), here) != null);
+        List<Denotation> left = new ArrayList<>();
+        for (Denotation part : parts) {
+            if (writtenByADeclaration(part.value())) {
+                continue;
+            }
+            if (answeredByABehaviorCalled(part, read)) {
+                continue;
+            }
+            if (piecesAreTheirs && pieces.containers().stream()
+                    .anyMatch(container -> container.value() == part.value())) {
+                continue;
+            }
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
             if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
-                            instanceof PathResolution.At)) {
+                            instanceof ValuesAt.At)) {
                 left.add(part);
             }
         }

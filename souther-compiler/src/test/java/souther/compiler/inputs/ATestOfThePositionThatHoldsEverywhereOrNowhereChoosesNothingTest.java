@@ -67,9 +67,9 @@ class ATestOfThePositionThatHoldsEverywhereOrNowhereChoosesNothingTest {
         ElementValue nought = new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO, Map.of()));
         ElementValue.PositionTest fromNought = new ElementValue.PositionTest(
                 ElementValue.PositionTest.THE_POSITION_ITSELF, Rel.GE, 0);
-        assertEquals(itself, ElementValue.choosingByPosition(fromNought, itself, nought));
-        assertEquals(nought, ElementValue.choosingByPosition(fromNought.denied(), itself, nought));
-        assertInstanceOf(ElementValue.ByPosition.class, ElementValue.choosingByPosition(
+        assertEquals(itself, ElementValue.choosing(fromNought, itself, nought));
+        assertEquals(nought, ElementValue.choosing(fromNought.denied(), itself, nought));
+        assertInstanceOf(ElementValue.Choose.class, ElementValue.choosing(
                 new ElementValue.PositionTest(ElementValue.PositionTest.THE_POSITION_ITSELF,
                         Rel.LT, 2), itself, nought));
     }

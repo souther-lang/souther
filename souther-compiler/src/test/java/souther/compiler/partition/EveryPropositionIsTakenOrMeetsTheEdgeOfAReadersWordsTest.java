@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.ACompiledModel;
+import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.flow.AWayThrough;
@@ -17,12 +20,16 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WaysSamples;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
+import souther.compiler.semantics.StringContainment;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -79,8 +86,9 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
             data Held = { o: Int? }
             data Node = { v: Int, below: List<Node> }
 
-            behavior f : (n: Int, b: Bool, s: String, h: Held, xs: List<Int>, t: Node) -> Yes
-            let f (n, b, s, h, xs, t) = Yes
+            behavior f : (n: Int, b: Bool, s: String, u: String, h: Held, xs: List<Int>,
+                          t: Node) -> Yes
+            let f (n, b, s, u, h, xs, t) = Yes
             """;
 
     /** Where a row reader's words stop: the input's own words, and nothing of a path's. */
@@ -269,9 +277,19 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
                 CasesLeft.of(Refinement.of(new Case.Presence(true))), true));
         out.put("a value being there",
                 new Proposition.Present(new DecisionSubject.AnInput(optional), true));
+        out.put("a string in a language", new Proposition.InTheStrings(
+                new Proposition.InTheStrings.Strings.AtAPosition(TermPath.of("s")),
+                new StringsLanguage(PatternMeaning.text("ab")), true));
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
+        out.put("a value being the one written", new Proposition.SameValue(
+                new DecisionSubject.AnInput(TermPath.of("s")),
+                new Operand.Written<>(Value.text("USD")), true));
+        out.put("one string inside another", new Proposition.StringInside(
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("u"))),
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("s"))),
+                StringContainment.ANYWHERE, true));
         out.put("the last of its value", new Proposition.LastToHold(
                 new DecisionSubject.AnInput(TermPath.of("xs")),
                 new DecisionSubject.AnInput(TermPath.of("xs").element()), true));
@@ -281,8 +299,9 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")), element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
         out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
-                .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
+                .sorted(Comparator.comparing(Proposition::spelledOut)).toList(), List.of(1, 1),
                 List.of(1)));
+        out.put("the cases of the ways of keeping", WaysSamples.over(truth));
         TermPath node = TermPath.of("t");
         out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
                 List.of("below"), new Proposition.Compared(new Relation.Affine(
@@ -295,8 +314,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
     }
 
     private static InputReading reading() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         assertTrue(!compilation.modules().isEmpty(), () -> "the model under test compiles: "
                 + compilation.diagnostics().values().stream().flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList());

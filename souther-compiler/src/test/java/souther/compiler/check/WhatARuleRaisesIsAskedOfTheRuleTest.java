@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -32,14 +34,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class WhatARuleRaisesIsAskedOfTheRuleTest {
 
     private static Map<RuleRef.Invariant, Required> raisedBy(String source, String type) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).required();
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).required();
     }
 
     /** What the rule raises, as `obligation at subject`, so a question and its subject are read

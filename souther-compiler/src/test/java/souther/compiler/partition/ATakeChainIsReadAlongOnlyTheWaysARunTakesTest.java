@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -246,22 +247,31 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
     /** What the body states of each condition it reads, as the reading of its meanings has it. */
     private static List<Proposition> stated(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        assertNotNull(checked, "the model under test compiles");
-        AnalysisBody analysis = checked.analysisBodies().get("draw");
-        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("draw");
-        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                inputs.dependencies());
-        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
-                () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
-        return meanings.stated().values().stream().map(each -> each.states()).toList();
+        return stated(source, Allowances.DECLARED);
+    }
+
+    /** What the body states of each condition it reads, in a compilation held to {@code held}. */
+    private static List<Proposition> stated(String source, Allowances held) {
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSource(source, "Main").allowing(held));
+        return held.over(() -> {
+            Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+            assertNotNull(checked, "the model under test compiles");
+            AnalysisBody analysis = checked.analysisBodies().get("draw");
+            RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+            InputDomain inputs =
+                    compilation.db().ask(new Adequacy.Inputs("demo")).value().get("draw");
+            InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                    inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                    inputs.dependencies());
+            MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
+                    () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
+            return meanings.stated().values().stream().map(each -> each.states()).toList();
+        });
     }
 
     private static DecisionReading decided(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         DecisionEvidence decided = compilation.db()
                 .ask(new Adequacy.Decides(compilation.modules().get(0))).value().get("draw");
         assertNotNull(decided, "the rules of the model are read");
@@ -272,11 +282,12 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
     private static boolean holds(Proposition stated, Map<String, Long> at) {
         return switch (stated) {
             case Proposition.Always always -> always.holds();
-            case Proposition.Compared(Relation.Affine(var form, var relation), var held, var _) ->
+            case Proposition.Compared(Relation.Affine(var form, var relation), var held, var _,
+                    var _) ->
                     relation.holds(signOf(form, at)) == held;
             case Proposition.All all -> all.parts().stream().allMatch(part -> holds(part, at));
             case Proposition.Any any -> any.parts().stream().anyMatch(part -> holds(part, at));
-            default -> throw new AssertionError("a statement this test reads: " + stated.key());
+            default -> throw new AssertionError("a statement this test reads: " + stated.spelledOut());
         };
     }
 
@@ -320,28 +331,33 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
      * are made: the last condition of {@code n} calls is read {@code 2^n - 2} times
      * ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}).
      */
-    private static final int PAST_THE_FIGURE = 32 - Integer.numberOfLeadingZeros(
-            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum() + 2);
+    private static final int NARROW = 128;
+
+    private static final int PAST_THE_FIGURE = 32 - Integer.numberOfLeadingZeros(NARROW + 2);
 
     /** As long as a chain nothing is left out of is when the figure stops it, and read to the end
-     *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). */
+     *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). Held at a figure of
+     *  {@value #NARROW} readings in all, which a chain of {@value #PAST_THE_FIGURE} is past if
+     *  nothing is left out. */
     @Test
     void aLongChainOfAmountsNoughtOrMoreReadsEveryConditionToTheEnd() {
+        Allowances narrow = Allowances.DECLARED.with(
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, NARROW);
         for (String source : List.of(chain(PAST_THE_FIGURE, true),
                 lets(PAST_THE_FIGURE, true))) {
-            List<Proposition> stated = stated(source);
+            List<Proposition> stated = stated(source, narrow);
 
             assertFalse(stated.isEmpty());
             for (Proposition each : stated) {
-                assertEquals(List.of(), Proposition.stopsIn(each), each::key);
+                assertEquals(List.of(), Proposition.stopsIn(each), each::spelledOut);
             }
         }
     }
 
     @Test
     void eachConditionReadIsTheConditionTheHelperTests() {
-        for (Model model : List.of(chainModel(4, true), chainModel(4, false), letsModel(4, true),
-                letsModel(4, false))) {
+        for (Model model : List.of(chainModel(3, true), chainModel(3, false), letsModel(3, true),
+                letsModel(3, false))) {
             List<Map<String, Long>> grid = model.grid();
             List<List<Boolean>> runs = grid.stream().map(model.run()).toList();
             int calls = runs.getFirst().size();
@@ -358,7 +374,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
                     }
                 }
                 assertFalse(alike.isEmpty(),
-                        () -> "a statement is one of the helper's conditions: " + stated.key());
+                        () -> "a statement is one of the helper's conditions: " + stated.spelledOut());
                 matched.addAll(alike);
             }
             assertEquals(calls, matched.size(), "every condition of the chain is stated");
@@ -367,7 +383,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
     @Test
     void amountsNoughtOrMoreLeaveARuleForEachWayARunTakes() {
-        DecisionReading read = rulesAgainstTheRun(chainModel(4, true), 5);
+        DecisionReading read = rulesAgainstTheRun(chainModel(3, true), 4);
 
         assertFalse(read.impossible().isEmpty(), "the ways no run takes are proved closed");
     }
@@ -382,21 +398,21 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
     /** The chain written out answers nought or the excess past every cap, which is two ways. */
     @Test
     void theChainWrittenOutOfAmountsNoughtOrMoreLeavesARuleForEachWayItsAnswerIsComeTo() {
-        DecisionReading read = rulesAgainstTheRun(letsModel(4, true), 2);
+        DecisionReading read = rulesAgainstTheRun(letsModel(3, true), 2);
 
         assertFalse(read.impossible().isEmpty(), "the ways no run takes are proved closed");
     }
 
     @Test
     void theChainWrittenOutOfAmountsThatMayBeNegativeLeavesEveryWay() {
-        DecisionReading read = rulesAgainstTheRun(letsModel(4, false), 5);
+        DecisionReading read = rulesAgainstTheRun(letsModel(3, false), 4);
 
         assertEquals(List.of(), read.impossible(), "every way is some input's");
     }
 
     @Test
     void conditionsOnPositionsOfTheirOwnLeaveEveryWay() {
-        DecisionReading read = rulesAgainstTheRun(apartModel(4), 16);
+        DecisionReading read = rulesAgainstTheRun(apartModel(3), 8);
 
         assertEquals(List.of(), read.impossible(), "every way is some input's");
     }

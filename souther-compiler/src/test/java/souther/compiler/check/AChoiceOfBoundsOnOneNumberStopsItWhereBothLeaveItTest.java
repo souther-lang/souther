@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -44,8 +45,12 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
             List.of("border      borders 0   obligations 0/0", "declarations   borders 1");
     private static final List<String> NO_LINE =
             List.of("border      not applicable (the rules of this behavior draw no line)");
+    /** The behavior has no line, and the declarations, which went without one too, say so under a
+     *  heading that counts nothing: a count would be a claim that none was drawn, and none was
+     *  found. */
     private static final List<String> NOT_MEASURED =
-            List.of("border      not measured (no line was derived at any position)");
+            List.of("border      not measured (no line was derived at any position)",
+                    "declarations");
 
     /**
      * Two ordinary bounds on how long the string is, one under a choice.
@@ -306,8 +311,8 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
                                               java.util.function.Predicate<String> which) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(which)
                 .map(AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest::linesCounted)

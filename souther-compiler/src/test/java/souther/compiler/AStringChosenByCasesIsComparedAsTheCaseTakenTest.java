@@ -25,16 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AStringChosenByCasesIsComparedAsTheCaseTakenTest {
 
     private static String report(String behavior) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
                 data H = { x: Int, s: String, name: Option<String> }
                 behavior f : (h: H) -> Bool
                 %s
-                """.formatted(behavior), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(behavior), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The lines read, each once: a line the choice's condition draws is said again under the
@@ -49,7 +47,7 @@ class AStringChosenByCasesIsComparedAsTheCaseTakenTest {
     }
 
     private static void readToTheEnd(String report) {
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(report.contains("nothing could show a row can be written"), report);
     }

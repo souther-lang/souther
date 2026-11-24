@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
@@ -84,6 +85,7 @@ class CascadeStopsAtTheCauseTest {
                 "m.a is correct, and is told nothing: " + found.get(new SourceId("a.sou")));
         assertEquals(Map.of(), c.classes(),
                 "m.a is built against declarations nothing will emit, so it is not emitted either");
+        ACompiledModel.refusedWith(List.of("E1011"), c);
     }
 
     @Test
@@ -132,6 +134,7 @@ class CascadeStopsAtTheCauseTest {
                 }
                 """), Set.of("m.broken"), ModulePath.EMPTY);
         Located.diagnosticsOf(c.diagnostics());
+        ACompiledModel.compiles(c);
 
         assertFalse(Boolean.TRUE.equals(c.db().ask(new Names.Sound("m.a")).value()),
                 "m.a is built on a name nothing brought in");

@@ -11,7 +11,7 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RequiredDependencies;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -37,9 +37,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * body the corpus holds — a dependency answered by a union of cases, two dependencies where the
  * decision reads one, a dependency inside a composition — and a model written for the test would
  * be the shapes somebody remembered.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class EveryRowOfferedStandsInWhatItsTargetRequiresTest {
 
     @Test
@@ -47,7 +51,7 @@ class EveryRowOfferedStandsInWhatItsTargetRequiresTest {
         List<String> short_ = new ArrayList<>();
         int rows = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compilation = RepositoryModels.analysed(corpus).compilation();
+            Compilation compilation = RepositoryModels.analysed(corpus).answered();
             for (String module : compilation.modules()) {
                 Offering offering = Adequacy.offeredFor(compilation.db(),
                         new OfferingRequest(module, new GenerationScope.Module()));

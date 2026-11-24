@@ -56,7 +56,7 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
                 """;
 
         assertEquals(List.of("Rejected"),
-                unverified(source, "decide"),
+                unverified(source, "decide", List.of("E1905")),
                 "the case a row expects and nothing produced is the one worth naming; the case a row "
                         + "confirmed is not");
     }
@@ -126,10 +126,11 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
                     | "greeted" : (MemberId("m-1")) -> Hello { who = "hi" }
                 """;
 
-        assertEquals(List.of(), unverified(source, "greet"),
+        List<String> refusedWith = List.of("E1908");
+        assertEquals(List.of(), unverified(source, "greet", refusedWith),
                 "a row that never applied the behavior saw nothing, and a let does not make it a "
                         + "row that did");
-        List<String> codes = codes(source);
+        List<String> codes = codes(source, refusedWith);
         assertTrue(codes.contains("E1908"),
                 "why the row stopped is reported at the row, which is what the reader is owed here: "
                         + codes);
@@ -159,22 +160,29 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
                     | "wants Missing, is answered with a String" : (1) -> Missing { why = "no" }
                 """;
 
-        assertEquals(List.of("Missing"), unverified(source, "name"),
+        assertEquals(List.of("Missing"), unverified(source, "name", List.of("E1905")),
                 "the row ran and was answered; that this compile cannot place the answer is not a "
                         + "reason to stop saying which case nothing confirmed");
     }
 
     private static List<String> unverified(String source, String behavior) {
-        return named(source, behavior, Adequacy.Kind.OUTPUT_CASE_UNVERIFIED);
+        return unverified(source, behavior, List.of());
+    }
+
+    /** As above, of a model the compile refuses with {@code refusedWith}. */
+    private static List<String> unverified(String source, String behavior,
+                                           List<String> refusedWith) {
+        return named(source, behavior, Adequacy.Kind.OUTPUT_CASE_UNVERIFIED, refusedWith);
     }
 
     private static List<String> unspecified(String source, String behavior) {
-        return named(source, behavior, Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED);
+        return named(source, behavior, Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED, List.of());
     }
 
     /** The cases one kind of finding names for one behavior, in the order the findings are held. */
-    private static List<String> named(String source, String behavior, Adequacy.Kind kind) {
-        Compilation compilation = compiled(source);
+    private static List<String> named(String source, String behavior, Adequacy.Kind kind,
+                                      List<String> refusedWith) {
+        Compilation compilation = compiled(source, refusedWith);
         List<Adequacy.Finding> all = compilation.db()
                 .ask(new Adequacy.Findings(compilation.modules().get(0))).value();
         return all == null ? List.of()
@@ -195,9 +203,9 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
         };
     }
 
-    private static List<String> codes(String source) {
+    private static List<String> codes(String source, List<String> refusedWith) {
         List<String> codes = new ArrayList<>();
-        for (Db.Found found : compiled(source).db().allReports()) {
+        for (Db.Found found : compiled(source, refusedWith).db().allReports()) {
             String code = found.report().diagnostic().code();
             if (code != null) {
                 codes.add(code);
@@ -206,10 +214,10 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
         return codes;
     }
 
-    private static Compilation compiled(String source) {
+    /** The model measured; held to compile unless {@code refusedWith} says what it is refused for. */
+    private static Compilation compiled(String source, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(refusedWith, compilation);
     }
 }

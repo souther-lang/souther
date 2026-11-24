@@ -13,12 +13,16 @@ import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Instants;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueOrder;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
@@ -33,6 +37,7 @@ import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -290,6 +295,31 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether a value on this order is a whole number, so that no value stands between a number
+     * and the next. Asked here and not by testing for the carrier where it is asked, so a number of
+     * the input and a value named in the body, each asked what it is counted on, are answered by
+     * one table.
+     */
+    default boolean countsInWholeNumbers() {
+        return this instanceof Whole;
+    }
+
+    /**
+     * Whether every value on this order is a whole number of its own unit: a whole number, a count
+     * of days, of seconds, of seconds of the day, or of nanoseconds. What is asked of the numbers
+     * of the input by a reader that holds a value to be one of those and says nothing of what the
+     * unit is — the days a date stands for are whole, though no value of a date is a whole number.
+     *
+     * <p>A switch with nothing to fall through to, so that a ninth carrier says for itself.
+     */
+    default boolean wholeInItsUnit() {
+        return switch (this) {
+            case Whole _, Days _, Seconds _, SecondsOfDay _, Nanos _ -> true;
+            case Dense _, Text _, Ordinal _ -> false;
+        };
+    }
+
+    /**
      * Whether a value written out on this order is a constant of the arithmetic over the input's
      * numbers.
      *
@@ -450,6 +480,14 @@ public sealed interface Carrier extends ValueOrder {
     /** Every value this order has, as the run {@link #extent} is: open on a side it has no end. */
     default NumericDomain.Bounds whereItStops() {
         return new NumericDomain.Bounds(extent().low(), extent().high());
+    }
+
+    /**
+     * What this order says of the values of an atom counted on it — how they are spaced and where
+     * the order stops — as the one thing a numeric domain is told of an atom.
+     */
+    default NumberSpace space() {
+        return NumberSpace.stopping(spacing(), whereItStops());
     }
 
     /**
@@ -807,22 +845,88 @@ public sealed interface Carrier extends ValueOrder {
      * them is a choice, and a choice made here puts a character nobody wrote into a row somebody has
      * to read.
      *
-     * <p>From the low end, which is what a range with no end named asks for.
+     * <p>From whichever end of the range the caller wants the value nearest. Which end is a
+     * question about the range and is asked here, where the arithmetic that answers it already is.
+     * Decided by the caller instead, a reader that wanted the value beside a line reached for a
+     * second way of getting one — "some value other than the line's" — and the two ways were one
+     * policy said twice, only one of them on purpose. That is the shape a run bounded at both ends
+     * was already lost to once (issue #903).
+     *
+     * <p><b>And nearest the number's usual place where the side it is entered from is one nobody
+     * drew.</b> A date is near today ({@link UsualPlace}): a range of dates with no end below, or
+     * with the calendar's first day for one, entered from below gives up the date in it nearest
+     * today and not the first day there is. A side a rule drew is the range's own and is where the
+     * value is taken, as the value beside a line is. Asked here and of every caller, so that no
+     * reader of a range chooses a date by a rule of its own.
      */
-    default Place somethingInside(Endpoint low, Endpoint high) {
-        return somethingInside(low, high, Towards.ABOVE);
+    default Place somethingInside(Endpoint low, Endpoint high, Towards from, UsualPlace usual) {
+        if (usual instanceof UsualPlace.Near near
+                && near.leftOpenAt(from == Towards.ABOVE ? low : high, from == Towards.ABOVE)) {
+            Place nearest = nearestTo(near, low, high);
+            if (nearest != null) {
+                return nearest;
+            }
+        }
+        return entered(low, high, from);
     }
 
     /**
-     * The same, from whichever end of the range the caller wants the value nearest.
+     * A value standing for the range from {@code low} to {@code high}, which no end of it is asked
+     * for: where the number is usually near, where the range is left open on either side of it,
+     * and otherwise from the low end, as {@link #somethingInside} enters it from below.
      *
-     * <p>Which end is a question about the range and is asked here, where the arithmetic that
-     * answers it already is. Decided by the caller instead, a reader that wanted the value beside a
-     * line reached for a second way of getting one — "some value other than the line's" — and the
-     * two ways were one policy said twice, only one of them on purpose. That is the shape a run
-     * bounded at both ends was already lost to once (issue #903).
+     * <p>The other question from the one beside a line. A value standing for a class has no end
+     * it wants to be beside, so a range of dates nobody bounded above is as open as one nobody
+     * bounded below, and a date standing for it is the date in it nearest today. A range a rule
+     * closed on both sides is entered from its end, so the values offered are the ones its rule
+     * names.
      */
-    default Place somethingInside(Endpoint low, Endpoint high, Towards from) {
+    default Place aPlaceInside(Endpoint low, Endpoint high, UsualPlace usual) {
+        if (usual instanceof UsualPlace.Near near && near.leftOpenIn(low, high)) {
+            Place nearest = nearestTo(near, low, high);
+            if (nearest != null) {
+                return nearest;
+            }
+        }
+        return entered(low, high, Towards.ABOVE);
+    }
+
+    /** The place from {@code low} to {@code high} nearest {@code near}: it, where the range holds
+     *  it, and the end on its side where the range stops short of it. */
+    private Place nearestTo(UsualPlace.Near near, Endpoint low, Endpoint high) {
+        Place above = entered(Endpoint.lower(low, Endpoint.inclusive(near.at())), high,
+                Towards.ABOVE);
+        return above != null ? above : entered(low, high, Towards.BELOW);
+    }
+
+    /**
+     * Where a value of this order is looked for first where no rule says, or
+     * {@link UsualPlace#NONE} where it has no such place and a value is taken from the ends of its
+     * range.
+     *
+     * <p>A date at {@code today}, and a date-time and a moment at the start of it — the moment in
+     * UTC, which is what a moment is written in. The ends of these orders are the first and the
+     * last day the calendar has, and their counts start at 1970; a row written at either is no
+     * case of anybody's domain. A time of day has no day to be near, and its order starts at
+     * midnight, which is a time a reader writes.
+     */
+    default UsualPlace usualPlace(Today today) {
+        Place at = switch (this) {
+            case Days _ -> today.day();
+            case Seconds _ -> DateTimes.secondOf(today.date().atStartOfDay());
+            case Nanos _ -> Instants.nanoOf(today.date().atStartOfDay(ZoneOffset.UTC).toInstant());
+            case Whole _, Dense _, SecondsOfDay _, Ordinal _, Text _ -> null;
+        };
+        if (at == null) {
+            return UsualPlace.NONE;
+        }
+        OrderedInterval own = extent();
+        return new UsualPlace.Near(at, own.low().at(), own.high().at());
+    }
+
+    /** The value {@code low} to {@code high} gives up from the end {@code from} names, as
+     *  {@link #somethingInside} gives it where no usual place is asked of. */
+    private Place entered(Endpoint low, Endpoint high, Towards from) {
         if (this instanceof Text) {
             return someStringInside(low, high, from);
         }
@@ -1013,9 +1117,17 @@ public sealed interface Carrier extends ValueOrder {
      *               rather than made here: whose allowance a machine is built out of is the
      *               caller's to say, and an order that named one would be spending at every
      *               position without anything having granted it
+     * @param usual  where the number is usually near ({@link #aPlaceInside}). Where a range left
+     *               open on a side holds it, the place nearest it is tried before any other:
+     *               a value singled out by a rule is no reason for the others to be chosen beside
+     *               it, and a date other than one in 2300 is a date near today
      */
     default Place somethingOtherThan(PlacesApart singled, NumericDomain.Bounds within,
-                                     ValueSet admits, Meter meter) {
+                                     ValueSet admits, Meter meter, UsualPlace usual) {
+        Endpoint low = within == null ? null : within.min();
+        Endpoint high = within == null ? null : within.max();
+        Place nearUsual = usual instanceof UsualPlace.Near near && near.leftOpenIn(low, high)
+                ? aPlaceInside(low, high, usual) : null;
         java.util.List<Place> stepped = new ArrayList<>();
         for (Place from : singled.places()) {
             if (from instanceof Count count) {
@@ -1048,19 +1160,25 @@ public sealed interface Carrier extends ValueOrder {
                     inside.add(end.at());
                 }
             }
-            inside.add(somethingInside(within.min(), within.max()));
+            // The range's own low end, as a range with no usual place is entered.
+            inside.add(aPlaceInside(within.min(), within.max(), UsualPlace.NONE));
             // Between the place singled out and each end, which is where a range with no step still
             // has room once the ends themselves are singled out too.
             for (Place from : singled.places()) {
                 for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                     if (end != null) {
-                        inside.add(somethingInside(Endpoint.exclusive(from), end));
-                        inside.add(somethingInside(end, Endpoint.exclusive(from)));
+                        inside.add(somethingInside(Endpoint.exclusive(from), end, Towards.ABOVE,
+                                UsualPlace.NONE));
+                        inside.add(somethingInside(end, Endpoint.exclusive(from), Towards.ABOVE,
+                                UsualPlace.NONE));
                     }
                 }
             }
         }
         java.util.List<Place> tried = new ArrayList<>();
+        if (nearUsual != null) {
+            tried.add(nearUsual);
+        }
         if (spacing() == Granularity.DENSE) {
             tried.addAll(inside);
             tried.addAll(stepped);
@@ -1180,36 +1298,56 @@ public sealed interface Carrier extends ValueOrder {
      * @param meter what building the machine a set of strings needs may cost
      */
     default Place somewhereIn(ValueSet set, OrderedInterval range, PlacesApart apart, Meter meter) {
+        Place inHand = somewhereInHand(set, range, apart);
+        // Where the order's own candidates answered, that is the value: they read better in a row
+        // than anything worked out of a machine, and the common case is a position whose rules say
+        // nothing about its values.
+        //
+        // And where they did not, they are not a proof for a set of strings. What they are is a
+        // handful, and a run away from that handful holds values none of them names — so the
+        // question goes to the crossing below, which answers it exactly. Read as an answer, a rule
+        // stating a run of the strings came back as one nothing could write a value in.
+        if (inHand != null || !(this instanceof Text)) {
+            return inHand;
+        }
+        OrderedInterval held = extent().meet(range);
+        if (held.holdsNothing()) {
+            return null;
+        }
+        return switch (set) {
+            // The values kept out are in hand and the ones left are not, and a language names its
+            // strings and does not list them: what is left of either inside the run and away from
+            // the places held apart is a machine — which is the crossing between a set of strings
+            // and a run of the order, and the reading of extents is where that is made.
+            case ValueSet.Cofinite it -> writableIn(it, held, apart, meter);
+            case ValueSet.Matching it -> writableIn(it, held, apart, meter);
+            case ValueSet.Finite _, ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> null;
+        };
+    }
+
+    /**
+     * The same crossing where it needs no machine: a place this order holds inside {@code range}
+     * that {@code set} admits and none of {@code apart} stands at, found among the values the set
+     * has in hand or the order's own candidates — or null where neither holds one.
+     *
+     * <p>For a caller with no allowance to spend on a machine. Null is not that the run holds no
+     * such value, since a set of strings may hold one only a machine finds ({@link #somewhereIn});
+     * it is that nothing in hand does.
+     */
+    default Place somewhereInHand(ValueSet set, OrderedInterval range, PlacesApart apart) {
         OrderedInterval held = extent().meet(range);
         if (held.holdsNothing()) {
             return null;
         }
         return switch (set) {
             // Named outright, so the first of them this order places inside the run and holds apart
-            // from none. No machine for a set that already has its values in hand.
+            // from none.
             case ValueSet.Finite it -> it.values().stream().map(this::placeOf)
                     .filter(at -> at != null && held.admits(at) && !apart.has(at))
                     .findFirst().orElse(null);
-            case ValueSet.Cofinite it -> {
-                Place cheap = firstHeldIn(held, anchorIn(range), it.excluded(), apart);
-                // Where the order's own candidates answered, that is the value: they read better in
-                // a row than anything worked out of a machine, and the common case is a position
-                // whose rules say nothing about its values.
-                //
-                // And where they did not, they are not a proof. What they are is a handful, and a run
-                // away from that handful holds values none of them names — so the question goes to
-                // the crossing below, which answers it exactly. Read as an answer, a rule stating a
-                // run of the strings came back as one nothing could write a value in.
-                yield cheap != null || !(this instanceof Text) ? cheap
-                        : writableIn(it, held, apart, meter);
-            }
-            // The one shape whose values are not in hand: a language names its strings and does not
-            // list them, so what is left of it inside the run and away from the places held apart
-            // is a machine — which is the crossing between a set of strings and a run of the order,
-            // and the reading of extents is where that is made. A language is a set of strings, so
-            // no order but the strings holds one.
-            case ValueSet.Matching it ->
-                    this instanceof Text ? writableIn(it, held, apart, meter) : null;
+            case ValueSet.Cofinite it -> firstHeldIn(held, anchorIn(range), it.excluded(), apart);
+            // The one shape whose values are not in hand, and so none of them is.
+            case ValueSet.Matching _ -> null;
             // Each run met with the run of the order in turn, and walked from its first number as
             // a run of the order is. Whole numbers, so only an order counted in ones holds them as
             // a run.
@@ -1224,6 +1362,29 @@ public sealed interface Carrier extends ValueOrder {
                     if (at != null) {
                         yield at;
                     }
+                }
+                yield null;
+            }
+            // Members of the progressions inside the run, taken one at a time from the one
+            // nearest the run's low end and no more of them than the values held apart can stand
+            // in front of.
+            case ValueSet.WholeSteps it -> {
+                if (!(this instanceof Whole)) {
+                    yield null;
+                }
+                WholeNumberSet inside = it.numbers().and(WholeNumberSet.ofRuns(
+                        WholeNumberRuns.between(held.low(), held.high())));
+                BigInteger from = inside.least() != null ? inside.least()
+                        : inside.nearestMember(BigInteger.ZERO, Set.of());
+                // As many members as there are values held apart and one more: distinct members
+                // cannot all be among those held apart, so the last of them is one that is not.
+                for (int tried = 0; from != null && tried <= apart.count(); tried++) {
+                    OrderedInterval one = new OrderedInterval(endAt(from), endAt(from));
+                    Place at = firstHeldIn(one, anchorIn(one), Set.of(), apart);
+                    if (at != null) {
+                        yield at;
+                    }
+                    from = inside.leastAtOrAbove(from.add(BigInteger.ONE));
                 }
                 yield null;
             }
@@ -1369,14 +1530,16 @@ public sealed interface Carrier extends ValueOrder {
                                   PlacesApart apart) {
         Endpoint from = range.low();
         for (Place at : named) {
-            Place found = heldAt(somethingInside(from, Endpoint.exclusive(at)),
+            Place found = heldAt(somethingInside(from, Endpoint.exclusive(at), Towards.ABOVE,
+                            UsualPlace.NONE),
                     range, excluded, apart);
             if (found != null) {
                 return found;
             }
             from = Endpoint.exclusive(at);
         }
-        return heldAt(somethingInside(from, range.high()), range, excluded, apart);
+        return heldAt(somethingInside(from, range.high(), Towards.ABOVE, UsualPlace.NONE), range,
+                excluded, apart);
     }
 
     /**
@@ -1515,6 +1678,13 @@ public sealed interface Carrier extends ValueOrder {
                     ? souther.compiler.values.Emptiness.UNDECIDED
                     : wholeNumbersOf(it, range).isNone() ? souther.compiler.values.Emptiness.EMPTY
                     : souther.compiler.values.Emptiness.NONEMPTY;
+            // Whether the progressions reach into the range, which their ends and remainders say.
+            case ValueSet.WholeSteps it -> !(this instanceof Whole)
+                    ? souther.compiler.values.Emptiness.UNDECIDED
+                    : it.numbers().and(WholeNumberSet.ofRuns(WholeNumberRuns.between(
+                            range.low(), range.high()))).isNone()
+                    ? souther.compiler.values.Emptiness.EMPTY
+                    : souther.compiler.values.Emptiness.NONEMPTY;
         };
     }
 
@@ -1566,6 +1736,29 @@ public sealed interface Carrier extends ValueOrder {
                          n = n.add(BigInteger.ONE)) {
                         out.add(valueAt(new Count(new BigDecimal(n))));
                     }
+                }
+                yield Admits.of(out, atMost);
+            }
+            // Members counted off one at a time, and not at all beyond what a caller counts.
+            case ValueSet.WholeSteps it -> {
+                if (!(this instanceof Whole)) {
+                    yield new Admits.NotKnown();
+                }
+                WholeNumberSet inside = it.numbers().and(WholeNumberSet.ofRuns(
+                        WholeNumberRuns.between(held.low(), held.high())));
+                Set<Value> out = new LinkedHashSet<>();
+                BigInteger from = inside.least() != null ? inside.least()
+                        : inside.nearestMember(BigInteger.ZERO, Set.of());
+                if (inside.least() == null && from != null) {
+                    // No least to count from, so the members are many unless few lie either side.
+                    yield new Admits.MoreThanCounted();
+                }
+                for (BigInteger at = from; at != null; at = inside.leastAtOrAbove(
+                        at.add(BigInteger.ONE))) {
+                    if (out.size() >= atMost) {
+                        yield new Admits.MoreThanCounted();
+                    }
+                    out.add(valueAt(new Count(new BigDecimal(at))));
                 }
                 yield Admits.of(out, atMost);
             }

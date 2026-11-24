@@ -2,15 +2,12 @@ package souther.compiler.cst;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -18,9 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A lexer that dispatches on one question and reads by another does not fail: it stops. The scan
  * asks what a character is, hands the text to the function for that kind, and that function reads
- * nothing — so the offset is where it was, the same character is met again, and the loop makes
- * empty tokens until the heap is gone. Nothing downstream sees a wrong answer, because nothing
- * downstream is reached.
+ * nothing — so the offset is where it was and the same character is met again. The lexer refuses
+ * that with an {@link IllegalStateException} naming the position, and this test reports it.
  *
  * <p>So this is not a list of characters that once went wrong. Every kind the scan can dispatch to
  * is reached with characters chosen from the classes it dispatches on, in and outside the basic
@@ -29,28 +25,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheScanMovesOnEveryCharacterTest {
 
-    /** Long enough that a scan which is merely slow is not called stuck, short enough that a stuck
-     *  one does not take the build with it. */
-    private static final Duration BEFORE_IT_IS_STUCK = Duration.ofSeconds(5);
-
     /**
-     * Every text read under one watch rather than one each. A watch is a thread of its own, and one
-     * per text costs more than the reading it watches; what a stuck scan needs is to be stopped and
-     * named, and the text it is on when the watch runs out is the one it is stuck on.
+     * A scan that does not move is refused by the lexer itself, which names the position, so every
+     * text lexes without that failure and no token but the end covers nothing. No clock decides
+     * anything.
      */
     @Test
     void andEveryCharacterOfWhatItReadIsInATokenOfIt() {
-        AtomicReference<String> reading = new AtomicReference<>();
-        assertTimeoutPreemptively(BEFORE_IT_IS_STUCK, () -> readEach(reading),
-                () -> "the scan did not finish on " + shown(reading.get()));
-    }
-
-    private static void readEach(AtomicReference<String> reading) {
         List<String> stuck = new ArrayList<>();
         List<String> empty = new ArrayList<>();
         for (String written : written()) {
-            reading.set(written);
-            CstLexer.Result lexed = CstLexer.lex(written);
+            CstLexer.Result lexed;
+            try {
+                lexed = CstLexer.lex(written);
+            } catch (IllegalStateException notAdvanced) {
+                stuck.add(shown(written) + ": " + notAdvanced.getMessage());
+                continue;
+            }
             StringBuilder back = new StringBuilder();
             for (GreenToken token : lexed.tokens()) {
                 back.append(token.text());
@@ -62,7 +53,7 @@ class TheScanMovesOnEveryCharacterTest {
                 stuck.add(shown(written) + " came back as " + shown(back.toString()));
             }
         }
-        assertEquals(List.of(), stuck, "the tokens do not join back into what was read");
+        assertEquals(List.of(), stuck, "the scan did not advance, or the tokens do not join back into what was read");
         assertEquals(List.of(), empty, "a token covering nothing is a scan that did not move");
     }
 

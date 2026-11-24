@@ -1,23 +1,33 @@
 package souther.compiler.partition;
 
+import souther.compiler.collect.SharingMap;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.OneOfEach.Step;
+import souther.compiler.semantics.TakenAs;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.BooleanSupplier;
+import java.util.stream.IntStream;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -60,8 +70,37 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * Said by the empty account rather than by the absence of one. */
     public static final WayToTheBorder UNTOUCHED = new WayToTheBorder(List.of());
 
+    /**
+     * Every condition on it, as statements of one value each: a way holds an element of a container
+     * by one name ({@link ElementsOnTheWay}), because what it states is composed as statements of
+     * the values it names, whoever reads it.
+     *
+     * <p>Which name that is, is the border's to say, and a way is not made here by choosing one.
+     * Whoever has the border keeps the way to it ({@link ElementsOnTheWay#keptToOneElementEach})
+     * before making it; a way that is only asked whether a row arrives may keep any one name
+     * ({@link #forArrival}).
+     *
+     * @throws IllegalArgumentException where an element is held by more than one name
+     */
     public WayToTheBorder {
         onTheWay = List.copyOf(onTheWay);
+        if (ElementsOnTheWay.keptToOneElementEach(onTheWay, ElementsNamed.NONE) != onTheWay) {
+            throw new IllegalArgumentException("a way holds one name for each element, and the"
+                    + " border it is kept to is the one to choose it: " + onTheWay);
+        }
+    }
+
+    /**
+     * {@code onTheWay} as a way that is only asked whether a row arrives, with the first name met
+     * for each element kept and what is read through another declined.
+     *
+     * <p>What it leaves out only widens the region the way states, so every row that arrives is
+     * still in it. It is no way to look for a value of an element in: a point at one element
+     * composed with a region kept to another element's name is a point refuted for no reason.
+     */
+    public static WayToTheBorder forArrival(List<OnTheWay> onTheWay) {
+        return new WayToTheBorder(ElementsOnTheWay.keptToOneElementEach(List.copyOf(onTheWay),
+                ElementsNamed.NONE));
     }
 
     /**
@@ -100,11 +139,109 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * acts on — that the region a search runs over admits every row that meets what was taken in.
      */
     public SearchRegion narrowing(SearchRegion base) {
-        SearchRegion region = base;
+        List<RowDemand.OnARemainder> remainders = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
-            region = narrowedBy(region, each);
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _,
+                    var _)) {
+                remainders.add(remainder);
+            }
         }
-        return region;
+        return withTheYearsLeftBy(base.narrowingsKept().through(base, takenIntoTheRegion(),
+                TakenConstraint::narrowing), remainders);
+    }
+
+    /**
+     * {@code region}, narrowed by what a way takes into it ({@link #takenIntoTheRegion}), with the
+     * days of each date held to the years {@code remainders} leave it ({@link #withTheYearsItLeaves}):
+     * what a region is narrowed by that is no constraint a region takes in, and which every reader
+     * that narrows a region by a way's statements again takes in after them, as {@link #narrowing}
+     * does.
+     */
+    static SearchRegion withTheYearsLeftBy(SearchRegion region,
+                                           List<RowDemand.OnARemainder> remainders) {
+        SearchRegion narrowed = region;
+        for (RowDemand.OnARemainder each : remainders) {
+            narrowed = withTheYearsItLeaves(narrowed, each);
+        }
+        return narrowed;
+    }
+
+    /**
+     * {@code region} with the days of a date held to the ones whose year leaves a remainder
+     * {@code remainder} does, where it is a remainder of the year of one date alone.
+     *
+     * <p>The class a remainder leaves is no run, so {@link #takenInBy} gives a region nothing of
+     * it, and a search for the date chose it first and met the remainder after: a date standing
+     * where the year leaves another one. Held here, the days the search offers are ones the year
+     * of which leaves it.
+     */
+    private static SearchRegion withTheYearsItLeaves(SearchRegion region,
+                                                     RowDemand.OnARemainder remainder) {
+        LinearForm<NumericTerm> dividend = remainder.remainder().overTheInput();
+        if (dividend.coefs().size() != 1 || !dividend.constant().isWhole()
+                || !(dividend.constant().floor() instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger moved))
+                || remainder.remainder().divisor().compareTo(MOST_DIVISOR_A_YEAR_IS_HELD_BY) > 0) {
+            return region;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = dividend.coefs().entrySet().iterator().next();
+        if (!only.getValue().equals(ExactRatio.ONE)
+                || !(only.getKey() instanceof NumericTerm.TakenOf year)
+                || !(year.takenAs() instanceof TakenAs.PartOfDate(var part))
+                || part != TakenAs.DatePart.YEAR
+                || year.transformation().translation().offsetDays() != 0) {
+            return region;
+        }
+        int divisor = remainder.remainder().divisor().intValueExact();
+        return region.assumingTheYearLeaves(new NumericTerm.ValueOf(year.position()), divisor,
+                yearsLeaving(moved, divisor, remainder.leaves()));
+    }
+
+    /**
+     * The remainders by {@code divisor} a year may leave where the year moved by {@code moved}
+     * leaves one that {@code leaves} holds: each such remainder less the move.
+     *
+     * <p>The move is any whole number, so it is reduced by the divisor before it is taken from
+     * anything, and not narrowed to the bits a machine integer holds, which leaves another
+     * remainder.
+     */
+    static Set<Integer> yearsLeaving(BigInteger moved, int divisor, WholeNumberRuns leaves) {
+        int shift = moved.mod(BigInteger.valueOf(divisor)).intValueExact();
+        Set<Integer> years = new TreeSet<>();
+        BigInteger last = BigInteger.valueOf(divisor - 1L);
+        // Each run is taken between the remainders there are, which is as many numbers as the
+        // divisor and no more, whatever the ends of the run are.
+        for (WholeNumberRuns.Run run : leaves.runs()) {
+            if ((run.from() != null && run.from().compareTo(last) > 0)
+                    || (run.to() != null && run.to().signum() < 0)) {
+                continue;
+            }
+            int from = (run.from() == null || run.from().signum() < 0) ? 0
+                    : run.from().intValueExact();
+            int to = (run.to() == null || run.to().compareTo(last) > 0) ? divisor - 1
+                    : run.to().intValueExact();
+            IntStream.rangeClosed(from, to)
+                    .forEach(left -> years.add(Math.floorMod(left - shift, divisor)));
+        }
+        return years;
+    }
+
+    /** How large a divisor of a year a date is held to what it leaves of: the walk of the days of
+     *  the class goes no further than a few cycles of the calendar, and says some may be left
+     *  where the class repeats in more than that. */
+    private static final BigInteger MOST_DIVISOR_A_YEAR_IS_HELD_BY = BigInteger.valueOf(400);
+
+    /**
+     * What {@link #narrowing} takes into a region, in the order it takes it in: the region a way
+     * leaves is the base with each of these taken in, and the years the remainders of the way
+     * leave a date ({@link #withTheYearsLeftBy}), and nothing else.
+     */
+    public List<TakenConstraint> takenIntoTheRegion() {
+        List<TakenConstraint> out = new ArrayList<>();
+        for (OnTheWay each : onTheWay) {
+            out.addAll(takenInBy(each));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -159,16 +296,16 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     return CountedWays.admits(this, so, counted);
                 }
                 return switch (takenIn(so.held(), entry)) {
-                    case Step.Closed<HeldTogether, Reachability>(var why) ->
-                            new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(switch (why) {
+                    case Step.Closed<HeldTogether, Reachability> closed -> Step.Closed.workedOut(
+                            () -> new NoInputTakesIt.TheConditionsClash(switch (closed.why()) {
                                 case Reachability.NothingReaches(var what) ->
                                         new NoInputTakesIt.Clash.TwoAtOnce(what);
                                 case Reachability.NothingComesOutThatWay(var condition) ->
                                         new NoInputTakesIt.Clash.NeverComesOutSo(condition);
-                                case Reachability.Reaching _, Reachability.NumbersLeaveNone _ ->
-                                        throw new IllegalStateException(
-                                        "a way taken in closes on why nothing reaches it, and"
-                                                + " not on its numbers, which the region says");
+                                case Reachability.NumbersLeaveNone numbers ->
+                                        new NoInputTakesIt.Clash.RemaindersLeaveNone(numbers);
+                                case Reachability.Reaching _ -> throw new IllegalStateException(
+                                        "a way taken in closes on why nothing reaches it");
                             }));
                     case Step.Held<HeldTogether, Reachability>(var held) -> {
                         SearchRegion region = ofOnePosition(entry) && takesIn.getAsBoolean()
@@ -185,51 +322,152 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         };
     }
 
+    /**
+     * Each way {@code able} is split into ({@link Reachability.Reaching#along}), at the same place,
+     * its conditions as the walk chose them ({@link Reachability.Ways#chosenAs}) taken in over
+     * {@code declarations}, the declarations {@code able} was read over, and ready to be asked
+     * what more beside it would leave: an empty one where the walk left some of its conditions
+     * unchosen there.
+     *
+     * <p>Worked out once for the way and asked as often as anyone likes: each question takes what
+     * it asks in beside what the way already took in, and leaves that as it was.
+     */
+    public static List<Optional<Assuming>> assumingAlong(Reachability.Reaching able,
+                                                         SearchRegion declarations) {
+        OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary =
+                numbered(declarations, () -> true);
+        return able.ways().chosenAs().stream()
+                .map(chosen -> chosen.map(entries -> new Assuming(vocabulary,
+                        Assuming.taken(vocabulary, vocabulary.nothing(), entries))))
+                .toList();
+    }
+
+    /**
+     * One way chosen to the end, taken in, asked what more beside it would leave.
+     *
+     * <p>Held for as long as a question about the way is being asked, and kept by nothing that is
+     * an answer: what it holds is how far a walk got, which no answer is about.
+     */
+    public static final class Assuming {
+
+        private final OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary;
+
+        /** What the way took in, or null where taking it in left no row. */
+        private final Numbered taken;
+
+        private Assuming(OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> vocabulary,
+                         Numbered taken) {
+            this.vocabulary = vocabulary;
+            this.taken = taken;
+        }
+
+        /** {@code entries} taken in after {@code so}, or null where some of them leave no row. */
+        private static Numbered taken(OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt>
+                                              vocabulary, Numbered so, List<OnTheWay> entries) {
+            Numbered at = so;
+            for (OnTheWay entry : entries) {
+                if (!(vocabulary.with(at, entry)
+                        instanceof Step.Held<Numbered, NoInputTakesIt>(var held))) {
+                    return null;
+                }
+                at = held;
+            }
+            return at;
+        }
+
+        /**
+         * Whether {@code more}, taken in beside the way, is shown to leave no row: a proof where
+         * true, and nothing at all where false. A choice among them leaves none only where every
+         * way of it leaves none.
+         *
+         * <p>True only on a proof that no input takes them together: cases or truths asked two
+         * ways, counts or remainders that leave nothing, or a region of the declarations shown
+         * empty. A count whose choices were not walked to the end is taken in as leaving rows
+         * ({@link CountedWays#admits}), and an entry nothing here reads leaves the way as it was,
+         * so running out of a figure, or not reading something, is never a proof here.
+         */
+        public boolean leavesNone(List<OnTheWay> more) {
+            return taken == null || leavesNone(taken, more);
+        }
+
+        private boolean leavesNone(Numbered so, List<OnTheWay> more) {
+            if (more.isEmpty()) {
+                return false;
+            }
+            OnTheWay first = more.getFirst();
+            List<OnTheWay> rest = more.subList(1, more.size());
+            List<List<OnTheWay>> ways = vocabulary.alternatives(first);
+            if (ways != null) {
+                for (List<OnTheWay> one : ways) {
+                    List<OnTheWay> along = new ArrayList<>(one);
+                    along.addAll(rest);
+                    if (!leavesNone(so, along)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return switch (vocabulary.with(so, first)) {
+                case Step.Closed<Numbered, NoInputTakesIt> _ -> true;
+                case Step.Held<Numbered, NoInputTakesIt>(var held) -> leavesNone(held, rest);
+            };
+        }
+    }
+
     /** Whether every position {@code entry} asks about is one value of a run's own, outside every
      *  container. */
-    private static boolean ofOnePosition(OnTheWay entry) {
+    static boolean ofOnePosition(OnTheWay entry) {
         return ASKED_OF_A_ROW.positions(entry).stream().noneMatch(TermPath::insideAContainer);
     }
 
     /** {@code region} with what the one entry {@code each} says of a row taken in
      *  ({@link #narrowing}). */
     private static SearchRegion narrowedBy(SearchRegion region, OnTheWay each) {
+        for (TakenConstraint taken : takenInBy(each)) {
+            region = taken.narrowing(region);
+        }
+        return region;
+    }
+
+    /** What the one entry {@code each} takes into a region, in order ({@link #narrowing}). */
+    private static List<TakenConstraint> takenInBy(OnTheWay each) {
         // What a narrowing says on the position's own order, which a region can carry: the
         // cases it leaves out are values no row past it holds.
         if (each instanceof OnTheWay.Narrowed narrowed) {
-            for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
-                region = hole.narrowing(region);
-            }
+            return List.copyOf(narrowed.onItsOrder());
         }
         if (each instanceof OnTheWay.TakenIn taken) {
-            region = switch (taken.demand()) {
+            return switch (taken.demand()) {
                 // Taken in, and the region is asked to take it in: an entry here is one the
                 // region said it could carry when the walk recorded it.
-                case RowDemand.Relational(var relation) -> relation.narrowing(region);
+                case RowDemand.Relational(var relation) -> List.of(relation);
                 // That some element meets these says nothing every row past it holds of each
                 // element, so the region is narrowed only by the container holding one. What
                 // the element meets is composed where the row is.
                 case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
-                        holdingOne.constraint().narrowing(region);
+                        List.of(holdingOne.constraint());
                 // That every element meets these, which a container holding none does. A
                 // region reads a term inside the elements as the value of one that is there,
                 // so narrowed on, it would leave nothing where the rules leave the element
                 // nothing — and the way past an empty container would be proved closed. And
                 // the container is not held to holding none either, since elements meeting
                 // these are a way past it too.
-                case RowDemand.ForAll _ -> region;
+                case RowDemand.ForAll _ -> List.of();
                 // How many elements meet a statement, which is no number a region holds.
-                case RowDemand.SoMany _ -> region;
+                case RowDemand.SoMany _ -> List.of();
+                // The values of a form that leave a remainder are a class, which a region holds
+                // no run of.
+                case RowDemand.OnARemainder _ -> List.of();
                 // A statement no composer writes toward, which a region holds nothing of.
-                case RowDemand.ForTheRun _ -> region;
+                case RowDemand.ForTheRun _ -> List.of();
                 // Which of two values stands at a position no region measures. The row is
                 // written with it where the row is composed, and the region says nothing of it.
-                case RowDemand.ATruth _ -> region;
+                case RowDemand.ATruth _ -> List.of();
                 // Two values being one on no order, which no region measures either.
-                case RowDemand.OneValueAtBoth _ -> region;
+                case RowDemand.OneValueAtBoth _ -> List.of();
             };
         }
-        return region;
+        return List.of();
     }
 
     /**
@@ -268,7 +506,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     public TruthsAsked.Merge truths() {
         List<RowDemand.ATruth> asked = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
-            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth)) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _, var _)) {
                 asked.add(truth);
             }
         }
@@ -332,26 +570,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      */
     public List<OnTheWay> stated() {
         List<OnTheWay> out = new ArrayList<>();
-        stated(onTheWay, out);
+        OnTheWay.eachOnce(onTheWay, out::add);
         return List.copyOf(out);
-    }
-
-    private static void stated(List<OnTheWay> entries, List<OnTheWay> into) {
-        for (OnTheWay each : entries) {
-            into.add(each);
-            switch (each) {
-                case OnTheWay.OneOf several ->
-                        several.alternatives().forEach(one -> stated(one, into));
-                case OnTheWay.Counted counted -> counted.statements().forEach(one -> {
-                    stated(one.holding(), into);
-                    stated(one.failing(), into);
-                });
-                // A narrowing's alternatives are the cases it leaves, each made afresh as a
-                // narrowing to that case; they state nothing the narrowing did not.
-                case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.TakenIn _,
-                     OnTheWay.Settled _ -> { }
-            }
-        }
     }
 
     /**
@@ -389,12 +609,39 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * The positions what {@code entry} asks of a row turns on: the one account of them, which the
-     * walk of a way groups its choices by and a reader asking what holding a row to it writes asks
-     * as well.
+     * The positions what {@code entry} asks of a row places: what the walk of a way groups its
+     * choices by, and a reader asking what holding a row to it writes asks as well.
+     *
+     * <p>Places only. A condition this reading has no words for, a choice inside a count, and a
+     * value a binding holds that a statement only a run checks reads place nothing here, though
+     * each may turn on anything; a group of choices put apart on that is only read less closely.
+     * Whether an entry is shown to have nothing to do with something is {@link #turnsOn}'s.
      */
     static Set<TermPath> positionsOf(OnTheWay entry) {
         return ASKED_OF_A_ROW.positions(entry);
+    }
+
+    /**
+     * The positions what {@code entry} asks of a row places ({@link #positionsOf}), inside every
+     * alternative it leaves a row and every statement it counts as well — places only, as
+     * {@link #positionsOf} says.
+     */
+    static Set<TermPath> positionsInside(OnTheWay entry) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        OnTheWay.eachOnce(List.of(entry), one -> out.addAll(positionsOf(one)));
+        return out;
+    }
+
+    /**
+     * Whether {@code entry} is shown to ask nothing of the value at {@code at}: what it turns on
+     * ({@link #turnsOn}) is known and does not bear on {@code at}
+     * ({@link ReadSubject#bearOnEachOther}). Not shown where a condition inside it is one this
+     * reading has no words for, or a statement only a run checks reads a value a binding holds,
+     * either of which may ask anything.
+     */
+    static boolean asksNothingOf(TermPath at, OnTheWay entry) {
+        Set<ReadSubject> on = turnsOn(entry);
+        return on != null && !ReadSubject.bearOnEachOther(on, Set.of(new ReadSubject.At(at)));
     }
 
     /** The conditions on this way a row is past one of several ways of
@@ -418,6 +665,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * it is judged by the same walk, as the one way it is.
      */
     OneOfEach.Walked<OnTheWay, Reachability> along() {
+        return OneReading.walked(onTheWay, this::walkedAlong);
+    }
+
+    /** {@link #along}, walked. */
+    private OneOfEach.Walked<OnTheWay, Reachability> walkedAlong() {
         // A way with no count on it is walked as it always was, with the walk's own figures.
         if (stated().stream().noneMatch(OnTheWay.Counted.class::isInstance)) {
             return walked(onTheWay, ASKED_OF_A_ROW);
@@ -440,20 +692,61 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * many elements meet each statement it counts, which two conditions asking for counts that
      * leave none in common contradict each other in as well.
      *
+     * <p>A way's walk holds these for each alternative it takes, so each step makes another of
+     * these and shares with the one it was made from what the step left alone.
+     *
+     * @param truths the value each position is asked to hold
      * @param counts what is left of each count asked, by its spelling
      * @param numbers the relations of numbers it has taken in, which statements of one form
      *                leave no point of the line in common
+     * @param remainders the remainders it has taken in, which statements of one remainder leave
+     *                   none of in common
      */
-    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
-                                Map<String, LevelRegion> counts,
-                                List<TakenConstraint.Affine> numbers) {
+    private record HeldTogether(Requirements requirements, SharingMap<TermPath, Boolean> truths,
+                                SharingMap<String, LevelRegion> counts, FormsHeld numbers,
+                                RemaindersHeld remainders) {
 
         HeldTogether withRequirements(Requirements required) {
-            return new HeldTogether(required, truths, counts, numbers);
+            return new HeldTogether(required, truths, counts, numbers, remainders);
         }
 
-        HeldTogether withTruths(List<RowDemand.ATruth> asked) {
-            return new HeldTogether(requirements, asked, counts, numbers);
+        /**
+         * These with {@code asked} held as well, or why no row is where it and a truth asked
+         * before ask two values of one position.
+         *
+         * <p>What was held before holds together, since the way was open, so the one position
+         * that can newly be asked both values is the one {@code asked} is of: the position
+         * {@link TruthsAsked#of} would say of all of them in the order they were asked.
+         */
+        Step<HeldTogether, Reachability> asking(RowDemand.ATruth asked) {
+            Boolean before = truths.get(asked.at());
+            if (before == null) {
+                return new Step.Held<>(new HeldTogether(requirements,
+                        truths.with(asked.at(), asked.held()), counts, numbers, remainders));
+            }
+            return before == asked.held() ? new Step.Held<>(this)
+                    : new Step.Closed<>(new Reachability.NothingReaches(
+                            new Reachability.TwoAtOnce.Truths(asked.at())));
+        }
+
+        /**
+         * These with what {@code added} leaves of its remainder held against what the others
+         * did, or why no row is where that leaves it none.
+         *
+         * <p>Asked where cases and truths are, by the way's own reading and by the search for
+         * what no input takes alike: a region holds no class a remainder leaves, so the
+         * declarations' region says nothing of these, and this is the one place that does.
+         */
+        Step<HeldTogether, Reachability> leaving(RowDemand.OnARemainder added) {
+            return switch (remainders.taking(added)) {
+                // Said in the statements that prove it: one that follows from statements only a
+                // run checks is said as those.
+                case RemaindersHeld.Taken.NoneLeft(var ofIt) -> Step.Closed.workedOut(
+                        () -> new Reachability.NumbersLeaveNone(ofIt.stream()
+                                .flatMap(each -> each.provedBy().stream()).distinct().toList()));
+                case RemaindersHeld.Taken.Held(var held) -> new Step.Held<>(
+                        new HeldTogether(requirements, truths, counts, numbers, held));
+            };
         }
 
         /**
@@ -468,34 +761,34 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
          */
         Step<HeldTogether, Reachability> relating(OnTheWay entry) {
             if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.Relational(
-                    TakenConstraint.Affine affine)))) {
+                    TakenConstraint.Affine affine), var _, var _))) {
                 return new Step.Held<>(this);
             }
             // The ones taken in before have not been proved to leave none, since the way was
             // open, so only the statements of this one's form can newly be proved to.
-            List<TakenConstraint.Affine> ofItsForm =
-                    WhatStatementsOfOneFormDecide.ofTheFormOf(numbers, affine);
-            if (WhatStatementsOfOneFormDecide.of(ofItsForm, null).noRowArrives()) {
-                return new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm));
-            }
-            List<TakenConstraint.Affine> stated = new ArrayList<>(numbers);
-            stated.add(affine);
-            return new Step.Held<>(new HeldTogether(requirements, truths, counts, stated));
+            return switch (numbers.taking(affine)) {
+                case FormsHeld.Taken.NoPointLeft(var ofItsForm) ->
+                        new Step.Closed<>(new Reachability.NumbersLeaveNone(ofItsForm.stream()
+                                .<RowDemand.OfACondition>map(RowDemand.Relational::new)
+                                .toList()));
+                case FormsHeld.Taken.Held(var forms) -> new Step.Held<>(
+                        new HeldTogether(requirements, truths, counts, forms, remainders));
+            };
         }
 
-        /** These with the count {@code counted} asked to be in {@code region}, or why no row is
-         *  where that leaves it none. */
-        Step<HeldTogether, Reachability> counting(Quantity.HowManyMeet counted,
-                                                  LevelRegion region) {
-            LevelRegion left = counts.containsKey(counted.spelled())
-                    ? counts.get(counted.spelled()).meet(region) : region;
+        /** These with the count {@code counted}, one {@link AStatementAtARow#countIn} answers,
+         *  asked to be in {@code region}, or why no row is where that leaves it none. */
+        Step<HeldTogether, Reachability> counting(Quantity counted, LevelRegion region) {
+            String spelled = counted.spelled();
+            LevelRegion before = counts.get(spelled);
+            LevelRegion left = before == null ? region : before.meet(region);
             if (left.parts().isEmpty()) {
                 return new Step.Closed<>(new Reachability.NothingReaches(
-                        new Reachability.TwoAtOnce.Counts(counted.container().inputPosition())));
+                        new Reachability.TwoAtOnce.Counts(AStatementAtARow.elementsOf(counted)
+                                .container().inputPosition())));
             }
-            Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
-            out.put(counted.spelled(), left);
-            return new Step.Held<>(new HeldTogether(requirements, truths, out, numbers));
+            return new Step.Held<>(new HeldTogether(requirements, truths,
+                    counts.with(spelled, left), numbers, remainders));
         }
     }
 
@@ -541,7 +834,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public HeldTogether nothing() {
-                    return new HeldTogether(Requirements.NONE, List.of(), Map.of(), List.of());
+                    return new HeldTogether(Requirements.NONE, SharingMap.empty(),
+                            SharingMap.empty(), FormsHeld.NONE, RemaindersHeld.NONE);
                 }
 
                 /** {@code so} with {@code entry} taken in, or why no row takes them together. */
@@ -556,7 +850,80 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                         case Step.Closed<HeldTogether, Reachability> closed -> closed;
                     };
                 }
+
+                /** What is held is a value, and a count is looked into with steps of its own
+                 *  ({@link CountedWays#admits}). */
+                @Override
+                public boolean answersAlone() {
+                    return true;
+                }
             };
+
+    /**
+     * What whether {@code entry} holds turns on — the positions, and the values bindings hold that
+     * a statement only a run checks reads — or null where it turns on something neither says: the
+     * one account of what an entry depends on, inside every alternative it leaves a row and every
+     * statement it counts, on either side, however deep. A reader that asks a question without an
+     * entry, as one the entry has nothing to do with, asks it here.
+     *
+     * <p>An entry that places nothing is no entry that turns on nothing: a statement the run only
+     * checks places nowhere and turns on what it reads, which it says itself
+     * ({@link PositionsAStatementReads#everyPlaceAndValueOf}), and a condition declined was not
+     * read, so neither is ever taken to leave a position alone. A choice among ways turns on what
+     * all its ways turn on.
+     */
+    static Set<ReadSubject> turnsOn(OnTheWay entry) {
+        Set<ReadSubject> out = new LinkedHashSet<>();
+        return addPlacesTurnedOn(entry, out) ? out : null;
+    }
+
+    private static boolean addPlacesTurnedOn(OnTheWay entry, Set<ReadSubject> into) {
+        if (entry instanceof OnTheWay.Settled) {
+            return true;
+        }
+        if (entry instanceof OnTheWay.Declined) {
+            return false;
+        }
+        if (entry.ofSeveralWays()) {
+            for (List<OnTheWay> way : entry.alternatives()) {
+                for (OnTheWay each : way) {
+                    if (!addPlacesTurnedOn(each, into)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        // A count turns on what each statement it counts turns on, held or failing: what it
+        // places is not all a statement of it may read.
+        if (entry instanceof OnTheWay.Counted counted) {
+            if (counted.parts().isEmpty()) {
+                return false;
+            }
+            for (OnTheWay each : counted.parts()) {
+                if (!addPlacesTurnedOn(each, into)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (entry instanceof OnTheWay.TakenIn taken
+                && taken.demand() instanceof RowDemand.ForTheRun run) {
+            Optional<Set<ReadSubject>> read =
+                    PositionsAStatementReads.everyPlaceAndValueOf(run.statement());
+            if (read.isEmpty() || read.get().isEmpty()) {
+                return false;
+            }
+            into.addAll(read.get());
+            return true;
+        }
+        Set<TermPath> at = ASKED_OF_A_ROW.positions(entry);
+        if (at.isEmpty()) {
+            return false;
+        }
+        at.forEach(path -> into.add(new ReadSubject.At(path)));
+        return true;
+    }
 
     /** {@code so} with {@code entry} taken in as far as the cases, truths and counts it asks go;
      *  what its numbers say beside the others is {@link HeldTogether#relating}. */
@@ -571,26 +938,21 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                 case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
                         new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
             };
-            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
-                List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
-                truths.add(truth);
-                yield switch (TruthsAsked.of(truths)) {
-                    case TruthsAsked.Merge.Merged _ -> new Step.Held<>(so.withTruths(truths));
-                    case TruthsAsked.Merge.Conflict(var at) -> new Step.Closed<>(
-                            new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(at)));
-                };
-            }
-            case OnTheWay.TakenIn(var _, RowDemand.Exists exists)
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, var _, var _) -> so.asking(truth);
+            case OnTheWay.TakenIn(var _, RowDemand.Exists exists, var _, var _)
                     when exists.counted().isPresent() ->
                     so.counting(exists.counted().get(), ONE_OR_MORE);
-            case OnTheWay.TakenIn(var _, RowDemand.ForAll every)
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _, var _)
                     when every.counted().isPresent() ->
                     so.counting(every.counted().get(), NONE);
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) when !many.againstNumbers() ->
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _, var _)
+                    when !many.againstNumbers() ->
                     so.counting(many.count(), many.counts().values());
+            case OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _, var _) ->
+                    so.leaving(remainder);
             // A relation over a number written under a case is a relation of a value that is
             // that case: the number is nowhere else.
-            case OnTheWay.TakenIn(var _, RowDemand.Relational relation) -> {
+            case OnTheWay.TakenIn(var _, RowDemand.Relational relation, var _, var _) -> {
                 Requirements required = so.requirements();
                 for (NumericTerm term : relation.terms()) {
                     switch (required.merge(term.subjectPath().requirements())) {

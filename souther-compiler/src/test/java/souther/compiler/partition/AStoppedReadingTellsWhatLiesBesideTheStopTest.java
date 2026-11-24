@@ -1,0 +1,231 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.StatedComparison;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A comparison the reading stopped at tells what the program works out beside the expression it
+ * stopped at. The expression is its analysis's to answer for; an operation beside it is worked out
+ * on every row and is told, so that a row where it stops is not taken as computed.
+ */
+class AStoppedReadingTellsWhatLiesBesideTheStopTest {
+
+    private static final String SOURCE = """
+            module g
+
+            data Yes
+            data No
+
+            behavior classify : (n: Int, m: Int, k: Int) -> Yes | No
+            let classify (n, m, k) = if %s then Yes else No
+            """;
+
+    private static final String OVER_RATIONALS = """
+            module g
+
+            data Yes
+            data No
+
+            behavior classify : (n: Decimal, m: Decimal, k: Int) -> Yes | No
+            let classify (n, m, k) = if %s then Yes else No
+            """;
+
+    private static final String CHECKED = """
+            module g
+
+            data Yes
+            data No
+            data Pos = Int
+                invariant positive = value > 0
+
+            behavior classify : (n: Int, m: Int, k: Int) -> Yes | No
+            let classify (n, m, k) = if %s then Yes else No
+            """;
+
+    private static final String OVER_CHOICES = """
+            module g
+
+            data Yes
+            data No
+
+            behavior classify : (p: Bool, q: Bool, k: Int) -> Yes | No
+            let classify (p, q, k) = if %s then Yes else No
+            """;
+
+    private static ReadComparisons readOf(String source, String condition) {
+        return ReadComparisons.of(source.formatted(condition), "classify");
+    }
+
+    private static StatedComparison statedOf(ReadComparisons read) {
+        return ((ComparisonReadings.Stated.AComparison) read.only().statement()).comparison();
+    }
+
+    /** What the lines drawn from the comparison of {@code condition} are told it works out. */
+    private static UndividedByARelation.Working workingOfTheStop(String condition) {
+        return workingOfTheStop(SOURCE, condition);
+    }
+
+    private static UndividedByARelation.Working workingOfTheStop(String source,
+                                                                 String condition) {
+        ReadComparisons read = readOf(source, condition);
+        ComparisonReadings.Reading against = read.only();
+        AffineReading.OfAComparison arithmetic = AffineReading.read(statedOf(read),
+                against.reads(), read.inputs().reading(read.rules()));
+        assertTrue(arithmetic instanceof AffineReading.OfAComparison.Stopped,
+                () -> condition + " is read to a stop");
+        return AffineReading.OfAComparison.workingOf(arithmetic);
+    }
+
+    /** What the rule that reads the comparison of {@code condition} tells of its rows. */
+    private static UndividedByARelation.Working workingOfTheRule(String condition) {
+        return workingOfTheRule(SOURCE, condition);
+    }
+
+    private static UndividedByARelation.Working workingOfTheRule(String source,
+                                                                 String condition) {
+        ReadComparisons read = readOf(source, condition);
+        ComparisonReadings.Reading against = read.only();
+        return Pullback.ofAComparisonOnTheInput(statedOf(read), against.reads(),
+                read.inputs().reading(read.rules())).working().get();
+    }
+
+    @Test
+    void nothingBesideTheProductLeavesTheSizesOfTheFormToAnswer() {
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM, workingOfTheStop("m * m >= 100"));
+    }
+
+    /**
+     * {@code n + 1} is worked out on every row, and a row at the greatest {@code Int} stops there
+     * whatever the product comes to: it is told, though the sum cancels in the form.
+     */
+    @Test
+    void anOperationBesideTheProductIsTold() {
+        UndividedByARelation.Working working = workingOfTheStop("(n + 1) - 1 + m * m >= 100");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
+        assertTrue(working.operations().stream().anyMatch(each ->
+                        each.form().coefs().size() == 1 && each.form().constant().signum() > 0),
+                working::toString);
+    }
+
+    /**
+     * The quotient of two positions works out neither a product with the number nor anything else:
+     * every row where the divisor is not nought is computed, so no size of a place is held back.
+     */
+    @Test
+    void aQuotientByAnInputIsToldToWorkOutNothingBeyondItsOperands() {
+        UndividedByARelation.Working working = workingOfTheRule("n / m >= 100");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
+        assertTrue(working.operations().isEmpty(), working::toString);
+    }
+
+    @Test
+    void theOperandsOfAQuotientAreWorkedOutOnEveryRowOfIt() {
+        UndividedByARelation.Working working = workingOfTheRule("(n + 1) / m >= 100");
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
+        assertEquals(1, working.operations().size(), working::toString);
+    }
+
+    /**
+     * What is worked out on the number a quotient comes to is a sum of rationals, which is a
+     * rational wherever its operands are, so it stops no row: the quotient answers wherever its
+     * divisor is not nought, and every operation that can stop a run is told.
+     */
+    @Test
+    void anOperationOnTheNumberAQuotientComesToStopsNoRow() {
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY,
+                workingOfTheRule("n / m + 1 >= 100").told());
+        assertEquals(WhatARelationLeavesUndivided.Told.EVERY,
+                workingOfTheRule(OVER_RATIONALS, "n / m + 1.0m >= 100").told());
+    }
+
+    /**
+     * Two expressions the reading cannot read are two stops, and only the first is held for its
+     * owner to answer for: where the divisor of the second is nought a run stops, and nothing here
+     * tells of it.
+     */
+    @Test
+    void aSecondStopIsNotTheFirstOnesToAnswerFor() {
+        UndividedByARelation.Working working = workingOfTheStop("m * m + n / m >= 100");
+        assertNotEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
+        assertNotEquals(UndividedByARelation.Working.AS_THE_FORM, working);
+    }
+
+    /**
+     * A quotient around the stop, or on the other side of the comparison, is not the stopped
+     * expression's to answer for: where its divisor is nought a run stops, and the analysis that
+     * owns the stop draws no line from it. A rule that reads the quotient answers for it, as a
+     * quotient by a value does for its own ({@link #aQuotientByAnInputIsToldToWorkOutNothingBeyondItsOperands}).
+     */
+    @Test
+    void aQuotientBesideTheStopIsNotTheStopsToAnswerFor() {
+        assertUnread(workingOfTheStop("(m * m) / n >= 100"));
+        assertUnread(workingOfTheStop("m * m >= n / m"));
+    }
+
+    /**
+     * The sizes of the addends answer for a row only where the program adds the addends up. A sum
+     * that cancels in the form, or weighs the product otherwise, is an operation of its own: at
+     * the greatest product the run stops in the sum that adds one. It is told over what the
+     * product comes to, which no row of the input is placed at.
+     */
+    @Test
+    void anOperationThatIsNoSumOfTheAddendsIsNotTheOwnersToAnswerFor() {
+        assertToldOverWhatTheStopComesTo(workingOfTheStop("((m * m) + 1) - 1 >= 100"));
+        assertToldOverWhatTheStopComesTo(workingOfTheStop("m * m + 5 >= 100"));
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM,
+                workingOfTheStop("m * m + n >= 100"));
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM,
+                workingOfTheStop("m * m * 2 >= 100"));
+    }
+
+    /**
+     * Two choices are two values, each held aside as its own and each with the numbers its own
+     * arms come to: the numbers the first comes to say nothing of the second. Their sum is within
+     * the type when the two ranges together are, and is an operation of its own when they are not.
+     */
+    @Test
+    void twoChoicesAreHeldAsideEachWithItsOwnNumbers() {
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM, workingOfTheStop(OVER_CHOICES,
+                "(if p then 0 else 1) + (if q then 1 else 0) >= k"));
+        assertUnread(workingOfTheStop(OVER_CHOICES,
+                "(if p then 0 else 1) + (if q then 9223372036854775807 else 0) >= k"));
+    }
+
+    /** An operation is told over the value the stopped expression comes to, which no row of the
+     *  input is placed at. */
+    private static void assertToldOverWhatTheStopComesTo(UndividedByARelation.Working working) {
+        assertTrue(working.operations().stream()
+                .anyMatch(UndividedByARelation.IntOperation::overAValueWorkedOut), working::toString);
+    }
+
+    /** No row is shown computed, and no operation is told. */
+    private static void assertUnread(UndividedByARelation.Working working) {
+        assertEquals(WhatARelationLeavesUndivided.Told.SOME, working.told(), working::toString);
+        assertTrue(working.operations().isEmpty(), working::toString);
+    }
+
+    /**
+     * A construction checks the invariant of the type it makes, which stops a run, whatever the
+     * stop under it is.
+     */
+    @Test
+    void aConstructionAroundTheStopStillChecksItsInvariant() {
+        assertUnread(workingOfTheStop(CHECKED, "Pos(m * m).value + n >= 100"));
+    }
+
+    /**
+     * A quotient added to a product is no quotient of the kind the quotient's analysis reads, so
+     * its lines are not told to work out nothing beyond their operands. The product is a stop of
+     * its own beside the quotient, and no row is shown computed for either.
+     */
+    @Test
+    void aQuotientAddedToAProductIsNotTheQuotientsToAnswerFor() {
+        assertUnread(workingOfTheRule("n / m + k * k >= 100"));
+    }
+}

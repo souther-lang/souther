@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.GeneratedLinkage;
+
 /**
  * What a generated method ended with, carried out of the invocation that made it.
  *
@@ -22,11 +24,35 @@ package souther.compiler.examples;
  * <p>Public because what applies a behavior is given to a run ({@link Answerer}), and an answerer
  * outside this package carries what it applied out the same way.
  */
-public final class InvocationFailure extends RuntimeException {
+public final class InvocationFailure extends RuntimeException implements GeneratedLinkage.Attributed {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Carries {@code cause} out as it stands. Whose code ended with it is not decided here, because
+     * what is applied may be supplied from outside, and a link failure of a supplied implementation
+     * is that implementation failing. Code of this compile is carried by {@link #ofGeneratedCode}.
+     *
+     * <p>What is carried is never a defect that was found already. Applied code may call back into
+     * generated code of this compile, and a defect thrown there reaches here under whatever the
+     * reflective call wrapped it in. Judging nothing new is what this does, and it is why the
+     * readers of one need not each ask: a defect is not something an application ended with.
+     */
     public InvocationFailure(Throwable cause) {
+        GeneratedLinkage.rethrowClassified(cause);
         super(cause == null ? "the invocation ended with no cause" : cause.toString(), cause);
+    }
+
+    /**
+     * What a generated class of this compile ended with, carried out.
+     *
+     * <p>The one place that says the code was this compile's own, which is what makes a link
+     * failure in it this compiler's output failing: raised here, as {@link
+     * GeneratedLinkage#rejectDefect} does, and not carried as something the applied code ended
+     * with. Applied code that may be supplied from outside is carried by the constructor.
+     */
+    public static InvocationFailure ofGeneratedCode(Throwable cause) {
+        GeneratedLinkage.rejectDefect(cause);
+        return new InvocationFailure(cause);
     }
 }

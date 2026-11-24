@@ -61,7 +61,7 @@ public sealed interface AdmittedPlan {
     /** The same, into {@code out}, so a plan of plans is walked once and allocates once. */
     private void asked(java.util.Set<souther.compiler.regex.PatternPlan> out) {
         switch (this) {
-            case Everything _, Nothing _, Of _ -> { }
+            case Everything _, Nothing _, Of _, Without _ -> { }
             case Pattern it -> out.add(it.plan());
             case Both it -> it.parts().forEach(each -> each.asked(out));
             case Either it -> it.parts().forEach(each -> each.asked(out));
@@ -91,9 +91,11 @@ public sealed interface AdmittedPlan {
         }
 
         /** Whether putting this together with something costs nothing, which is what the values a
-         *  rule wrote out do. A language is the other kind. */
+         *  rule wrote out do. A language is the other kind, and so are progressions of whole
+         *  numbers: a meet of those is as many progressions as the two hold between them, paid for
+         *  under an allowance. */
         boolean isFree() {
-            return !(set instanceof ValueSet.Matching);
+            return !(set instanceof ValueSet.Matching) && !(set instanceof ValueSet.WholeSteps);
         }
     }
 
@@ -124,6 +126,23 @@ public sealed interface AdmittedPlan {
         public Pattern {
             if (plan == null) {
                 throw new IllegalArgumentException("a pattern leaf names some pattern");
+            }
+        }
+    }
+
+    /**
+     * Every value a set already worked out does not hold.
+     *
+     * <p>The complement as a plan, for the same reason a denied pattern is one: it is the expensive
+     * operation, and what a plan is for is saying where it is spent. The set it is of was built by
+     * whoever read it, and this is built by whoever works the plan out.
+     */
+    record Without(ValueSet set) implements AdmittedPlan {
+
+        public Without {
+            if (set == null || set.isAny() || set.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "everything and nothing are said as themselves, not as a denied set");
             }
         }
     }
@@ -175,6 +194,14 @@ public sealed interface AdmittedPlan {
             return ANY;
         }
         return set.isEmpty() ? NONE : new Of(set);
+    }
+
+    /** The plan for every value {@code set} does not hold. */
+    static AdmittedPlan without(ValueSet set) {
+        if (set.isAny()) {
+            return NONE;
+        }
+        return set.isEmpty() ? ANY : new Without(set);
     }
 
     /**

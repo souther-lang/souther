@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -80,7 +82,7 @@ class WhatARuleRaisesDependsOnTheValueItAppliesToTest {
 
     /** What the clause of {@code Price} raises at {@code type}. */
     private static Required raisedBy(String type) {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
@@ -88,7 +90,7 @@ class WhatARuleRaisesDependsOnTheValueItAppliesToTest {
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         java.util.Collection<Required> raised = FieldDomains
                 .of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES)).required().values();
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).required().values();
         assertEquals(1, raised.size(), type + " is held to one rule here");
         return raised.iterator().next();
     }

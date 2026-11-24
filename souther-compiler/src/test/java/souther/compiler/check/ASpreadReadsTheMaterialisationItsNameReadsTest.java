@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -38,9 +39,7 @@ class ASpreadReadsTheMaterialisationItsNameReadsTest {
 
     @Test
     void aValueSpreadAndNamedInOneRegionIsBuiltOnce() {
-        Compilation compiled = Compiler.compiled(SOURCE, "m");
-        assertEquals("{0=[]}", String.valueOf(compiled.diagnostics()),
-                "the source this counts over was refused");
+        Compilation compiled = ACompiledModel.compiles(Compiler.compiled(SOURCE, "m"));
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
                 .value().value().definition().writtenBody();

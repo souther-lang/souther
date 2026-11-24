@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.meaning.KeptWays;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,30 +26,31 @@ import java.util.List;
  *
  * <p>One truth shared by occurrences (an element kept by the same outer filter after several inner
  * ones) is one truth, decided once.
+ *
+ * <p>What the truths state is held here, and what decides the ways is {@link KeptWays}, which is
+ * all a statement over the ways keeps of them.
  */
 final class WaysOfKeeping {
 
-    private final List<ReadMeaning.Occurrence> occurrences;
     private final List<Denotation> truths = new ArrayList<>();
-    /** For each occurrence, the index in {@link #truths} of each truth it is kept by. */
-    private final int[][] keptBy;
+    private final KeptWays kept;
 
     WaysOfKeeping(List<ReadMeaning.Occurrence> occurrences) {
-        this.occurrences = List.copyOf(occurrences);
-        keptBy = new int[this.occurrences.size()][];
-        for (int i = 0; i < keptBy.length; i++) {
-            List<ReadMeaning.Occurrence.Kept> kept = this.occurrences.get(i).keptWhere();
-            keptBy[i] = new int[kept.size()];
-            for (int j = 0; j < keptBy[i].length; j++) {
-                Denotation truth = truthOf(kept.get(j)).truth();
-                int index = truths.indexOf(truth);
+        List<List<KeptWays.Keep>> keptBy = new ArrayList<>();
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            List<KeptWays.Keep> keeps = new ArrayList<>();
+            for (ReadMeaning.Occurrence.Kept each : occurrence.keptWhere()) {
+                ReadMeaning.Occurrence.Kept.ATruth truth = truthOf(each);
+                int index = truths.indexOf(truth.truth());
                 if (index < 0) {
                     index = truths.size();
-                    truths.add(truth);
+                    truths.add(truth.truth());
                 }
-                keptBy[i][j] = index;
+                keeps.add(new KeptWays.Keep(index, truth.holds()));
             }
+            keptBy.add(keeps);
         }
+        kept = new KeptWays(keptBy, truths.size());
     }
 
     /** Whether every truth an occurrence is kept by is one ({@code false} where one is an arm of a
@@ -56,6 +58,16 @@ final class WaysOfKeeping {
     static boolean allTruths(List<ReadMeaning.Occurrence> occurrences) {
         return occurrences.stream().flatMap(one -> one.keptWhere().stream())
                 .allMatch(kept -> kept instanceof ReadMeaning.Occurrence.Kept.ATruth);
+    }
+
+    /** What decides the ways. */
+    KeptWays kept() {
+        return kept;
+    }
+
+    /** The occurrences and the truths that keep them, as they are told apart by. */
+    String spelled() {
+        return kept.spelled();
     }
 
     int truthCount() {
@@ -68,7 +80,7 @@ final class WaysOfKeeping {
 
     /** The decisions of no truth yet. */
     Boolean[] undecided() {
-        return new Boolean[truths.size()];
+        return kept.undecided();
     }
 
     /**
@@ -76,66 +88,19 @@ final class WaysOfKeeping {
      * decided — or -1 where there is none, and the way is a leaf.
      */
     int nextEvaluated(Boolean[] decided) {
-        int next = -1;
-        for (int i = 0; i < keptBy.length; i++) {
-            for (int j = 0; j < keptBy[i].length; j++) {
-                int truth = keptBy[i][j];
-                if (decided[truth] == null) {
-                    if (next < 0 || truth < next) {
-                        next = truth;
-                    }
-                    break;
-                }
-                if (decided[truth] != truthOf(occurrences.get(i).keptWhere().get(j)).holds()) {
-                    break;
-                }
-            }
-        }
-        return next;
+        return kept.nextEvaluated(decided);
     }
 
     /** Whether occurrence {@code i} is there at a leaf, every truth it is kept by decided as it
      *  was kept. */
     boolean isThere(int i, Boolean[] decided) {
-        for (int j = 0; j < keptBy[i].length; j++) {
-            if (decided[keptBy[i][j]] != truthOf(occurrences.get(i).keptWhere().get(j)).holds()) {
-                return false;
-            }
-        }
-        return true;
+        return kept.isThere(i, decided);
     }
 
-    /**
-     * How many readings the tree makes in all, or {@code limit} where it makes that many or more.
-     *
-     * <p>What a leaf reads is the reader's: a sum reads one of each element there, as the sum of
-     * the elements of a container that is not kept by anything does, so a leaf is the elements
-     * that are there and one for a leaf that has none. A count reads no element, only which are
-     * there, so a leaf is one. Counted only to {@code limit}, because what a caller asks is whether
-     * the work is within a budget, and a tree of independent truths has as many leaves as there
-     * are combinations of them. The truths {@code decided} already are not split again.
-     *
-     * @param readsTheElements whether a leaf reads each element that is there
-     */
+    /** How many readings the tree makes in all, or {@code limit} where it makes that many or
+     *  more ({@link KeptWays#work}). */
     long work(Boolean[] decided, long limit, boolean readsTheElements) {
-        int next = nextEvaluated(decided);
-        if (next < 0) {
-            long there = 0;
-            for (int i = 0; readsTheElements && i < keptBy.length; i++) {
-                there += isThere(i, decided) ? 1 : 0;
-            }
-            return Math.min(limit, Math.max(1, there));
-        }
-        long total = 0;
-        for (boolean holds : new boolean[] {true, false}) {
-            decided[next] = holds;
-            total += work(decided, limit - total, readsTheElements);
-            decided[next] = null;
-            if (total >= limit) {
-                return limit;
-            }
-        }
-        return total;
+        return kept.work(decided, limit, readsTheElements);
     }
 
     private static ReadMeaning.Occurrence.Kept.ATruth truthOf(ReadMeaning.Occurrence.Kept kept) {

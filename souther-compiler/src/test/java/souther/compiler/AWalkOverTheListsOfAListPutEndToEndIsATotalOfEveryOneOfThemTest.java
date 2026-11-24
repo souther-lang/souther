@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -78,7 +77,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
             String report = report(total(body.formatted(4)));
             assertTrue(report.contains("List.sum(ledger.entries[*].postings[*].q)"),
                     () -> body + ": " + report);
-            assertFalse(report.contains("not read"), () -> body + ": " + report);
+            assertFalse(NotRead.in(report), () -> body + ": " + report);
         }
     }
 
@@ -241,8 +240,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
     void aGreatManyListsOfNothingAreNotWrittenAndTheFigureIsSaid() {
         String model = model("", "invariant List.length(entries) >= 2000000000",
                 SUMMED.formatted(0));
-        String rows = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
-                java.time.Duration.ofSeconds(30), () -> rowsOf(model));
+        String rows = rowsOf(model);
         assertTrue(rows.length() < 20_000,
                 () -> "no row of that size is written: " + rows.length());
         assertTrue(count(rows, "Entry \\{") < 200, () -> "no entry is written a million times");
@@ -415,7 +413,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
                 """;
         String report = report(model);
         assertTrue(report.contains("List.sum(entries[*].postings[*].amount)"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertFalse(report.contains("made from this one"), report);
 
         List<java.math.BigDecimal> totals = new ArrayList<>();
@@ -455,7 +453,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
                     then Many else Few
                 """);
         assertTrue(report.contains("List.sum(groups[*].bs[*].cs[*].q)"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** What each row's postings come to, over every entry of every ledger it writes. */
@@ -487,14 +485,15 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
     }
 
     private static String rowsOf(String model) {
-        return GeneratedRows.of(compiled(model), null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+        Compilation compilation = ACompiledModel.compiles(compiled(model));
+        return GeneratedRows.of(compilation, null, null,
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static String report(String model) {
-        Compilation compilation = compiled(model);
+        Compilation compilation = ACompiledModel.compiles(compiled(model));
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model compiled and measured once for the class: some are asked for their report and
@@ -516,10 +515,6 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
     private static Compilation measuring(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + model);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

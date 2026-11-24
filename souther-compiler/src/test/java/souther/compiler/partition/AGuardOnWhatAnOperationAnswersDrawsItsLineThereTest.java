@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Sig;
@@ -66,7 +67,7 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
     /** Every threshold a body's guards put on a number: the term, where it stands, and what the
      *  line is measured on. */
     private static List<String> thresholdsOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

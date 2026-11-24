@@ -1,8 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.diag.Localizable;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation.AComparisonRead.Facing;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
@@ -64,9 +68,24 @@ import java.util.function.Supplier;
  *                    and a side is where it comes out one way. Neither where none is shown to be,
  *                    which is not a side shown to hold something — see
  *                    {@link #noValueStandsWhereItComesOut}
+ * @param threshold which threshold of a computation cut at several places this line is, where it
+ *                  cuts one ({@link DerivedValues}). Its ON and OFF points are owed once for each
+ *                  threshold and not once for the comparison, because a row at the points of one
+ *                  threshold says nothing about where another is
  */
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
-                     Sides leftNothing) {
+                     Sides leftNothing, Optional<ThresholdOfADerivedValue> threshold) {
+
+    /** A line that is no place of a computation cut at several places. */
+    public Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers,
+                  Sides leftNothing) {
+        this(cut, origin, answers, leftNothing, Optional.empty());
+    }
+
+    /** This line as the threshold {@code place} names. */
+    Border atThreshold(ThresholdOfADerivedValue place) {
+        return new Border(cut, origin, answers, leftNothing, Optional.of(place));
+    }
 
     /**
      * Which of the two sides of a line something holds of.
@@ -85,9 +104,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     public Border {
-        if (leftNothing == null) {
+        if (leftNothing == null || threshold == null) {
             throw new IllegalArgumentException("a border says which sides it knows hold nothing,"
-                    + " neither among them");
+                    + " neither among them, and which place it is of a computation, if any");
         }
         if (answers == null || !answersEveryPoint(answers, pointsOf(origin))) {
             throw new IllegalArgumentException("a border that does not answer at every point its"
@@ -265,20 +284,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 + " point, and its rule accounts for no such absence: " + answers.keySet());
     }
 
+
     /**
-     * How a report names one of this border's points.
+     * One of this border's points as its role and which side of the line it is on, in the catalog's
+     * base language.
      *
      * <p>Which of the four it is, and which side of the line where this border has two of them in
      * that role. A rule that names a value owes a row outside it on each side, and the two are
-     * different work — so a report that wrote the role alone would print one sentence twice and
-     * leave a reader unable to say which value is being asked for.
-     *
-     * <p>The side and not the value. Where a point is takes a quantity to write, and a quantity
-     * belongs to the reading that met the line; which side of the line it lies on is the line's own
-     * and is the same at every reading of it.
+     * different work — so a name that wrote the role alone would name two points alike.
      */
     public String named(DomainPoint point) {
-        return roleOf(point) + whichSide(point);
+        return roleOf(point) + Messages.render(sideOf(point), Messages.BASE_LANGUAGE);
     }
 
     /**
@@ -290,27 +306,28 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * alone instead, every border would say a side and an order's one point outside it would be
      * given a side nobody was choosing between.
      */
-    public String whichSide(DomainPoint point) {
-        PointRole role = roleOf(point);
-        return sideSaid(point, answers.keySet().stream()
-                .anyMatch(each -> !each.equals(point) && roleOf(each) == role));
+    public SearchMessage sideOf(DomainPoint at) {
+        PointRole role = roleOf(at);
+        return sideSaid(at, answers.keySet().stream()
+                .anyMatch(each -> !each.equals(at) && roleOf(each) == role));
     }
 
     /**
      * The same, of {@code point} of a line that claims {@code facts}: which side of it the point is
      * on, where another point of that line plays the same role.
      */
-    public static String whichSideOf(LineFacts facts, DomainPoint point) {
+    public static SearchMessage sideOf(LineFacts facts, DomainPoint point) {
         PointRole role = PointRole.of(point, facts.holdsAt(point));
         return sideSaid(point, pointsOf(facts).stream().anyMatch(each -> !each.equals(point)
                 && PointRole.of(each, facts.holdsAt(each)) == role));
     }
 
-    private static String sideSaid(DomainPoint point, boolean andAnother) {
+    private static SearchMessage sideSaid(DomainPoint point, boolean andAnother) {
         if (!andAnother) {
-            return "";
+            return new SearchMessage.NothingSaid();
         }
-        return point.side() == Towards.BELOW ? " below the line" : " above the line";
+        return point.side() == Towards.BELOW ? new SearchMessage.BelowTheLine()
+                : new SearchMessage.AboveTheLine();
     }
 
     /** What this border asks of the rows at the one point playing {@code role}. */
@@ -437,12 +454,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         Optional<DomainPoint> tied = placed.of(point);
         if (tied.isPresent()) {
-            return List.of(owedAt(line, tied.get(), settled, new ReadingSeat.At(point)));
+            return List.of(owedAt(line, tied.get(), settled, new ReadingSeat.At(point),
+                    threshold));
         }
         List<OwedPoint> out = new ArrayList<>();
         for (DomainPoint each : pointsOf(line.line().facts())) {
             if (sameKind(each, point)) {
-                out.add(owedAt(line, each, settled, new ReadingSeat.Untied(point)));
+                out.add(owedAt(line, each, settled, new ReadingSeat.Untied(point), threshold));
             }
         }
         return out;
@@ -470,8 +488,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 }
                 yield new AuthoredPlacement.Placed(points);
             }
-            case AuthoredPointMapping.NotAnAuthoredBoundary _ ->
-                    new AuthoredPlacement.NoPlaceOfTheLine();
+            case AuthoredPointMapping.NotAnAuthoredBoundary _,
+                 AuthoredPointMapping.SelectsACase _ -> new AuthoredPlacement.NoPlaceOfTheLine();
             case AuthoredPointMapping.Undetermined _ -> new AuthoredPlacement.NotShown();
         };
     }
@@ -502,9 +520,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     private static OwedPoint owedAt(BorderObligationId line, DomainPoint point,
-                                    PointContributions settled, ReadingSeat seat) {
+                                    PointContributions settled, ReadingSeat seat,
+                                    Optional<ThresholdOfADerivedValue> threshold) {
         return new OwedPoint(point.againstTheLine()
-                ? new BorderObligationPoint.AtLine(line, point)
+                ? new BorderObligationPoint.AtLine(line, point, threshold)
                 : new BorderObligationPoint.InRegion(line, point, Optional.empty()),
                 PointAttribution.of(settled), seat);
     }
@@ -513,10 +532,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * Which point of the author's line {@code point} of this reading is, as {@code proven} says the
      * reading faces it — or nothing where the facing does not say.
      *
-     * <p>The value the line is at is the author's line's value whichever way it is faced. A side is
+     * <p>Where the reading faces its sides a known way that is {@link #faced}. Otherwise a side is
      * told by what the line claims: an order's satisfied side is its satisfied side on any quantity
      * it is drawn on, so a side of this reading is the author's satisfied side exactly where the
-     * comparison holds there. Where this reading drew the relation the comparison denies — a
+     * comparison holds there, and the value the line is at is the author's. Where this reading drew the relation the comparison denies — a
      * statement of several holds each relation one way round, and the comparison may hold where it
      * fails — the relation's satisfied side is the comparison's other one, and what holds at the
      * value is what does not. A value singled out holds on neither side, and which side of it is
@@ -524,22 +543,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private Optional<DomainPoint> theAuthorsPoint(DomainPoint point,
                                                   AuthoredPointMapping.Proven proven) {
-        if (point.side() == null) {
-            return Optional.of(point);
-        }
         // Where the line is the comparison's own relation and this reading's quantity faces the
         // sides it wrote a known way, a side is a side of the left against the right, whatever the
         // reading drew it as: the rules can leave one value at an order's end, and the line is
         // then a value singled out where the author wrote an order. A line something else in the
         // definition draws has no two sides of the comparison's written for it, and its claim is
         // what the comparison comes to across it.
-        Optional<Towards> faced = !proven.itsOwn() ? Optional.empty() : switch (proven.facing()) {
-            case AS_WRITTEN -> Optional.of(point.side());
-            case TURNED -> Optional.of(point.side().opposite());
-            case NOTHING_WRITTEN -> Optional.empty();
-        };
-        if (faced.isPresent()) {
-            return faced.map(towards -> sideOf(point, towards));
+        if (proven.itsOwn() && proven.facing() != Facing.NOTHING_WRITTEN) {
+            return Optional.of(faced(point, proven.facing() == Facing.TURNED, proven));
+        }
+        if (point.side() == null) {
+            return Optional.of(point);
         }
         Optional<Towards> side = switch (proven.claims()) {
             case ComparisonClaim.Cut authoredCut
@@ -561,6 +575,33 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             default -> Optional.empty();
         };
         return side.map(towards -> sideOf(point, towards));
+    }
+
+    /**
+     * {@code point} as a point of the author's line, for a reading that faces its sides the way
+     * {@code turned} says.
+     *
+     * <p>Two orders cut the same values into the same two classes, and each names the number it is
+     * at as one of them. A relation and its denial name different ends of one cut — {@code x <= 1}
+     * and {@code x >= 2} are the cut between 1 and 2, named at 1 and at 2 — so the number the
+     * reading is at is not always the number the author's line is at. Where it falls in the other
+     * class once the sides are faced, the number the reading is at is the value beside the author's
+     * line, and the value beside the reading's line is the author's number. Anywhere else the
+     * numbers are one and a point is the same kind of point on the side the facing gives it.
+     */
+    private DomainPoint faced(DomainPoint point, boolean turned,
+                              AuthoredPointMapping.Proven proven) {
+        if (proven.claims() instanceof ComparisonClaim.Cut authored
+                && origin.lineFacts().claim() instanceof ComparisonClaim.Cut drawn
+                && (turned ? drawn.valueBelongs().opposite() : drawn.valueBelongs())
+                        != authored.valueBelongs()
+                && !(point instanceof DomainPoint.InTheRegion)) {
+            return point instanceof DomainPoint.AtTheLine
+                    ? new DomainPoint.BesideTheLine(authored.valueBelongs().opposite())
+                    : new DomainPoint.AtTheLine();
+        }
+        return point.side() == null ? point
+                : sideOf(point, turned ? point.side().opposite() : point.side());
     }
 
     /** {@code point}, on side {@code towards} of the line. */
@@ -597,7 +638,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * it, so nothing here folds two spellings of one form.
      */
     public boolean sameReadingAs(Border other) {
-        if (other == null || !origin.equals(other.origin) || !cut.equals(other.cut)) {
+        if (other == null || !drawnAt().equals(other.drawnAt())) {
             return false;
         }
         if (!answers.keySet().equals(other.answers.keySet())) {
@@ -618,6 +659,16 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         return Set.copyOf(pointsOwed()).equals(Set.copyOf(other.pointsOwed()))
                 && Set.copyOf(pointsLeftOut()).equals(Set.copyOf(other.pointsLeftOut()));
     }
+
+    /** Where this line was drawn and what drew it, which two lines are one reading only where they
+     *  share ({@link #sameReadingAs}): what a reader filing lines to find one again files them
+     *  by. */
+    public DrawnAt drawnAt() {
+        return new DrawnAt(cut, origin);
+    }
+
+    /** Where a line was drawn and what drew it ({@link #drawnAt}). */
+    public record DrawnAt(BoundaryTarget cut, LineOrigin origin) {}
 
     /** The points a row is owed at, without whose each is. */
     private List<BorderObligationPoint> pointsOwed() {
@@ -681,23 +732,53 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the line to say.
      */
     public List<OwedPoint> holdsOpen() {
-        if (!(placement() instanceof AuthoredPlacement.NotShown)) {
+        AuthoredPlacement placement = placement();
+        return answers.keySet().stream()
+                .flatMap(point -> holdsOpen(point, placement).stream()).toList();
+    }
+
+    /** The same, of what this reading holds at {@code point} of its own. */
+    public List<OwedPoint> holdsOpen(DomainPoint point) {
+        return holdsOpen(point, placement());
+    }
+
+    private List<OwedPoint> holdsOpen(DomainPoint point, AuthoredPlacement placement) {
+        if (!(placement instanceof AuthoredPlacement.NotShown)) {
             return List.of();
         }
         BorderObligationId line = obligation();
-        PointContributions own = PointContributions.by(origin.authoredLine());
+        PointContributions settled = settledAt(point, PointContributions.by(origin.authoredLine()));
+        if (settled == null) {
+            return List.of();
+        }
         List<OwedPoint> out = new ArrayList<>();
-        for (DomainPoint point : answers.keySet()) {
-            PointContributions settled = settledAt(point, own);
-            if (settled == null) {
-                continue;
-            }
-            for (DomainPoint each : pointsOf(line.line().facts())) {
-                if (sameKind(each, point)) {
-                    out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point)));
-                }
+        for (DomainPoint each : pointsOf(line.line().facts())) {
+            if (sameKind(each, point)) {
+                out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point),
+                        threshold));
             }
         }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every point of the author's line a row at {@code point} of this reading would say something
+     * about: the ones it owes there, and the ones it holds open there.
+     *
+     * <p>Something about, and not something that settles. Each comes with where this reading stands
+     * to it ({@link OwedPoint#seat}): a row here settles the point only through a reading standing
+     * at it ({@link ReadingSeat.At}), and through one that cannot tie its place to the point
+     * ({@link ReadingSeat.Untied}) or is not shown to be a place of the line
+     * ({@link ReadingSeat.Unresolved}) it is what the reading tried, said against the point and
+     * counted neither for it nor against it.
+     *
+     * <p>Empty for a reading shown to be no place of the line, which owes nothing and holds nothing
+     * open. What a row there shows is about no point anybody is owed.
+     */
+    public List<OwedPoint> about(DomainPoint point) {
+        AuthoredPlacement placement = placement();
+        List<OwedPoint> out = new ArrayList<>(owes(point, placement));
+        out.addAll(holdsOpen(point, placement));
         return List.copyOf(out);
     }
 
@@ -747,6 +828,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     public String operator(DomainPoint point) {
         Criterion criterion = demand(point).criterion();
         return criterion == null ? null : criterion.operator();
+    }
+
+    /** How one point relates a row's value to what it is against, as the catalog's phrase, or null
+     *  where none is owed. */
+    public Localizable asked(DomainPoint point) {
+        Criterion criterion = demand(point).criterion();
+        return criterion == null ? null
+                : Localizable.of(criterion.askedAs(), criterion.written(cut.of()));
     }
 
     /** What that point is against, or null where none is owed. */
@@ -901,7 +990,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                      HeldValues heldTo, ExactAnswer<List<Parting>> parted,
                      NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        Admissible admissible = new Admissible(reach, heldTo);
+        HeldByTheLanguage language = target.of().heldByTheLanguage();
+        Admissible admissible = new Admissible(reach, heldTo, language);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -928,7 +1018,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // others already hold is a question about where the values part, and the arrangement is
         // what answers it — asked here as well, this reading would keep whichever of two lines at
         // one place it met first and the other would go unsaid.
-        ExactAnswer<Arranged> arranged = parted.flatMap(others ->
+        ExactAnswer<Arranged> arranged = onTheOrderOf(space, parted).flatMap(others ->
                 partedBy(target, origin).map(mine -> {
                     List<Parting> all = new ArrayList<>(others);
                     all.addAll(mine);
@@ -1313,6 +1403,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         List<Border> out = new ArrayList<>();
         for (LineDrawn each : drawn) {
+            // A line that only selects a case of a library's definition has parted the values
+            // above and owes no row at its points.
+            if (each.by().onlySelectsACase()) {
+                continue;
+            }
             // And read back into the units this rule wrote, which is what its own quantity measures
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.
@@ -1363,6 +1458,31 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     .ifPresent(out::add);
         }
         return out;
+    }
+
+    /**
+     * {@code parted} as places of {@code space}, or the way one of them was not worked out there.
+     * A quantity parted at a decimal and at a number no decimal writes has the second on an order
+     * that counts, and the places of the first are said as counts to stand among them
+     * ({@link LevelSpace#countsLevels}).
+     */
+    private static ExactAnswer<List<Parting>> onTheOrderOf(LevelSpace space,
+                                                          ExactAnswer<List<Parting>> parted) {
+        if (!space.countsLevels()) {
+            return parted;
+        }
+        return parted.flatMap(places -> {
+            List<Parting> counted = new ArrayList<>();
+            for (Parting each : places) {
+                switch (each.counted()) {
+                    case ExactAnswer.Held<Parting> held -> counted.add(held.value());
+                    case ExactAnswer.Unheld<Parting> unheld -> {
+                        return ExactAnswer.unheld(unheld.why());
+                    }
+                }
+            }
+            return ExactAnswer.held(List.copyOf(counted));
+        });
     }
 
     /**
@@ -1605,12 +1725,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * @param bounds the range the value runs in
      * @param held   what the declarations hold the value to besides where it runs
+     * @param language what the language holds of it, which no rule wrote and no class is drawn to
      */
-    private record Admissible(NumericDomain.Bounds bounds, HeldValues held) {
+    private record Admissible(NumericDomain.Bounds bounds, HeldValues held,
+                              HeldByTheLanguage language) {
 
-        /** Whether a row may be written at {@code level} as far as these two say. */
+        /** Whether a row may be written at {@code level} as far as these say. */
         boolean admits(Level level) {
-            if (held.refuses(level)) {
+            if (held.refuses(level) || !language.admits(level)) {
                 return false;
             }
             ExactRatio number = level.asANumber();
@@ -1620,7 +1742,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         /** Whether the rules leave nothing in {@code part}: of the range, what the declarations hold
          *  the value to ({@link HeldValues}). */
         boolean admitsNothingIn(LevelInterval part) {
-            return held.leaveNothingIn(part, bounds);
+            return language.admitsNothingIn(part) || held.leaveNothingIn(part, bounds);
         }
     }
 

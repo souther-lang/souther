@@ -267,6 +267,34 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
         /**
+         * What the rule states was read, and it relates the value here to another value, but a run
+         * may stop on the way to the rule on what this compiler does not say, so not every value
+         * here is shown to get to it.
+         *
+         * <p>Its own word and not the one above. There every value here gets to the rule and the
+         * other side is what falls short, and a reader looks at the other side; here the values
+         * here may not get to the rule at all, and a reader looks at what the run works out before
+         * it. Told the rule relates two values, a reader would take every value here as one the
+         * rule leaves open.
+         *
+         * <p>It is also the word for numbers the relation settles in which no row is shown to
+         * get past an operation told: the run stops there where the operation stops it, no class
+         * is drawn for the term, and the numbers are in the reason and not in the document.
+         */
+        RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+        /**
+         * What the rule states was read, and it relates the value here to another value; the
+         * classes it draws here hold the values it was shown over, and the rest are shown on
+         * neither side of it.
+         *
+         * <p>Its own word and not the two above, which leave the position no class of the rule's.
+         * Here the classes stand, and what a reader is told is which values they do not hold and
+         * what ended the showing: the longest {@code String}, past which nothing here wrote the
+         * other value out, or a value the other side holds only through a code point normalization
+         * changes.
+         */
+        RELATION_SHOWN_OVER_A_REGION,
+        /**
          * The rule says how the elements of the container here stand to each other, and which
          * containers it leaves is not worked out.
          *
@@ -282,6 +310,37 @@ public record UndividedPosition(TermPath at, Why why) {
          * taken to hold.
          */
         RULE_RELATING_ELEMENTS,
+        /**
+         * The rule says how two elements of one container stand to each other, which this compiler
+         * does not read.
+         *
+         * <p>Two values of one container are two entries at one position, and a form over the
+         * position would hold them as one number. A statement that needs both, such as a value
+         * chosen by one membership of a container and then held to a membership of the same
+         * container, is not read on its elements, and what stopped it is this and not a form nothing
+         * takes apart: {@link #UNSUPPORTED_SYNTAX} would send an author after a rewrite of a
+         * comparison that is written in a form this compiler reads.
+         */
+        RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER,
+        /**
+         * The rule is about what a division leaves of a number no position of the input holds, and
+         * what it says about the values here is not worked out.
+         *
+         * <p>Its own word beside {@link #RULE_ABOUT_A_REMAINDER}, which says the remainder was
+         * read to the end. Here the dividend is a number the body works out, such as the weekday
+         * of a date a walk found, so no line is drawn on the remainder and none relates it to
+         * another value; and beside {@link #UNSUPPORTED_SYNTAX}, since the comparison is written
+         * in a form this compiler reads.
+         */
+        RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS,
+        /**
+         * The comparison was read, and what a run works out to evaluate it was not read to the
+         * end: an operation it works out may end a run, and the stops of it are not all told.
+         *
+         * <p>Neither a stop nor a proof that none ends a run. The line the comparison draws stands
+         * where it was read; what is open is which rows a run gets to it past.
+         */
+        EVALUATION_STOPS_NOT_FULLY_READ,
         /**
          * The rule relates the value here to another value rather than dividing the values here.
          *
@@ -316,6 +375,16 @@ public record UndividedPosition(TermPath at, Why why) {
          * is about a run would go looking for a total.
          */
         RULE_ABOUT_A_REMAINDER,
+        /**
+         * The rule compares a number a call or a walk works out of the values here, which this
+         * compiler does not read back to them, so it divides none of them; its rows are placed by
+         * what their runs worked out.
+         *
+         * <p>Its own word and not {@link #RULE_ABOUT_A_RUN}: that rule was read to the end, and
+         * this one's reading stopped. A reader is told both that nothing says where the values
+         * here have to be and that the border is measured all the same.
+         */
+        RULE_MEASURED_ON_ITS_RUNS,
         /**
          * The rule holds this position to the values it admits, and places no end on them.
          *

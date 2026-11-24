@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -122,16 +123,14 @@ class AStatedValueHandsOnWhatTheBoundaryBuiltTest {
                         | Express -> Done { n = 3 }
                 }
                 """.formatted(field.declared(), field.type(), field.type(), field.stated());
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), "example.settle");
         assertNotNull(all, () -> "the model compiles: " + compilation.diagnostics());
         for (FillResult.Offer offer : all.get("settle").composed().offers()) {
             for (Generator.Purpose purpose : offer.row().purposes()) {
                 if (purpose instanceof Generator.Purpose.ForAClass forAClass
-                        && forAClass.label().equals("kind=Plain")) {
+                        && forAClass.label().equals("Plain at kind")) {
                     return new Offered(
                             offer.row().inputs().stream().map(FixtureTemplate::text).toList(),
                             offer.stop());

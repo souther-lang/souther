@@ -89,37 +89,11 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Same choke point as Carrier#valueOf; Ordinal's own extent is 0..cases.size()-1,"
                             + " trivially inside int since cases is a List."),
             new Permission(
-                    "souther/compiler/check/ConstantAlgebra#arith(Lsouther/compiler/types/BinOp;"
-                            + "Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Optional;"
-                            + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_TRANSLATED,
-                    "Inside try/catch(ArithmeticException) returning Optional.empty(), the fold's"
-                            + " own documented answer for a sum this compiler could not compute."),
-            new Permission(
-                    "souther/compiler/check/ConstantAlgebra#arith(Lsouther/compiler/types/BinOp;"
-                            + "Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Optional;"
-                            + " multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_TRANSLATED,
-                    "Same try/catch as the add above, plus a pre-check on the product's own scale"
-                            + " before the call; the catch covers what the pre-check leaves."),
-            new Permission(
-                    "souther/compiler/check/ConstantAlgebra#arith(Lsouther/compiler/types/BinOp;"
-                            + "Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Optional;"
-                            + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_TRANSLATED,
-                    "Same try/catch as the add above."),
-            new Permission(
                     "souther/compiler/check/OccurrenceValues#wholeValuesAt(Lsouther/compiler/"
                             + "check/RuleKey;)Lsouther/compiler/check/Cardinality; longValueExact()J",
                     Reason.REFUSAL_TRANSLATED,
                     "try/catch(ArithmeticException) answers Cardinality.UNKNOWN, which is already"
                             + " this method's own answer for a span it cannot bound."),
-            new Permission(
-                    "souther/compiler/check/ScaleRange#receivedUnchanged(Ljava/math/BigDecimal;)"
-                            + "Ljava/lang/Integer; intValueExact()I",
-                    Reason.REFUSAL_TRANSLATED,
-                    "try/catch(ArithmeticException) answers null, this method's own documented"
-                            + " answer for a scale the run time could not be handed."),
             new Permission(
                     "souther/compiler/frontend/AstBuilder#decimalWritten(Ljava/lang/String;"
                             + "Lsouther/compiler/diag/SourcePos;)Ljava/math/BigDecimal;"
@@ -128,7 +102,7 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "The method checks the text is digits with at most one point between two runs"
                             + " of them, so its places fit an int scale; a text with more digits"
                             + " than a whole number the host holds is caught and reported as"
-                            + " ADecimalLiteralHasMoreDigitsThanADecimalHolds."),
+                            + " ADecimalLiteralHasMoreDigitsThanThisCompilerReads."),
             new Permission(
                     "souther/compiler/inputs/Distinctions#whole(Ljava/math/BigDecimal;)Z"
                             + " longValueExact()J",
@@ -143,14 +117,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + " epoch days before this line, so the value is a whole number inside"
                             + " long, whatever scale it was written at."),
             new Permission(
-                    "souther/compiler/numeric/Instants#countAt(Ljava/time/Instant;)Lsouther/"
+                    "souther/compiler/numeric/Instants#nanoOf(Ljava/time/Instant;)Lsouther/"
                             + "compiler/numeric/Count; add(Ljava/math/BigDecimal;)Ljava/math/"
                             + "BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
                     "Both operands are BigDecimal.valueOf(long/int) — always scale nought — so the"
                             + " sum needs no room past either side's own, already-valid scale."),
             new Permission(
-                    "souther/compiler/numeric/Instants#countAt(Ljava/time/Instant;)Lsouther/"
+                    "souther/compiler/numeric/Instants#nanoOf(Ljava/time/Instant;)Lsouther/"
                             + "compiler/numeric/Count; multiply(Ljava/math/BigDecimal;)Ljava/math/"
                             + "BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
@@ -181,8 +155,7 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Same bounded-scale value; toPlainString has no documented throw for a value at"
                             + " an ordinary scale."),
             new Permission(
-                    "souther/compiler/query/Adequacy$DeadBranches$DeadBranchProofWords#shown("
-                            + "Lsouther/compiler/values/Value;)Ljava/lang/String; toPlainString()"
+                    "souther/compiler/values/Value#spelled()Ljava/lang/String; toPlainString()"
                             + "Ljava/lang/String;",
                     Reason.REFUSAL_IMPOSSIBLE,
                     "A value a rule of the model names, which was written as a literal and read"
@@ -223,6 +196,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     Reason.REFUSAL_TRANSLATED,
                     "The second setScale of the same aligning pair, caught by the same try/catch."),
             new Permission(
+                    "souther/compiler/partition/LevelRealizer$Search#firstOf(Lsouther/compiler/"
+                            + "partition/CandidateDomain;)Ljava/math/BigDecimal; "
+                            + "setScale(I)Ljava/math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "The first value of a run written at the scale the walk writes it at, caught by"
+                            + " try/catch(ArithmeticException) and answered as no first value, which"
+                            + " leaves the search to the walk that aligns the same pair."),
+            new Permission(
                     "souther/compiler/partition/LevelRealizer$Search#walkingAtOneScale(ILjava/"
                             + "math/BigDecimal;Ljava/math/BigDecimal;Ljava/math/BigDecimal;"
                             + "Lsouther/compiler/numeric/ExactRatio;Lsouther/compiler/numeric/"
@@ -234,6 +215,25 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + " a value with more digits than the host holds is caught and the run"
                             + " carried on in exact ratios from the value just tried, which records"
                             + " the value it could not hold. No step is taken past last."),
+            new Permission(
+                    "souther/compiler/partition/NearbyValues#unitsOf(Lsouther/compiler/observe/"
+                            + "ObservedValue$Decimal;)Ljava/util/Iterator; add(Ljava/math/"
+                            + "BigDecimal;)Ljava/math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "Caught with the other two calls of the method: a decimal too wide to step has"
+                            + " no unit step, and the iterator of candidates is empty."),
+            new Permission(
+                    "souther/compiler/partition/NearbyValues#unitsOf(Lsouther/compiler/observe/"
+                            + "ObservedValue$Decimal;)Ljava/util/Iterator; movePointLeft(I)Ljava/"
+                            + "math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "The unit of the decimal's scale, caught by the same try/catch."),
+            new Permission(
+                    "souther/compiler/partition/NearbyValues#unitsOf(Lsouther/compiler/observe/"
+                            + "ObservedValue$Decimal;)Ljava/util/Iterator; subtract(Ljava/math/"
+                            + "BigDecimal;)Ljava/math/BigDecimal;",
+                    Reason.REFUSAL_TRANSLATED,
+                    "The step below, caught by the same try/catch."),
             new Permission(
                     "souther/compiler/partition/TermRealizations#atThoseParts(Ljava/util/Map;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/Carrier;"
@@ -307,9 +307,9 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
     @Test
     void theWalkFindsConstantAlgebra() {
         assertTrue(askingWhatCanBeRefused().stream()
-                        .anyMatch(row -> row.startsWith("souther/compiler/check/ConstantAlgebra#")),
-                "constant folding always reaches an add, a subtract or a multiply, so a walk not"
-                        + " finding it is finding nothing");
+                        .anyMatch(row -> row.startsWith("souther/compiler/numeric/Instants#")),
+                "an instant's nanoseconds are always worked out with an add and a multiply, so a"
+                        + " walk not finding it is finding nothing");
     }
 
     private static List<String> askingWhatCanBeRefused() {

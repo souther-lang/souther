@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.RowsOfABlock;
+import souther.compiler.TestDay;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -26,6 +28,9 @@ import souther.compiler.report.GeneratedRows;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -162,7 +167,9 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                 TermRealizations.Realization.Built.class, made,
                 () -> "a date stands at a month from February on and a day from the thirtieth on: "
                         + made).values();
-        assertEquals(List.of("Date(\"2000-03-30\")"),
+        // The thirtieth of February is no date, so the first of the year's dates that is in both
+        // is the thirtieth of March.
+        assertEquals(List.of("Date(\"" + LocalDate.of(TestDay.DATE.getYear(), 3, 30) + "\")"),
                 built.stream().map(FixtureTemplate::text).toList());
         model.readsBackIntoEveryClass(built, model.upperClasses());
     }
@@ -413,6 +420,78 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     }
 
     /**
+     * A date-time asked for beside the day it falls on, each held to a line of its own.
+     *
+     * <p>The day is a number read off the value, as an hour is: the value's candidates are the
+     * ones its own demand leaves, and the day is read off each of them.
+     */
+    private static final String A_DATE_TIME_AND_ITS_DAY = """
+            module example.dated
+
+            data Early
+            data Late
+            data When = Early | Late
+
+            data Slot = { at: DateTime }
+
+            behavior gate : (slot: Slot) -> When
+            let gate (slot) =
+                if DateTime.toDate(slot.at) >= Date("2026-03-01")
+                    && slot.at >= DateTime("2026-03-15T12:00:00") then Late else Early
+            """;
+
+    /** The exact numbers of the date-time and of its day, asked for together. */
+    private static SequencedMap<RealizationTarget.OfANumber, NumericSet> exactlyTheSecondAndTheDay(
+            Model model, String at, String day) {
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
+        for (Axis axis : model.partitioning.axes()) {
+            boolean ofTheDay = axis.term() instanceof NumericTerm.WholeUnitsOf;
+            long count = ofTheDay ? LocalDate.parse(day).toEpochDay()
+                    : LocalDateTime.parse(at).toEpochSecond(ZoneOffset.UTC);
+            out.put(RealizationTarget.ofATakenIn(axis.term()), new NumericSet.At(Count.of(count)));
+        }
+        return out;
+    }
+
+    /**
+     * A date-time and the day it falls on are answered by one value when one falls on that day at
+     * that second, and by none when no second of the day is that one.
+     *
+     * <p>The group was a capability this compiler lacked: a number of the day beside the date-time
+     * itself was declined, so a row at a point of the day that also had to stand at a point of the
+     * second was never written, though the second is in the day.
+     */
+    @Test
+    void aDateTimeAndTheDayItFallsOnAreAnsweredByOneValueWhereOneIsInTheOther() {
+        Model model = new Model(A_DATE_TIME_AND_ITS_DAY);
+
+        TermRealizations.Realization made = model.answering(exactlyTheSecondAndTheDay(model,
+                "2026-03-15T12:00:00", "2026-03-15"));
+        List<FixtureTemplate> built = assertInstanceOf(TermRealizations.Realization.Built.class,
+                made, made::toString).values();
+        assertEquals(List.of("DateTime(\"2026-03-15T12:00:00\")"),
+                built.stream().map(FixtureTemplate::text).toList());
+
+        TermRealizations.Realization apart = model.answering(exactlyTheSecondAndTheDay(model,
+                "2026-03-15T12:00:00", "2026-03-01"));
+        assertInstanceOf(TermRealizations.Realization.NoNumberTheDeclarationsAdmit.class, apart,
+                "the second is not in that day, and every value tried was read through both");
+    }
+
+    /** Asked for with the value, the day is one more number read off it, and the group is written
+     *  as the value it is read off. */
+    @Test
+    void theDayBesideTheValueItselfIsAGroupWithAWayToBeWritten() {
+        Model model = new Model(A_DATE_TIME_AND_ITS_DAY);
+        List<RealizationTarget> group = new ArrayList<>();
+        model.partitioning.axes().forEach(axis -> group.add(RealizationTarget.ofATakenIn(axis.term())));
+
+        assertInstanceOf(TermRealizations.JointBuilder.ItsOwnValueAndWhatIsTakenOfIt.class,
+                assertInstanceOf(TermRealizations.JointRealization.Supported.class,
+                        TermRealizations.jointRealizationOf(group)).builder());
+    }
+
+    /**
      * And the rows a reader is handed: every class of the length is written with a value of it,
      * and none is said to need the value to be two things.
      */
@@ -420,14 +499,15 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     void theRowsForTheClassesOfTheLengthAreWrittenWithAValueOfEach() {
         Compilation compilation = Compilation.ofSource(THREE_STRINGS, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String rows = GeneratedRows.of(compilation, "example.named", "gate",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertFalse(rows.contains("would have to hold two values at once"), rows);
         assertFalse(rows.contains("no row for"), rows);
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c== 2")), rows);
-        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("c=/= 2")), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(row -> row.isFor("String.length(c): = 2 at String.length(c)")), rows);
+        assertTrue(RowsOfABlock.of(rows).stream().anyMatch(
+                row -> row.isFor("String.length(c): /= 2 at String.length(c)")), rows);
     }
 
     /** A whole number held to three values, divided by what it leaves by two, three and five. */
@@ -536,9 +616,9 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String rows = GeneratedRows.of(compilation, "example.named", "gate",
-                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
             assertFalse(rows.contains("would have to hold two values at once"), rows);
         }
     }
@@ -550,15 +630,15 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         private final Partitions.Partitioning partitioning;
 
         private Model(String source) {
-            Compilation read = Compilation.ofSource(source, "Main");
-            read.answerEverything();
+            Compilation read = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
+            ACompiledModel.compiles(read);
             RuleReadingSource rules = RuleReadings.of(read, read.modules().get(0));
             InputReading reading = read.db().ask(new Adequacy.Inputs(read.modules().get(0)))
                     .value().get("gate").reading(rules);
 
-            Compilation divided = Compilation.ofSource(source, "Main");
+            Compilation divided = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             divided.measure(Adequacy.Asked.fullReport());
-            divided.answerEverything();
+            ACompiledModel.compiles(divided);
             this.partitioning = divided.db()
                     .ask(new Adequacy.Divided(divided.modules().get(0), "gate")).value();
             assertNotNull(partitioning, "the model under test divides its position");
@@ -571,7 +651,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             for (Axis axis : partitioning.axes()) {
                 PartitionClass upper = axis.classes().get(axis.classes().size() - 1);
-                out.put(RealizationTarget.of(upper.of()), upper.recognises().numbers());
+                out.put(RealizationTarget.ofATakenIn(upper.of()), upper.recognises().numbers());
             }
             return out;
         }
@@ -582,7 +662,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             List<Axis> axes = partitioning.axes();
             for (int i = 0; i < axes.size() && i < which.length; i++) {
                 PartitionClass cls = axes.get(i).classes().get(which[i]);
-                out.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                out.put(RealizationTarget.ofATakenIn(cls.of()), cls.recognises().numbers());
             }
             return out;
         }
@@ -603,7 +683,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             List<Axis> axes = partitioning.axes();
             for (int i = 0; i < axes.size() && i < numbers.length; i++) {
-                out.put(RealizationTarget.of(axes.get(i).term()),
+                out.put(RealizationTarget.ofATakenIn(axes.get(i).term()),
                         new NumericSet.At(Count.of(BigDecimal.valueOf(numbers[i]))));
             }
             return out;
@@ -621,7 +701,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                         .orElseThrow(() -> new AssertionError("no class " + label + " among "
                                 + partitioning.axes().stream().flatMap(axis -> axis.classes()
                                         .stream()).map(PartitionClass::label).toList()));
-                out.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                out.put(RealizationTarget.ofATakenIn(cls.of()), cls.recognises().numbers());
             }
             return out;
         }
@@ -639,7 +719,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     if (cls.label().equals(label)) {
                         SequencedMap<RealizationTarget.OfANumber, NumericSet> one =
                                 new LinkedHashMap<>();
-                        one.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                        one.put(RealizationTarget.ofATakenIn(cls.of()), cls.recognises().numbers());
                         out.add(one);
                     }
                 }
@@ -667,7 +747,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         /** The value the container itself stands at, which is one number of its location. */
         private RealizationTarget theContainerItself() {
-            return RealizationTarget.of(new NumericTerm.ValueOf(theContainer()));
+            return RealizationTarget.ofATakenIn(new NumericTerm.ValueOf(theContainer()));
         }
 
         /** How many that container holds, which is a number read off the value standing there. */
@@ -678,7 +758,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(many, "how many a list holds is a number taken of the list");
-            return RealizationTarget.of(many);
+            return RealizationTarget.ofATakenIn(many);
         }
 
         private static TermPath theContainer() {
@@ -701,7 +781,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(over, "a total over the occurrences of a path is a number of the run");
-            return RealizationTarget.of(over);
+            return RealizationTarget.ofATakenIn(over);
         }
 
         /**
@@ -720,7 +800,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                     Type.INT, subject.ruleReading().source().inners(),
                     subject.ruleReading().source().symbols());
             assertNotNull(over, "a total over what is computed of each element is a number of a run");
-            return RealizationTarget.of(over);
+            return RealizationTarget.ofATakenIn(over);
         }
 
         /**

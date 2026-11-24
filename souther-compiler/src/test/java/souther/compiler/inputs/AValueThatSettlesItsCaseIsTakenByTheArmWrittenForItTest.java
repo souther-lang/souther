@@ -2,11 +2,13 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -83,7 +85,8 @@ class AValueThatSettlesItsCaseIsTakenByTheArmWrittenForItTest {
         TypeSymbol.AtModule station = (TypeSymbol.AtModule) match.cases().get(0).pattern()
                 .cases().get(0).atoms().get(0);
         assertEquals("Station", station.name(), "the first leaf under OnceKind");
-        Core made = new Core.Construct(station, List.of(), Type.ref(station), HERE);
+        Core made = new Core.Construct(station, List.of(), Type.ref(station),
+                OccurrenceLineage.ORIGINAL, HERE);
         assertEquals(List.of(true, false), taken(match, made));
     }
 
@@ -99,13 +102,10 @@ class AValueThatSettlesItsCaseIsTakenByTheArmWrittenForItTest {
 
     private static Core.Match matchOf(String behavior) {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().literalMessage())
-                .toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         Core body = compilation.db().ask(new Bodies.Checked(compilation.modules().get(0))).value()
                 .behaviorBodies().get(behavior);
-        assertNotNull(body, () -> "the model compiles: " + compilation.errors());
+        assertNotNull(body, "the body of the behavior is checked");
         Core.Match match = firstMatch(body);
         assertNotNull(match, "the body matches");
         return match;

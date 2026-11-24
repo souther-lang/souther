@@ -10,11 +10,6 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.BehaviorMessage;
-import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -26,16 +21,17 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.KernelSignatures;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
+import souther.compiler.coverage.WalkRewrite;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.WalkProbe;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.JvmClassName;
 import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
@@ -60,6 +56,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -134,6 +131,18 @@ public final class Backend {
         return definition;
     }
 
+    /**
+     * {@code body} as it is emitted: a walk whose list is another walk's answer is one loop with
+     * it, unless the classes record what runs. Joined, the loop goes over the inner walk's list and
+     * runs the outer step where the inner one adds, so it is neither walk of the two the source
+     * wrote, and a rewrite of either one ({@link WalkRewrite}) would be a rewrite of neither. The
+     * classes that measure keep each walk the loop it is; the others join them, which changes when
+     * each step runs and no answer.
+     */
+    private Core emittedForm(Core body) {
+        return ctx.measuring() ? body : GrowingFold.joins(body, ctx.symbols.theWalk());
+    }
+
     /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
      * checked, and the check elaborates every body the backend emits, so a missing one is a compiler
      * invariant violation rather than something to emit around. */
@@ -175,7 +184,7 @@ public final class Backend {
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, StandingSignature> standingCalls,
-                                               SourceLayouts layouts,
+                                               TextsOfModules layouts,
                                                LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
                 requirements, checked, compositions, shapes, checks, standingCalls, layouts,
@@ -207,7 +216,7 @@ public final class Backend {
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, StandingSignature> standingCalls,
-                                               SourceLayouts layouts,
+                                               TextsOfModules layouts,
                                                LinkageReader linkage,
                                                Instrumentation instrumentation) {
         // The forks whose siblings a method could not hold, found by writing it and gathered across
@@ -281,7 +290,7 @@ public final class Backend {
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, StandingSignature> standingCalls,
-                                                  SourceLayouts layouts,
+                                                  TextsOfModules layouts,
                                                   LinkageReader linkage,
                                                   Instrumentation instrumentation,
                                                   Set<Core> notCarrying) {
@@ -331,9 +340,17 @@ public final class Backend {
         // And which siblings the classes carry, which is the plan's less the forks a method could not
         // hold them in: what a run may ask for is what was written, and a reading of the runs is
         // handed this image rather than the plan for that reason.
+        // A walk's switch is left out with the siblings of the method it stands in, for the same
+        // reason, and the walk is then one no run can be asked to rewrite.
         Set<Integer> leftOut = new HashSet<>();
-        for (Core fork : notCarrying) {
-            for (int site : coverage.probesOf(fork)) {
+        Set<Integer> walksLeftOut = new HashSet<>();
+        for (Core node : notCarrying) {
+            Optional<WalkProbe> walk = coverage.walkSiteOf(node);
+            if (walk.isPresent()) {
+                walksLeftOut.add(walk.get().raw());
+                continue;
+            }
+            for (int site : coverage.probesOf(node)) {
                 if (site != CoverageSites.NO_SITE) {
                     leftOut.add(site);
                 }
@@ -341,7 +358,8 @@ public final class Backend {
         }
         ProbeImage probes = instrumentation.measuresCoverage()
                 ? new ProbeImage.Instrumented(coverage.identity(),
-                        coverage.replacements().carryingNothingAt(leftOut))
+                        coverage.replacements().carryingNothingAt(leftOut),
+                        coverage.walkRewrites().carryingNothingAt(walksLeftOut))
                 : new ProbeImage.Uninstrumented();
         ctx.setCoveragePlan(coverage);
         ctx.setNotCarrying(notCarrying);
@@ -350,39 +368,15 @@ public final class Backend {
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
         JvmLimits.checkParameterSlots(module, ctx, methods, sigs, requirements);
-        // A behavior's class capitalizes its first letter (spec §jvm-behavior). Data names are already
-        // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
-        // `Quote`. Reject the collision here rather than let one silently overwrite the other.
-        // Every one of these checks asks the same question — does the ABI spell two of this module's
-        // identities the same — so each compares what the ABI answers rather than a spelling worked
-        // out here. What collides is decided on the JVM name; what the report names is the Souther
-        // declarations that landed on it.
-        Map<JvmClassName, Hir.Def> localTypes = new LinkedHashMap<>();
-        for (Hir.Def d : module.defs()) {
-            localTypes.put(SoutherJvmAbi.nameOf(new GeneratedClass.Value(d.declares())), d);
-        }
-        Map<JvmClassName, String> behaviorClassOwner = new LinkedHashMap<>();
-        for (Hir.BehaviorDef bd : module.behaviors()) {
-            JvmClassName cls = SoutherJvmAbi.nameOf(
-                    new GeneratedClass.BehaviorInterface(module.name(), bd.name()));
-            Hir.Def data = localTypes.get(cls);
-            if (data != null) {
-                throw CompileException.of(Diagnostic
-                                .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), data.name())).build());
-            }
-            String prev = behaviorClassOwner.put(cls, bd.name());
-            if (prev != null) {
-                throw CompileException.of(Diagnostic
-                                .at(bd.pos()).say(new BehaviorMessage.TwoBehaviorsCapitalizeToOneClass(prev, bd.name(), cls.classDesc().displayName())).build());
-            }
-        }
+        // That no two classes this module is generated as are one is settled by the check, before a
+        // module reaches here (JvmClassNames); a second writing of one name is the emissions' own
+        // refusal.
         // A behavior whose output is an anonymous union gets a generated sealed interface
         // <behavior名>Result that its cases implement (spec §jvm-anonymous-union). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
         Map<GeneratedClass.BehaviorResult, Boundary.Alternatives> behaviorResults =
                 b.behaviorResultInterfaces(module, sigs);
-        b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
         // list is settled when its own module is generated. A member this module declared takes the
         // interface on itself. A primitive and a type another module emitted cannot: `java.lang.Long`
@@ -399,7 +393,6 @@ public final class Backend {
                 }
             }
         });
-        b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
         Emissions out = new Emissions(module.name(), probes);
         behaviorResults.forEach((union, alternatives) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
@@ -787,7 +780,7 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(definition.body(), cdFns, Set.of(), helperReturn);
+                    gen.emitTail(emittedForm(definition.body()), cdFns, Set.of(), helperReturn);
                 });
             }
         });
@@ -1188,87 +1181,6 @@ public final class Backend {
             }
             code.areturn();
         });
-    }
-
-    /**
-     * A bridge case takes a class name in this module (spec §jvm-anonymous-union), so it is subject to the same rule
-     * as every other name this module emits: no two of them may be one class. {@code YenCase} is a
-     * name a model may well have declared, and {@code IntCase} / {@code DateCase} the same, so this
-     * is reported rather than reserved — the collision is decided by what the module holds, and a
-     * name nothing collides with stays available.
-     *
-     * <p>Three ways to collide: with a data this module declares, with the class a behavior
-     * capitalizes into (spec §jvm-behavior), and with another bridge case. The last is two members of one
-     * spelling from two modules — refused within a union by the member-name rule, and reaching here
-     * when they are members of two different unions of this module.
-     */
-    private void rejectBridgeCaseCollisions(Hir.Module module,
-                                            Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases,
-                                            Map<JvmClassName, Hir.Def> localTypes,
-                                            Map<JvmClassName, String> behaviorClassOwner) {
-        Map<JvmClassName, TypeSymbol> byBridgeName = new LinkedHashMap<>();
-        for (Map.Entry<TypeSymbol, List<GeneratedClass.BehaviorResult>> e : bridgeCases.entrySet()) {
-            TypeSymbol member = e.getKey();
-            JvmClassName cls = SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member));
-            String bridge = cls.classDesc().displayName();
-            Hir.BehaviorDef owner = behaviorNamed(module, e.getValue().get(0).behavior());
-            SourcePos pos = owner.pos();
-            String what = owner.name();
-            TypeSymbol sameName = byBridgeName.put(cls, member);
-            if (sameName != null) {
-                // Each written as the identity it is: a module's with its module, and a primitive
-                // as itself. Which is what tells the two members apart, and what a reader has to
-                // see to know which pair collided — the class name they share is the third part.
-                // Not `Type.show`, which writes a simple name and would print one name twice.
-                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(String.valueOf(sameName), String.valueOf(member), bridge))
-                                .at(pos)
-                                .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
-            }
-            Hir.Def aData = localTypes.get(cls);
-            String aBehavior = behaviorClassOwner.get(cls);
-            if (aData != null || aBehavior != null) {
-                String other = aData != null ? aData.name() : aBehavior;
-                throw CompileException.of(Diagnostic.at(pos)
-                                .say(aData != null
-                                        ? new ModuleMessage.AMemberReachesTheUnionThroughAData(what,
-                                                member.name(), bridge, other)
-                                        : new ModuleMessage
-                                                .AMemberReachesTheUnionThroughABehavior(what,
-                                                        member.name(), bridge, other))
-                                .hint(new ModuleMessage.RenameTheMemberOrTheTypeItCollidesWith(bridge)).build());
-            }
-        }
-    }
-
-    /**
-     * A behavior with a union output is generated as a sealed interface named after it, so that name
-     * is subject to the rule every other name this module emits is subject to: no two of them may be
-     * one class. Two ways to collide — with a data this module declares, and with the class another
-     * behavior capitalizes into. Two result unions cannot collide with each other, their behaviors
-     * having already been rejected for capitalizing into one class.
-     */
-    private void rejectResultUnionCollisions(Hir.Module module,
-                                             Map<GeneratedClass.BehaviorResult, Boundary.Alternatives> behaviorResults,
-                                             Map<JvmClassName, Hir.Def> localTypes,
-                                             Map<JvmClassName, String> behaviorClassOwner) {
-        for (GeneratedClass.BehaviorResult union : behaviorResults.keySet()) {
-            JvmClassName cls = SoutherJvmAbi.nameOf(union);
-            String resultName = cls.classDesc().displayName();
-            Hir.BehaviorDef owner = behaviorNamed(module, union.behavior());
-            SourcePos pos = owner.pos();
-            String what = owner.name();
-            if (localTypes.containsKey(cls)) {
-                throw CompileException.of(Diagnostic
-                                .at(pos)
-                                .hint(new BehaviorMessage.AUnionOutputReachesJavaThroughThatName(resultName)).say(new BehaviorMessage.AUnionOutputsInterfaceCollidesWithAData(what, resultName)).build());
-            }
-            String behavior = behaviorClassOwner.get(cls);
-            if (behavior != null) {
-                throw CompileException.of(Diagnostic
-                                .at(pos)
-                                .hint(new BehaviorMessage.AUnionOutputReachesJavaThroughThatName(resultName)).say(new BehaviorMessage.AUnionOutputsInterfaceCollidesWithABehavior(what, resultName, behavior)).build());
-            }
-        }
     }
 
     /** The behavior of this module written under {@code name}. Every result union and every bridge
@@ -1710,7 +1622,8 @@ public final class Backend {
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
-                gen.emitTail(elaborated(checked.behaviorBodies(), implemented.definition().name()),
+                gen.emitTail(emittedForm(elaborated(checked.behaviorBodies(),
+                                implemented.definition().name())),
                         cdB, held, successType(spec.ret()));
             });
             if (n != 1) {

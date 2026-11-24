@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -15,9 +16,11 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.AnApplicationOfACall;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -116,10 +119,10 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 "as many applications as are read are read one by one");
         Proposition.Unread past = assertInstanceOf(Proposition.Unread.class,
                 stated("List.any(x -> w.n == x, " + values(most + 1) + ")"));
-        assertEquals(new WhyUnread.MoreReadingsThanAreMade(), past.why());
+        assertEquals(WhyUnread.PAST_THE_READINGS, past.why());
         Proposition.Unread inside = assertInstanceOf(Proposition.Unread.class,
                 theOneConditionIn("List.any(x -> w.n == x, " + values(most + 1) + ")"));
-        assertEquals(new WhyUnread.MoreReadingsThanAreMade(), inside.why(),
+        assertEquals(WhyUnread.PAST_THE_READINGS, inside.why(),
                 "and a condition in the body is filed as declined, not read on fewer of them");
     }
 
@@ -150,7 +153,7 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         assertFalse(unreadIn(within), () -> "within the figure: " + within);
         Proposition past = stated(choices("w.n", side + 1) + " > "
                 + choices("w.first.days", side + 1));
-        assertEquals(List.of(new WhyUnread.MoreTotalReadingsThanAreMade()), whysIn(past));
+        assertEquals(List.of(WhyUnread.PAST_THE_TOTAL_READINGS), whysIn(past));
     }
 
     /**
@@ -162,7 +165,7 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         Proposition past = stated("(match " + cases(0, most + 1) + " with\n    | Lo -> true\n"
                 + "    | Hi -> false)");
-        assertEquals(List.of(new WhyUnread.MoreReadingsThanAreMade()), whysIn(past),
+        assertEquals(List.of(WhyUnread.PAST_THE_READINGS), whysIn(past),
                 () -> "one case more than the figure: " + past);
     }
 
@@ -236,6 +239,37 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 "which application was read first says nothing");
     }
 
+    /**
+     * The applications one call makes of a closure over every element of a list are each told
+     * apart, by the call and where the element it is handed is written. Over what a filter keeps,
+     * an element the filter drops on every row is handed to nothing and its place is no
+     * application's, and the ones after it keep theirs: {@code 0} is dropped, so the outer filter
+     * is applied to the elements written second and third. An element kept on some rows only is
+     * still where it is written.
+     */
+    @Test
+    void anApplicationIsToldApartByWhereTheElementItIsHandedIsWritten() {
+        assertEquals(Set.of(List.of(0, 1)), placesToldApart(
+                "List.length(List.filter(m -> m.days >= 17, [w.first, w.second])) >= 1"));
+        assertEquals(Set.of(List.of(0, 1, 2), List.of(1, 2)), placesToldApart(
+                "List.length(List.filter(x -> x >= 17,"
+                        + " List.filter(x -> x > 0, [0, 5, w.n]))) >= 1"));
+    }
+
+    /** Which applications the body's meanings tell apart: for each call telling some apart, where
+     *  the elements its applications are handed are written. */
+    private static Set<List<Integer>> placesToldApart(String condition) {
+        Model model = model(condition);
+        MeaningsOfABody meanings = MeaningsOfABodyReading.of(model.analysis,
+                () -> model.inputs.reading(model.rules), model.reads, model.rules.symbols(),
+                model.rules.newtypes());
+        return meanings.applications().keySet().stream()
+                .collect(Collectors.groupingBy(AnApplicationOfACall::call,
+                        Collectors.mapping(AnApplicationOfACall::written, Collectors.toList())))
+                .values().stream().map(each -> each.stream().sorted().toList())
+                .collect(Collectors.toSet());
+    }
+
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */
     private static Proposition stated(String condition) {
         Model model = model(condition);
@@ -271,9 +305,6 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 """.formatted(condition);
         Compilation compilation = Compilation.ofSource(source, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        // The errors of what was asked, which is the body checked: a model that does not check
-        // has no fork to read, whatever its condition says.
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -281,6 +312,8 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
+        // A model that does not check has no fork to read, whatever its condition says.
+        ACompiledModel.compiles(compilation);
         return new Model(analysis, inputs, rules, reads);
     }
 }

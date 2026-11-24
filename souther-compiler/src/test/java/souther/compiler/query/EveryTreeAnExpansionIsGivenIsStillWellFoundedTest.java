@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClosedImports;
@@ -12,6 +13,7 @@ import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -79,14 +81,14 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
 
             let markup = base + 5
 
-            behavior quote : (r: Req) -> Quote
+            behavior price : (r: Req) -> Quote
                 constructs Quote, Amount
-            let quote (r) = Quote { amount = Amount(r.n + markup) }
+            let price (r) = Quote { amount = Amount(r.n + markup) }
             """;
 
     private static Db dbOf() {
-        return Compilation.ofDocuments(
-                Map.of("a.sou", UPSTREAM, "b.sou", DOWNSTREAM), Set.of(), ModulePath.EMPTY).db();
+        return ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("a.sou", UPSTREAM, "b.sou", DOWNSTREAM), Set.of(), ModulePath.EMPTY)).db();
     }
 
     /** Each tree a compile of {@code name} makes, by the stage that makes it. */
@@ -158,7 +160,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
      */
     @Test
     void theSameQuestionAskedOfATreeWithACycleRefusesIt() {
-        Db db = Compilation.ofDocuments(Map.of("a.sou", """
+        Compilation compilation = Compilation.ofDocuments(Map.of("a.sou", """
                 module m.a
 
                 data In = { n: Int }
@@ -169,7 +171,9 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                 behavior go : (i: In) -> Out
                     constructs Out
                 let go (i) = Out { n = i.n + step }
-                """), Set.of(), ModulePath.EMPTY).db();
+                """), Set.of(), ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1022"), compilation);
+        Db db = compilation.db();
         Answer<Hir.Module> resolved = db.ask(new Names.Resolved("m.a"));
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 

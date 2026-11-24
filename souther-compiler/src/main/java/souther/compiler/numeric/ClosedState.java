@@ -3,11 +3,13 @@ package souther.compiler.numeric;
 import souther.compiler.numeric.DifferenceBounds.Apart;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
@@ -35,6 +37,13 @@ import java.util.function.Function;
  * {@link #theRulesLeaveAFormNothing}. What a query may take as a premise is one rule and is
  * {@link FormReach}'s to say; what reaches that query besides is whatever the rounds have already
  * put in the ends, so nothing here is a count of how many rules a proof may come from.
+ *
+ * <p><b>A hole is a rule that becomes a bound.</b> {@code f /= v} beside what puts {@code f} on one
+ * side of {@code v} is a half-space about {@code f}, and it is kept as one ({@link #sided}): read as
+ * a premise by every query about a form, and, where it bounds the difference of two positions,
+ * closed with the differences. Which side a hole falls on is settled to the end in the round that
+ * reads it ({@link AffineReduction}) and not left to the rounds, which exist for the ends that
+ * need not settle at all.
  *
  * <p>What "against what the closure leaves" means is {@link FormReach}, which says what it reads
  * and how much of it one query may take. A chain of rules composes here, through the ends a round
@@ -81,6 +90,19 @@ import java.util.function.Function;
  * the reduced rule does not weigh, has to hold the product to the closure in one run again — which is
  * what the theorem test of this does.
  *
+ * <p><b>Three things are said of independent rules, and they are not one.</b> What they denote is the
+ * product of what each part denotes: exact, and never otherwise. What the canonical closure is —
+ * each part closed and the closures put together ({@link #of}) — is the one the rest of the analysis
+ * reads, however the closures are kept. And how that stands beside the closure of all the rules in
+ * one run ({@link #closedTogether(List, Function, CanonicalOrder)}), which is a derivation of the
+ * same rules and not another way to the same box: where every part is closed by rounds the two are
+ * one, and where a part is a chain of prefix sums it is closed in a {@link PrefixBasis}, exactly,
+ * which the rules in one run do not choose, so that the product is never wider and proves more of a
+ * form over several positions. A derivation by rounds is an approximation, and that a more exact
+ * one for a kind of part is within it is a claim about that kind of part, which is held for it
+ * ({@code ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest}) and not for approximations
+ * in general.
+ *
  * <p><b>What emptiness means here, in one direction.</b> Where this says nothing is left, nothing is.
  * Two routes reach that word and each is sound on its own: every step that narrows is implied by the
  * rules, so a box that has closed on itself is a proof; and a form the rules leave no value is a
@@ -101,6 +123,33 @@ public final class ClosedState<A> {
      * settled in the first round and would have settled anyway.
      */
     static final int ROUNDS = 16;
+
+    /** How many closures of several parts have been put together, for a test holding a question
+     *  about one part to being answered without them: that is a shape and not a speed. */
+    private static final AtomicLong PRODUCTS_MADE = new AtomicLong();
+
+    static long productsMade() {
+        return PRODUCTS_MADE.get();
+    }
+
+    /** How many times a premise has been looked at for a question over every closure, for a test
+     *  holding what a program costs to how many rules it says and not how many pairs of them: that
+     *  is a shape and not a speed. See {@link FormReach#premisesWorked}. */
+    public static long premisesWorked() {
+        return FormReach.premisesWorked();
+    }
+
+    /** How many positions of a rule the bases made so far have read, for the same test as
+     *  {@link #premisesWorked}. See {@link PrefixBasis#termsRead}. */
+    public static long basisTermsRead() {
+        return PrefixBasis.termsRead();
+    }
+
+    /** How many bases have been closed by the difference of every pair of coordinates, for the same
+     *  test as {@link #premisesWorked}. See {@link PrefixBasis#closedByEveryPair()}. */
+    public static long basesClosedByEveryPair() {
+        return PrefixBasis.closedByEveryPair();
+    }
 
     /** Whether the rounds ran out before the box stopped moving. */
     public enum Status {
@@ -126,17 +175,56 @@ public final class ClosedState<A> {
 
     private final Box<A> box;
     private final DifferenceBounds<A> differences;
+    private final Set<AffineConstraint.HalfSpace<A>> sided;
     private final boolean holdsNothing;
     private final Status status;
     private final boolean everyBoundWasComposed;
 
-    private ClosedState(Box<A> box, DifferenceBounds<A> differences, boolean holdsNothing,
-                        Status status, boolean everyBoundWasComposed) {
+    /**
+     * The bases the rules were closed in: one for each part of them that was, and none where they
+     * were closed as they are stated. The parts share no position, so a form whose positions are
+     * a basis's has that basis to answer it, whichever way the parts were put together.
+     */
+    private final List<PrefixBasis<A>> bases;
+
+    private ClosedState(Box<A> box, DifferenceBounds<A> differences,
+                        Set<AffineConstraint.HalfSpace<A>> sided, boolean holdsNothing,
+                        Status status, boolean everyBoundWasComposed, List<PrefixBasis<A>> bases) {
         this.box = box;
         this.differences = differences;
+        this.sided = sided;
         this.holdsNothing = holdsNothing;
         this.status = status;
         this.everyBoundWasComposed = everyBoundWasComposed;
+        this.bases = bases;
+    }
+
+    /** Whether the rules were closed in a basis, for the closure of one part. */
+    boolean isClosedInABasis() {
+        return !bases.isEmpty();
+    }
+
+    /**
+     * How high a form comes to over these rules where a basis they were closed in answers it, and
+     * not answered where none does: no basis was chosen, or the form is not one of its positions,
+     * or not one it answers, or the exact arithmetic could not hold what it comes to.
+     */
+    PrefixBasis.Highest highestInBasis(Map<A, ExactRatio> coefs, ExactRatio constant) {
+        return highestInBasis(Weighed.of(coefs), constant);
+    }
+
+    /** The same, of a form whose weights are held apart and whose answers over a basis are kept. */
+    PrefixBasis.Highest highestInBasis(Weighed<A> form, ExactRatio constant) {
+        if (holdsNothing) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        for (PrefixBasis<A> each : bases) {
+            PrefixBasis.Highest answer = each.highest(form, constant);
+            if (!(answer instanceof PrefixBasis.Highest.NotAnswered)) {
+                return answer;
+            }
+        }
+        return PrefixBasis.Highest.NOT_ANSWERED;
     }
 
     /**
@@ -169,17 +257,28 @@ public final class ClosedState<A> {
         if (closures.size() == 1) {
             return closures.getFirst();
         }
+        PRODUCTS_MADE.incrementAndGet();
         List<DifferenceBounds<A>> each = new ArrayList<>(closures.size());
         closures.forEach(closure -> each.add(closure.differences));
         DifferenceBounds<A> differences = DifferenceBounds.product(each);
-        Map<A, ExactCut> least = new LinkedHashMap<>();
-        Map<A, ExactCut> most = new LinkedHashMap<>();
+        int leastSize = 0;
+        int mostSize = 0;
+        for (ClosedState<A> closure : closures) {
+            leastSize += closure.box.atLeast().size();
+            mostSize += closure.box.atMost().size();
+        }
+        Map<A, ExactCut> least = LinkedHashMap.newLinkedHashMap(leastSize);
+        Map<A, ExactCut> most = LinkedHashMap.newLinkedHashMap(mostSize);
         Status status = Status.STABLE;
         boolean everyBoundWasComposed = true;
+        Set<AffineConstraint.HalfSpace<A>> sided = new LinkedHashSet<>();
+        List<PrefixBasis<A>> bases = new ArrayList<>();
         for (ClosedState<A> closure : closures) {
             if (closure.holdsNothing) {
                 return empty(differences);
             }
+            bases.addAll(closure.bases);
+            sided.addAll(closure.sided);
             least.putAll(closure.box.atLeast());
             most.putAll(closure.box.atMost());
             if (closure.status == Status.BUDGET_EXHAUSTED) {
@@ -187,35 +286,110 @@ public final class ClosedState<A> {
             }
             everyBoundWasComposed &= closure.everyBoundWasComposed;
         }
-        return settled(new Box<>(least, most), differences, status, everyBoundWasComposed);
+        return settled(new Box<>(least, most), differences, Collections.unmodifiableSet(sided), status,
+                everyBoundWasComposed, List.copyOf(bases));
     }
 
     /**
      * What {@code constraints} leave, every rule read against every other in one run of the rounds.
      *
-     * <p>The closure as it is defined, whether or not the rules are independent of each other.
-     * {@link #of} is this over each independent part and the product of those; this is the one a
-     * test holds that product to.
+     * <p>The closure by rounds of all the rules at once, whether or not they are independent of each
+     * other, and not parted: the reference the product of the parts is held to. Where every part is
+     * closed by rounds {@link #of}, which is this over each independent part and the product of
+     * those, is this; where a part is closed in a basis it is no wider.
      */
     static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order) {
-        DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
+        return closedTogether(constraints, spacing, order, null, null);
+    }
+
+    /**
+     * The same closure, with each round worked out from the same round of {@code parent} where that
+     * is the work of the closure of the rules before these, and the work of this closure's rounds
+     * left in {@code into} as they are run.
+     *
+     * <p>Work is how the closure is reached and not what it is: with none, or with work it cannot
+     * use, this is the closure {@link #closedTogether(List, Function, CanonicalOrder)} is.
+     *
+     * @param parent the work of the closure of the rules these follow, or null
+     * @param into   where the work of this closure's rounds goes, or null where none is kept
+     */
+    static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                             Function<A, Granularity> spacing,
+                                             CanonicalOrder<A> order, ClosureWork<A> parent,
+                                             ClosureWork<A> into) {
+        return closedTogether(constraints, spacing, order, parent, into, null);
+    }
+
+    /**
+     * The same closure, with what is read of the rules before these taken from {@code before},
+     * the closure of the rules these are the very ones followed by others, where it was closed in a
+     * basis and the rules added are of a kind it is extended by. Only how the closure is reached:
+     * with none, or with one it cannot use, this is the closure of the rules read from the start.
+     */
+    static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                             Function<A, Granularity> spacing,
+                                             CanonicalOrder<A> order, ClosureWork<A> parent,
+                                             ClosureWork<A> into, ClosedState<A> before) {
+        PrefixBasis<A> prefix = null;
+        DifferenceBounds<A> differences = null;
+        if (before != null && before.bases.size() == 1 && !before.holdsNothing) {
+            PrefixBasis<A> was = before.bases.getFirst();
+            prefix = PrefixBasis.following(was, constraints, spacing, order);
+            if (prefix != null) {
+                differences = before.differences.followedBy(
+                        constraints.subList(was.ruleCount(), constraints.size()), order);
+                if (differences == null) {
+                    prefix = null;
+                }
+            }
+        }
+        boolean read = prefix == null;
+        if (read) {
+            differences = DifferenceBounds.over(constraints, order);
+        }
         if (differences.holdsNothing()) {
             return empty(differences);
         }
-        Set<A> positions = positionsOf(constraints, order);
+        Set<A> positions = read ? positionsOf(constraints, order) : prefix.positions();
         Box<A> box = boxOf(differences, positions);
         if (!box.holdsAValue()) {
             return empty(differences);
         }
         boolean everyBoundWasComposed = differences.everyHopWasComposed();
+        if (read) {
+            prefix = PrefixBasis.over(constraints, spacing, order);
+        }
+        if (prefix != null) {
+            return closedInPrefixBasis(prefix, box, differences, positions, everyBoundWasComposed);
+        }
+        Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
+        Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
+        ClosureWork<A> work = into;
+        RoundWork<A> previous = null;
         for (int round = 0; round < ROUNDS; round++) {
             // The reading is made afresh from the box this round starts in, and every rule is read
             // against that one. A reading that carried the box along as the rules narrowed it would
             // answer a rule differently depending on which rules had been read before it, which is
-            // the order deciding the result — the thing the rounds exist to be rid of.
-            FormReach<A> reading = FormReach.over(constraints, box, differences, order);
+            // the order deciding the result — the thing the rounds exist to be rid of. The holes
+            // the last round sided are read with the rules for the same reason the box is: they are
+            // that round's finding, taken whole at the start of this one.
+            FormReach<A> reading = FormReach.over(constraints, sided, box, differences, order);
+            // A round whose reading holds premises beside the rules (the holes the round before
+            // sided) has its premises in another place than the rules before it gave them, so it
+            // neither starts from the work of the round before nor leaves any.
+            if (work != null && sided.isEmpty()) {
+                RoundWork<A> here = work.next(constraints, box);
+                List<RoundWork<A>> from = new ArrayList<>(3);
+                from.add(previous);
+                if (parent != null) {
+                    from.add(parent.round(round));
+                    from.add(parent.last());
+                }
+                reading.working(from, here);
+                previous = here;
+            }
             if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
@@ -225,19 +399,76 @@ public final class ClosedState<A> {
             }
             AffineReduction.Reduction.Tightened<A> tightened =
                     (AffineReduction.Reduction.Tightened<A>) found;
-            Carried<A> carried = throughDifferences(
-                    box.meeting(tightened.atLeast(), tightened.atMost()), differences, positions);
+            Box<A> met = box.meeting(tightened.atLeast(), tightened.atMost());
+            // A hole that came to a bound on a difference is a rule of that shape from here on, and
+            // a path of differences runs through it as through any other. Folded in where the
+            // closure is made, so that which rules are of the shape is still decided in one place.
+            Set<AffineConstraint.HalfSpace<A>> between = relatingTwoPositions(tightened.sided(), order);
+            if (!between.equals(folded)) {
+                differences = DifferenceBounds.over(withThe(constraints, between), order);
+                if (differences.holdsNothing()) {
+                    return empty(differences);
+                }
+                Box<A> held = boxOf(differences, positions);
+                met = met.meeting(held.atLeast(), held.atMost());
+                everyBoundWasComposed &= differences.everyHopWasComposed();
+                folded = between;
+            }
+            Carried<A> carried = throughDifferences(met, differences, positions);
             everyBoundWasComposed &= carried.everyBoundWasComposed();
             Box<A> next = carried.box();
             if (!next.holdsAValue()) {
                 return empty(differences);
             }
-            if (next.equals(box)) {
-                return settled(box, differences, Status.STABLE, everyBoundWasComposed);
+            if (next.equals(box) && tightened.sided().equals(sided)) {
+                return settled(box, differences, sided, Status.STABLE, everyBoundWasComposed);
             }
             box = next;
+            sided = tightened.sided();
         }
-        return settled(box, differences, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+        return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+    }
+
+    /**
+     * The state of rules closed in a {@link PrefixBasis}: the box there is the whole of what the
+     * rules leave each position, so no round reads a rule against it and it is where reading stops.
+     * Met with the box the differences of the rules as stated leave, and carried along those
+     * differences, as the box a round leaves is.
+     */
+    private static <A> ClosedState<A> closedInPrefixBasis(PrefixBasis<A> prefix, Box<A> box,
+                                                          DifferenceBounds<A> differences,
+                                                          Set<A> positions,
+                                                          boolean everyBoundWasComposed) {
+        if (prefix.holdsNothing()) {
+            return empty(differences);
+        }
+        Box<A> met = box.meeting(prefix.box().atLeast(), prefix.box().atMost());
+        Carried<A> carried = throughDifferences(met, differences, positions);
+        if (!carried.box().holdsAValue()) {
+            return empty(differences);
+        }
+        return settled(carried.box(), differences, Set.of(), Status.STABLE,
+                everyBoundWasComposed && carried.everyBoundWasComposed(), List.of(prefix));
+    }
+
+    /** The half-spaces among {@code sided} that bound the difference of two positions. */
+    private static <A> Set<AffineConstraint.HalfSpace<A>> relatingTwoPositions(
+            Set<AffineConstraint.HalfSpace<A>> sided, CanonicalOrder<A> order) {
+        Set<AffineConstraint.HalfSpace<A>> out = new LinkedHashSet<>();
+        for (AffineConstraint.HalfSpace<A> each : sided) {
+            if (DifferenceBounds.relatesTwoPositions(each, order)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /** {@code constraints} with {@code more} beside them, as the difference bounds are made over. */
+    private static <A> List<AffineConstraint<A>> withThe(List<AffineConstraint<A>> constraints,
+                                                         Set<AffineConstraint.HalfSpace<A>> more) {
+        List<AffineConstraint<A>> out = new ArrayList<>(constraints);
+        out.addAll(more);
+        return out;
     }
 
     /**
@@ -256,6 +487,14 @@ public final class ClosedState<A> {
      */
     static <A> ClosedState<A> of(ClosureQuestion<A> question) {
         return closedTogether(question.rules(), question::spacingOf, question.order());
+    }
+
+    /** The same, worked from {@code parent} and leaving its own work in {@code into}; see
+     *  {@link #closedTogether(List, Function, CanonicalOrder, ClosureWork, ClosureWork)}. */
+    static <A> ClosedState<A> of(ClosureQuestion<A> question, ClosureWork<A> parent,
+                                 ClosureWork<A> into, ClosedState<A> before) {
+        return closedTogether(question.rules(), question::spacingOf, question.order(), parent,
+                into, before);
     }
 
     /**
@@ -289,7 +528,7 @@ public final class ClosedState<A> {
         for (AffineConstraint<A> each : constraints) {
             Map<A, ExactRatio> form = each.form().coefs();
             if (form.size() > 1 && asked.add(form)
-                    && reading.of(form, ExactRatio.ZERO).isEmpty()) {
+                    && reading.ofKept(each, form).isEmpty()) {
                 return true;
             }
         }
@@ -318,17 +557,27 @@ public final class ClosedState<A> {
      * not the rounds settled.
      */
     private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
+                                              Set<AffineConstraint.HalfSpace<A>> sided,
                                               Status status, boolean everyBoundWasComposed) {
+        return settled(box, differences, sided, status, everyBoundWasComposed, List.of());
+    }
+
+    private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
+                                              Set<AffineConstraint.HalfSpace<A>> sided,
+                                              Status status, boolean everyBoundWasComposed,
+                                              List<PrefixBasis<A>> bases) {
         assert box.equals(carriedAlong(box, differences))
                 : "a difference still narrows the box that is about to be handed back";
-        return new ClosedState<>(box, differences, false, status, everyBoundWasComposed);
+        return new ClosedState<>(box, differences, sided, false, status, everyBoundWasComposed,
+                bases);
     }
 
     private static <A> ClosedState<A> empty(DifferenceBounds<A> differences) {
         // Nothing is left, so there is no box for the arithmetic to have failed to carry a bound
         // onto: emptiness is either the difference closure's own proof or a form the rules leave
         // nothing, and both hold whatever the closure could or could not compose.
-        return new ClosedState<>(Box.unbounded(), differences, true, Status.STABLE, true);
+        return new ClosedState<>(Box.unbounded(), differences, Set.of(), true, Status.STABLE, true,
+                List.of());
     }
 
     private static <A> Set<A> positionsOf(List<AffineConstraint<A>> constraints,
@@ -440,6 +689,16 @@ public final class ClosedState<A> {
         return box;
     }
 
+    /**
+     * The half-spaces the holes among the rules came to against this state: each a statement about
+     * the sum its hole is on, which the box says only position by position.
+     *
+     * <p>Implied by the rules, so a reader may take them as premises beside the rules.
+     */
+    Set<AffineConstraint.HalfSpace<A>> sided() {
+        return sided;
+    }
+
     /** The difference-bound part, closed, for a question about two positions rather than one. */
     public DifferenceBounds<A> differences() {
         return differences;
@@ -474,5 +733,27 @@ public final class ClosedState<A> {
      */
     public boolean everyBoundWasComposed() {
         return everyBoundWasComposed;
+    }
+
+    /**
+     * Whether the box is where reading every rule against it stops, and not a step on the way
+     * there: the rounds settled and every bound was composed. Also where the rules leave nothing,
+     * which is settled however the rounds went.
+     *
+     * <p>What is claimed is that reading the rules against this box narrows nothing further and
+     * nothing was left out of the reading. It is not a claim that the box is the narrowest the rules
+     * imply: the rules are read the ways {@link FormReach} reads them, and what those ways do not
+     * reach stays in the box at a fixed point as it does anywhere.
+     *
+     * <p>That is what a reader needs who treats a state shown empty with fewer rules as shown empty
+     * with more. A closure the rounds ran out on, or that left a bound it could not compose out, is
+     * a box the rules read again may still narrow, and nothing is said of how it stands beside the
+     * closure of fewer. The property is held against the regions a model reads, with relations taken
+     * in and numbers fixed at random
+     * ({@code ARegionIsShownEmptyWhereAnythingItRefinesWasIfItsReadingIsSettledTest}); it is not
+     * derived from this definition alone, and a reading it does not cover should be added there.
+     */
+    public boolean isSettledAndComposed() {
+        return holdsNothing || (status == Status.STABLE && everyBoundWasComposed);
     }
 }

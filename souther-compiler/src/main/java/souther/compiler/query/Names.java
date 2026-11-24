@@ -1123,7 +1123,8 @@ public final class Names {
             // asked as well as the reports.
             if (Boolean.TRUE.equals(db.ask(new Nameless(name)).value())) {
                 return Answer.of(Boolean.FALSE);
-            }            Ast.Module m = db.ask(new Front.Available(name)).value();
+            }
+            Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m != null) {
                 for (Ast.Import imp : m.imports()) {
                     // An import that could not be followed at all — the module is not here, or the

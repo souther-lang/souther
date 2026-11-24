@@ -164,6 +164,69 @@ class WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest {
         out.put("souther.compiler.query.About$AnUnansweredRow.at",
                 new Standing(new Because.NothingReachesOne(),
                         new AcrossTheCut.BlocksIt(lookAtIt)));
+        // A construction a way goes through, held by the way a rule of the decision is: under a
+        // finding where no row takes that rule. The place is where the construction is written,
+        // which is what a stop along the way is said at, as a module, a line and a column.
+        // Nothing a compile of the models answers holds one, so nothing has been seen of it; it
+        // reaches whoever reads the finding all the same, so the cut waits on it.
+        out.put("souther.compiler.partition.PassedConstruction.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt("say where the construction is written as the"
+                                + " module, line and column a run stopped there says, made"
+                                + " where the way is read, or show that nothing carrying a way"
+                                + " through a body crosses a module boundary")));
+        // A construction on the way to a rule a run may stop in, held by what it asks of the run.
+        // The place is where the construction is written, which the words and the document say
+        // as a line and a column. Nothing a compile of the models answers holds one, so nothing
+        // has been seen of it; it reaches whoever reads the finding all the same, so the cut
+        // waits on it.
+        out.put("souther.compiler.inputs.WhatAConstructionAsks.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt("say where the construction is written as the"
+                                + " module, line and column the report says, made where the"
+                                + " construction is told what it asks, or show that nothing"
+                                + " carrying a rule a run may stop in crosses a module boundary")));
+        // A construction on the way to a rule of which neither a stop nor none is shown, held with
+        // why. The same place as above, said by the same words and document. Two of them the
+        // models reach differ only there: one construction read at two calls of a helper.
+        out.put("souther.compiler.inputs.AConstructionStopNotShown.at",
+                new Standing(new Because.TwoOfThemDifferOnlyThere(),
+                        new AcrossTheCut.BlocksIt("say where the construction is written as the"
+                                + " module, line and column the report says, made where the"
+                                + " construction is judged, or show that nothing carrying a rule"
+                                + " whose stop is not resolved crosses a module boundary")));
+        // Where a stop left untold is, under a rule whose stop is not resolved, and each place in
+        // a called body down to where the proof that a run gets past gave out: a call, a
+        // construction or another expression. Each is where it is written, which the words and the
+        // document say as a line and a column, and the place may be in another module than the
+        // rule's, the one a called behavior is declared in. Each step is judged where it stands,
+        // so a step of a helper read at two calls is two of them alike but for where the call
+        // is, of a call and of another expression; the models reach one construction.
+        String sayWhereAStopIsLeftUntold = "say where each is written as the module, line and"
+                + " column the report says, made where the stop is found left untold, or show"
+                + " that nothing carrying a rule whose stop is not resolved crosses a module"
+                + " boundary";
+        out.put("souther.compiler.check.StopOrigin$ACall.at",
+                new Standing(new Because.TwoOfThemDifferOnlyThere(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        out.put("souther.compiler.check.StopOrigin$AConstruction.at",
+                new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        out.put("souther.compiler.check.StopOrigin$SomethingWorkedOut.at",
+                new Standing(new Because.TwoOfThemDifferOnlyThere(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStopIsLeftUntold)));
+        // A step a run may stop at is said where it is written, which is the finding's subject.
+        // Nothing the models reach is a step a run is shown to stop at; they reach steps whose
+        // stop is not resolved, no two of which were seen differing only there.
+        String sayWhereAStepIs = "say where the step is written as the module, line and column"
+                + " the report says, made where the step is judged, or show that nothing carrying a"
+                + " step a run may stop at crosses a module boundary";
+        out.put("souther.compiler.inputs.StepWhereARunMayStop.at",
+                new Standing(new Because.NothingReachesOne(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStepIs)));
+        out.put("souther.compiler.inputs.StepWhereAStopIsNotShown.at",
+                new Standing(new Because.ReachedAndNotObservedToDiscriminate(),
+                        new AcrossTheCut.BlocksIt(sayWhereAStepIs)));
         return out;
     }
 

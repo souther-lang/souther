@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -55,7 +56,8 @@ class ACountOfStatementsIsJudgedAsACountTest {
     private static OnTheWay positive(int field, boolean holds) {
         return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
                 new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO,
-                        Map.of(term(field), ExactRatio.ONE)), holds ? Rel.GT : Rel.LE)));
+                        Map.of(term(field), ExactRatio.ONE)), holds ? Rel.GT : Rel.LE)),
+                NamedElements.NONE);
     }
 
     /** The statement {@code x_field > 0}: what a row meets where it holds, and where it fails. */
@@ -144,11 +146,15 @@ class ACountOfStatementsIsJudgedAsACountTest {
     void exactlyOneOfATruthAndItsDenialIsOpenAndNoneOrBothIsNot() {
         TermPath at = TermPath.of("r").then("flag");
         OnTheWay.Counted.Statement truth = new OnTheWay.Counted.Statement(1,
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true))),
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false))));
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true),
+                        NamedElements.NONE)),
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false),
+                        NamedElements.NONE)));
         OnTheWay.Counted.Statement untrue = new OnTheWay.Counted.Statement(1,
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false))),
-                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true))));
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, false),
+                        NamedElements.NONE)),
+                List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.ATruth(at, true),
+                        NamedElements.NONE)));
 
         assertEquals(2, alongEach(of(counted(List.of(1), truth, untrue))).size());
         for (int count : new int[] {0, 2}) {
@@ -277,7 +283,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
     @Test
     void countsAndChoicesNestedInEachOtherAreHeldToOneFigureTogether() {
         Counting counting = new Counting();
-        OnTheWay.OneOf choice = new OnTheWay.OneOf(
+        OnTheWay.OneOf choice = OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
                 List.of(List.of(ofPositives(14, 7)), List.of(ofPositives(14, 6))),
                 Optional.empty());
@@ -314,6 +320,30 @@ class ACountOfStatementsIsJudgedAsACountTest {
 
         assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(), walks);
         assertTrue(steps.ranOut());
+        assertEquals(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG, steps.ranOutAt());
+    }
+
+    /**
+     * What ran out is said as the figure that ran out: a search handed steps whose walks are
+     * spent says the walks', with steps of its own left, and one whose steps are spent says the
+     * steps'.
+     */
+    @Test
+    void aSearchStoppedSaysTheFigureThatRanOut() {
+        CountedWays.Steps walked = CountedWays.Steps.ofAWay();
+        for (int each = 0; each <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum(); each++) {
+            walked.takeAWalk();
+        }
+        assertEquals(new CountedWays.Found.Unknown<String>(
+                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                CountedWays.of(new Counting(), 0, ofPositives(20, 10), 16, true, walked));
+
+        CountedWays.Steps stepped = new CountedWays.Steps(0);
+        assertEquals(new CountedWays.Found.Unknown<String>(
+                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+                CountedWays.of(new Counting(), 0, ofPositives(20, 10), 16, true, stepped));
+        assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, stepped.ranOutAt(),
+                "and the steps keep the figure they ran out at");
     }
 
     /**
@@ -372,7 +402,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
         // Both of two statements hold, so x_0 > 0 and x_1 > 0 — and each alternative of the choice
         // denies one of them.
         OnTheWay.Counted both = counted(List.of(2), positiveStatement(0), positiveStatement(1));
-        OnTheWay.OneOf denies = new OnTheWay.OneOf(
+        OnTheWay.OneOf denies = OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
                 List.of(List.of(positive(0, false)), List.of(positive(1, false))),
                 Optional.empty());
@@ -389,7 +419,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
         // One of two holds: x_0 > 0 and x_1 <= 0, or the other way round. The alternatives say
         // x_0 > 0 or x_1 > 0, and each fits one assignment.
         OnTheWay.Counted one = counted(List.of(1), positiveStatement(0), positiveStatement(1));
-        OnTheWay.OneOf choice = new OnTheWay.OneOf(
+        OnTheWay.OneOf choice = OnTheWay.OneOf.of(
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 2), WHERE,
                 List.of(List.of(positive(0, true)), List.of(positive(1, true))),
                 Optional.empty());
@@ -404,7 +434,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
     private static InputReading inputReading() {
         String fields = IntStream.range(0, FIELDS).mapToObj(at -> "x" + at + ": Int")
                 .collect(Collectors.joining(", "));
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data R = { %s, flag: Bool }
@@ -412,7 +442,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
 
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
-                """.formatted(fields), "Main");
+                """.formatted(fields));
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

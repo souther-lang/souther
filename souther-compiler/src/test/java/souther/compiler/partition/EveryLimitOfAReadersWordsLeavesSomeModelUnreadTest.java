@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
@@ -96,6 +97,11 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             behavior oneValue : (o: O) -> A | B | C
             let oneValue (o) = if named(o) then (if o.a > 5 then A else B) else C
 
+            let holdsOther (o: O): Bool = String.contains(o.other, o.name)
+
+            behavior aStringInside : (o: O) -> A | B | C
+            let aStringInside (o) = if holdsOther(o) then (if o.a > 5 then A else B) else C
+
             behavior anOrder : (o: O) -> A | B | C
             let anOrder (o) = if o.name /= "M" then (if o.a > 5 then A else B) else C
 
@@ -108,6 +114,13 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             let someDifferent (o) =
                 if List.length(List.distinct(o.ns)) >= 2
                 then (if o.a > 5 then A else B) else C
+
+            behavior twoElements : (o: O) -> A | B | C
+            let twoElements (o) =
+                if List.sum(List.map(a -> List.sum(List.map(b ->
+                    if a.n < 0 then (if b.n >= 1 then (if o.a > 5 then 1 else 2) else 3) else 4,
+                    o.xs)), o.xs)) > 0
+                then A else B
 
             behavior twoTexts : (o: O) -> A | B | C
             let twoTexts (o) = if o.name == o.other then (if o.a > 5 then A else B) else C
@@ -154,6 +167,9 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN, "askedOfADependency");
         // A search from a node, which some node further down than a row is written may settle.
         out.put(WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES, "aSearch");
+        // Two closures over one list, each handed an element, and a condition on each on the way
+        // to a comparison of the row's: the way is about one of the two.
+        out.put(WhyNotTaken.DomainLimit.ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS, "twoElements");
         // A helper whose answer is one of two comparisons of two numbers: a path holds facts that
         // all hold, and the values of one number they leave, which these are not.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES, "oneOfTwo");
@@ -164,6 +180,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, "aCase");
         // A helper whose answer is two texts being one.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES, "oneValue");
+        // A helper whose answer is one text standing inside another.
+        out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER, "aStringInside");
         // A text held apart from a written place on its order, which is a hole and no range.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, "anOrder");
         // How many elements meet something, against a number.
@@ -178,16 +196,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         return out;
     }
 
-    private static final Compilation COMPILATION = compiled();
-
-    private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
-        return made;
-    }
+    private static final Compilation COMPILATION =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     @Test
     void everyLimitHasAModel() {
@@ -217,10 +227,10 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         InputDomain input = COMPILATION.db().ask(new Adequacy.Inputs("probe.edges")).value()
                 .get(behavior);
         InputReading reading = input.reading(rules);
-        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis, () -> reading,
-                InputReads.ofParametersWhereCallsStand(input.parameterReads(),
-                        input.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                        input.dependencies()),
+        InputReads reads = InputReads.ofParametersWhereCallsStand(input.parameterReads(),
+                input.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                input.dependencies());
+        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis, () -> reading, reads,
                 rules.symbols(), rules.newtypes());
         Set<WhyNotTaken.DomainLimit> out = new LinkedHashSet<>();
         meanings.stated().values().forEach(stated -> {
@@ -238,6 +248,22 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
                         instanceof AWayThrough.NotRuledOut(var notAsked)) {
                     notAsked.forEach(why -> limitOf(why, out));
                 }
+            }
+        });
+        // And what the way to each comparison a run stops in declined, with each statement the
+        // body makes put on it either way, beside what the comparison reads: a row is written
+        // toward the way as one value at each position.
+        // Read off the compilation the rest is, as a module's comparisons are when it is measured.
+        List<ComparisonReadings.Reading> comparisons = ComparisonReadings.of(behavior, analysis,
+                reading, reads, ComparisonWitnesses.AtComparisons.NONE).comparisons();
+        meanings.stated().values().forEach(stated -> {
+            for (boolean way : List.of(true, false)) {
+                Proposition decides = way ? stated.states() : stated.states().denied();
+                comparisons.stream()
+                        .filter(each -> each.statedAsACondition().isPresent())
+                        .forEach(each -> new WayToTheBorder(each.wayToACase(
+                                each.aCasePutOnTheWay(decides, reading))).declined()
+                        .forEach(declined -> declined.whys().forEach(why -> limitOf(why, out))));
             }
         });
         return out;

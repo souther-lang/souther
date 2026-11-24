@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.diag.Citation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,6 +13,7 @@ import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static souther.compiler.reading.ReadInteractions.readAll;
 import static souther.compiler.reading.ReadInteractions.shape;
 
@@ -124,6 +126,18 @@ class EquivalentWaysOfWritingOneSumAreReadAlikeTest {
             CoverageRead.Read read = readAll(source, "total");
             assertEquals(List.of(), read.interactions(), way);
             assertEquals(List.of(WhyNotJoined.A_VALUE_CHOICE_NOT_NUMBERED), read.notJoined(), way);
+        });
+    }
+
+    @Test
+    void aMeetingNotJoinedIsSaidWhereItIsWritten() {
+        NOT_JOINED.forEach((way, source) -> {
+            List<UnjoinedMeeting> unjoined = readAll(source, "total").unjoined();
+
+            assertFalse(unjoined.isEmpty(), way);
+            for (UnjoinedMeeting each : unjoined) {
+                assertInstanceOf(Citation.Written.class, each.at(), way);
+            }
         });
     }
 

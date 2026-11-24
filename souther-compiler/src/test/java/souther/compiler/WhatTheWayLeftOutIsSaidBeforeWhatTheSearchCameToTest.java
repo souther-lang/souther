@@ -10,7 +10,6 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -160,8 +159,8 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                                 + " written for one"),
                 () -> only(NUMBERS_NOTHING_COMPOSES_ONE_VALUE_FOR));
         assertTrue(only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR).contains(
-                        "a condition on what String.startsWith answers, which comes to one string"
-                                + " standing inside another — no condition here says that"),
+                        "a condition on one string standing inside another, where one of them is"
+                                + " neither a value of the input nor made of one"),
                 () -> only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR));
     }
 
@@ -216,11 +215,8 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
     private static String human(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

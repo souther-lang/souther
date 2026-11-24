@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -53,7 +54,7 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
         ComparisonAssessment.AgainstAnotherValue relation =
                 assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, part.line());
         assertFalse(relation.settling().isEmpty(), several::toString);
-        assertTrue(part.cases().stream().anyMatch(each -> each.condition().key().contains("o.open")),
+        assertTrue(part.cases().stream().anyMatch(each -> each.condition().spelledOut().contains("o.open")),
                 () -> "it decides where the order is open: " + several);
         assertEquals(part.cases().size(), part.readings().size(), several::toString);
         assertTrue(several.whatEachPlaceIsLeftWith().stream().noneMatch(
@@ -110,10 +111,19 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 .findFirst().orElseThrow();
         ComparisonAssessment read = assertInstanceOf(BoundaryPolicy.Standing.Admitted.class,
                 contains.standing()).read();
-        ComparisonAssessment.AgainstAnotherValue relation =
-                assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, read,
-                        read::toString);
-        assertFalse(relation.settling().isEmpty(), read::toString);
+        // The relation of the element to the value, as a comparison of the two is: a line over the
+        // two places, or the relation to another value where the value is none of a position's.
+        assertFalse(settlingOf(read).isEmpty(), read::toString);
+    }
+
+    private static List<ComparisonAssessment.AtAPosition> settlingOf(ComparisonAssessment read) {
+        return switch (read) {
+            case ComparisonAssessment.AgainstAnotherValue relation -> relation.settling();
+            case ComparisonAssessment.AcrossPositions across -> across.settling();
+            case ComparisonAssessment.Several several -> several.parts().stream()
+                    .flatMap(part -> settlingOf(part.line()).stream()).toList();
+            default -> throw new AssertionError(read.toString());
+        };
     }
 
     /**
@@ -146,11 +156,9 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                     if (%s) then Within else Needs
                 """.formatted(condition.indent(8).strip()), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList());
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static ComparisonAssessment.Several.Part relationPart(
@@ -179,9 +187,7 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 let f (o) =
                     if (%s) then 1 else 0
                 """.formatted(condition.indent(8).strip()), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -190,6 +196,7 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
-        return ComparisonReadings.of("f", analysis, read, reads).comparisons();
+        return ComparisonReadings.of("f", analysis, read, reads,
+                ComparisonWitnesses.AtComparisons.NONE).comparisons();
     }
 }

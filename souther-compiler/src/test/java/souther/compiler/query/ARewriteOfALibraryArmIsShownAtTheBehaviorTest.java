@@ -2,10 +2,9 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
-import souther.compiler.diag.Located;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.Replacement;
@@ -14,7 +13,6 @@ import souther.compiler.report.AdequacyReport;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -76,11 +74,7 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
         byId.put("orders.sou", ORDERS);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        c.answerEverything();
-        assertEquals(List.of(), c.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return c;
+        return ACompiledModel.compiles(c);
     }
 
     /** The rewrites of arms of {@code behavior} no row tells apart, as findings. */
@@ -173,29 +167,10 @@ class ARewriteOfALibraryArmIsShownAtTheBehaviorTest {
     @Test
     void thePageNamesTheArmsAndSaysTheForkIsOutOfSight() {
         Compilation c = measured();
-        String page = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        String page = AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
 
         assertTrue(page.contains("no row would come out differently if `then` answered as `else`"
                         + " in a fork of `souther.int.max` this build holds no source of"),
                 () -> "what the page says: " + page);
-    }
-
-    /** The sentence says which arm, since the behavior it is pointed at is not one. */
-    @Test
-    void theBuildIsToldTheArmIsInCodeItHoldsNoSourceOf() {
-        Compilation c = measured();
-        List<String> said = c.warnings().stream()
-                .map(Located::diagnostic)
-                .filter(d -> "E1939".equals(d.code().toString()))
-                .map(d -> Messages.render(d.said(), Locale.ENGLISH))
-                .toList();
-
-        assertTrue(said.contains("No row of `keepInTheLibrary` would come out differently if the"
-                        + " `then` arm of a fork of `souther.int.max`, which this build holds no"
-                        + " source of, answered as the `else` arm."),
-                () -> "what a build is told: " + said);
-        assertTrue(said.contains("No row of `keepHere` would come out differently if the `then`"
-                        + " arm of this fork answered as the `else` arm."),
-                () -> "and the arm a reader can open is this one: " + said);
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -114,11 +115,11 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     @Test
     void theBehaviorThisIssueWasAboutHasOneAndSaysWhatItFound() {
         AdequacyReport report = report();
-        String take = block(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)), "take");
+        String take = block(report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)), "take");
         // The lines are `Rate`'s, so they are counted and said under the declarations, which a
         // view of `take` alone shows because `take` reads them.
         String shown = report.only(null, "take")
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         String declarations = shown.substring(shown.indexOf("  declarations "));
 
         assertTrue(take.contains("border      borders 0"), take);
@@ -144,7 +145,7 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     private static Set<String> inTheText() {
         Set<String> out = new LinkedHashSet<>();
         String name = null;
-        for (String line : report().human(SourceRendering.namedByIdentity(SourceLayouts.NONE)).lines().toList()) {
+        for (String line : report().humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)).lines().toList()) {
             if (line.startsWith("  ") && !line.startsWith("    ") && !line.isBlank()) {
                 name = line.trim().split("\\s+")[0];
             } else if (name != null && line.startsWith("    partition ")) {
@@ -167,9 +168,7 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     }
 
     private static AdequacyReport report() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 }

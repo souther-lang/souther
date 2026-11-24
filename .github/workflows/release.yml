@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -220,14 +220,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
 
       - name: Build and test
-        run: mvn -B --no-transfer-progress verify
+        run: mvn -B --no-transfer-progress verify -DrunOrder=filesystem
 
       # The CLI's really-executable launcher and the shaded language server are build outputs of the
       # reactor; the grammar is a committed resource that `verify` has just checked is not stale.
@@ -295,7 +295,7 @@ jobs:
           subject-path: artifacts/*
 
       - name: Attach the artifacts to the GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           files: artifacts/*
           body_path: notes/release-notes.md

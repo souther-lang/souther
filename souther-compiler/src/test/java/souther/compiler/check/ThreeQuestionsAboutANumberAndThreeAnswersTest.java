@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
@@ -44,7 +45,7 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
     private record Answers(Type directNewtypeArithmetic, Type ordered, Type affine) {}
 
     private static Answers of(String type) {
-        Compilation compilation = Compilation.ofSource(TYPES, "Main");
+        Compilation compilation = ACompiledModel.answered(TYPES);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");

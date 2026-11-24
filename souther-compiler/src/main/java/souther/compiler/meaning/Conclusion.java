@@ -1,5 +1,7 @@
 package souther.compiler.meaning;
 
+import souther.compiler.inputs.ElementsNamed;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ModelOccurrence;
 
@@ -43,50 +45,147 @@ public final class Conclusion {
      */
     private static final CompositionBudget PARTS = CompositionBudget.PARTS_A_DERIVATION_CONCLUDES;
 
+    /**
+     * How many ways of keeping elements a statement over them is written out from
+     * ({@link CompositionBudget#WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER}), read here and nowhere
+     * else.
+     */
+    private static final CompositionBudget WAYS =
+            CompositionBudget.WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER;
+
+    /**
+     * The most ways that are written out where a statement over them is concluded. A statement
+     * over more is held as what its cases are written out from, and written out where a reader
+     * asks for them.
+     */
+    private static final long WRITTEN_AT_ONCE = 64;
+
+    /** Whether the cases of a statement over {@code kept} are written out where it is concluded. */
+    static boolean writtenAtOnce(KeptWays kept) {
+        return kept.work(kept.undecided(), WRITTEN_AT_ONCE + 1, false) <= WRITTEN_AT_ONCE;
+    }
+
     /** What every concluding made from one by supposing more shares: where, the numbering, and
      *  what each step came to. */
     private static final class Shared {
         private final Optional<ModelOccurrence> where;
         private final boolean reusing;
+        /** Whether what is concluded is read for the lines it draws and not for the rows it
+         *  asks ({@link Derivation.LinesWithoutRows}). */
+        private final boolean drawingLines;
+        /** Whether a step that says lines from rows was concluded. */
+        private boolean linesToldFromRows;
         private final Map<Derivation, List<Kept>> kept = new IdentityHashMap<>();
-        private final Map<Derivation, Proposition> last = new IdentityHashMap<>();
+        private final Map<Derivation, Kept> last = new IdentityHashMap<>();
         /** The carried values each step being concluded has read so far, innermost last. */
         private final Deque<Set<ACarriedValue>> reading = new ArrayDeque<>();
+        /** Whether each step being concluded has met, at it or under it, a stop other than coming
+         *  to too many parts, innermost last. Kept only where steps are kept ({@link #reusing}). */
+        private final Deque<boolean[]> stopping = new ArrayDeque<>();
+        /** Whether a statement stops for nothing but coming to too many parts. */
+        private final StatementReading<Boolean> onlyPastTheParts =
+                Proposition.stopsOnlyPastThePartsReading();
         /** How many parts each statement concluded here comes to written out, past the figure
          *  held at one past it. By identity, since a part held twice is one statement counted
          *  twice wherever it is held. */
-        private final Map<Proposition, Long> parts = new IdentityHashMap<>();
+        private final StatementReading<Long> parts =
+                StatementReading.over((stated, again) -> partsAt(this, stated, again));
+        /** Where the numbers a statement over the ways is owed start, by what it is written out
+         *  from, so that the statement met again here is owed the same ones. */
+        private final Map<Spelling, Long> reserved = new HashMap<>();
         /** The figure parts are counted up to, and held at one past. */
         private final long mostParts;
         private int unread;
+        /** What is concluded for the rows asked where this concludes the lines drawn, made when
+         *  first asked ({@link Conclusion#askingRows}). */
+        private Shared askedOfRows;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
-            this(where, reusing, PARTS);
+            this(where, reusing, PARTS, false);
         }
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing,
                        CompositionBudget countedTo) {
+            this(where, reusing, countedTo, false);
+        }
+
+        private Shared(Optional<ModelOccurrence> where, boolean reusing,
+                       CompositionBudget countedTo, boolean drawingLines) {
             this.where = where;
             this.reusing = reusing;
             this.mostParts = countedTo.maximum();
+            this.drawingLines = drawingLines;
         }
     }
 
-    /** What a step came to, and how each carried value it read was supposed then — absent where
-     *  nothing supposed it. */
-    private record Kept(Map<ACarriedValue, Optional<Boolean>> read, Proposition concluded) {}
+    /** What a step came to, how each carried value it read was supposed then — absent where
+     *  nothing supposed it — and whether it, or a step under it, stopped for something besides
+     *  coming to too many parts. */
+    private record Kept(Map<ACarriedValue, Optional<Boolean>> read, Proposition concluded,
+                        boolean stoppedBesidesItsSize) {}
 
     private final Shared shared;
     private final Map<ACarriedValue, Boolean> supposed;
 
-    /** A concluding of a condition at {@code where}, where the reader knows it. */
+    /**
+     * A concluding of a condition at {@code where}, where the reader knows it.
+     *
+     * <p>Each step is concluded once however many derivations hold it: a derivation is a value,
+     * so what a step concludes under one supposition does not change, and a name used twice stands
+     * for one step held twice. A part nothing read is then the one part wherever the step is held,
+     * and is numbered where it is first met.
+     */
     public Conclusion(Optional<ModelOccurrence> where) {
-        this(new Shared(where, false), Map.of());
+        this(new Shared(where, true), Map.of());
     }
 
     private Conclusion(Shared shared, Map<ACarriedValue, Boolean> supposed) {
         this.shared = shared;
         this.supposed = supposed;
+    }
+
+    /**
+     * A concluding of a condition at {@code where} for the lines it draws. It differs from
+     * {@link #Conclusion(Optional)} in the one place a derivation says what a row is asked and what
+     * a line is drawn on apart ({@link Derivation.LinesWithoutRows}), and there it concludes the
+     * second.
+     */
+    public static Conclusion drawingLines(Optional<ModelOccurrence> where) {
+        return new Conclusion(new Shared(where, false, PARTS, true), Map.of());
+    }
+
+    /**
+     * Whether this concluding is read for the lines drawn and not for the rows asked, which is
+     * asked where a derivation says the two apart. Having been asked is kept
+     * ({@link #toldLinesFromRows}).
+     */
+    boolean concludingLinesApart() {
+        shared.linesToldFromRows = true;
+        return shared.drawingLines;
+    }
+
+    /**
+     * This supposing the same, concluding the rows a statement asks: what a count of the elements
+     * meeting a statement counts is the rows that statement holds at, so a count says the same
+     * whether the lines drawn or the rows asked are what is read, as the relation naming it does.
+     */
+    Conclusion askingRows() {
+        if (!shared.drawingLines) {
+            return this;
+        }
+        if (shared.askedOfRows == null) {
+            shared.askedOfRows = new Shared(shared.where, false, PARTS, false);
+        }
+        return new Conclusion(shared.askedOfRows, supposed);
+    }
+
+    /**
+     * Whether some step this concluded says the lines it draws apart from the rows it asks
+     * ({@link Derivation.LinesWithoutRows}): where none did, what it concluded is what a reader of
+     * lines is told as well.
+     */
+    public boolean toldLinesFromRows() {
+        return shared.linesToldFromRows;
     }
 
     /**
@@ -103,6 +202,31 @@ public final class Conclusion {
         return new Conclusion(new Shared(Optional.empty(), true), Map.of());
     }
 
+    /**
+     * {@code element}, what a quantifier over {@code container} says of its element, where no call
+     * said which names it was handed: every part at that element told a name a part nothing read
+     * ({@link ReadThroughNames#ownedBy}).
+     */
+    Proposition ownedBy(DecisionSubject container, Proposition element) {
+        return ReadThroughNames.ownedBy(container, _ -> true, element, this::twoElementsAsOne);
+    }
+
+    /** What {@code step} concludes of the element of {@code container}, held to being the
+     *  element of a call handed {@code given} ({@link Derivation.OfItsOwnElement}). */
+    Proposition ofItsOwnElement(DecisionSubject container, ElementsNamed given, Derivation step) {
+        return ReadThroughNames.ownedBy(container, given::stoodFor, of(step),
+                this::twoElementsAsOne);
+    }
+
+    /**
+     * What {@code step} concludes, read through {@code names} ({@link Derivation.ReadThrough}):
+     * each number and subject at an element of a container they hold told the name that stood
+     * for it, and a part at one more than one name stood for a part nothing read.
+     */
+    Proposition readThrough(Derivation step, ElementsNamed names) {
+        return ReadThroughNames.readThrough(of(step), names, this::twoElementsAsOne);
+    }
+
     /** This concluding, with what {@code carried} stands for supposed to have come out as
      *  {@code holds}. */
     public Conclusion supposing(ACarriedValue carried, boolean holds) {
@@ -117,32 +241,216 @@ public final class Conclusion {
             for (Kept each : shared.kept.getOrDefault(step, List.of())) {
                 if (agrees(each.read())) {
                     readAll(each.read().keySet());
+                    stoppedUnder(each.stoppedBesidesItsSize());
+                    shared.last.put(step, each);
                     return each.concluded();
                 }
             }
         }
         shared.reading.push(new HashSet<>());
+        shared.stopping.push(new boolean[1]);
         Proposition out;
         Set<ACarriedValue> read;
+        boolean stopped;
         try {
             out = step.conclusion(this);
         } finally {
             read = shared.reading.pop();
+            stopped = shared.stopping.pop()[0];
         }
-        // Counted as each step is concluded, so the steps it is made of are each within the figure
-        // already and what is kept of it — here and by whoever asks again — is the step given up.
-        if (partsIn(out) > PARTS.maximum()) {
-            out = unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false));
-        }
+        // Asked of what the step came to before it is given up for coming to too many parts: the
+        // statement it is given up as says that and nothing of the stops inside it.
+        stopped |= shared.reusing && !shared.onlyPastTheParts.read(out);
+        out = withinTheParts(out);
+        Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
+        read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
+        Kept concluded = new Kept(Map.copyOf(how), out, stopped);
         if (shared.reusing) {
-            Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
-            read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
-            shared.kept.computeIfAbsent(step, _ -> new ArrayList<>())
-                    .add(new Kept(Map.copyOf(how), out));
+            shared.kept.computeIfAbsent(step, _ -> new ArrayList<>()).add(concluded);
         }
         readAll(read);
-        shared.last.put(step, out);
+        stoppedUnder(stopped);
+        shared.last.put(step, concluded);
         return out;
+    }
+
+    /**
+     * Whether {@code step}, as it was last concluded here, or a step under it, stopped for
+     * something besides coming to too many parts.
+     *
+     * <p>A step that comes to too many parts is given up as one part nothing read, and what stopped
+     * inside it is not in what it is given up as. So this is asked of the steps and not of what
+     * they came to. Where a step was never concluded here it is told as having stopped, since
+     * nothing says it did not. Only a concluding that keeps its steps ({@link #reusing}) tells.
+     */
+    public boolean stoppedBesidesItsSize(Derivation step) {
+        Kept last = shared.last.get(step);
+        return !shared.reusing || last == null || last.stoppedBesidesItsSize();
+    }
+
+    /** That the step being concluded has {@code stopped} at it or under it. */
+    private void stoppedUnder(boolean stopped) {
+        boolean[] into = shared.stopping.peek();
+        if (stopped && into != null) {
+            into[0] = true;
+        }
+    }
+
+    /**
+     * {@code out}, or the step given up where it comes to more parts than a step is concluded
+     * with.
+     *
+     * <p>Counted as each step is concluded, so the steps it is made of are each within the figure
+     * already and what is kept of it — here and by whoever asks again — is the step given up.
+     */
+    private Proposition withinTheParts(Proposition out) {
+        return pastTheParts(out)
+                ? unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false))
+                : out;
+    }
+
+    /** Whether {@code stated} comes to more parts than a step is concluded with. */
+    private boolean pastTheParts(Proposition stated) {
+        return partsIn(stated) > PARTS.maximum();
+    }
+
+    /**
+     * What a comparison over the ways its elements are kept states: every way written out where
+     * there are few, and otherwise held as what its cases are written out from
+     * ({@link Proposition.OfTheWays}), with the conditions and the reading concluded now.
+     *
+     * <p>How many ways there are is what writing them out costs, and not how many parts they come
+     * to, which the ways written out say: alike, they come to a few. So it is the work that is
+     * bounded here, and what the cases come to is counted as they are written out. Past the
+     * figure they are not written out, and the statement is a part nothing read.
+     */
+    Proposition overTheWays(Derivation.WaysWrittenWhenAsked ways) {
+        KeptWays kept = ways.kept();
+        long cases = waysWrittenOut(kept);
+        if (cases > WAYS.maximum()) {
+            return unread(new Derivation.Stopped(new WhyUnread.MoreWaysThanAreWrittenOut(),
+                    ways.fixed()));
+        }
+        if (writtenAtOnce(kept)) {
+            return of(ways.ways());
+        }
+        Map<Integer, Proposition> conditions = new HashMap<>();
+        ways.conditions().forEach((truth, condition) -> conditions.put(truth, of(condition)));
+        Proposition reading = of(ways.reading());
+        long owed = numbersOwed(cases);
+        Spelling spelled = new Proposition.WaysToWrite(kept, conditions, reading, ways.forms(),
+                ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where, 0, owed)
+                .spelled();
+        Long first = shared.reserved.get(spelled);
+        if (first == null) {
+            first = (long) shared.unread;
+            shared.unread += (int) owed;
+            shared.reserved.put(spelled, first);
+        }
+        return new Proposition.OfTheWays(new Proposition.WaysToWrite(kept, conditions, reading,
+                ways.forms(), ways.sum(), ways.count(), ways.counted(), ways.fixed(), shared.where,
+                first, owed), true);
+    }
+
+    /** How many ways a statement over {@code kept} is written out over, or one past the most it
+     *  is written out over where there are more. */
+    private static long waysWrittenOut(KeptWays kept) {
+        return kept.work(kept.undecided(), WAYS.maximum() + 1, false);
+    }
+
+    /** Whether a statement over {@code kept} is written out way by way, and not given up as a
+     *  part nothing read for having more ways than are written out. */
+    public static boolean everyWayIsWrittenOut(KeptWays kept) {
+        return waysWrittenOut(kept) <= WAYS.maximum();
+    }
+
+    /**
+     * How many numbers the cases of {@code cases} ways are written out with at the most. A part
+     * nothing read is made at a way, where a number of it cannot be held, or at a step that joins
+     * two ways, where it comes to more parts than a step is concluded with; never twice at one.
+     * The steps are a tree whose every step joins two, so there is one fewer of them than there
+     * are ways.
+     */
+    private static long numbersOwed(long cases) {
+        return 2 * cases - 1;
+    }
+
+    /**
+     * The cases of a statement over the ways, written out from what it is held as: every way,
+     * decided in turn, with the totals it makes given to the reading.
+     *
+     * <p>Each part nothing read the cases come to is numbered from where the statement was
+     * concluded to be owed them, so the cases are the same however often and by whoever they are
+     * written out, and none of them is numbered as a part that is concluded beside the statement.
+     * Counted as each step of them is, as a step of a derivation is concluded.
+     */
+    static Proposition writtenOutOver(Proposition.WaysToWrite ways) {
+        Conclusion at = new Conclusion(new Shared(ways.where(), false), Map.of());
+        at.shared.unread = (int) ways.firstNumber();
+        KeptWays kept = ways.kept();
+        Proposition written = writtenOutBy(at, ways, kept);
+        if (at.shared.unread > ways.firstNumber() + ways.numbersOwed()) {
+            throw new IllegalStateException("the cases of ways were written out with more numbers"
+                    + " than they were owed: " + (at.shared.unread - ways.firstNumber()) + " of "
+                    + ways.numbersOwed());
+        }
+        return written;
+    }
+
+    /**
+     * The cases, or the one part nothing read they are given up as where a step of them past the
+     * figure is needed to say what they come to.
+     *
+     * <p>A step past the figure stands as a part nothing read while it is joined on, so that a
+     * step above it that does not need it — one whose condition decides against it — is joined as
+     * it would have been. The cases are one step, though, and a part nothing read that stands
+     * for each step past the figure that is still needed would be told of once for each: the
+     * step above a given-up one is small again, so the cases would hold as many of them as there
+     * are such steps. Where one is still there when the cases are joined, the cases are given up
+     * as that one part.
+     */
+    private static Proposition writtenOutBy(Conclusion at, Proposition.WaysToWrite ways,
+                                            KeptWays kept) {
+        Set<Integer> givenUp = new HashSet<>();
+        Proposition[] first = new Proposition[1];
+        Proposition written = kept.made(new KeptWays.Making<Proposition>() {
+            @Override
+            public Proposition split(int truth, Proposition where, Proposition otherwise) {
+                Proposition joined = Derivation.IfThenElse.joined(
+                        ways.conditions().get(truth), where, otherwise);
+                if (!at.pastTheParts(joined)) {
+                    return joined;
+                }
+                Proposition.Unread past = at.unread(new Derivation.Stopped(
+                        new WhyUnread.MorePartsThanAreConcluded(), false));
+                givenUp.add(past.ordinal());
+                if (first[0] == null) {
+                    first[0] = past;
+                }
+                return past;
+            }
+
+            @Override
+            public Proposition leaf(Boolean[] decided) {
+                return Derivation.WithTheTotalsOfAWay.stated(at, ways.reading(),
+                        ways.sum(), kept.thereOf(ways.forms(), decided), ways.count(),
+                        kept.countThere(ways.forms().size(), ways.counted(), decided),
+                        ways.fixed());
+            }
+        }, kept.undecided());
+        return givenUp.isEmpty() || !stands(written, givenUp) ? written : first[0];
+    }
+
+    /** Whether a part nothing read numbered as one of {@code numbers} stands in {@code stated}. */
+    private static boolean stands(Proposition stated, Set<Integer> numbers) {
+        return StatementReading.<Boolean>over((each, again) ->
+                each instanceof Proposition.Unread unread
+                        ? numbers.contains(unread.ordinal()) : each.anyPart(again)).read(stated);
+    }
+
+    /** A part nothing read, for a number of a way that cannot be held. */
+    Proposition numberNotHeld(UnheldNumber why, boolean fixed) {
+        return unread(new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
     }
 
     /**
@@ -165,62 +473,67 @@ public final class Conclusion {
      * it.
      */
     private long partsIn(Proposition stated) {
-        Long known = shared.parts.get(stated);
-        if (known != null) {
-            return known;
+        return shared.parts.read(stated);
+    }
+
+    /**
+     * {@link #partsIn} of one statement, its parts read through {@code again}, which keeps what
+     * each came to across every statement counted here.
+     */
+    private static long partsAt(Shared shared, Proposition stated,
+                                StatementReading<Long> again) {
+        // A statement held as how it is written out is one part until it is written out, and is
+        // counted against the figure then, as the step that writes it out concludes it.
+        if (stated instanceof Proposition.OfTheWays) {
+            return 1;
         }
         // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
         // number walks as much as a part.
-        long out = 1 + partsIn(stated.partsHeld()) + switch (stated) {
+        long out = 1 + stated.sumOverParts(again) + switch (stated) {
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> {
                     long held = 0;
                     for (Quantity each : affine.form().coefs().keySet()) {
-                        held += partsIn(each);
+                        held += partsIn(shared, each);
                     }
                     yield held;
                 }
                 case Relation.Ordered _ -> 0;
             };
+            case Proposition.StringInside inside ->
+                    partsIn(shared, inside.inner()) + partsIn(shared, inside.outer());
             case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.LastToHold _, Proposition.Unread _,
                  Proposition.Carried _, Proposition.SoManyHold _,
-                 Proposition.WhereItAnswers _ -> 0;
+                 Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> 0;
         };
-        long kept = Math.min(out, shared.mostParts + 1L);
-        shared.parts.put(stated, kept);
-        return kept;
-    }
-
-    private long partsIn(List<Proposition> each) {
-        long out = 0;
-        for (Proposition one : each) {
-            out += partsIn(one);
-        }
-        return out;
+        return Math.min(out, shared.mostParts + 1L);
     }
 
     /** The parts the statements {@code quantity} is a count or a sum over come to. */
-    private long partsIn(Quantity quantity) {
+    private static long partsIn(Shared shared, Quantity quantity) {
         return switch (quantity) {
-            case Quantity.HowManyMeet(DecisionSubject _, Proposition each) -> partsIn(each);
-            case Quantity.HowManyHold(List<Proposition> each) -> partsIn(each);
-            case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(each);
-            case Quantity.WhatAnOperationAnswers answers -> {
-                long out = 0;
-                for (Quantity each : answers.of()) {
-                    out += partsIn(each);
-                }
-                yield out;
-            }
-            case Quantity.APieceOf piece -> partsIn(piece.string());
+            case Quantity.HowManyMeet(DecisionSubject _, Proposition each) ->
+                    shared.parts.read(each);
+            case Quantity.HowManyMeetAcross(DecisionSubject _, DecisionSubject _,
+                                            Proposition each) -> shared.parts.read(each);
+            case Quantity.HowManyDifferentMeet different ->
+                    shared.parts.read(different.meeting().statement());
+            case Quantity.HowManyHold(List<Proposition> each) ->
+                    each.stream().mapToLong(shared.parts::read).sum();
+            case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(shared, each);
+            // Its arguments are numbers of the input and other such answers, which hold no
+            // statement, so there is nothing to count however many paths lead to them.
+            case Quantity.WhatAnOperationAnswers _ -> 0;
+            case Quantity.APieceOf piece -> partsIn(shared, piece.string());
+            case Quantity.ThePieceAt piece -> partsIn(shared, piece.string());
             case Quantity.IsAmongThePieces among ->
-                    partsIn(among.value()) + partsIn(among.string());
+                    partsIn(shared, among.value()) + partsIn(shared, among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                  DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
-                 Quantity.OfABinding _,
+                 Quantity.OfABinding _, Quantity.OfACall _, Quantity.TheKeptTotal _,
                  Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
                  Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
                  Quantity.RemainderOfADividend _, Quantity.RemainderByAnInput _,
@@ -230,12 +543,35 @@ public final class Conclusion {
 
     /** What {@code how} concludes, beside {@code how}: the one way a meaning is made. */
     public MeaningsOfABody.Meaning meaningOf(Derivation how) {
-        return new MeaningsOfABody.Meaning(of(how), how);
+        return new MeaningsOfABody.Meaning(atOneValueEach(of(how)), how);
     }
 
-    /** What {@code step} concluded the last time it was concluded here, or null where it was not. */
+    /**
+     * {@code stated}, as it is handed to whoever reads it at positions: holding one value at each
+     * element's position, a part reading another a part nothing read
+     * ({@link ReadThroughNames#oneValueAtEachElement}).
+     */
+    public Proposition atOneValueEach(Proposition stated) {
+        return ReadThroughNames.oneValueAtEachElement(stated, this::twoElementsAsOne);
+    }
+
+    /**
+     * What {@code step} concluded the last time it was concluded here under what this supposes of
+     * the values it read, or null where it was not: what another supposition concluded for it is
+     * another conclusion, and is not told.
+     */
     public Proposition concludedAt(Derivation step) {
-        return shared.last.get(step);
+        Kept last = shared.last.get(step);
+        if (last != null && agrees(last.read())) {
+            return last.concluded();
+        }
+        List<Kept> kept = shared.kept.getOrDefault(step, List.of());
+        for (int at = kept.size() - 1; at >= 0; at--) {
+            if (agrees(kept.get(at).read())) {
+                return kept.get(at).concluded();
+            }
+        }
+        return null;
     }
 
     /**
@@ -245,9 +581,10 @@ public final class Conclusion {
      * derivation concludes is made here, so no reading of two elements reaches a reader as one.
      */
     Proposition someElement(DecisionSubject container, Proposition element) {
-        return Proposition.Some.quantifiesOver(container, element)
+        Proposition owned = ownedBy(container, element);
+        return Proposition.Some.quantifiesOver(container, owned)
                 ? twoElementsAsOne()
-                : new Proposition.Some(container, element, true);
+                : new Proposition.Some(container, owned, true);
     }
 
     /**
@@ -275,7 +612,7 @@ public final class Conclusion {
         return Proposition.Some.quantifiesOver(container, element) ? twoElementsAsOne() : element;
     }
 
-    private Proposition twoElementsAsOne() {
+    private Proposition.Unread twoElementsAsOne() {
         return unread(new Derivation.Stopped(new WhyUnread.TwoElementsOfOneContainer(), false));
     }
 
@@ -289,9 +626,9 @@ public final class Conclusion {
         return unread(new Derivation.Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
     }
 
-    Proposition unread(Derivation.Stopped stopped) {
+    Proposition.Unread unread(Derivation.Stopped stopped) {
         return new Proposition.Unread(shared.where, shared.unread++, stopped.why(),
-                stopped.fixed(), true);
+                stopped.fixed(), true, stopped.couldBe());
     }
 
     /** What {@code carried} is supposed to have come out as, or itself where nothing supposes it. */

@@ -3,20 +3,25 @@ package souther.compiler.inputs;
 import souther.compiler.check.GuaranteeWalk;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.ValuesWithin;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.
@@ -87,6 +92,19 @@ public sealed interface BlockReason {
          * told a figure stopped something is told which, and at the number the run used.
          */
         List<Figure> figures();
+
+        /**
+         * The values a row built and run was shown to get to the rule at, where what stopped the
+         * reading is that not every value is shown to get there — none for every other stop.
+         *
+         * <p>Beside the word and not inside it, as the figures are. What is shown is that each of
+         * these is reached, on the row that held it; the rest of the values are not shown either
+         * way, and the word says so whatever is here.
+         */
+        default List<String> shownReachedAt() {
+            return this instanceof RelationNotShownReachedAtEveryValue(var shown, var _, var _)
+                    ? shown : List.of();
+        }
     }
 
     /**
@@ -283,17 +301,27 @@ public sealed interface BlockReason {
                 case LineAtANumberNoRatioHolds _ -> 13;
                 case LineSideNotWorkedOut _ -> 14;
                 case SeveralLinesInOneRule _ -> 15;
-                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
+                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why, var _) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE -> 16;
                     case MORE_TOTAL_READINGS_THAN_ARE_MADE -> 17;
                     case MORE_PARTS_THAN_ARE_CONCLUDED -> 18;
                     case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 19;
+                    case MORE_WAYS_THAN_ARE_WRITTEN_OUT -> 28;
                     case A_PART_NOT_READ -> 20;
                     case A_NUMBER_NO_POSITION_HOLDS -> 21;
                     case NO_RELATION_OF_NUMBERS -> 22;
+                    case TWO_ELEMENTS_OF_ONE_CONTAINER -> 32;
                 };
                 case RelationNotShownToReachEveryValue _ -> 23;
                 case WhereALineDecidesNotWorkedOut _ -> 24;
+                case RelationNotShownWhereTheSearchStopped _ -> 25;
+                case RelationNotShownReachedAtEveryValue _ -> 26;
+                case OrderedExtentEndIsNoValue _ -> 27;
+                case RelationShownOverARegion _ -> 29;
+                case RelationRowsNotShownComputed _ -> 30;
+                case RelationNotShownWhereItsRowsStopped _ -> 31;
+                case RuleAboutARemainderNoPositionHolds _ -> 33;
+                case EvaluationStopsNotFullyRead _ -> 34;
             };
         }
 
@@ -314,15 +342,75 @@ public sealed interface BlockReason {
                         stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
                 case WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt) -> Figure.compare(
                         stoppedAt, ((WhereALineDecidesNotWorkedOut) other).stoppedAt());
-                // The rank says which statement it is.
-                case WhatItStatesIsNoLine _ -> 0;
+                case RelationNotShownWhereTheSearchStopped(List<Figure> stoppedAt) ->
+                        Figure.compare(stoppedAt,
+                                ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
+                case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
+                                              Long shorterThan,
+                                              List<String> imagesNotShown) -> {
+                    RelationShownOverARegion them = (RelationShownOverARegion) other;
+                    int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
+                    if (byLength != 0) {
+                        yield byLength;
+                    }
+                    int byLonger = Comparator.nullsFirst(Long::compare)
+                            .compare(longerThan, them.longerThan());
+                    if (byLonger != 0) {
+                        yield byLonger;
+                    }
+                    int byShorter = Comparator.nullsFirst(Long::compare)
+                            .compare(shorterThan, them.shorterThan());
+                    if (byShorter != 0) {
+                        yield byShorter;
+                    }
+                    List<String> theirs = them.imagesNotShown();
+                    for (int i = 0; i < Math.min(imagesNotShown.size(), theirs.size()); i++) {
+                        int byName = imagesNotShown.get(i).compareTo(theirs.get(i));
+                        if (byName != 0) {
+                            yield byName;
+                        }
+                    }
+                    yield Integer.compare(imagesNotShown.size(), theirs.size());
+                }
+                case RelationRowsNotShownComputed(NumberRegion numbers) -> numbers.compareTo(
+                        ((RelationRowsNotShownComputed) other).numbers());
+                case RelationNotShownWhereItsRowsStopped(List<WhereARunStopped> stopped) ->
+                        WhereARunStopped.compare(stopped,
+                                ((RelationNotShownWhereItsRowsStopped) other).stopped());
+                // By the values shown reached, one after another, and then by how many; and then
+                // by where the runs stopped, and then by the figures the search stopped at.
+                case RelationNotShownReachedAtEveryValue(List<String> shown,
+                                                         List<WhereARunStopped> stopped,
+                                                         List<Figure> figures) -> {
+                    RelationNotShownReachedAtEveryValue them =
+                            (RelationNotShownReachedAtEveryValue) other;
+                    List<String> theirs = them.shownReachedAt();
+                    for (int i = 0; i < Math.min(shown.size(), theirs.size()); i++) {
+                        int byValue = shown.get(i).compareTo(theirs.get(i));
+                        if (byValue != 0) {
+                            yield byValue;
+                        }
+                    }
+                    if (shown.size() != theirs.size()) {
+                        yield Integer.compare(shown.size(), theirs.size());
+                    }
+                    int byRuns = WhereARunStopped.compare(stopped, them.runsStopped());
+                    yield byRuns != 0 ? byRuns : Figure.compare(figures, them.stoppedAt());
+                }
+                // The rank says which word it is, and the figure it stopped at is what is left.
+                case WhatItStatesIsNoLine(var _, var stoppedAt) -> Figure.compare(
+                        stoppedAt.map(List::of).orElseGet(List::of),
+                        ((WhatItStatesIsNoLine) other).stoppedAt()
+                                .map(List::of).orElseGet(List::of));
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _ -> 0;
+                     RelationNotShownToReachEveryValue _, OrderedExtentEndIsNoValue _,
+                     EvaluationStopsNotFullyRead _ -> 0;
             };
         }
 
@@ -354,22 +442,37 @@ public sealed interface BlockReason {
                 // values were read. What the position admits is what the rules leave; the line
                 // through them is what nobody worked out.
                 case EndLeftOpenByAChoice _ -> false;
+                // And a run whose end is no value: the strings the rule admits were read in full
+                // and they are what the position holds, and what is missing is an end to draw a
+                // line at.
+                case OrderedExtentEndIsNoValue _ -> false;
                 // And where one line of several decides was not worked out, which is a question
                 // about the line and asks nothing of the values the rules leave.
                 case WhereALineDecidesNotWorkedOut _ -> false;
+                // And a relation shown over some of the values here: what the position admits is
+                // what the rules leave, and what is open is which class some of them are in.
+                case RelationShownOverARegion _ -> false;
+                // And an evaluation whose stops are not all told: the values are what the rules
+                // leave and the line is where it was read.
+                case EvaluationStopsNotFullyRead _ -> false;
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
                      NonAffineArithmetic _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      CasePairingNotDetermined _,
                      SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
-                     RelationNotShownToReachEveryValue _ -> true;
+                     RelationNotShownToReachEveryValue _,
+                     RelationNotShownWhereTheSearchStopped _,
+                     RelationNotShownWhereItsRowsStopped _,
+                     RelationNotShownReachedAtEveryValue _,
+                     RelationRowsNotShownComputed _ -> true;
             };
         }
 
@@ -387,9 +490,22 @@ public sealed interface BlockReason {
                 // And the cases where one line of several decides, taken apart and asked one at a
                 // time as far as a figure lets them be.
                 case WhereALineDecidesNotWorkedOut _ -> RunSensitivity.MAY_CHANGE;
+                // And the search for a row showing the other value of a relation reaching every
+                // value, which tries as many values as a figure lets it.
+                case RelationNotShownWhereTheSearchStopped _ -> RunSensitivity.MAY_CHANGE;
+                // Not the same search where the rows it found had runs that stopped: a run stops
+                // at an invariant, an ensures, an operation the runtime would not finish or an
+                // unreachable in a run allowed more of everything, and nothing was compared
+                // against a figure there.
+                case RelationNotShownWhereItsRowsStopped _ -> RunSensitivity.UNAFFECTED;
+                // And the search for a row getting to the relation, which tries as many values as
+                // a figure lets it: a run allowed more may find the row where it stopped at one,
+                // and where it stopped at none the stops of its rows are what is left.
+                case RelationNotShownReachedAtEveryValue it -> it.stoppedAt().isEmpty()
+                        ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
                 // the part they declined stopped at one.
-                case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
+                case WhatItStatesIsNoLine(var _, var stoppedAt) -> stoppedAt.isPresent()
                         ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
                 // And every other, where nothing was compared against anything. A form nothing
                 // takes apart, values no line can be drawn on, a rule about a value made from this
@@ -397,17 +513,20 @@ public sealed interface BlockReason {
                 // positions or between the elements of one, a pairing nothing worked out and a rule
                 // of several lines are all met again by a run allowed more of everything. So is an
                 // end a choice left open: what the reading of ends stops on is a form it does not
-                // enter, and there is no figure it stopped at.
+                // enter, and there is no figure it stopped at. So is a run whose end is no value:
+                // a longer walk finds the same end.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
-                     NonAffineArithmetic _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
+                     NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _ ->
-                        RunSensitivity.UNAFFECTED;
+                     RelationNotShownToReachEveryValue _, RelationShownOverARegion _,
+                     EvaluationStopsNotFullyRead _,
+                     RelationRowsNotShownComputed _ -> RunSensitivity.UNAFFECTED;
             };
         }
 
@@ -427,17 +546,27 @@ public sealed interface BlockReason {
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
                 case WhereALineDecidesNotWorkedOut it -> it.stoppedAt();
+                case RelationNotShownWhereTheSearchStopped it -> it.stoppedAt();
+                // A run that stopped stopped at none: where it stopped is beside the reason, as
+                // places and not as figures.
+                case RelationNotShownWhereItsRowsStopped _ -> List.of();
+                // The figures the search for a row getting to the relation stopped at.
+                case RelationNotShownReachedAtEveryValue it -> it.stoppedAt();
                 // The figure the part it declined stopped at, which that part's reason says.
-                case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
+                case WhatItStatesIsNoLine(var _, var stoppedAt) ->
+                        stoppedAt.map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
-                     NonAffineArithmetic _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
+                     NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _ -> List.of();
+                     RelationNotShownToReachEveryValue _,
+                     RelationShownOverARegion _, EvaluationStopsNotFullyRead _,
+                     RelationRowsNotShownComputed _ -> List.of();
             };
         }
     }
@@ -529,7 +658,8 @@ public sealed interface BlockReason {
      */
     sealed interface MetAtFigures extends BlockReason
             permits PatternTooCostly, ExactValuesTooCostly, BehaviorDistinctionsTooCostly,
-                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut {
+                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut,
+                    RelationNotShownWhereTheSearchStopped {
 
         /** Every figure it was met at, each once and in {@link Figure#inOrder}. */
         List<Figure> stoppedAt();
@@ -537,15 +667,32 @@ public sealed interface BlockReason {
 
     /**
      * What tells {@code reason} from another reason: the reason itself, with the figures it was met
-     * at left out.
+     * at left out, and the values a row was shown to get to the rule at.
      *
      * <p>Asked by everything that holds these by what they are — a set, a key, a check that two
      * accounts agree. Compared as values, two accounts of one reason met at different figures are
      * two reasons, and what they come to is a rule said twice, or one reading refused for
-     * disagreeing with another about which limit a position ran into first.
+     * disagreeing with another about which limit a position ran into first. A row shown on one
+     * way and another on the next are evidence of one reason in the same way.
      */
     static Object factOf(BlockReason reason) {
-        return reason instanceof MetAtFigures ? reason.getClass() : reason;
+        return reason instanceof MetAtFigures || reason instanceof RelationNotShownReachedAtEveryValue
+                ? reason.getClass() : reason;
+    }
+
+    /**
+     * Whether {@code reason} is a stop of a statement that is about the elements of a container
+     * and says nothing of the container but that it holds them: two elements of one container, and
+     * a remainder of a number no position holds beside a comparison of the elements.
+     *
+     * <p>A question such a stop leaves standing at the container as a position is still asked,
+     * since it is what holds the container's own measure open; a report that names what a stop
+     * left unread names the elements and not the container beside them.
+     */
+    static boolean saysNothingOfTheContainerOfItsElements(RuleReadingStopped reason) {
+        return reason instanceof RuleAboutARemainderNoPositionHolds
+                || (reason instanceof WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why, var _)
+                        && why == WhatItStatesIsNoLine.Why.TWO_ELEMENTS_OF_ONE_CONTAINER);
     }
 
     /**
@@ -573,6 +720,19 @@ public sealed interface BlockReason {
                     it.alsoAtNoFigure() || ((RulesNotHandedOnAsSets) other).alsoAtNoFigure());
             case WhereALineDecidesNotWorkedOut it -> new WhereALineDecidesNotWorkedOut(
                     both(it, (MetAtFigures) other));
+            case RelationNotShownWhereTheSearchStopped it ->
+                    new RelationNotShownWhereTheSearchStopped(both(it, (MetAtFigures) other));
+            case RelationNotShownReachedAtEveryValue it -> {
+                RelationNotShownReachedAtEveryValue them =
+                        (RelationNotShownReachedAtEveryValue) other;
+                List<String> shown = new ArrayList<>(it.shownReachedAt());
+                shown.addAll(them.shownReachedAt());
+                List<WhereARunStopped> stopped = new ArrayList<>(it.runsStopped());
+                stopped.addAll(them.runsStopped());
+                List<Figure> figures = new ArrayList<>(it.stoppedAt());
+                figures.addAll(them.stoppedAt());
+                yield new RelationNotShownReachedAtEveryValue(shown, stopped, figures);
+            }
             default -> one;
         };
         return (R) out;
@@ -755,6 +915,18 @@ public sealed interface BlockReason {
     record UnreadComparisonDomain() implements RuleReadingStopped {}
 
     /**
+     * A rule's strings are a run whose end is not a value: {@code a} and a combining acute held as
+     * two code points is a string no {@code String} is, so there is no value to draw a line at.
+     *
+     * <p>Its own case beside {@link UnreadComparisonDomain}, which is a comparison against values
+     * with no order to draw a line on. Here the strings are read in full, they carry an order, and
+     * the rule is not a name for one value; what could not be established is that an end of the run
+     * is a value. Said as a rule that draws no line, it would be a statement about the model, and
+     * it is a statement about what a {@code String} holds.
+     */
+    record OrderedExtentEndIsNoValue() implements RuleReadingStopped {}
+
+    /**
      * A comparison naming the position was read to the end, and a number its line is read through
      * has no representation here: a coefficient over what the coefficients share, or the place the
      * line falls at in the quantity's own units, stands past the far end of the exponents an exact
@@ -841,6 +1013,34 @@ public sealed interface BlockReason {
      * author can do about it today is write the block twice.
      */
     record RuleAboutAnElementOfSeveralContainers() implements RuleReadingStopped {}
+
+    /**
+     * A statement that compares what a division leaves of a number no position of the input
+     * holds, such as the weekday of a date a walk found.
+     *
+     * <p>Its own case beside {@link UnreadComparisonForm} and {@link ComparisonOnARemainder}. The
+     * remainder was read, and so was its divisor; what stopped the reading is that its dividend is
+     * no form of the input's numbers, so no line is drawn on the remainder and none relates it to
+     * another value. The other says the form was read to the end, and this says it was not.
+     *
+     * <p>A fact of the statement, and said at a place only where the place has no word of its own:
+     * the word for a form nothing takes apart gives way to it, and a place made by an operation, or
+     * one no line can be drawn on, keeps what it says.
+     */
+    record RuleAboutARemainderNoPositionHolds() implements RuleReadingStopped {}
+
+    /**
+     * What the comparison states was read, and what a run works out to evaluate it was not read
+     * to the end: an operation it works out may end a run, and nothing here says where, or that
+     * none does.
+     *
+     * <p>A statement about the evaluation and not about the line. The values at a position are
+     * what the rules leave and the line the comparison draws is where it was read; what is not
+     * shown is which rows a run gets to it past, since a row at a value where an operation stops
+     * is no row of the line. Neither a stop nor a proof there is none: said where a run reaching
+     * the comparison works out an operation whose stops are not all told.
+     */
+    record EvaluationStopsNotFullyRead() implements RuleReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -1229,6 +1429,254 @@ public sealed interface BlockReason {
     record RelationNotShownToReachEveryValue() implements RuleReadingStopped {}
 
     /**
+     * The same, where what would have shown the other value reaching every value here is a row
+     * this compiler searched for, and the search stopped at a figure before it had tried all it
+     * would have.
+     *
+     * <p>Apart from {@link RelationNotShownToReachEveryValue} for what a reader can do about it. A
+     * search that tried everything it had and found nothing leaves the place where a run allowed
+     * more leaves it too; one that stopped at a figure may find the row in such a run.
+     *
+     * @param stoppedAt every figure the search stopped at, each once and in {@link Figure#inOrder}
+     */
+    record RelationNotShownWhereTheSearchStopped(List<Figure> stoppedAt)
+            implements RuleReadingStopped, MetAtFigures {
+
+        public RelationNotShownWhereTheSearchStopped {
+            stoppedAt = metAtSome(stoppedAt, "a search that stopped stopped at some figure");
+        }
+    }
+
+    /**
+     * The same, where the row this compiler searched for was found to meet what it was asked to,
+     * and the runs of the behavior on the rows tried stopped without answering.
+     *
+     * <p>Apart from {@link RelationNotShownWhereTheSearchStopped} for what a reader can do about
+     * it. A figure is something a run allowed more may get past; a run that stopped at an
+     * invariant, an {@code ensures}, an operation the runtime would not finish or an
+     * {@code unreachable} stops there in any run, and each place is an input the model has not
+     * decided about. And apart from {@link RelationNotShownToReachEveryValue}, which says nothing
+     * of any run having been tried.
+     *
+     * @param stopped where the runs stopped, each once and in
+     *                {@link WhereARunStopped#IN_A_STEADY_ORDER}
+     */
+    record RelationNotShownWhereItsRowsStopped(List<WhereARunStopped> stopped)
+            implements RuleReadingStopped {
+
+        public RelationNotShownWhereItsRowsStopped {
+            stopped = WhereARunStopped.inOrder(stopped);
+            if (stopped.isEmpty()) {
+                throw new IllegalArgumentException("rows whose runs stopped stopped somewhere");
+            }
+        }
+    }
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value, but
+     * a run may stop on the way to it on what nothing here says: an operator the run works out
+     * before it on a value the relation reads, or one whose operands are no place's.
+     *
+     * <p>That the relation divides none of the values here is a statement about every value here
+     * getting to it, and only a value that gets there is shown either side of it. Under
+     * {@code let total = x * x}, an {@code x} whose square passes the end of {@code Int} stops
+     * before {@code x == y}, and where that is nobody worked out.
+     *
+     * <p>Apart from {@link RelationNotShownToReachEveryValue}: there every value here gets to the
+     * relation and the other side is what is not shown to reach it. A comparison that comes out one
+     * way wherever a row gets to it is not this, since that is said whichever values get there.
+     *
+     * <p>What a search for a row getting to the relation showed goes beside the word and changes
+     * it in nothing: the values a row got there at, and, where none did, where the runs of the
+     * rows it tried stopped — each an input the model has not decided about, said as
+     * {@link RelationNotShownWhereItsRowsStopped} says the stops of a count's search — and the
+     * figures the search stopped at before it had tried everything, which a run allowed more may
+     * get past ({@link RelationNotShownWhereTheSearchStopped}).
+     *
+     * @param shownReachedAt the values a row built and run got to the relation at, each once
+     * @param runsStopped    where the runs of the rows tried stopped without answering, each once
+     *                       and in {@link WhereARunStopped#IN_A_STEADY_ORDER}
+     * @param stoppedAt      every figure the search stopped at, each once and in
+     *                       {@link Figure#inOrder}; none where it tried everything it would have
+     */
+    record RelationNotShownReachedAtEveryValue(List<String> shownReachedAt,
+                                               List<WhereARunStopped> runsStopped,
+                                               List<Figure> stoppedAt)
+            implements RuleReadingStopped {
+
+        public RelationNotShownReachedAtEveryValue {
+            shownReachedAt = List.copyOf(new LinkedHashSet<>(shownReachedAt));
+            runsStopped = WhereARunStopped.inOrder(runsStopped);
+            stoppedAt = Figure.inOrder(stoppedAt);
+        }
+
+        /** No value shown reached by a row, no run of one stopped and no figure stopped at. */
+        public RelationNotShownReachedAtEveryValue() {
+            this(List.of(), List.of(), List.of());
+        }
+    }
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value, and
+     * some numbers here settle it by the terms' ends; but the operations the rows work out were
+     * not all worked out on a row built in them, so no row is shown computed there.
+     *
+     * <p>A fact about what was shown and not about the numbers: it does not say that a number of
+     * the region has no room, and a number outside it may have none. The region is the numbers of
+     * the runs the relation settles in which no row was built, as a region and not an interval,
+     * since numbers with a row can lie between them. Apart from
+     * {@link RelationNotShownToReachEveryValue}, which says nothing of rows being computed.
+     *
+     * @param numbers the numbers of the term the relation is read over in which no row is shown
+     *                computed
+     */
+    record RelationRowsNotShownComputed(NumberRegion numbers) implements RuleReadingStopped {
+
+        public RelationRowsNotShownComputed {
+            Objects.requireNonNull(numbers, "numbers no row is shown computed in are some");
+        }
+    }
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value; the
+     * classes it draws here are shown over some of the values, and the rest are shown on neither
+     * side of it.
+     *
+     * <p>Under {@code a.domain == d} with {@code d} the domain of an address, a domain an address
+     * held as written has is shown to be one some address has, and a domain no address has is
+     * shown that whatever its length. A domain an address has only through a code point
+     * normalization changes is neither, and no class here holds it; nor does one of a length no
+     * run gets to the relation at.
+     *
+     * <p>Apart from {@link RelationNotShownToReachEveryValue}, which leaves the position no class
+     * of the rule's. Here the classes stand over what was shown, and what this says is where the
+     * values they do not hold lie.
+     *
+     * <p>A bound on those values and not the values. Of the strings longer than {@code longerThan},
+     * those the relation is shown of at every length are in a class all the same — a domain no
+     * address has is shown to be none whatever its length — and which of them are open is the
+     * relation's to say, and the classes say which values they hold. What a reader is told is
+     * where to look, and the one value a question carries is this summary: the values themselves
+     * are a language, which no answer the store keeps holds.
+     *
+     * @param atAnyLength whether some values here are shown on neither side whatever their length
+     * @param longerThan  the fewest code points less one of a value left open for its length: some
+     *                    longer may be in no class, and none shorter is for that; null where no
+     *                    value is left open for being long
+     * @param shorterThan the most code points plus one of a value left open for its length: some
+     *                    shorter may be in no class, and none longer is for that; null where no
+     *                    value is left open for being short
+     * @param imagesNotShown the operations of the library whose image over the strings of a side
+     *                    is shown only where it is exact, each as the library names it: some of the
+     *                    values left open, at the lengths the region says, are open for them —
+     *                    the strings they are not exact on, and the strings of a length the
+     *                    partner is not held to, which they may lengthen or shorten into one. None
+     *                    where the values left open are left for another reason
+     */
+    record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
+                                    List<String> imagesNotShown)
+            implements RuleReadingStopped {
+
+        public RelationShownOverARegion {
+            if (!atAnyLength && longerThan == null && shorterThan == null) {
+                throw new IllegalArgumentException("a relation shown over a region leaves some"
+                        + " values open");
+            }
+            imagesNotShown = imagesNotShown.stream().distinct().sorted().toList();
+        }
+
+        /** Values open for being long, or open at any length. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan) {
+            this(atAnyLength, longerThan, null, List.of());
+        }
+
+        /** The same, and values open for being short. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan) {
+            this(atAnyLength, longerThan, shorterThan, List.of());
+        }
+
+        /** Values open for being long, or open at any length, for the operations whose image is
+         *  not shown. */
+        public RelationShownOverARegion(boolean atAnyLength, Long longerThan,
+                                        List<String> imagesNotShown) {
+            this(atAnyLength, longerThan, null, imagesNotShown);
+        }
+
+        /**
+         * What a reader is shown of the values {@code open} holds, each as long as it is left
+         * open at: whether some are open whatever their length, the fewest code points the
+         * values left open for being long are longer than, and the most the values left open for
+         * being short are shorter than.
+         */
+        public static RelationShownOverARegion of(List<ValuesWithin> open) {
+            return of(open, List.of());
+        }
+
+        /** The same, with the operations whose image the values open whatever their length are
+         *  open for ({@code imagesNotShown}). */
+        public static RelationShownOverARegion of(List<ValuesWithin> open,
+                                                  List<String> imagesNotShown) {
+            return of(open, OperationsNotShown.ofImages(imagesNotShown));
+        }
+
+        /**
+         * The same, with the operations some of the values open are open for, by why
+         * ({@code operations}): the caller's to say, since it is the one holding which values are
+         * open for what. Said beside the region whatever lengths it is bounded by — a string a
+         * conversion may lengthen past the partner's most code points, or shorten below its
+         * fewest, is open at those lengths for the conversion's image.
+         */
+        public static RelationShownOverARegion of(List<ValuesWithin> open,
+                                                  OperationsNotShown operations) {
+            boolean atAnyLength = open.stream()
+                    .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
+            Long longerThan = open.stream().filter(each -> each.shortest() > 0)
+                    .map(each -> each.shortest() - 1).min(Long::compare).orElse(null);
+            Long shorterThan = open.stream()
+                    .filter(each -> each.shortest() == 0 && each.longest() != null)
+                    .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
+            return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
+                    operations.images());
+        }
+    }
+
+    /**
+     * The operations of the library values of a place were left open for, each as the library
+     * names it: those whose image over the strings of a side is shown only where it is exact.
+     *
+     * <p>Where an operation ends a run only past what a {@code String} holds is no reason a value
+     * is open: that is where the representation stops, which no class is drawn to.
+     *
+     * @param images the operations whose image is not shown
+     */
+    public record OperationsNotShown(List<String> images) {
+
+        /** None. */
+        public static final OperationsNotShown NONE = new OperationsNotShown(List.of());
+
+        public OperationsNotShown {
+            images = images.stream().distinct().sorted().toList();
+        }
+
+        /** The operations {@code images} as ones whose image is not shown. */
+        public static OperationsNotShown ofImages(List<String> images) {
+            return new OperationsNotShown(images);
+        }
+
+        /** These and {@code other}'s. */
+        public OperationsNotShown and(OperationsNotShown other) {
+            List<String> allImages = new ArrayList<>(images);
+            allImages.addAll(other.images);
+            return new OperationsNotShown(allImages);
+        }
+
+        /** These, and {@code operations} as ones whose image is not shown. */
+        public OperationsNotShown andImagesOf(List<String> operations) {
+            return and(ofImages(operations));
+        }
+    }
+
+    /**
      * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:
      * read off what the rule states, and never off how it is written.
      *
@@ -1244,10 +1692,26 @@ public sealed interface BlockReason {
      * words it, as {@link UnreadComparisonForm}, {@link UnreadComparisonDomain} or
      * {@link RuleAboutADerivedValue}.
      */
-    record WhatItStatesIsNoLine(Why why) implements RuleReadingStopped {
+    record WhatItStatesIsNoLine(Why why, Optional<Figure> stoppedAt)
+            implements RuleReadingStopped {
 
         public WhatItStatesIsNoLine {
             Objects.requireNonNull(why, "a statement is no line for some reason");
+            Objects.requireNonNull(stoppedAt, "a figure stopped at, or none");
+            if (stoppedAt.isPresent() != (why.says() != null)) {
+                throw new IllegalArgumentException(why + " says a stop at a figure exactly where"
+                        + " a figure is held: " + stoppedAt);
+            }
+        }
+
+        /** What stopped at the figure {@code unread} stopped at, which is the figure held. */
+        public WhatItStatesIsNoLine(Why why, WhyUnread unread) {
+            this(why, unread.figure());
+        }
+
+        /** The word {@code why}, for a part that stopped at the figure declared, or at none. */
+        public WhatItStatesIsNoLine(Why why) {
+            this(why, why.declaredFigure());
         }
 
         /** Why what a rule states is no line on the input's numbers. */
@@ -1271,8 +1735,21 @@ public sealed interface BlockReason {
              *  compiler's work was reached, and none of the ones above. */
             MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
 
+            /** A part whose statement is over more ways of keeping the elements of a container
+             *  than are written out: a figure of this compiler's work was reached, and none of
+             *  the ones above. */
+            MORE_WAYS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_WAYS),
+
             /** Some other part of what it states was not read. */
             A_PART_NOT_READ(null),
+
+            /** It needs two elements of one container, which a form over the container's
+             *  position would hold as one number. The stop is the statement's and no place's:
+             *  the comparison may be written in a form this compiler reads, and an author told
+             *  otherwise would rewrite what is not the difficulty. Said after the figures and
+             *  before {@link #A_PART_NOT_READ}, and never where a place words a part for itself
+             *  ({@code Cutting#whatStopsSay}). */
+            TWO_ELEMENTS_OF_ONE_CONTAINER(null),
 
             /** It relates a number no position of the input holds: a value the body works out,
              *  or what a run of values comes to. */
@@ -1297,13 +1774,26 @@ public sealed interface BlockReason {
                 this.says = says;
             }
 
-            /** The reason that stopped at a figure this word says, or null where it says none. */
+            /** The reason that stopped at a figure this word says, at the figure declared, or null
+             *  where it says none. Which reason a stop was is asked of this, and the figure it
+             *  stopped at of the stop. */
             public WhyUnread says() {
                 return says;
             }
 
-            /** The figure the part was declined at, or none. */
-            public Optional<Figure> figure() {
+            /** Whether this word says a stop for the reason {@code why}, at whatever figure. */
+            public boolean saysTheKindOf(WhyUnread why) {
+                return says != null && says.isTheKindOf(why);
+            }
+
+            /** The word that says {@code why}, or none where no word does. */
+            public static Optional<Why> saying(WhyUnread why) {
+                return Arrays.stream(values()).filter(each -> each.saysTheKindOf(why)).findFirst();
+            }
+
+            /** The figure a stop this word says would be at where the compilation held every
+             *  budget to the figure declared, or none. */
+            public Optional<Figure> declaredFigure() {
                 return says == null ? Optional.empty() : says.figure();
             }
         }
@@ -1432,6 +1922,18 @@ public sealed interface BlockReason {
      * position and not a limit of this compiler's.
      */
     record ComparisonOnARemainder() implements ReadToEndWithoutLine {}
+
+    /**
+     * The comparison is about a number a call or a walk works out, which this compiler does not
+     * read back to the input, so its line is drawn on how far apart its sides come out on a run
+     * and its rows are placed by what their runs worked out.
+     *
+     * <p>Its own word beside {@link ComparisonOverARun}. That one is a rule read to the end; this
+     * one is a rule whose reading stopped, and what the stop leaves is still said: nothing is
+     * known of where the values here have to be for the comparison to come out either way, so no
+     * class of them is drawn. What is no longer missing is the border, which the runs measure.
+     */
+    record ComparisonMeasuredOnItsRuns() implements ReadToEndWithoutLine {}
 
     /**
      * The rule holds this position to the values it admits, and places no end on them.

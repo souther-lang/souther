@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -87,6 +88,19 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
             """;
 
     private static JsonNode behaviorOf(String source) {
+        Compilation compilation = measuredMerging(source);
+        ACompiledModel.compiles(compilation);
+        return behaviorIn(compilation);
+    }
+
+    /** The same, of a model the rules leave no value of, which it is refused for. */
+    private static JsonNode behaviorOfWhatNothingBuilds(String source) {
+        Compilation compilation = measuredMerging(source);
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
+        return behaviorIn(compilation);
+    }
+
+    private static Compilation measuredMerging(String source) {
         // Read with no choice held apart, which is the reading this finding comes of. Nothing
         // written here expands far enough to fall back to it at the limit a compilation sets, so a
         // test that wants the fallback says so — and this is the one seam where what the fallback
@@ -94,7 +108,10 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
         Compilation compilation = Compilation.ofSource(source, "Main")
                 .withReadingPolicy(souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        return compilation;
+    }
+
+    private static JsonNode behaviorIn(Compilation compilation) {
         return JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors").get(0);
     }
@@ -168,9 +185,7 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
      */
     @Test
     void andHeldApartTheSameModelSaysNoneOfIt() {
-        Compilation compilation = Compilation.ofSource(WITNESS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(WITNESS, Adequacy.Asked.fullReport());
         JsonNode behavior = JSON.readTree(
                         AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors").get(0);
@@ -200,7 +215,13 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
      */
     @Test
     void aDeclarationTheRulesLeaveNoValueIsNotToldHowItsValuesWereHeld() {
-        assertEquals(List.of(), ofKind(NONE, "partition_values_not_separated"),
+        List<String> told = new ArrayList<>();
+        for (JsonNode each : behaviorOfWhatNothingBuilds(NONE).get("findings")) {
+            if (each.get("kind").asString().equals("partition_values_not_separated")) {
+                told.add(each.toString());
+            }
+        }
+        assertEquals(List.of(), told,
                 "no value of this type exists, and that is the answer it is owed");
     }
 }

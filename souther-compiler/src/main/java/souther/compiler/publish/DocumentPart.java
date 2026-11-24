@@ -29,6 +29,12 @@ public enum DocumentPart {
     /** What a reading could not read. */
     NOT_READ("notRead", "/$defs/partition/properties/notRead"),
 
+    /** What a rule's line not worked out because its cases were too many was told of them. */
+    CASE_EXPANSIONS("caseExpansions", "/$defs/partition/properties/caseExpansions"),
+
+    /** The helper the cases of a rule's line read at a cost choose among. */
+    COSTLY_READINGS("costlyReadings", "/$defs/partition/properties/costlyReadings"),
+
     /** The lines a behavior's rules drew. */
     BOUNDARIES("boundaries", "/$defs/partition/properties/boundaries"),
 
@@ -41,7 +47,14 @@ public enum DocumentPart {
     /** What gave the offer no value, where a search of a rule of a decision composed nothing. */
     SYNTHESIS_SHORTFALL_CAUSES("causes",
             "/$defs/decision/properties/obligations/items/properties/synthesisShortfalls/items"
-                    + "/properties/causes");
+                    + "/properties/causes"),
+
+    /**
+     * Where the runs of rows stopped without answering, published by two parts through one
+     * definition: a search of a rule of a decision that composed nothing, and an entry of
+     * {@link #NOT_READ} whose search for a row tried rows whose runs stopped.
+     */
+    RUNS_STOPPED("runsStopped", "/$defs/runsStopped");
 
     private final String key;
     private final String schemaPath;

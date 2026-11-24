@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +58,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
 
             data Fee = Int
 
-            behavior fee : (e: Either, p: Flag, q: Flag) -> Fee
+            behavior feeFor : (e: Either, p: Flag, q: Flag) -> Fee
                 constructs Fee
 
             let one (f: Flag): Int =
@@ -65,7 +66,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
                     | Yes -> 1
                     | No -> 0
 
-            let fee (e, p, q) = Fee(one(p) + one(q))
+            let feeFor (e, p, q) = Fee(one(p) + one(q))
             """;
 
     private record Model(MeasuredInput subject, CoverageRead.Read read) {
@@ -77,16 +78,17 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
     }
 
     private static Model model() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("fee")).findFirst().orElseThrow();
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("fee");
-        Core body = checked.behaviorBodies().get("fee");
+                .filter(b -> b.name().equals("feeFor")).findFirst().orElseThrow();
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module))
+                .value().get("feeFor");
+        Core body = checked.behaviorBodies().get("feeFor");
         assertNotNull(body);
         Partitions.Partitioning axes =
                 Partitions.of(spec.name(), inputs.reading(rules), ReadAs.THE_COMPILATION_DOES);

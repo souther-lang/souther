@@ -1,5 +1,10 @@
 package souther.compiler.coverage;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -39,8 +44,33 @@ public final class AlignedObservation {
 
     private final Set<SeenVisit> visits;
 
+    private final Set<WalkProbe> walks;
+
+    private final Set<WalkProbe> walksOn;
+
+    private final Set<SeenComparison> compared;
+
+    /** The same, by the place each was recorded at and in the order of the visits: asked of every
+     *  reading of a row at every point, so put in order once. */
+    private final Map<ConditionOutcomeSite, List<SeenComparison>> comparedBySite;
+
+    private final Set<ConditionOutcomeSite> pastTheKept;
+
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
                        Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits) {
+        this(numbering, arms, outcomes, visits, Set.of(), Set.of());
+    }
+
+    AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
+                       Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
+                       Set<WalkProbe> walks, Set<WalkProbe> walksOn) {
+        this(numbering, arms, outcomes, visits, walks, walksOn, Set.of(), Set.of());
+    }
+
+    AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
+                       Set<SeenConditionOutcome> outcomes, Set<SeenVisit> visits,
+                       Set<WalkProbe> walks, Set<WalkProbe> walksOn,
+                       Set<SeenComparison> compared, Set<ConditionOutcomeSite> pastTheKept) {
         if (numbering == null) {
             throw new IllegalArgumentException(
                     "a run read as places is read as places of some numbering");
@@ -49,9 +79,22 @@ public final class AlignedObservation {
         this.arms = Set.copyOf(arms);
         this.outcomes = Set.copyOf(outcomes);
         this.visits = Set.copyOf(visits);
+        this.walks = Set.copyOf(walks);
+        this.walksOn = Set.copyOf(walksOn);
+        this.compared = Set.copyOf(compared);
+        this.compared.forEach(each -> requireOurs(each.at().numbering(), each));
+        Map<ConditionOutcomeSite, List<SeenComparison>> bySite = new HashMap<>();
+        this.compared.stream().sorted(Comparator.comparingInt(SeenComparison::nth))
+                .forEach(each -> bySite.computeIfAbsent(each.at(), _ -> new ArrayList<>())
+                        .add(each));
+        bySite.replaceAll((_, ofOne) -> List.copyOf(ofOne));
+        this.comparedBySite = Map.copyOf(bySite);
+        this.pastTheKept = Set.copyOf(pastTheKept);
+        this.pastTheKept.forEach(each -> requireOurs(each.numbering(), each));
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
         this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
         this.visits.forEach(each -> requireOurs(each.at().numbering(), each));
+        this.walks.forEach(each -> requireOurs(each.numbering(), each));
     }
 
     /** What this run is read under, which is what a place put to it has to be a place of. */
@@ -75,6 +118,34 @@ public final class AlignedObservation {
         return arms.contains(probe);
     }
 
+    /** The walks the run entered, as places of this numbering. */
+    public Set<WalkProbe> walks() {
+        return walks;
+    }
+
+    /** Whether the run entered the walk at {@code walk}. */
+    public boolean entered(WalkProbe walk) {
+        requireOurs(walk.numbering(), walk);
+        return walks.contains(walk);
+    }
+
+    /**
+     * Whether this run went the way {@code other} did: through the same arms, with every condition
+     * coming out the same, on every visit kept. Which walks either entered, and how far, is not
+     * part of it: no measure but the rewrites of a walk reads that, and a row taking a list one
+     * element longer goes the way a row of one element went.
+     */
+    public boolean wentTheWayOf(AlignedObservation other) {
+        return numbering.equals(other.numbering) && arms.equals(other.arms)
+                && outcomes.equals(other.outcomes) && visits.equals(other.visits);
+    }
+
+    /** Whether the run took a second element of the walk at {@code walk}. */
+    public boolean wentOn(WalkProbe walk) {
+        requireOurs(walk.numbering(), walk);
+        return walksOn.contains(walk);
+    }
+
     /** Whether the run had the condition at {@code at} come out {@code held}. Not the same as the
      *  condition having been reached: one that came out the other way was reached and is not
      *  this. */
@@ -92,6 +163,26 @@ public final class AlignedObservation {
     public boolean sawOnVisit(ConditionOutcomeSite at, int nth, boolean held) {
         requireOurs(at.numbering(), at);
         return visits.contains(new SeenVisit(at, nth, held));
+    }
+
+    /**
+     * What the sides of the comparison at {@code at} came to on each visit kept, in the order of
+     * the visits — none where it is no comparison of whole numbers, or the run did not reach it.
+     */
+    public List<SeenComparison> comparedAt(ConditionOutcomeSite at) {
+        requireOurs(at.numbering(), at);
+        return comparedBySite.getOrDefault(at, List.of());
+    }
+
+    /**
+     * Whether every visit the run made to the condition at {@code at} is one the recording kept.
+     *
+     * <p>The recording's word and not a count: a run that visited as many times as are kept and
+     * stopped kept every visit, and one that went on did not, and only the recording saw which.
+     */
+    public boolean keptEveryVisit(ConditionOutcomeSite at) {
+        requireOurs(at.numbering(), at);
+        return !pastTheKept.contains(at);
     }
 
     /** Whether the run reached {@code at} at all, whichever way the condition there came out. */
@@ -115,12 +206,17 @@ public final class AlignedObservation {
                         && numbering.equals(that.numbering)
                         && arms.equals(that.arms)
                         && outcomes.equals(that.outcomes)
-                        && visits.equals(that.visits));
+                        && visits.equals(that.visits)
+                        && walks.equals(that.walks)
+                        && walksOn.equals(that.walksOn)
+                        && compared.equals(that.compared)
+                        && pastTheKept.equals(that.pastTheKept));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(numbering, arms, outcomes, visits);
+        return Objects.hash(numbering, arms, outcomes, visits, walks, walksOn, compared,
+                pastTheKept);
     }
 
     @Override

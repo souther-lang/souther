@@ -6,8 +6,15 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.CasesAtARule;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.PositionReadingBlocked;
+import souther.compiler.inputs.PositionValuesNotSeparated;
+import souther.compiler.inputs.RuleSite;
+import souther.compiler.inputs.WhatIsShownOfAStop;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Figure;
@@ -19,7 +26,9 @@ import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WhyKept;
 
 import java.util.ArrayList;
@@ -72,16 +81,77 @@ import java.util.Set;
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
+ * @param caseExpansions what each rule's line not worked out because its cases were too many was
+ *                     told of those cases: no measure, and nothing any measure went without, but
+ *                     what a reader is told beside the finding about that line
+ * @param stopsPastTheRepresentation the operations of the body that end a run only past what a
+ *                     {@code String} or a collection holds, which the classes are drawn without:
+ *                     no measure, and said once each
+ * @param costlyReadings what each rule's line that was read all the same, at a cost, was told of
+ *                     its cases: the helper whose readings they choose among one beside another,
+ *                     and where it was read. Beside {@code caseExpansions} and not among them,
+ *                     which say why a line was not read: no measure, and no reason, only where a
+ *                     model is dear to read
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
-                                List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
+                                List<WhatIsShownOfAStop> stopsShown,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
-                                List<Incompleteness> whyUnclassified) implements RuleCitations {
+                                List<Incompleteness> whyUnclassified,
+                                List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
+                                List<StopPastTheRepresentation> stopsPastTheRepresentation,
+                                List<CasesAtARule<List<CaseExpansion.MultipliedHelper>>> costlyReadings)
+        implements RuleCitations {
+
+    /** The same, with no rule's line read at a cost told of. */
+    public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                             PairSpace pairs,
+                             List<UndividedPosition> notDerivable,
+                             List<RuleWithoutALine> rulesWithoutALine,
+                             List<WhatIsShownOfAStop> stopsShown,
+                             List<PositionReadingBlocked> blocked,
+                             List<PositionValuesNotSeparated> notSeparated,
+                             List<Unanswered> unanswered,
+                             List<Incompleteness> whyUnclassified,
+                             List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
+                             List<StopPastTheRepresentation> stopsPastTheRepresentation) {
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, stopsShown, blocked,
+                notSeparated, unanswered, whyUnclassified, caseExpansions,
+                stopsPastTheRepresentation, List.of());
+    }
+
+    /** The same, with no operation that ends a run only past the representation. */
+    public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                             PairSpace pairs,
+                             List<UndividedPosition> notDerivable,
+                             List<RuleWithoutALine> rulesWithoutALine,
+                             List<WhatIsShownOfAStop> stopsShown,
+                             List<PositionReadingBlocked> blocked,
+                             List<PositionValuesNotSeparated> notSeparated,
+                             List<Unanswered> unanswered,
+                             List<Incompleteness> whyUnclassified,
+                             List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions) {
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, stopsShown, blocked,
+                notSeparated, unanswered, whyUnclassified, caseExpansions, List.of());
+    }
+
+    /** The same, with no rule's cases told of. */
+    public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                             PairSpace pairs,
+                             List<UndividedPosition> notDerivable,
+                             List<RuleWithoutALine> rulesWithoutALine,
+                             List<WhatIsShownOfAStop> stopsShown,
+                             List<PositionReadingBlocked> blocked,
+                             List<PositionValuesNotSeparated> notSeparated,
+                             List<Unanswered> unanswered,
+                             List<Incompleteness> whyUnclassified) {
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, stopsShown, blocked,
+                notSeparated, unanswered, whyUnclassified, List.of());
+    }
 
 
     /**
@@ -132,11 +202,14 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
-        rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
+        stopsShown = List.copyOf(stopsShown);
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
         whyUnclassified = List.copyOf(whyUnclassified);
+        caseExpansions = List.copyOf(caseExpansions);
+        stopsPastTheRepresentation = List.copyOf(stopsPastTheRepresentation);
+        costlyReadings = List.copyOf(costlyReadings);
     }
 
     /**
@@ -265,6 +338,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                                 + count.through().writtenAround(at()) + ")";
                                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                                         "List.sum(String.codePoints(" + at() + "))";
+                                case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                                        "List.get(" + point.index() + ", String.codePoints("
+                                                + at() + "))";
+                                case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                                        named(units.operation()) + "(" + at() + ")";
                                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
                                         "multiplicity(" + at() + ")";
                                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
@@ -367,6 +445,28 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         List<Figure> figures();
 
         /**
+         * Where the runs of the rows tried for it stopped without answering, which is none where no
+         * run was tried and for a rule read to the end.
+         *
+         * <p>Beside the word for the reason the figures are: a run that stopped is no figure, and a
+         * reader told the word alone cannot tell which input the model has not decided about.
+         * Handed on from what stopped it ({@link ReportedReason#runsStopped}).
+         */
+        List<WhereARunStopped> runsStopped();
+
+        /**
+         * The values a row built and run was shown to get to the rule at, where the reading stopped
+         * because not every value is shown to get there — none for every other entry.
+         *
+         * <p>Beside the word and not inside it, as the figures are: each of these is reached, and
+         * the word still says what is not shown of the rest
+         * ({@link BlockReason.ReadingStopReason#shownReachedAt}).
+         */
+        default List<String> shownReachedAt() {
+            return List.of();
+        }
+
+        /**
          * Every handle a reader was offered for what this is about, which is nothing for an entry
          * about no rule.
          *
@@ -399,6 +499,17 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             public List<Figure> figures() {
                 return finding.why() instanceof BlockReason.ReadingStopReason stopped
                         ? stopped.figures() : List.of();
+            }
+
+            @Override
+            public List<WhereARunStopped> runsStopped() {
+                return ReportedReason.runsStopped(finding.why());
+            }
+
+            @Override
+            public List<String> shownReachedAt() {
+                return finding.why() instanceof BlockReason.ReadingStopReason stopped
+                        ? stopped.shownReachedAt() : List.of();
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
@@ -447,9 +558,25 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return finding.why().figures();
             }
 
+            @Override
+            public List<WhereARunStopped> runsStopped() {
+                return ReportedReason.runsStopped(finding.why());
+            }
+
+            @Override
+            public List<String> shownReachedAt() {
+                return finding.why().shownReachedAt();
+            }
+
             /** Which rule, which is what tells this finding from the one beside it. */
             public RuleRef rule() {
                 return finding.rule();
+            }
+
+            /** Where inside the rule a reader goes about it: the expression the reading stopped
+             *  at, or the rule itself. */
+            public RuleSite sentTo() {
+                return finding.sentTo();
             }
 
             /** And how a reader finds that rule, which is not what tells it from another. */
@@ -483,6 +610,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public List<Figure> figures() {
                 return finding.why().figures();
+            }
+
+            /** None: a walk that never arrived at a position's rules tried no row there. */
+            @Override
+            public List<WhereARunStopped> runsStopped() {
+                return List.of();
             }
 
             /** None: this entry is about the position and names no rule of the model. */
@@ -522,14 +655,37 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         // declaration that came to no line is already above, said by the reader that gave up on it;
         // a comparison has no such finding, so the question is what a reader asking what went
         // unread is told about it.
+        List<StandingQuestion.NothingClassifiesIt> unclassified = new ArrayList<>();
         unanswered.forEach(each -> {
-            if (each.asked() instanceof StandingQuestion
-                    .NothingClassifiesIt it) {
-                out.add(new NotRead.AnUnclassifiedRule(it));
+            if (each.asked() instanceof StandingQuestion.NothingClassifiesIt it) {
+                unclassified.add(it);
+            }
+        });
+        unclassified.forEach(each -> {
+            if (!saidByItsElements(each, unclassified)) {
+                out.add(new NotRead.AnUnclassifiedRule(each));
             }
         });
         blocked.forEach(each -> out.add(new NotRead.APosition(each)));
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether {@code finding} is left at a container as a position for a stop that says nothing of
+     * the container, and an element of it is left for the same rule and the same reason: what
+     * stopped is said at the element, and the container beside it is not a second place unread.
+     *
+     * <p>Only what is said. The question at the container stays among {@link #unanswered} and
+     * holds the measure of the container open, as it did before this was left out of the list.
+     */
+    private static boolean saidByItsElements(
+            StandingQuestion.NothingClassifiesIt finding,
+            List<StandingQuestion.NothingClassifiesIt> all) {
+        return finding.at() instanceof FilingCoordinate.AtPosition container
+                && BlockReason.saysNothingOfTheContainerOfItsElements(finding.why())
+                && all.stream().anyMatch(other -> other.filed().rule().equals(finding.filed().rule())
+                        && other.why().equals(finding.why())
+                        && other.at().path().containersHoldingIt().contains(container.path()));
     }
 
     /**

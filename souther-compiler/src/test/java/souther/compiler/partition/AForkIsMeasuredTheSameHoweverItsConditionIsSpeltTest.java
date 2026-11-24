@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -47,9 +48,7 @@ class AForkIsMeasuredTheSameHoweverItsConditionIsSpeltTest {
     private record Owed(int arms, int rules) { }
 
     private static Owed owed(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         int arms = compilation.db().ask(new Adequacy.BranchCoverage(compilation.modules().get(0)))
                 .value().get("f").arms().counted();
         return new Owed(arms, DecisionReadings.of(source, "f").rules().size());

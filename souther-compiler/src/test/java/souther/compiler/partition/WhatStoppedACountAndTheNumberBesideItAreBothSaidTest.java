@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
@@ -23,6 +25,8 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
@@ -32,7 +36,6 @@ import souther.compiler.query.ReadAs;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -65,14 +68,14 @@ class WhatStoppedACountAndTheNumberBesideItAreBothSaidTest {
 
     /** {@code #xs [limit >= element] + limit}, the count with the limit added to it. */
     private static BorderQuantity.HowMany countPlusLimit() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain input = InputDomain.of(sigs.get("counted"), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         Quantities measuring = input.quantities(rules);
@@ -93,7 +96,7 @@ class WhatStoppedACountAndTheNumberBesideItAreBothSaidTest {
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         on.put(limit, TermOrdersFixtures.itself(limit, Carrier.WHOLE));
         return new BorderQuantity.HowMany(counted, new LinearForm<>(ExactRatio.ZERO, added), on,
-                Optional.empty());
+                NumericDomain.Bounds.OPEN);
     }
 
     private static TermPath pathIn(InputDomain input, String spelled) {
@@ -106,6 +109,11 @@ class WhatStoppedACountAndTheNumberBesideItAreBothSaidTest {
      *  reach. */
     private static BorderQuantity.Observation unreadRow() {
         return new BorderQuantity.Observation() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

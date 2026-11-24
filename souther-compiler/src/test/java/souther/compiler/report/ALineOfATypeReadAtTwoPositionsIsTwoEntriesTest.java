@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -17,7 +18,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One clause of a type, read at two positions, holds a verdict open at each of them.
@@ -160,10 +160,7 @@ class ALineOfATypeReadAtTwoPositionsIsTwoEntriesTest {
     private static JsonNode written() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(),
-                () -> "a model that did not compile answers every question with nothing: "
-                        + compilation.errors());
+        ACompiledModel.compiles(compilation);
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
     }

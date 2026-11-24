@@ -55,13 +55,18 @@ class AGapNamesEveryFigureItReachedTest {
     /** And the figure each names is the one it was declined or stopped at. */
     @Test
     void aReadingGapNamesTheFigureItWasStoppedAt() {
-        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure()),
+        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.MORE_READINGS_THAN_ARE_MADE)
                         .figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(
                         ElementsWrittenOut.MOST_WALKED)),
                 new ReadingGap.ReachNotRead(
                         ReadingGap.ReachNotRead.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT).figures());
+        Figure.Budget takenApart = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached();
+        Figure.Budget asked = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached();
+        assertEquals(Figure.inOrder(List.of(takenApart, asked)),
+                new CasesWorkedOut.Stopped(List.of(asked, takenApart)).gap().figures(),
+                "a row in cases nobody worked out says every figure they were stopped at");
         assertEquals(List.of(DEPTH), ReadingGap.ofAComparisonOf(new ObservedValue.Sequence(
                         List.of(new ObservedValue.Truncated(DEPTH)))).figures(),
                 "a value the walk stopped says the figure the walk stopped it at");
@@ -167,6 +172,8 @@ class AGapNamesEveryFigureItReachedTest {
                 case "NoValue" -> out.add(ReadingGap.NO_VALUE);
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
+                case "KeysNotTold" -> out.add(ReadingGap.KEYS_NOT_TOLD);
+                case "SamenessNotTold" -> out.add(ReadingGap.SAMENESS_NOT_TOLD);
                 case "CouldNotWorkOut" -> {
                     for (UnheldNumber why : UnheldNumber.values()) {
                         out.add(ReadingGap.of(why));
@@ -177,6 +184,8 @@ class AGapNamesEveryFigureItReachedTest {
                         out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
+                case "CasesNotWorkedOut" -> out.add(new ReadingGap.CasesNotWorkedOut(List.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure())));
                 default -> fail("a reading gap this cannot make: " + permitted);
             }
         }

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
@@ -54,7 +55,7 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
 
     /** The body the backend emits for {@code name}: a behavior, or a value emitted as a method. */
     private static Hir.Expr loweredDefinition(String tail, String name) {
-        Compilation compilation = Compilation.ofSource(HEAD + tail, "m");
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSource(HEAD + tail, "m"));
         return compilation.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(name)))
                 .value().value().definition().writtenBody();

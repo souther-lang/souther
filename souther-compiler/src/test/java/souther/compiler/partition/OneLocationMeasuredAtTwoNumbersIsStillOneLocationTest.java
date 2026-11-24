@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.BlockReason;
@@ -139,8 +140,10 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     void twoClassesOfOneLocationAreAnsweredByOneValueStandingInBoth() {
         FillResult filled = filled(TWO_NUMBERS);
 
-        assertEquals(List.of("slot.at=0 <= x < 9", "slot.at=9 <= x <= 23",
-                        "slot.at=0 <= x < 30", "slot.at=30 <= x <= 59"),
+        assertEquals(List.of("Time.hour(slot.at): 0 <= x < 9 at Time.hour(slot.at)",
+                        "Time.hour(slot.at): 9 <= x <= 23 at Time.hour(slot.at)",
+                        "Time.minute(slot.at): 0 <= x < 30 at Time.minute(slot.at)",
+                        "Time.minute(slot.at): 30 <= x <= 59 at Time.minute(slot.at)"),
                 filled.rows().stream().flatMap(row -> row.purposes().stream())
                         .flatMap(purpose -> purpose.labels().stream()).toList(),
                 "every class of both numbers is answered by a row");
@@ -159,8 +162,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     /** What the reading of that input says about its numbers, which is what a subject is asked
      *  through. */
     private static souther.compiler.inputs.InputReading readingOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate")
@@ -172,9 +174,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     }
 
     private static Partitions.Partitioning partitioningOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "gate")).value();
     }

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
@@ -143,7 +144,7 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
     private static Hir.Module derive(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY))
                 .db().ask(new Names.Resolved("m")).value();
     }
 }

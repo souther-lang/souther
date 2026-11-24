@@ -211,18 +211,15 @@ final class Combinators {
             ValueName.Stdlib.operation("Option", "map"), HowAClosureIsApplied.TO_EVERY_ELEMENT);
 
     /**
-     * What kernels answer of their arguments that no fact about what they build says: a list of
-     * every element of a set, each once; an option holding, where it holds anything, one value of a
-     * map.
+     * What kernels answer of their arguments that no fact about what they build or which value
+     * they answer says: a list of every element of a set, each once.
      *
      * <p>An axiom about each, as {@link #KERNELS} is, and held to what the kernel computes the same
      * way. Read where a body hands its closure what such an answer holds.
      */
     private static final Map<ValueName.Stdlib.Operation, AppliedClosures.Listing> LISTED = Map.of(
             ValueName.Stdlib.operation("Set", "toList"),
-            new AppliedClosures.Listing.EveryElementOf(0, true),
-            ValueName.Stdlib.operation("Map", "get"),
-            new AppliedClosures.Listing.AtMostOneElementOf(1));
+            new AppliedClosures.Listing.EveryElementOf(0, true));
 
     /**
      * The kernels whose answer holds the elements of the argument at the position given, each once
@@ -314,6 +311,12 @@ final class Combinators {
                         + " as a kernel, and the library writes it in the language");
             }
             return declared;
+        }
+        // An option holding, where it holds anything, an element of one argument: what the facts
+        // say of which value an answer holds, read as what it lists.
+        DeclaredArgument element = facts.answersAnElementOf(operation);
+        if (element != null) {
+            return new AppliedClosures.Listing.AtMostOneElementOf(element.position());
         }
         BoundOperationFacts.Listed listed = facts.listsAPartOf(operation);
         if (listed != null) {

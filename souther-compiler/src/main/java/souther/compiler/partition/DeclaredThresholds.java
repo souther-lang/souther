@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The lines a declaration's clauses draw between two of a behavior's positions.
@@ -89,13 +90,14 @@ public final class DeclaredThresholds {
         // And no arrival: a declaration's clause stands in no body for anything to be on the way
         // to, which reads as an arrival that restricts nothing. Nor a dependency, which a type's
         // values are not stood in by: a clause is read where none is ({@link
-        // InputReads#ofADeclaredClause}).
+        // InputReads#ofADeclaredClause}). And no witness of a count, which is found at a row
+        // getting to a comparison of a body.
         ComparisonAssessment assessed = ComparisonAssessment.of(behavior, clause.states(),
                 Citation.of(clause.wrote()), read,
                 InputReads.ofADeclaredClause(roots, read.declared()),
-                ClosureApplications.OUTSIDE, null,
+                ClosureApplications.OUTSIDE, Set.of(),
                 Arrivals.inTheTree(clause.readOutOf()), true,
-                WhatConditionsState.of(read), Optional.empty());
+                WhatConditionsState.of(read), Optional.empty(), ComparisonWitnesses.AtAComparison.NONE);
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.

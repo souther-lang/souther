@@ -2,17 +2,24 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.values.Operand;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -21,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -52,8 +60,10 @@ public sealed interface RowDemand {
          * <p>Asked of the demand, for the reason {@link TakenConstraint#terms} is: what a composer
          * does first with a demand is find where each of its numbers is written, and read off the
          * shapes that act would be written once per shape.
+         *
+         * <p>In one order, as {@link TakenConstraint#terms} hands them over.
          */
-        Set<NumericTerm> terms();
+        SequencedSet<NumericTerm> terms();
 
         /**
          * Every position whose value this turns on.
@@ -79,6 +89,20 @@ public sealed interface RowDemand {
     }
 
     /**
+     * What an element of a container is asked, as the reading states it: what the element is to
+     * meet, what some element of a container inside it is to meet ({@link SomeElementWithin}), or
+     * what each element of one is to meet one way or another ({@link EveryElementWithin}).
+     *
+     * <p>Wider than {@link OfAnElement} by what a composer does not write: which element of a
+     * container inside the element is asked something, and elements of one meeting different
+     * ways. A composer writes the elements of that container alike as well, so to it what some
+     * element of it is asked is what each is asked, and every element meeting one of several ways
+     * is every element meeting the same one of them ({@link AnElementMeets#ways}); a reader proving
+     * that no element meets a way asks them as they are ({@link AnElementMeets#asAsked}).
+     */
+    sealed interface AskedOfAnElement permits OfAnElement, SomeElementWithin, EveryElementWithin {}
+
+    /**
      * What an element of a container is to meet.
      *
      * <p>Three vocabularies, because a composer meets them three ways. A relation over the
@@ -92,7 +116,7 @@ public sealed interface RowDemand {
      * written into each; two elements asked for two things are a row it does not write, and never
      * a row the model does not have.
      */
-    sealed interface OfAnElement {
+    sealed interface OfAnElement extends AskedOfAnElement {
 
         /** Every position whose value this turns on, given the element it is asked of. */
         Set<TermPath> positions(TermPath element);
@@ -111,15 +135,13 @@ public sealed interface RowDemand {
     record Relational(TakenConstraint constraint) implements OfACondition, OfAnElement {
 
         @Override
-        public Set<NumericTerm> terms() {
+        public SequencedSet<NumericTerm> terms() {
             return constraint.terms();
         }
 
         @Override
         public Set<TermPath> positions() {
-            Set<TermPath> out = new LinkedHashSet<>();
-            constraint.terms().forEach(term -> out.add(term.subjectPath()));
-            return Collections.unmodifiableSet(out);
+            return placesReadOff(constraint.terms());
         }
 
         @Override
@@ -163,8 +185,8 @@ public sealed interface RowDemand {
 
         /** None: a {@code Bool} is no number. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Set.of();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.none();
         }
 
         @Override
@@ -253,13 +275,13 @@ public sealed interface RowDemand {
 
         /** None: two values on no order are no number. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Set.of();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.none();
         }
 
         @Override
         public Set<TermPath> positions() {
-            return elementAndValue(one, other);
+            return elementAndValue(one, new Operand.At<>(other));
         }
 
         /** None: a row held to this writes both. */
@@ -349,15 +371,168 @@ public sealed interface RowDemand {
     }
 
     /**
+     * That some element of the container at {@code container}, inside the element, meets every one
+     * of {@code asked}: one way of what a quantifier over that container asks.
+     *
+     * <p>The element it is asked of is one of its own. A position inside it says an element of the
+     * container and not which one, so what two of these ask, or one of these and what every element
+     * of the container is asked, is written at the same positions — and two of these may be met by
+     * two elements that differ. So what is asked here is asked of an element that meets what holds
+     * of every element there, and never together with what another of these asks.
+     *
+     * <p>{@code asked} is in the words of the inner element: what names the element names that
+     * one, as it does in the quantifier's own demand.
+     *
+     * @param container the container inside the element
+     * @param asked     what some element of it meets, all of it together; never empty
+     */
+    record SomeElementWithin(TermPath container, List<AskedOfAnElement> asked)
+            implements AskedOfAnElement {
+
+        public SomeElementWithin {
+            Objects.requireNonNull(container, "the container inside an element");
+            asked = List.copyOf(asked);
+            if (asked.isEmpty()) {
+                throw new IllegalArgumentException("some element of " + container
+                        + " is asked something");
+            }
+        }
+    }
+
+    /**
+     * That every element of the container at {@code container}, inside the element, meets one of
+     * {@code ways} — each element whichever of them, or the container holding none.
+     *
+     * <p>Not one of these ways for every element. Every element meeting one of two things is not
+     * every element meeting the same one of them, so taken apart into a way of the outer element
+     * per way, a container holding an element of each kind is along none of them, and where every
+     * one of those leaves nothing beside what else the element is asked, a container that meets
+     * them all would be proved to be none. So the ways stay here, and what follows from them is
+     * asked of each element they are asked of ({@link WhatAnElementIsLeft}).
+     *
+     * <p>Only of two ways or more. Every element meeting one way is that way for each of them or
+     * the container holding none, exactly, which is how one way is read: as two ways of the outer
+     * element.
+     *
+     * <p>{@code ways} are in the words of the inner element, as the quantifier's own demand is.
+     *
+     * @param container   the container inside the element
+     * @param ways        what each element of it meets one of; two or more, none of them empty
+     * @param holdingNone the container holding none, which meets this whatever the ways ask
+     */
+    record EveryElementWithin(TermPath container, List<List<AskedOfAnElement>> ways,
+                              Relational holdingNone) implements AskedOfAnElement {
+
+        public EveryElementWithin {
+            Objects.requireNonNull(container, "the container inside an element");
+            Objects.requireNonNull(holdingNone, "the container holding none, which it may");
+            ways = ways.stream().map(List::copyOf).toList();
+            if (ways.size() < 2 || ways.stream().anyMatch(List::isEmpty)) {
+                throw new IllegalArgumentException("every element of " + container + " meets one"
+                        + " of several ways, each asking something, or one way is read as it is: "
+                        + ways);
+            }
+        }
+    }
+
+    /**
+     * The ways {@code way} is met by a row whose elements are written alike: what some element of
+     * a container inside the element is asked, asked of each of them, and every element of one
+     * meeting one of several ways, every element meeting the same one of them or none.
+     *
+     * <p>What names the inner element by no position of it is said to be about that container
+     * ({@link WithinIt}); everything else names its positions already.
+     */
+    static List<List<OfAnElement>> writtenAlike(List<? extends AskedOfAnElement> way) {
+        return writtenAlike(way, Integer.MAX_VALUE).orElseThrow();
+    }
+
+    /**
+     * The same, where they are no more than {@code most} — or nothing where they are more, made
+     * no further than that shows.
+     *
+     * <p>As many as every choice of a way for each element of a container that meets one of
+     * several, so the ways a walk keeps are counted as these before they are kept: what a
+     * composer is handed is held to the figure the walk is.
+     */
+    static Optional<List<List<OfAnElement>>> writtenAlike(List<? extends AskedOfAnElement> way,
+                                                          int most) {
+        // Each way made so far, grown in place by what is asked one way and copied only where
+        // something is asked several.
+        List<List<OfAnElement>> out = new ArrayList<>();
+        out.add(new ArrayList<>());
+        for (AskedOfAnElement each : way) {
+            List<List<OfAnElement>> these = new ArrayList<>();
+            switch (each) {
+                case OfAnElement asked -> {
+                    out.forEach(made -> made.add(asked));
+                    continue;
+                }
+                case SomeElementWithin(TermPath container, var asked) -> {
+                    Optional<List<List<OfAnElement>>> inner = writtenAlike(asked, most);
+                    if (inner.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    inner.get().forEach(one -> these.add(named(container, true, one)));
+                }
+                case EveryElementWithin(TermPath container, var ways, var holdingNone) -> {
+                    for (List<AskedOfAnElement> one : ways) {
+                        Optional<List<List<OfAnElement>>> inner = writtenAlike(one, most);
+                        if (inner.isEmpty()) {
+                            return Optional.empty();
+                        }
+                        inner.get().forEach(written -> these.add(named(container, false,
+                                written)));
+                    }
+                    these.add(List.of(holdingNone));
+                }
+            }
+            if ((long) out.size() * these.size() > most) {
+                return Optional.empty();
+            }
+            if (these.size() == 1) {
+                out.forEach(made -> made.addAll(these.getFirst()));
+                continue;
+            }
+            List<List<OfAnElement>> joined = new ArrayList<>();
+            for (List<OfAnElement> before : out) {
+                for (List<OfAnElement> one : these) {
+                    List<OfAnElement> both = new ArrayList<>(before);
+                    both.addAll(one);
+                    joined.add(both);
+                }
+            }
+            out = joined;
+        }
+        return Optional.of(out.stream().map(List::copyOf).toList());
+    }
+
+    /** {@code asked} of an element of the container at {@code container} inside the element, said
+     *  of positions of the outer one: what names the inner element as about that container. */
+    private static List<OfAnElement> named(TermPath container, boolean some,
+                                           List<OfAnElement> asked) {
+        return asked.stream().<OfAnElement>map(inner -> switch (inner) {
+            case SameAs _, DifferentFrom _, KeyedAs _, NotKeyedAs _ ->
+                    new WithinIt(container, some, inner);
+            case Relational _, ATruth _, InCases _, WithinIt _ -> inner;
+        }).toList();
+    }
+
+    /**
      * That the element is equal to the value at {@code value}.
      *
      * <p>The element is not named here: it is always the element of the container the demand
      * holding this is about, and named twice the two could name different containers.
      */
-    record SameAs(TermPath value) implements OfAnElement {
+    record SameAs(Operand<TermPath> value) implements OfAnElement {
 
         public SameAs {
-            Objects.requireNonNull(value, "the position whose value the element is");
+            Objects.requireNonNull(value, "what the element is");
+        }
+
+        /** The element being the value at {@code at}. */
+        public SameAs(TermPath at) {
+            this(new Operand.At<>(at));
         }
 
         @Override
@@ -367,15 +542,20 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return placesOf(value);
         }
     }
 
     /** That the element is unequal to the value at {@code value}. */
-    record DifferentFrom(TermPath value) implements OfAnElement {
+    record DifferentFrom(Operand<TermPath> value) implements OfAnElement {
 
         public DifferentFrom {
-            Objects.requireNonNull(value, "the position whose value the element is not");
+            Objects.requireNonNull(value, "what the element is not");
+        }
+
+        /** The element being unequal to the value at {@code at}. */
+        public DifferentFrom(TermPath at) {
+            this(new Operand.At<>(at));
         }
 
         @Override
@@ -385,7 +565,7 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return placesOf(value);
         }
     }
 
@@ -397,10 +577,15 @@ public sealed interface RowDemand {
      * is asked whatever else of it, so what else the element is asked of its value — a relation
      * over it — is asked of the entry under that key.
      */
-    record KeyedAs(TermPath value) implements OfAnElement {
+    record KeyedAs(Operand<TermPath> value) implements OfAnElement {
 
         public KeyedAs {
-            Objects.requireNonNull(value, "the position whose value the key is");
+            Objects.requireNonNull(value, "what the key is");
+        }
+
+        /** The key being the value at {@code at}. */
+        public KeyedAs(TermPath at) {
+            this(new Operand.At<>(at));
         }
 
         @Override
@@ -410,15 +595,20 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return placesOf(value);
         }
     }
 
     /** That the key of the element is unequal to the value at {@code value}. */
-    record NotKeyedAs(TermPath value) implements OfAnElement {
+    record NotKeyedAs(Operand<TermPath> value) implements OfAnElement {
 
         public NotKeyedAs {
-            Objects.requireNonNull(value, "the position whose value the key is not");
+            Objects.requireNonNull(value, "what the key is not");
+        }
+
+        /** The key being unequal to the value at {@code at}. */
+        public NotKeyedAs(TermPath at) {
+            this(new Operand.At<>(at));
         }
 
         @Override
@@ -428,24 +618,30 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> valuesRead() {
-            return Set.of(value);
+            return placesOf(value);
         }
     }
 
-    /** The key of the entry {@code element} is the value of, and then {@code value}. */
-    private static Set<TermPath> keyAndValue(TermPath element, TermPath value) {
+    /** The position {@code value} is the value at: none where it is a value written. */
+    private static Set<TermPath> placesOf(Operand<TermPath> value) {
+        return value.place().map(Set::of).orElse(Set.of());
+    }
+
+    /** The key of the entry {@code element} is the value of, and then the position of what the
+     *  key is against. */
+    private static Set<TermPath> keyAndValue(TermPath element, Operand<TermPath> value) {
         Set<TermPath> out = new LinkedHashSet<>();
-        List<TermPath.Step> steps = element.steps();
-        out.add(new TermPath(element.head(), steps.subList(0, steps.size() - 1)).key());
-        out.add(value);
+        out.add(element.prefix(element.steps().size() - 1).key());
+        out.addAll(placesOf(value));
         return Collections.unmodifiableSet(out);
     }
 
-    /** {@code element} and then {@code value}, in that order whatever run it is. */
-    private static Set<TermPath> elementAndValue(TermPath element, TermPath value) {
+    /** {@code element} and then the position of what it is against, in that order whatever run it
+     *  is. */
+    private static Set<TermPath> elementAndValue(TermPath element, Operand<TermPath> value) {
         Set<TermPath> out = new LinkedHashSet<>();
         out.add(element);
-        out.add(value);
+        out.addAll(placesOf(value));
         return Collections.unmodifiableSet(out);
     }
 
@@ -464,37 +660,75 @@ public sealed interface RowDemand {
      * is every element, and a demand with none is no element; neither is one of these, since the
      * reading settles both before a demand is made ({@link DemandReading}).
      *
+     * <p>Held as the reading states it ({@link #asAsked}), and read by a composer as it writes it
+     * ({@link #ways}): the second is worked out from the first and is never handed in beside it,
+     * so the two cannot come to say different things.
+     *
      * <p>A value, compared by its ways, and hashed once: what a reading of a statement asks is
      * gathered into sets at every level a disjunction nests at, and hashed afresh each time, the
      * ways inside were walked once per level.
      */
     static final class AnElementMeets {
 
-        /** Each way an element may meet it, each once and in the order the reading kept them; one
-         *  or more, and none of them empty. */
+        /** Each way an element may meet it as the reading states it, each once and in the order
+         *  the reading kept them; one or more, and none of them empty. */
+        private final List<List<AskedOfAnElement>> asAsked;
+        /** The ways of {@link #asAsked}, each as rows written alike meet it
+         *  ({@link RowDemand#writtenAlike}). */
         private final List<List<OfAnElement>> ways;
         private final int hash;
         /** What {@link #positions} came to last, or null before it is asked. */
         private volatile PositionsOf positions;
 
-        AnElementMeets(List<List<OfAnElement>> ways) {
-            this.ways = ways.stream().map(List::copyOf).distinct().toList();
-            if (this.ways.isEmpty() || this.ways.stream().anyMatch(List::isEmpty)) {
+        AnElementMeets(List<? extends List<? extends AskedOfAnElement>> ways) {
+            this.asAsked = ways.stream().map(List::<AskedOfAnElement>copyOf).distinct().toList();
+            if (this.asAsked.isEmpty() || this.asAsked.stream().anyMatch(List::isEmpty)) {
                 throw new IllegalArgumentException("what an element meets is one or more ways,"
-                        + " each asking something: " + this.ways);
+                        + " each asking something: " + this.asAsked);
             }
-            this.hash = this.ways.hashCode();
+            this.ways = this.asAsked.stream().flatMap(way -> writtenAlike(way).stream())
+                    .distinct().toList();
+            this.hash = this.asAsked.hashCode();
         }
 
-        /** Each way an element may meet it. */
+        /**
+         * Each way an element may meet it, as a row whose elements are written alike meets it:
+         * what some element of a container inside the element is asked, asked of each of them,
+         * and every element of one meeting one of several ways, the same one for each of them or
+         * none. Fewer rows than meet it, and so never asked whether some element does.
+         */
         public List<List<OfAnElement>> ways() {
             return ways;
+        }
+
+        /**
+         * Each way an element may meet it as the reading states it, with what some element of a
+         * container inside the element is asked kept apart ({@link SomeElementWithin}), and what
+         * each element of one meets one of kept whole ({@link EveryElementWithin}).
+         *
+         * <p>The one a reader proving that no element meets a way asks: two quantifiers over one
+         * container inside the element may be met by two of its elements, and every element of it
+         * meeting one of two ways by elements meeting different ones, which the ways written alike
+         * no longer tell from one element meeting both or every element meeting the same.
+         */
+        public List<List<AskedOfAnElement>> asAsked() {
+            return asAsked;
+        }
+
+        /**
+         * Whether no element of a container whose elements all hold {@code declared} is shown to
+         * meet this, along any of its ways ({@link WhatAnElementIsLeft}): a proof where true, and
+         * nothing at all where false.
+         */
+        boolean metByNoElementOf(SearchRegion declared) {
+            WhatAnElementIsLeft none = WhatAnElementIsLeft.of(declared);
+            return asAsked.stream().allMatch(way -> none.with(way).isEmpty());
         }
 
         @Override
         public boolean equals(Object other) {
             return this == other || (other instanceof AnElementMeets that && hash == that.hash
-                    && ways.equals(that.ways));
+                    && asAsked.equals(that.asAsked));
         }
 
         @Override
@@ -504,7 +738,7 @@ public sealed interface RowDemand {
 
         @Override
         public String toString() {
-            return "AnElementMeets[ways=" + ways + "]";
+            return "AnElementMeets[ways=" + asAsked + "]";
         }
 
         /** What an element asked only {@code asked} meets. */
@@ -567,7 +801,8 @@ public sealed interface RowDemand {
         return switch (demand) {
             case Exists exists -> exists.ofAnElement().oneWay();
             case ForAll every -> every.ofEachElement().oneWay();
-            case Relational _, ATruth _, OneValueAtBoth _, SoMany _, ForTheRun _ -> true;
+            case Relational _, ATruth _, OneValueAtBoth _, SoMany _, OnARemainder _,
+                 ForTheRun _ -> true;
         };
     }
 
@@ -583,10 +818,22 @@ public sealed interface RowDemand {
     }
 
     /** The numbers {@code asked} is written with, along every way. */
-    private static Set<NumericTerm> termsOf(AnElementMeets asked) {
-        Set<NumericTerm> out = new LinkedHashSet<>();
+    private static SequencedSet<NumericTerm> termsOf(AnElementMeets asked) {
+        SequencedSet<NumericTerm> out = new LinkedHashSet<>();
         asked.ways().forEach(way -> relationsAmong(way).forEach(each -> out.addAll(each.terms())));
         return out;
+    }
+
+    /**
+     * Every place {@code terms} are read off ({@link NumericTerm#placesReadOff}), which is every
+     * position a statement of them turns on: how often a value occurs is read off the container
+     * as well as the value, and a total of the elements a statement keeps off what the statement
+     * reads; a step moving any of them moves the number.
+     */
+    static Set<TermPath> placesReadOff(Set<NumericTerm> terms) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        terms.forEach(term -> out.addAll(term.placesReadOff()));
+        return Collections.unmodifiableSet(out);
     }
 
     /**
@@ -666,7 +913,12 @@ public sealed interface RowDemand {
             }
         }
 
-        /** The relations among what the element is to meet, along its one way. */
+        /**
+         * The relations a row whose elements are written alike places for the element, along
+         * its one way ({@link AnElementMeets#ways}) — with what some element of a container
+         * inside it is asked among them, so what they leave of a region is no proof that no
+         * element meets this ({@link AnElementMeets#metByNoElementOf}).
+         */
         public List<Relational> relations() {
             return relationsAmong(ofAnElement.theWay());
         }
@@ -674,8 +926,8 @@ public sealed interface RowDemand {
         /** The numbers the element is written with, which are what a row composed for this
          *  places. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Collections.unmodifiableSet(termsOf(ofAnElement));
+        public SequencedSet<NumericTerm> terms() {
+            return Collections.unmodifiableSequencedSet(termsOf(ofAnElement));
         }
 
         @Override
@@ -726,19 +978,50 @@ public sealed interface RowDemand {
             Objects.requireNonNull(counted, "the count it is, or that it is none");
         }
 
-        /** The relations among what every element is to meet, along its one way. */
+        /**
+         * The relations a row whose elements are written alike places for each element, along
+         * its one way ({@link AnElementMeets#ways}) — with what some element of a container
+         * inside it is asked among them, so what they leave of a region is no proof that no
+         * element meets this ({@link AnElementMeets#metByNoElementOf}).
+         */
         public List<Relational> relations() {
             return relationsAmong(ofEachElement.theWay());
+        }
+
+        /**
+         * The relations every element of the container meets, whichever element it is: those the
+         * one way the reading states puts on the element itself ({@link AnElementMeets#asAsked}).
+         * What some element of a container inside the element is asked holds of that one alone,
+         * and what every element of one meets one of holds of none in particular, so neither is
+         * among them; an element meeting one of several ways meets none of them for sure, so
+         * there are none.
+         *
+         * <p>Not {@link #relations}, which is what a row written alike is composed to meet: it
+         * asks every element of a container inside the element what some element of it is
+         * asked, and so says more of the elements than they meet.
+         */
+        public List<Relational> heldOfEveryElement() {
+            List<List<AskedOfAnElement>> ways = ofEachElement.asAsked();
+            if (ways.size() != 1) {
+                return List.of();
+            }
+            List<Relational> out = new ArrayList<>();
+            for (AskedOfAnElement each : ways.getFirst()) {
+                if (each instanceof Relational relation) {
+                    out.add(relation);
+                }
+            }
+            return List.copyOf(out);
         }
 
         /** The numbers the element is written with and the container's size, which are what a
          *  row composed for this places — the first where it writes an element, the second where
          *  it writes none. */
         @Override
-        public Set<NumericTerm> terms() {
-            Set<NumericTerm> out = termsOf(ofEachElement);
+        public SequencedSet<NumericTerm> terms() {
+            SequencedSet<NumericTerm> out = termsOf(ofEachElement);
             out.addAll(holdingNone.terms());
-            return Collections.unmodifiableSet(out);
+            return Collections.unmodifiableSequencedSet(out);
         }
 
         @Override
@@ -761,7 +1044,8 @@ public sealed interface RowDemand {
      * other count of that container a row is asked for ({@link CardinalityComposer}).
      *
      * @param count             what is counted: the container, and what an element is counted
-     *                          for meeting
+     *                          for meeting — each element, or each different value those meeting
+     *                          it hold ({@link Quantity.HowManyDifferentMeet})
      * @param met               how the count stands to {@code level} on every row this holds of
      * @param level             the number the count, with {@code against} added to it, is held
      *                          against
@@ -772,12 +1056,16 @@ public sealed interface RowDemand {
      *                          and what it hands on to another container, where it is either
      *                          ({@link DemandReading#anElementMeeting})
      */
-    record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level,
+    record SoMany(Quantity count, Rel met, ExactRatio level,
                   LinearForm<NumericTerm> against, AnElementMeeting anElementMeeting)
             implements OfACondition {
 
         public SoMany {
             Objects.requireNonNull(count, "a count of the elements of some container");
+            if (!AStatementAtARow.countsElements(count)) {
+                throw new IllegalArgumentException("a count of the elements meeting something, or"
+                        + " of the values they hold, and not " + count);
+            }
             Objects.requireNonNull(met, "a count held against a number some way");
             Objects.requireNonNull(level, "a count held against some number");
             Objects.requireNonNull(against, "what is added to the count, or nothing");
@@ -837,23 +1125,127 @@ public sealed interface RowDemand {
         /** The numbers the statement reads, of the elements and beside them, and the numbers added
          *  to the count. */
         @Override
-        public Set<NumericTerm> terms() {
-            Set<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
-                    count.ofTheElement()));
-            out.addAll(against.coefs().keySet());
-            return Collections.unmodifiableSet(out);
+        public SequencedSet<NumericTerm> terms() {
+            SequencedSet<NumericTerm> out = new LinkedHashSet<>(AStatementAtARow.numbersOf(
+                    AStatementAtARow.meetingOf(count)));
+            out.addAll(NumericTerms.inOrder(against.coefs().keySet()));
+            return Collections.unmodifiableSequencedSet(out);
         }
 
+        /** The container, the place whose values are counted where values are what is counted,
+         *  and the place of every number read. */
         @Override
         public Set<TermPath> positions() {
             Set<TermPath> out = new LinkedHashSet<>();
-            out.add(count.container().inputPosition());
-            terms().forEach(term -> out.add(term.subjectPath()));
+            out.add(AStatementAtARow.elementsOf(count).container().inputPosition());
+            if (count instanceof Quantity.HowManyDifferentMeet different) {
+                out.addAll(different.ofTheElement().places());
+            }
+            out.addAll(placesReadOff(terms()));
             return Collections.unmodifiableSet(out);
         }
 
         /** None: a row held to this writes the container and whatever the statement reads beside
          *  an element. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
+     * That what a division by a written number leaves of a form of the input's numbers is one of
+     * {@code leaves}.
+     *
+     * <p>No relation a region places: the values of the form that leave one remainder come round
+     * every divisor, so they are a class and not a run. A composer places it by choosing a value of
+     * the form in the class of a remainder this leaves and placing the form's numbers to come to
+     * it, as a point of the remainder's border is placed ({@link LevelRealizer}).
+     *
+     * <p>Stated by a condition, or following from statements only a run checks
+     * ({@link RemaindersOfAnElement}): those stay on the way beside it, still the run's to check,
+     * and this is only what every run passing them leaves.
+     *
+     * @param remainder the remainder, with the form it is of and what that is divided by: a form
+     *                  of the input's numbers alone, since a row is asked to put its numbers at it
+     * @param leaves    the remainders a row passing the condition may leave, none below nought and
+     *                  none as large as the divisor
+     * @param from      the statements this follows from, which are what proves it; none where a
+     *                  condition states it
+     */
+    record OnARemainder(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves,
+                        List<ForTheRun> from) implements OfACondition {
+
+        /** Stated by a condition. */
+        public OnARemainder(Quantity.RemainderOfADividend remainder, WholeNumberRuns leaves) {
+            this(remainder, leaves, List.of());
+        }
+
+        public OnARemainder {
+            Objects.requireNonNull(remainder, "a remainder of some form");
+            Objects.requireNonNull(leaves, "the remainders the condition leaves");
+            from = List.copyOf(from);
+            if (remainder.overTheInput() == null) {
+                throw new IllegalArgumentException("a row puts its numbers at a remainder of a"
+                        + " form of them: " + remainder);
+            }
+            WholeNumberRuns below = WholeNumberRuns.one(BigInteger.ZERO,
+                    remainder.divisor().subtract(BigInteger.ONE));
+            if (leaves.isNone() || !leaves.and(below).equals(leaves)) {
+                throw new IllegalArgumentException("a condition on a remainder leaves some of the"
+                        + " remainders a division by " + remainder.divisor() + " leaves: " + leaves);
+            }
+        }
+
+        /**
+         * The remainders a division leaves that meet {@code affine} coming out {@code met}, where
+         * it holds one remainder against a number and nothing else — or null where it is no such
+         * relation. None where no remainder meets it.
+         *
+         * <p>Read off the relation as {@code w·r + c met 0} over the remainders the divisor
+         * leaves, which is a run of them, its bounds turned over where the weight is below
+         * nought. Whatever the remainder is a form of: what the form is over is the reader's to
+         * ask.
+         */
+        static WholeNumberRuns meeting(Relation.Affine affine, Rel met) {
+            if (affine.form().coefs().size() != 1
+                    || !(affine.form().coefs().keySet().iterator().next()
+                            instanceof Quantity.RemainderOfADividend remainder)) {
+                return null;
+            }
+            ExactRatio weight = affine.form().coefs().get(remainder);
+            if (!(affine.form().constant().negated().dividedBy(weight)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+                return null;
+            }
+            return WholeNumberRuns.standing(weight.signum() < 0 ? met.turned() : met, threshold)
+                    .and(WholeNumberRuns.one(BigInteger.ZERO,
+                            remainder.divisor().subtract(BigInteger.ONE)));
+        }
+
+        /** The form the remainder is of, over the input's numbers. */
+        public LinearForm<NumericTerm> dividend() {
+            return remainder.overTheInput();
+        }
+
+        /** What proves this: the statements it follows from, or itself where a condition states
+         *  it. */
+        List<OfACondition> provedBy() {
+            return from.isEmpty() ? List.of(this) : List.copyOf(from);
+        }
+
+        /** The numbers of the form. */
+        @Override
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.setInOrder(dividend().coefs().keySet());
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            return placesReadOff(terms());
+        }
+
+        /** None: a row held to this writes every number of the form. */
         @Override
         public Set<TermPath> valuesRead() {
             return Set.of();
@@ -877,20 +1269,62 @@ public sealed interface RowDemand {
      * @param why       which kind of statement no composer writes toward
      * @param past      where the reading of what the values it is over were made from stopped,
      *                  each once; empty where nothing of them was read to stop
+     * @param partedStrings the string a statement about a piece of one is over, and how its
+     *                  pieces were taken, where it is one: what it depends on, and not what it
+     *                  places — a composer places nothing for it
+     * @param composedAs how a composer does write a row toward this, which a row meets exactly
+     *                  where it meets this one, or none: what the run decides is still asked of the
+     *                  row, and a row composing it is composed for is one the run need not turn
+     *                  away. Said apart from the statement because a reader of what the way
+     *                  leaves reads the statement and not a way of writing a row for it
      */
-    record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past)
+    record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
+                     Optional<PartedString> partedStrings,
+                     Optional<ComposedAs> composedAs)
             implements OfACondition {
+
+        /**
+         * Counts of the elements of one container and how many it holds, held to a relation: each
+         * count is composed for as a count of every number is, and the container is composed with
+         * the relation holding of the elements it is chosen with ({@link AggregateRelation}).
+         *
+         * @param relation what the counts and the size are held to
+         * @param counts   each count the relation weighs, asked at every number
+         */
+        public record ComposedAs(AggregateRelation relation, List<SoMany> counts) {
+
+            public ComposedAs {
+                Objects.requireNonNull(relation, "a relation among counts");
+                counts = List.copyOf(counts);
+            }
+        }
 
         public ForTheRun {
             Objects.requireNonNull(statement, "a statement about some value");
             Objects.requireNonNull(why, "a statement no composer writes is of some kind");
             past = List.copyOf(new LinkedHashSet<>(past));
+            Objects.requireNonNull(partedStrings, "a string it is over, or none");
+            Objects.requireNonNull(composedAs, "a statement composed for, or none");
+        }
+
+        public ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past) {
+            this(statement, why, past, Optional.empty(), Optional.empty());
+        }
+
+        public ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
+                         Optional<PartedString> partedStrings) {
+            this(statement, why, past, partedStrings, Optional.empty());
+        }
+
+        /** The position of the string it is over, which it depends on and places nothing at. */
+        Set<TermPath> fromStringsAt() {
+            return partedStrings.map(parted -> Set.of(parted.string())).orElse(Set.of());
         }
 
         /** None: a composer places nothing for this, and the run says whether it held. */
         @Override
-        public Set<NumericTerm> terms() {
-            return Set.of();
+        public SequencedSet<NumericTerm> terms() {
+            return NumericTerms.none();
         }
 
         @Override
@@ -949,6 +1383,14 @@ public sealed interface RowDemand {
 
         /** Two subjects of a row being one value. */
         TWO_SUBJECTS_ONE_VALUE,
+
+        /** A string being one of the strings a language holds, which a row's classes of the
+         *  position are composed for and no demand of the row writes toward. */
+        A_STRING_IN_A_LANGUAGE,
+
+        /** One string standing inside another, which no composer writes a pair of strings
+         *  toward. */
+        A_STRING_INSIDE_ANOTHER,
 
         /** A place on an order, of a term that is no one position. */
         AN_ORDER_OF_NO_ONE_POSITION

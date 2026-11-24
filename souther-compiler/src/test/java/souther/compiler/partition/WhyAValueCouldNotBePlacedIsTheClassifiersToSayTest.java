@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -103,7 +105,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        // The third row writes an amount below nought, so its input is refused and never built.
+        ACompiledModel.refusedWith(List.of("E1903"), compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
@@ -113,7 +116,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Core body = checked.behaviorBodies().get("submit");
         CoverageSites.Plan plan = checked.plan();
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(sigs.get("submit"), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
@@ -123,7 +126,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 ThresholdFixtures.guardsOf("submit", checked.analysisBodies().get("submit"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), rules).thresholds(),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
@@ -254,9 +257,9 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     void aReadableValueIsStillPlacedInTheClassThatHoldsIt() {
         Read read = read();
 
-        assertEquals(Classification.in("request.cost/0 <= x <= 100"),
+        assertEquals(Classification.in("request.cost: 0 <= x <= 100"),
                 at(read, read.row(), "request.cost"));
-        assertEquals(Classification.in("request.plain/x <= 10"),
+        assertEquals(Classification.in("request.plain: x <= 10"),
                 at(read, read.row(), "request.plain"));
         assertEquals(Classification.in("Domestic"),
                 at(read, read.row(), "request.kind"));
@@ -268,7 +271,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
 
         assertEquals(Classification.in("Overseas"),
                 at(read, read.acrossTheLines(), "request.kind"));
-        assertEquals(Classification.in("request.cost/100 < x"),
+        assertEquals(Classification.in("request.cost: 100 < x"),
                 at(read, read.acrossTheLines(), "request.cost"));
     }
 
@@ -321,7 +324,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
             ids.add("c" + i);
         }
         return InputClassifications.decided(new AxisId("submit", "request.plain"),
-                ids, List.of(answers), null);
+                ids, List.of(answers), () -> Axis.Outside.NOT_AN_ANSWER, null);
     }
 
     /**

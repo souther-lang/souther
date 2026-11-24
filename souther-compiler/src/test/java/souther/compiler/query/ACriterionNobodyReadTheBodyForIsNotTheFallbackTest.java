@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -71,8 +73,7 @@ class ACriterionNobodyReadTheBodyForIsNotTheFallbackTest {
         if (ANSWERED == null) {
             Compilation compilation = Compilation.ofSource(INJECTED, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            ANSWERED = compilation;
+            ANSWERED = ACompiledModel.compiles(compilation);
         }
         return ANSWERED;
     }

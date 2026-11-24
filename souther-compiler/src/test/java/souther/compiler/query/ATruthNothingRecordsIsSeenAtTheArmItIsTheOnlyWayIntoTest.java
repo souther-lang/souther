@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.ShownBy;
@@ -246,9 +247,7 @@ class ATruthNothingRecordsIsSeenAtTheArmItIsTheOnlyWayIntoTest {
     }
 
     private static DecisionEvidence evidenceOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Decides(compilation.modules().get(0))).value()
                 .get("decides");
     }

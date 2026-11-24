@@ -6,7 +6,9 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 import souther.compiler.check.ElementProvenance.CopyableFactKind;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
@@ -192,6 +194,9 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
             case DERIVES_FROM -> builder::derivesFrom;
             case PROJECTS_EACH_ELEMENT_OF -> builder::projectsEachElementOf;
             case KEEPS_THE_KEYS_OF -> builder::keepsTheKeysOf;
+            case ASSEMBLES_THE_PIECES_OF -> (parameter, source) -> builder.assemblesThePiecesOf(
+                    parameter, source, PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS);
+            case HANDED_EACH_ELEMENT_OF -> builder::handedEachElementOf;
         };
         into.accept(of, from);
     }
@@ -231,7 +236,7 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
             """;
 
     private static ElementBindings elements(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         Bodies.CheckedBody checked = compilation.db().ask(new Bodies.CheckedBehavior(
                 compilation.modules().get(0), behavior)).value();
         return checked.elements();

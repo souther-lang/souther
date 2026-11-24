@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -66,11 +67,7 @@ class ARuleUnderNamesThatWriteNothingDrawsItsLineTest {
     /** What the lines drawn for an input of {@code type} cut, with the rule each is filed against
      *  dropped. */
     private static List<String> cutsTaking(String type) {
-        Compilation compilation = Compilation.ofSource(SOURCE.formatted(type), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model under test is a program that can be written");
+        Compilation compilation = ACompiledModel.answered(SOURCE.formatted(type));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs =

@@ -4,7 +4,9 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Spelling;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,11 +25,15 @@ import java.util.Optional;
  * generator's problem, and a term that answered it would name this side's vocabulary from the side
  * that only measures.
  *
- * <p><b>Total, so a term of a new kind is a compilation error here.</b> Every number this compiler
- * has is realized by rebuilding one value, and which value that is is the whole of what this
- * answers. A kind of term arriving that no single value realizes does not belong in either variant,
- * and what should happen then is that this switch stops compiling and the vocabulary is looked at
- * again — not that the new term quietly joins the ones nothing composes a row for.
+ * <p><b>Exhaustive over the terms, so a term of a new kind is a compilation error here.</b> A number
+ * this compiler writes is written by rebuilding one value, and which value that is is the whole of
+ * what a target answers. {@link #of} says for each kind of term whether it has one: every kind does
+ * except a product no one number holds at a value, which is read off several places and is none's
+ * value. A target that exists always has its write root, and a number with none is one a row is not
+ * written for, which is said where its demand is taken in and not found out where its target is
+ * asked. A kind of term arriving that no single value realizes stops this switch compiling, and the
+ * vocabulary is looked at again — not that the new term quietly joins the ones nothing composes a
+ * row for.
  *
  * <p>Whether anything can be built at a target is a different question and is not asked here.
  * {@link TermRealizations} owns it, and answers it for a target that exists — so "there is nowhere
@@ -40,6 +46,12 @@ import java.util.Optional;
  * both are targets; a reader that asks for the number asks it of the first kind only.
  */
 public sealed interface RealizationTarget {
+
+    /** What this is written as, held as the pieces it is put together from: the text
+     *  {@code toString} writes, with a statement held as its own spelling. */
+    default Spelling spelling() {
+        return Spelling.of(toString());
+    }
 
     /**
      * The location whose whole value is rebuilt so that what is asked of it is answered: the
@@ -102,7 +114,10 @@ public sealed interface RealizationTarget {
     record AskedKey(TermPath elements, TermPath keyAt, TermPath asked) {}
 
     /**
-     * The target of a number, which every number has.
+     * The target of a number, or none where no row writes it: a product no one number holds at a
+     * value is read off several places and is no place's value, so there is nothing to write and
+     * a row is not claimed to reach it. Every other term has one. A target that is made always
+     * has its write root, and a reader that takes the target takes the root with it.
      *
      * <p>Exhaustive over the terms there are, with no {@code default} and no null. Read off a
      * condition instead, a kind of term added would fall to whichever side the last reader's
@@ -114,17 +129,104 @@ public sealed interface RealizationTarget {
      * builds {@link AtOnePositionElsewhere} instead — and only such a caller can, which is why
      * this answers with the place the term names rather than guessing at a case.
      */
-    static OfANumber of(NumericTerm term) {
+    static Optional<OfANumber> of(NumericTerm term) {
         return switch (term) {
-            case NumericTerm.Multiplicity among -> new AmongTheElements(among);
-            case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
-            case NumericTerm.GatheredUnderItsKey gathered -> new UnderItsKey(gathered);
-            case NumericTerm.GatheredUnderAKey asked -> new UnderAKey(asked);
-            case NumericTerm.OccurrencesOfItsValue among -> new AmongEveryOccurrence(among);
-            case NumericTerm.OccurrencesOfAKey asked -> new AmongEveryOccurrenceEqualToAKey(asked);
-            case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
-            case NumericTerm.TakenOver over -> new OverARun(over);
+            case NumericTerm.Multiplicity among -> Optional.of(new AmongTheElements(among));
+            case NumericTerm.ExtremeOfItsKey extreme -> Optional.of(new AtItsKey(extreme));
+            case NumericTerm.GatheredUnderItsKey gathered -> Optional.of(new UnderItsKey(gathered));
+            case NumericTerm.GatheredUnderAKey asked -> Optional.of(new UnderAKey(asked));
+            case NumericTerm.OccurrencesOfItsValue among ->
+                    Optional.of(new AmongEveryOccurrence(among));
+            case NumericTerm.OccurrencesOfAKey asked ->
+                    Optional.of(new AmongEveryOccurrenceEqualToAKey(asked));
+            case NumericTerm.FromOnePosition one -> Optional.of(new AtOnePosition(one));
+            case NumericTerm.TakenOver over -> Optional.of(new OverARun(over));
+            case NumericTerm.ProductOf product -> OfAProduct.of(product);
         };
+    }
+
+    /**
+     * Whether every one of {@code terms} has a target, which is what a demand over them has to be
+     * for a row to be written for it. The one place a demand is asked this: a demand that is not
+     * answered by it is left uncomposed where it is taken in, and what is composed after that
+     * asks {@link #ofATakenIn} of its numbers.
+     */
+    static boolean writesEvery(Collection<? extends NumericTerm> terms) {
+        return terms.stream().allMatch(term -> of(term).isPresent());
+    }
+
+    /**
+     * The target of a number in a position, which every such number has.
+     */
+    static OfANumber ofAPlace(NumericTerm.FromOnePosition one) {
+        return new AtOnePosition(one);
+    }
+
+    /** The target of a number taken over a run, which every such number has. */
+    static OfANumber ofARun(NumericTerm.TakenOver over) {
+        return new OverARun(over);
+    }
+
+    /**
+     * The target of a number of a demand that was taken in, which is one every number of it has
+     * ({@link #writesEvery}).
+     *
+     * <p>Not for a number of any other origin: a number nobody asked {@link #of} of may be a
+     * product no row writes, and this refuses it rather than answering with a place to write at.
+     * What is held is the target and not the number, wherever the caller already has it.
+     */
+    static OfANumber ofATakenIn(NumericTerm term) {
+        return of(term).orElseThrow(() -> new IllegalStateException(
+                term + " was taken in with a demand and has no target"));
+    }
+
+    /**
+     * What two forms come to multiplied, realized by the number alone that carries the value
+     * standing at it while the other factor's number stands where that factor is one
+     * ({@link NumericTerm.ProductOf#atAValue}).
+     *
+     * <p>Not rebuilt as one value: the product is made of the numbers of two forms, each realized
+     * as it is anywhere, so the row stands at it by the numbers standing and the target of
+     * the product is replaced by theirs before a row is composed ({@code Generator}). The root
+     * here is the carrier's, which is where the value is written.
+     */
+    record OfAProduct(NumericTerm.ProductOf term, OfANumber carrier, OfANumber fixed)
+            implements OfANumber {
+
+        public OfAProduct {
+            NumericTerm.ProductOf.AtAValue way = term == null ? null : term.atAValue();
+            if (way == null || carrier == null || fixed == null
+                    || !way.carrier().equals(carrier.term()) || !way.fixed().equals(fixed.term())) {
+                throw new IllegalArgumentException(
+                        "a product is a target only with the two numbers that hold it: " + term);
+            }
+        }
+
+        /**
+         * The target of {@code product}, or none where no one number holds it at a value: such a
+         * product is read off several places and no place a row writes is the product's, so there
+         * is nothing to write and a row is not claimed to reach it.
+         */
+        static Optional<OfANumber> of(NumericTerm.ProductOf product) {
+            NumericTerm.ProductOf.AtAValue way = product.atAValue();
+            if (way == null) {
+                return Optional.empty();
+            }
+            // Held by two numbers, the one alone and the one beside it, and a row writes both.
+            return RealizationTarget.of(way.carrier()).flatMap(carrier ->
+                    RealizationTarget.of(way.fixed()).map(fixed ->
+                            new OfAProduct(product, carrier, fixed)));
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return carrier.writeRoot();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
     }
 
     /** A number of the row, which the rules hold a range of and a search can put to them. */
@@ -271,6 +373,13 @@ public sealed interface RealizationTarget {
                 return nodes.root().then(nodes.through().getFirst());
             }
             return term.source().subjectPath().outermostContainer();
+        }
+
+        /** The value a search is for, which is another parameter's and is fixed with the rest of
+         *  the row before the tree is written holding it. */
+        @Override
+        public TermPath keyAskedFor() {
+            return term.source() instanceof RunSource.SearchedLine line ? line.key() : null;
         }
 
         @Override
@@ -432,6 +541,11 @@ public sealed interface RealizationTarget {
         }
 
         @Override
+        public Spelling spelling() {
+            return count.spelling();
+        }
+
+        @Override
         public String toString() {
             return count.toString();
         }
@@ -494,8 +608,48 @@ public sealed interface RealizationTarget {
         }
 
         @Override
+        public Spelling spelling() {
+            return Spelling.of(container + " meeting ", stated.spelling());
+        }
+
+        @Override
         public String toString() {
-            return container + " meeting " + stated.key();
+            return spelling().toString();
+        }
+    }
+
+    /**
+     * That the counts of a container's elements and how many it holds stand as a relation says,
+     * realized by the container the counts are composed for being one of them
+     * ({@link CardinalityComposer}).
+     *
+     * <p>The place a search fixes for this is one, the relation holding: nothing about it is a
+     * number of the row, and it asks the container's elements nothing but how they are shared out
+     * among the counts.
+     *
+     * @param relation what the counts of one container and its size are held to
+     */
+    record CountsRelated(AggregateRelation relation) implements RealizationTarget {
+
+        public CountsRelated {
+            if (relation == null) {
+                throw new IllegalArgumentException("a relation among counts is some relation");
+            }
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return relation.container().element().outermostContainer();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of(relation.container() + " counted as " + relation.counted());
+        }
+
+        @Override
+        public String toString() {
+            return spelling().toString();
         }
     }
 }

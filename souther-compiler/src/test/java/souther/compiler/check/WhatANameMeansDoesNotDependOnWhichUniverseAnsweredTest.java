@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -68,7 +69,8 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("up.sou", UP);
         byId.put("down.sou", DOWN);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         // Asked of what was said and not of the map it arrives in: a map with a list per source is
         // never empty, and a check on the map would pass whatever was in the lists.
         assertTrue(compilation.diagnostics().values().stream().allMatch(java.util.List::isEmpty),

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import java.util.LinkedHashMap;
@@ -36,11 +37,11 @@ class ADefinitionNobodyCouldReadDoesNotSilenceTheOnesBesideItTest {
             let run (n) = Out { n = "text" }
             """;
 
-    private static List<String> saidOf(String source) {
+    private static List<String> saidOf(List<String> refusedWith, String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         return c.diagnostics().values().stream().flatMap(List::stream)
                 .map(each -> each.diagnostic().code()).toList();
     }
@@ -48,7 +49,7 @@ class ADefinitionNobodyCouldReadDoesNotSilenceTheOnesBesideItTest {
     /** The one beside it on its own, so that what the pair says below can be told from it. */
     @Test
     void theIndependentMistakeIsSaidOnItsOwn() {
-        List<String> said = saidOf(SOURCE);
+        List<String> said = saidOf(List.of("E1317"), SOURCE);
 
         assertTrue(said.contains("E1317"), "a field given a value of another type: " + said);
     }
@@ -56,7 +57,7 @@ class ADefinitionNobodyCouldReadDoesNotSilenceTheOnesBesideItTest {
     /** And it is still said where a definition beside it holds a newtype applied to two values. */
     @Test
     void theIndependentMistakeIsStillSaidBesideOneNobodyCouldRead() {
-        List<String> said = saidOf(SOURCE.replace(
+        List<String> said = saidOf(List.of("E1802", "E1317"), SOURCE.replace(
                 "let bad (a: Int, b: Int) : Int = 0",
                 "let bad (a: Int, b: Int) : Int = Amount(a, b).value"));
 

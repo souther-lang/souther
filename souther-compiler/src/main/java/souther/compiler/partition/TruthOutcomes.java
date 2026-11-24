@@ -68,14 +68,6 @@ final class TruthOutcomes {
             return this == only(value);
         }
 
-        /** Whether it is the same whatever the input. */
-        boolean isFixed() {
-            return switch (this) {
-                case ONLY_TRUE, ONLY_FALSE, FIXED_UNNAMED -> true;
-                case EITHER, UNKNOWN -> false;
-            };
-        }
-
         Outcomes denied() {
             return switch (this) {
                 case ONLY_TRUE -> ONLY_FALSE;
@@ -152,8 +144,7 @@ final class TruthOutcomes {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> Outcomes.only(holds);
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _ ->
-                    Outcomes.EITHER;
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _ -> Outcomes.EITHER;
             case Proposition.Unread unread ->
                     unread.fixed() ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -164,6 +155,7 @@ final class TruthOutcomes {
             case Proposition.OnAnApplication applications -> Outcomes.onSomeApplication(
                     applications.each().stream().map(TruthOutcomes::of).toList());
             case Proposition.SoManyHold counted -> ofACount(counted);
+            case Proposition.OfTheWays ways -> of(ways.written());
             // Where it can answer, it comes out as what it states can; where it never can, it
             // comes out no way at all, which is no answer this can name.
             case Proposition.WhereItAnswers where -> of(where.answers()) == Outcomes.ONLY_FALSE

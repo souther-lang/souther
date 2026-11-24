@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.ReachName;
@@ -58,7 +59,8 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("lib.sou", LIB);
         byId.put("app.sou", APP);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c =
+                ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         Hir.FnDef def =
                 c.db().ask(new Bodies.LoweredBody("app",
                         new souther.compiler.ast.DefinitionName("lib.flatten"))).value().value()

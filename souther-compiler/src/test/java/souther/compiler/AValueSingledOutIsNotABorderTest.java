@@ -35,25 +35,23 @@ class AValueSingledOutIsNotABorderTest {
                 data A
                 data B
 
-                behavior b : (r: R) -> A | B
-                let b (r) = if %s then A else B
+                behavior pick : (r: R) -> A | B
+                let pick (r) = if %s then A else B
 
-                example b
-                    | "one" : (R { cost = 1, a = 1, other = 2 }) -> B
+                example pick
+                    | "one" : (R { cost = 1, a = 1, other = 2 }) -> <?>
                 """;
 
     private static PartitionEvidence measured(String condition) {
-        Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(SOURCE.formatted(condition), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<souther.compiler.query.BorderAssessment> lines(String condition) {
-        Compilation compilation = Compilation.ofSource(SOURCE.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(SOURCE.formatted(condition), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).lines();
     }
 
@@ -80,7 +78,7 @@ class AValueSingledOutIsNotABorderTest {
      *  them. */
     @Test
     void anOrderingComparisonDividesThePositionAndDrawsABorder() {
-        assertEquals(List.of("r.cost/x <= 20", "r.cost/20 < x"), classes("r.cost <= 20"));
+        assertEquals(List.of("r.cost: x <= 20", "r.cost: 20 < x"), classes("r.cost <= 20"));
         assertEquals(1, borders("r.cost <= 20"));
     }
 
@@ -93,7 +91,7 @@ class AValueSingledOutIsNotABorderTest {
      */
     @Test
     void anEqualityPutsTheValueInAClassOfItsOwn() {
-        assertEquals(List.of("r.cost/= 20", "r.cost//= 20"), classes("r.cost == 20"));
+        assertEquals(List.of("r.cost: = 20", "r.cost: /= 20"), classes("r.cost == 20"));
     }
 
     /**

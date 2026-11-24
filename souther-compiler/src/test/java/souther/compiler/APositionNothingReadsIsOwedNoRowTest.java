@@ -458,7 +458,7 @@ class APositionNothingReadsIsOwedNoRowTest {
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).map(each -> each.diagnostic().code() + " "
                         + each.diagnostic().titleKey()).toList(),
@@ -469,6 +469,6 @@ class APositionNothingReadsIsOwedNoRowTest {
     private static String report(String model) {
         Compilation compilation = compiled(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

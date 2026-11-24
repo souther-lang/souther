@@ -41,7 +41,8 @@ final class ThresholdFixtures {
                 : GuardThresholds.of(behavior, states, emitted, plan, inputs.reading(source),
                         ElementBindings.of(states, source.newtypes()),
                         PathReachability.Arrivals.NONE,
-                        new RuleReachNumbering(source.symbols().module(), behavior));
+                        new RuleReachNumbering(source.symbols().module(), behavior),
+                        ComparisonWitnesses.AtComparisons.NONE);
     }
 
     /** The lines one behavior's clauses draw, reading the input's rules here. */
@@ -106,7 +107,8 @@ final class ThresholdFixtures {
         singled.forEach(each -> evidence.add(new RuleEvidence.Singles(each)));
         return Partitions.withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
                 rulesWithoutALine, between, reaching,
-                new MeasureClosure.Drawing.FromTheReading(), WhereTheOperationsStand.NONE);
+                new MeasureClosure.Drawing.FromTheReading(), WhereTheOperationsStand.NONE,
+                List.of(), ReadingsReadOn.NONE);
     }
 
     private ThresholdFixtures() {}

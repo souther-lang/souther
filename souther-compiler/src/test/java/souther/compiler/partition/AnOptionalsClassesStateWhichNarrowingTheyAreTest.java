@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
@@ -143,7 +145,7 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
                         read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
                         read.rules().sums(),
                         Set.of(), required, ConstructionPlan.ContentsComposed.NONE,
-                        ONE_AT_LEAST),
+                        ONE_AT_LEAST, _ -> false),
                 "nothing here asks one position to be two things").plan();
     }
 
@@ -162,7 +164,7 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
     private static Partitions.Partitioning partitioningOf() {
         Read read = read(FLAGGED);
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return Partitions.of("look",
                 InputDomain.of(read.sig(), reading,
                         TypeCardinality.Counts.workedOutIn(reading), Membership.none())
@@ -172,9 +174,8 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
     private record Read(DeclaredSig sig, RuleReadingSource rules) {}
 
     private static Read read(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

@@ -11,6 +11,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -69,7 +70,7 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
     void aNewtypesConstructionIsWhatItWraps() {
         Core wrapped = new Core.Construct(YEN,
                 List.of(new Core.FieldValue("value", computed(), SOMEWHERE)),
-                Type.ref(YEN), SOMEWHERE);
+                Type.ref(YEN), OccurrenceLineage.ORIGINAL, SOMEWHERE);
 
         assertEquals(ExactRatio.of(100), constantOf(wrapped));
     }
@@ -79,7 +80,7 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
     void aFieldReadOffAConstructionIsWhatItWasGiven() {
         Core built = new Core.Construct(BIG,
                 List.of(new Core.FieldValue("threshold", computed(), SOMEWHERE)),
-                Type.ref(BIG), SOMEWHERE);
+                Type.ref(BIG), OccurrenceLineage.ORIGINAL, SOMEWHERE);
 
         assertEquals(ExactRatio.of(100),
                 constantOf(new Core.FieldAccess(built, "threshold", Type.INT, SOMEWHERE)));

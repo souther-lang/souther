@@ -28,12 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AWalkOfNumbersOnNoOrderHasCoveredNoQuestionTest {
 
-    private static final NumericSet A_RUN_OF_THEM = new NumericSet.InARun(
+    private static final NumericSet.OfRuns A_RUN_OF_THEM = new NumericSet.InARun(
             new Band(Band.endAt(null, Bound.at(at(0), true), souther.compiler.numeric.Towards.ABOVE),
                     Band.endAt(null, Bound.at(at(10), true),
                             souther.compiler.numeric.Towards.BELOW)));
 
-    private static final NumericSet ONE_OF_THEM = new NumericSet.At(Count.of(5));
+    private static final NumericSet.OfRuns ONE_OF_THEM = new NumericSet.At(Count.of(5));
 
     private static Level at(long value) {
         return new Level.OnACarrier(Carrier.WHOLE, Count.of(value));
@@ -108,7 +108,8 @@ class AWalkOfNumbersOnNoOrderHasCoveredNoQuestionTest {
         OnTheWay.TakenIn away = new OnTheWay.TakenIn(
                 new ConditionReportAnchor.WhereTheReadingMetIt("m",
                         new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0)),
-                new RowDemand.Relational(new TakenConstraint.AwayFrom(term, Count.of(1))));
+                new RowDemand.Relational(new TakenConstraint.AwayFrom(term, Count.of(1))),
+                NamedElements.NONE);
 
         NumbersAskedFor asked = NumbersAskedFor.askedOf(term, NothingTheRulesSay.REGION, null,
                 List.of(away));

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
@@ -51,7 +52,7 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     /** The line, and the classes either side of it, named by the strings the model wrote. */
     @Test
     void theClassesAreTheTwoSidesOfTheLine() {
-        assertEquals(List.of("m/x < 2026-08", "m/2026-08 <= x"), classes());
+        assertEquals(List.of("m: x < 2026-08", "m: 2026-08 <= x"), classes());
     }
 
     /** A row at the line, which is the literal the body already holds. */
@@ -85,10 +86,7 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     }
 
     private static Compilation measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 
     private static List<String> classes() {
@@ -100,6 +98,6 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     private static String generated() {
         return souther.compiler.report.GeneratedRows.of(measured(), "example.month",
                 "classifyMonth",
-                souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 }

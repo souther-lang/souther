@@ -2,7 +2,10 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -33,16 +36,17 @@ class AReasonBelongsToTheConjunctItCameFromTest {
 
     /** The whole answer to the one boundary question the clause written here leaves standing. */
     private static FieldDomains.BoundaryStanding standing(String clause) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data Pair = { x: Int, y: Int }
                     %s
-                """.formatted(clause), "Main");
+                """.formatted(clause));
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Pair"));
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).accounting().values().stream()
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY))
+                .accounting().values().stream()
                 .flatMap(each -> each.answers().entrySet().stream())
                 .filter(e -> e.getKey().obligation() == CoverageObligation.BOUNDARY)
                 .map(e -> assertInstanceOf(RuleAccounting.Outcome.Unaccounted.class, e.getValue()))

@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -117,12 +116,17 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
         }
     }
 
-    /** How many strings each row writes, over both lists. */
+    /** A string as a row writes it: between quotes, a quote inside it behind a backslash. */
+    private static final String STRING = "\"(?:[^\"\\\\]|\\\\.)*\"";
+
+    /** How many strings each row writes, over both lists. A row standing at a line it was not
+     *  composed for is shown behind that line's name, which is text and no string of the row. */
     private static List<Integer> heldByEachRow(String rows) {
         List<Integer> held = new ArrayList<>();
         for (String line : rows.split("\n")) {
-            if (line.trim().startsWith("| (")) {
-                held.add(count(line.substring(0, line.indexOf("->")), "\"[^\"]*\""));
+            String row = line.trim().replaceFirst("^\\|\\s*" + STRING + "\\s*:\\s*", "| ");
+            if (row.startsWith("| (")) {
+                held.add(count(row.substring(0, row.indexOf("->")), STRING));
             }
         }
         return held;
@@ -139,21 +143,17 @@ class HowManyAListMadeFromOthersHoldsIsWrittenByThoseListsTest {
 
     private static String rowsOf(Compilation compilation) {
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + model);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

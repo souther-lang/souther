@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.RuleKey;
@@ -286,7 +287,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     @Test
     void aComparisonOfThatNameDrawsItsLineUnderEachCase() {
         Compilation c = measured(MODEL);
-        String human = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        String human = AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
         assertTrue(human.contains("read as busy/f.unit@Desk.count: = 4")
                         && human.contains("read as busy/f.unit@Ward.count: = 4"),
                 human);
@@ -390,15 +391,11 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      * of them changes one.
      */
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, written -> {
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model, written -> {
             Compilation c = Compilation.ofSource(written, "Main");
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
-            assertEquals(List.of(), c.errors().stream()
-                    .map(e -> e.diagnostic().code() + " " + e.diagnostic().said() + " "
-                            + e.diagnostic().literalMessage()).toList(), "the model is measured");
             return c;
-        });
+        }));
     }
 
     @AfterAll

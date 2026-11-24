@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -65,19 +66,17 @@ class TwoValuesStandingAlikeAreStillTwoValuesTest {
      */
     @Test
     void theValueThatBuildsIsTriedThoughAnotherStandsWhereItDoes() {
-        assertEquals("Request { ...loose, hi = Amount(0) }", rowFor("request.hi/0 <= x <= 60"));
+        assertEquals("Request { ...loose, hi = Amount(0) }", rowFor("request.hi: 0 <= x <= 60"));
     }
 
     /** And the value written first is still the one used where both can be. */
     @Test
     void theFirstOfThemIsStillTheOneUsedWhereBothCanBe() {
-        assertEquals("Request { ...tight, lo = Amount(51) }", rowFor("request.lo/50 < x"));
+        assertEquals("Request { ...tight, lo = Amount(51) }", rowFor("request.lo: 50 < x"));
     }
 
     private static String rowFor(String classId) {
-        Compilation compilation = Compilation.ofSource(ALIKE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(ALIKE, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");

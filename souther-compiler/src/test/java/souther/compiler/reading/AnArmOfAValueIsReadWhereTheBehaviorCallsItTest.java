@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
@@ -212,10 +213,7 @@ class AnArmOfAValueIsReadWhereTheBehaviorCallsItTest {
         static Model of() {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors().stream()
-                            .map(e -> e.diagnostic().code()).toList(),
-                    "the model under test compiles");
+            ACompiledModel.compiles(compilation);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Observable(MODULE)).value();
             return new Model(checked, checked.plan(),
                     compilation.db().ask(new Adequacy.Meets(MODULE)).value());

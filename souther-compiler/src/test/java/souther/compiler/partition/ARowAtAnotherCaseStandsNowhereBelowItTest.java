@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -72,8 +74,7 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
     }
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
@@ -85,7 +86,7 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         souther.compiler.inputs.InputDomain domain = souther.compiler.inputs.InputDomain.of(
                 sigs.get("read"), reading, TypeCardinality.Counts.workedOutIn(reading),
                 Membership.none());

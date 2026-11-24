@@ -11,11 +11,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongBinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code List.sum(List.map(a -> a.q, xs))} did not: the closure answered no place of its element,
  * and a place was the only thing a run could be made of. What is held here is that the number is
  * named by the computation and not by how it was written, that the line it draws owes its points,
- * that rows are written for it and come to what they were written for, and that what is not a form
- * of the element's fields is still reported as unread.
+ * that rows are written for it and come to what they were written for, and that what is no form of
+ * the element's fields or of their products — a field times itself — is still reported as unread.
  */
 class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
 
@@ -65,7 +65,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         read.forEach((spelled, report) -> {
             assertTrue(report.contains("List.sum({2·q + 0 | xs[*]})"),
                     () -> spelled + " is twice the field: " + report);
-            assertFalse(report.contains("not read"), () -> spelled + " is read: " + report);
+            assertFalse(NotRead.in(report), () -> spelled + " is read: " + report);
         });
         assertTrue(thrice.contains("List.sum({3·q + 0 | xs[*]})"), thrice);
         assertFalse(thrice.contains("{2·q"), thrice);
@@ -151,7 +151,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         String chosen = report(model("if a.debit then a.q else 0 - a.q", 3));
         assertTrue(chosen.contains(
                 "List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"), chosen);
-        assertFalse(chosen.contains("not read"), chosen);
+        assertFalse(UnreadBesideItsStops.in(chosen), chosen);
     }
 
     /** Arithmetic over a choice by a flag is the choice of the arithmetic, in each branch. */
@@ -160,7 +160,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         String weighed = report(model("(if a.debit then a.q else 0 - a.q) * 2 + a.p", 3));
         assertTrue(weighed.contains("List.sum({if debit then 1·p + 2·q + 0 else 1·p + -2·q + 0"
                 + " | xs[*]})"), weighed);
-        assertFalse(weighed.contains("not read"), weighed);
+        assertFalse(UnreadBesideItsStops.in(weighed), weighed);
     }
 
     /**
@@ -299,7 +299,9 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                 """);
         assertTrue(folded.contains("List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"),
                 folded);
-        assertFalse(folded.contains("not read"), folded);
+        // Nought less the least Int, and a running total, pass an Int where no operation tells:
+        // that is said of the run, and the fold is read to the end all the same.
+        assertFalse(UnreadBesideItsStops.in(folded), folded);
     }
 
     /**
@@ -395,7 +397,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(report.contains("List.sum({if first then if debit then 1·q + 0 else -1·q + 0"
                 + " else if second then if debit then 1·q + 0 else -1·q + 0 else 0 | xs[*]})"),
                 report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(UnreadBesideItsStops.in(report), report);
     }
 
     /** A weight below nought is solved for the way any other is: the fields come to minus the rest. */
@@ -408,11 +410,28 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(totals.stream().anyMatch(each -> each < 3), () -> "one outside: " + totals);
     }
 
-    /** A product of two fields is no form of them, and stays a rule nothing read. */
+    /**
+     * A product of two fields is read as the product it is, and rows are written for it with one
+     * field held still: each row's elements multiplied and added up come to the point it fills.
+     */
     @Test
-    void aProductOfTwoFieldsStaysUnread() {
-        String report = report(model("a.q * a.p", 3));
-        assertTrue(report.contains("not read"), report);
+    void aProductOfTwoFieldsIsSolvedForWithTheOtherHeldStill() {
+        String model = model("a.q * a.p", 3);
+        String report = report(model);
+        assertTrue(report.contains("List.sum({1·p·q + 0 | xs[*]})"), report);
+        assertFalse(NotRead.in(report), report);
+        List<Long> totals = totalsOf(rowsOf(model), (q, p) -> q * p);
+        assertTrue(totals.contains(3L), () -> "the point on the line: " + totals);
+        assertTrue(totals.contains(2L), () -> "the point just off it: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each > 3), () -> "one inside: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each < 2), () -> "one outside: " + totals);
+    }
+
+    /** A field times itself is a square, which holding no other field still makes a form of. */
+    @Test
+    void aSquareOfAFieldStaysUnread() {
+        String report = report(model("a.q * a.q", 3));
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("List.sum({"), report);
     }
 
@@ -464,25 +483,34 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(totals.contains(7L), () -> "the point just off it: " + totals);
     }
 
-    /** A point no whole number of the field reaches is said as a point nothing was written for. */
+    /**
+     * A point no whole number of the field reaches is shown to have no row: the total of twice
+     * each number is twice the total of the numbers, which is no odd number — and said so where it
+     * is shown, never as a search that stopped short of one.
+     */
     @Test
-    void aTotalNoElementComesToIsNotSaidToBeOneNoRowComesTo() {
+    void aTotalNoElementComesToIsShownToHaveNoRow() {
         String rows = rowsOf(model("a.q * 2", 4));
-        assertTrue(rows.contains("no row for `List.sum({2·q + 0 | xs[*]}) = 3`"), rows);
-        assertTrue(rows.contains("untried"), rows);
+        assertTrue(rows.contains("no row for `List.sum({2·q + 0 | xs[*]}) = 3` in `decide`: no"
+                + " value can stand here"), rows);
+        assertFalse(rows.contains("untried"), rows);
         assertEquals(3, totalsOf(rows, 2, 0).size(),
                 () -> "the other three points have rows: " + rows);
     }
 
-    /** What chooses more than one field of an element is a way this compiler writes none of. */
+    /**
+     * A form of several fields is solved for one of them with the other held still, and each row's
+     * elements come to the point it fills.
+     */
     @Test
-    void aFormOfSeveralFieldsIsReadAndNoRowIsWrittenForIt() {
+    void aFormOfSeveralFieldsIsSolvedForWithTheOthersHeldStill() {
         String model = model("a.q + a.p", 3);
-        String report = report(model);
-        assertTrue(report.contains("made of several fields, chosen by a flag, chosen by their"
-                + " case or chosen by where they stand"), report);
-        String rows = rowsOf(model);
-        assertTrue(rows.contains("no row for"), rows);
+        assertFalse(NotRead.in(report(model)), model);
+        List<Long> totals = totalsOf(rowsOf(model), Long::sum);
+        assertTrue(totals.contains(3L), () -> "the point on the line: " + totals);
+        assertTrue(totals.contains(2L), () -> "the point just off it: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each > 3), () -> "one inside: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each < 2), () -> "one outside: " + totals);
     }
 
     /** What each row's elements come to, each weighing its {@code q} and adding the constant. */
@@ -505,35 +533,55 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         return totals;
     }
 
+    /** What each row's elements come to, each the number {@code ofAnElement} makes of its
+     *  {@code q} and {@code p}. */
+    private static List<Long> totalsOf(String rows, LongBinaryOperator ofAnElement) {
+        List<Long> totals = new ArrayList<>();
+        Pattern element = Pattern.compile("A \\{ q = (-?\\d+), p = (-?\\d+)");
+        for (String row : rows.split("\n    \\| ")) {
+            Matcher found = element.matcher(row);
+            long total = 0;
+            boolean any = false;
+            while (found.find()) {
+                total += ofAnElement.applyAsLong(Long.parseLong(found.group(1)),
+                        Long.parseLong(found.group(2)));
+                any = true;
+            }
+            if (any) {
+                totals.add(total);
+            }
+        }
+        return totals;
+    }
+
     private static String rowsOf(String model) {
         return GeneratedRows.of(compiled(model), null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static String report(String model) {
         Compilation compilation = compiled(model);
         compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once for the class: some are asked for their report and for their
-     *  rows. The rows ask what they read of the measurement; the rest is asked where a report is
-     *  made. */
+     *  rows. */
     private static Compilation compiled(String model) {
-        return MEASURED.computeIfAbsent(model, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+        return SHARED.compiles(model, () -> {
+            Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             return compilation;
         });
     }
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.Generator;
 
 import org.junit.jupiter.api.Test;
@@ -75,7 +76,7 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
      */
     @Test
     void theClassesTheRowsMissedAreOfferedARowEach() {
-        assertEquals(List.of("c=Blue", "c=Green"),
+        assertEquals(List.of("Blue at c", "Green at c"),
                 classesOffered(ONE_CLASS_COVERED, Adequacy.Asked.reportOnly(Adequacy.Level.ALL)),
                 "a row sits in Red, and the other two are work");
     }
@@ -89,7 +90,7 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
      */
     @Test
     void aBehaviorWithNoRowsIsOfferedOneAtEveryClass() {
-        assertEquals(List.of("c=Blue", "c=Green", "c=Red"),
+        assertEquals(List.of("Blue at c", "Green at c", "Red at c"),
                 classesOffered(NO_ROWS_AT_ALL, Adequacy.Asked.reportOnly(Adequacy.Level.ALL)),
                 "nothing names this behavior, so each of its classes is a row to write");
     }
@@ -111,9 +112,7 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
 
     /** The classes the rows this request is offered were composed for, in order. */
     private static List<String> classesOffered(String source, Adequacy.Asked asked) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(asked);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, asked);
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(MODULE));
         assertNotNull(offering, "the model under test compiles");

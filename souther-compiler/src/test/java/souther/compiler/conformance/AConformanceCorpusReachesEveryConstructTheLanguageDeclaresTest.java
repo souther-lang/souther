@@ -2,6 +2,7 @@ package souther.compiler.conformance;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.check.BehaviorRequirement;
@@ -188,22 +189,6 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
                 "standard library modules the conformance corpus never uses");
     }
 
-    /** One module of one corpus, compiled, with what the compiler answers about it. */
-    private record Module(Compilation compiled, String name) {}
-
-    /** Compiled and nothing measured: what is asked of each module is what it declares and
-     *  requires, which the checking answers. */
-    private static List<Module> modules() {
-        List<Module> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compiled = Compilation.ofSources(corpus.sources(), ModulePath.EMPTY);
-            for (String name : compiled.modules()) {
-                out.add(new Module(compiled, name));
-            }
-        }
-        return out;
-    }
-
     /**
      * The corpus carries a requirement across a module boundary.
      *
@@ -224,31 +209,37 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
     void aRequirementIsCarriedAcrossAModuleBoundary() {
         List<String> closed = new ArrayList<>();
         List<String> owed = new ArrayList<>();
-        for (Module module : modules()) {
-            Prepared prepared =
-                    module.compiled().db().ask(new Shapes.Prepared(module.name())).value();
-            Map<String, List<BehaviorRequirement>> requirements =
-                    module.compiled().db().ask(new Bodies.Requirements(module.name())).value();
-            if (prepared == null || requirements == null) {
-                continue;
-            }
-            // The stand-ins this module writes, as the behaviors they answer for. A requirement is
-            // closed by one of these or by nothing: `with` supplies a dependency taking no input,
-            // and what this is about takes one.
-            Set<ValueName.Behavior> standsInFor =
-                    prepared.forExamples().fakes().unique().keySet();
-            requirements.forEach((behavior, required) -> {
-                for (BehaviorRequirement each : required) {
-                    if (each.dependency().module().equals(module.name())) {
-                        continue;
-                    }
-                    String said = module.name() + "." + behavior + " requires " + each.dependency();
-                    // The same behavior on both sides. Collected apart, a requirement borrowed by
-                    // one module and a table written in another for something nothing requires
-                    // would answer this together while the construct was written nowhere.
-                    (standsInFor.contains(each.dependency()) ? closed : owed).add(said);
+        // Compiled and nothing measured: what is asked of each module is what it declares and
+        // requires, which the checking answers.
+        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+            Compilation compiled = ACompiledModel.refusedWith(corpus.refusedWith(),
+                    Compilation.ofSources(corpus.sources(), ModulePath.EMPTY));
+            for (String name : compiled.modules()) {
+                Prepared prepared = compiled.db().ask(new Shapes.Prepared(name)).value();
+                Map<String, List<BehaviorRequirement>> requirements =
+                        compiled.db().ask(new Bodies.Requirements(name)).value();
+                if (prepared == null || requirements == null) {
+                    continue;
                 }
-            });
+                // The stand-ins this module writes, as the behaviors they answer for. A requirement
+                // is closed by one of these or by nothing: `with` supplies a dependency taking no
+                // input, and what this is about takes one.
+                Set<ValueName.Behavior> standsInFor =
+                        prepared.forExamples().fakes().unique().keySet();
+                requirements.forEach((behavior, required) -> {
+                    for (BehaviorRequirement each : required) {
+                        if (each.dependency().module().equals(name)) {
+                            continue;
+                        }
+                        String said = name + "." + behavior + " requires " + each.dependency();
+                        // The same behavior on both sides. Collected apart, a requirement borrowed
+                        // by one module and a table written in another for something nothing
+                        // requires would answer this together while the construct was written
+                        // nowhere.
+                        (standsInFor.contains(each.dependency()) ? closed : owed).add(said);
+                    }
+                });
+            }
         }
         assertFalse(closed.isEmpty(), "no behavior of the conformance corpus requires one another"
                 + " module declares and closes it with a stand-in written where its rows run, so"

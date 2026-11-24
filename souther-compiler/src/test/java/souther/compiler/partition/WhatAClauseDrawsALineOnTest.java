@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -15,6 +16,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -40,7 +42,18 @@ class WhatAClauseDrawsALineOnTest {
 
     /** The lines one behavior's clauses draw, through the readings a report is built from. */
     private static EnsuresThresholds.Clauses drawn(String source, String behavior) {
+        return drawn(ACompiledModel.answered(source), behavior);
+    }
+
+    /** The same, over a model that is expected to be refused with {@code codes} and read anyway. */
+    private static EnsuresThresholds.Clauses drawnDespite(
+            List<String> codes, String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(codes, compilation);
+        return drawn(compilation, behavior);
+    }
+
+    private static EnsuresThresholds.Clauses drawn(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -193,9 +206,12 @@ class WhatAClauseDrawsALineOnTest {
                 """;
 
         // The same clause over the input, so that "no line" is what reading the answer comes to
-        // rather than what this reading does with every clause of this shape.
-        assertEquals(List.of("n = 0"), valuesOf(drawn(model.formatted("n"), "tally")));
-        assertEquals(List.of(), valuesOf(drawn(model.formatted("value"), "tally")),
+        // rather than what this reading does with every clause of this shape. Each clause names
+        // only one side, so each model is refused for it and is read all the same.
+        assertEquals(List.of("n = 0"),
+                valuesOf(drawnDespite(List.of("E1616"), model.formatted("n"), "tally")));
+        assertEquals(List.of(),
+                valuesOf(drawnDespite(List.of("E1617"), model.formatted("value"), "tally")),
                 "a row cannot be written at a value the behavior answers with");
     }
 
@@ -375,6 +391,216 @@ class WhatAClauseDrawsALineOnTest {
                 """, "charge");
 
         assertEquals(List.of("a.n = 100"), valuesOf(clauses));
+    }
+
+    /** A behavior whose clause says what it says through {@code clause}, over an optional name. */
+    private static EnsuresThresholds.Clauses findingByName(String helper, String clause) {
+        return drawn("""
+                module g
+
+                data Account = { name: String, domain: String?, ok: Bool }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String) -> Account | AccountNotFound
+                    ensures %s
+                """.formatted(helper, clause), "find");
+    }
+
+    /** What the reading says of a clause, for two spellings to be held to one another. */
+    private static List<String> saidOf(EnsuresThresholds.Clauses clauses) {
+        return List.of(valuesOf(clauses).toString(),
+                clauses.noLine().reported().toString(),
+                clauses.noLine().unclassified().toString(),
+                clauses.between().toString());
+    }
+
+    /**
+     * A rule about the answer reads the same whether it is written out or through a helper.
+     *
+     * <p>The helper's parameter is another name for the answer, and a {@code match} whose other
+     * arm is a written {@code false} says that the arm is the case and what its body says.
+     */
+    @Test
+    void aRuleAboutTheAnswerReadsTheSameThroughAHelper() {
+        List<String> written = saidOf(findingByName("", "Account -> value.name == name"));
+
+        assertEquals(written, saidOf(findingByName(
+                "let sameName (name: String, a: Account): Bool = a.name == name",
+                "Account -> sameName(name, value)")),
+                "a helper with no branch");
+        EnsuresThresholds.Clauses byMatch = findingByName("""
+                let sameDomain (name: String, a: Account): Bool =
+                    match a.domain with
+                        | Some own -> own == name
+                        | None -> false
+                """, "Account -> sameDomain(name, value)");
+        assertEquals(List.of(), byMatch.noLine().reported(), "a match whose other arm is false");
+        assertEquals(List.of(), byMatch.noLine().unclassified());
+    }
+
+    /** A behavior over two inputs, whose clause is stated through {@code helper}. */
+    private static EnsuresThresholds.Clauses statedThrough(String helper, String clause) {
+        return drawn("""
+                module g
+
+                data Active
+                data Inactive
+                data Status = Active | Inactive
+                data Account = { name: String, ok: Bool }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String, limit: Int, status: Status) -> Account | AccountNotFound
+                    ensures %s
+                """.formatted(helper, clause), "find");
+    }
+
+    /**
+     * A statement an arm of a {@code match} selects on is still a statement about what it selects
+     * on, and a branch that is not a written {@code false} states neither side.
+     */
+    @Test
+    void aBranchIsOnlyReadAsAConjunctionWhereTheOtherWayIsFalse() {
+        // The match is true only where the status is Active, and that is about an input.
+        EnsuresThresholds.Clauses onTheInput = statedThrough("""
+                let isActive (s: Status, a: Account): Bool =
+                    match s with
+                        | Active -> a.ok
+                        | Inactive -> false
+                """, "Account -> isActive(status, value)");
+        assertEquals(List.of("status"),
+                onTheInput.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList(),
+                "the selection stays a statement about the input it selects on");
+
+        // An else that is anything but false is a choice, and a choice states neither side.
+        EnsuresThresholds.Clauses choice = statedThrough("""
+                let either (limit: Int, a: Account): Bool =
+                    if a.ok then limit > 0 else limit < 5
+                """, "Account -> either(limit, value)");
+        assertEquals(List.of(), valuesOf(choice));
+
+        // Two arms that are not false: neither body is required by itself.
+        EnsuresThresholds.Clauses twoBodies = statedThrough("""
+                let both (limit: Int, s: Status): Bool =
+                    match s with
+                        | Active -> limit > 0
+                        | Inactive -> limit < 0
+                """, "Account -> both(limit, status)");
+        assertEquals(List.of(), valuesOf(twoBodies));
+    }
+
+    /**
+     * What a branch states about an input is still a line where the other thing it states is about
+     * the answer.
+     */
+    @Test
+    void anInputComparisonBesideARuleAboutTheAnswerStillDrawsItsLine() {
+        EnsuresThresholds.Clauses clauses = statedThrough("""
+                let sameAndPositive (name: String, limit: Int, a: Account): Bool =
+                    if a.name == name then limit > 0 else false
+                """, "Account -> sameAndPositive(name, limit, value)");
+        // And with the branch written the other way round, which says the condition denied.
+        EnsuresThresholds.Clauses denied = statedThrough("""
+                let otherAndPositive (name: String, limit: Int, a: Account): Bool =
+                    if a.name == name then false else limit > 0
+                """, "Account -> otherAndPositive(name, limit, value)");
+        assertEquals(List.of("limit = 0"), valuesOf(denied));
+
+        assertEquals(List.of("limit = 0"), valuesOf(clauses));
+        assertEquals(List.of(), clauses.noLine().reported());
+    }
+
+    /**
+     * A value made of the answer is the answer's, whichever way it was got to.
+     *
+     * <p>Two ways a name comes to stand for something made of the answer, each of which must read
+     * as the rule written out reads: a name a {@code let} gave to a field of it, and the case an
+     * arm of a {@code match} selected of it. A field handed to a helper as an argument is the first
+     * of these, since the argument is bound to the parameter by a {@code let}.
+     */
+    @Test
+    void whatIsMadeOfTheAnswerIsTheAnswerWhicheverWayItIsGotTo() {
+        String model = """
+                module g
+
+                data Active = { label: String }
+                data Inactive
+                data Status = Active | Inactive
+                data Account = { name: String, status: Status }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String) -> Account | AccountNotFound
+                    ensures Account -> h(name, value)
+                """;
+        EnsuresThresholds.Clauses named = drawn(model.formatted("""
+                let h (name: String, a: Account): Bool = {
+                    let own = a.name
+                    own == name
+                }
+                """), "find");
+        EnsuresThresholds.Clauses selected = drawn(model.formatted("""
+                let h (name: String, a: Account): Bool =
+                    match a.status with
+                        | Active as s -> s.label == name
+                        | Inactive -> false
+                """), "find");
+
+        assertEquals(List.of(), unreadOf(named), "a name for a field");
+        assertEquals(List.of(), unreadOf(selected), "a case selected");
+    }
+
+    /** What a reading left unread of the rules it was handed. */
+    private static List<Object> unreadOf(EnsuresThresholds.Clauses clauses) {
+        List<Object> unread = new ArrayList<>(clauses.noLine().reported());
+        unread.addAll(clauses.noLine().unclassified());
+        return unread;
+    }
+
+    /**
+     * And the same spellings over an input are about the input: what makes a value the answer's is
+     * what it is made of, so a name given to a field of an input, or the case selected of one, is
+     * not mistaken for the answer.
+     */
+    @Test
+    void whatIsMadeOfAnInputIsNotTheAnswer() {
+        String model = """
+                module g
+
+                data Active = { label: String }
+                data Inactive
+                data Status = Active | Inactive
+                data Account = { name: String, status: Status }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String, other: Account) -> Account | AccountNotFound
+                    ensures Account -> %s
+                """;
+        assertEquals(saidOf(drawn(model.formatted("", "other.name == name"), "find")),
+                saidOf(drawn(model.formatted("""
+                        let h (name: String, a: Account): Bool = {
+                            let own = a.name
+                            own == name
+                        }
+                        """, "h(name, other)"), "find")),
+                "a name for a field");
+        EnsuresThresholds.Clauses selected = drawn(model.formatted("""
+                let h (name: String, a: Account): Bool =
+                    match a.status with
+                        | Active as s -> s.label == name
+                        | Inactive -> false
+                """, "h(name, other)"), "find");
+        assertEquals(List.of("other.status"),
+                selected.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList(),
+                "the selection stays a statement about the input it selects on");
     }
 
     /**

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -18,8 +19,11 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -43,7 +47,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             data Name = String
                 invariant String.length(value) >= 1 && String.length(value) <= 8
 
-            data Lead = { campaigns: Set<Name>, names: List<Name>, picked: Name }
+            data Lead = { campaigns: Set<Name>, names: List<Name>, picked: Name, raw: String }
 
             let campaignsOf (lead: Lead): Set<Name> = lead.campaigns
 
@@ -67,7 +71,10 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             let spread (lead, priority) = Set.contains(priority, campaignsOfOpen(lead))
 
             behavior written : (lead: Lead) -> Bool
-            let written (lead) = Set.contains(Name("q"), lead.campaigns)
+            let written (lead) = Set.contains(Name(String.trim(lead.raw)), lead.campaigns)
+
+            behavior namedWritten : (lead: Lead) -> Bool
+            let namedWritten (lead) = Set.contains(Name("q"), lead.campaigns)
 
             data Tally = { counts: List<Int> }
 
@@ -78,10 +85,58 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             let filtered (lead, priority) =
                 Set.contains(priority, Set.filter(n -> n /= lead.picked, lead.campaigns))
 
+            behavior taken : (lead: Lead, priority: Name) -> Bool
+            let taken (lead, priority) = List.contains(priority, List.take(2, lead.names))
+
+            behavior takenAny : (lead: Lead, priority: Name) -> Bool
+            let takenAny (lead, priority) =
+                List.any(n -> n == priority, List.take(2, lead.names))
+
+            behavior dropped : (lead: Lead, priority: Name) -> Bool
+            let dropped (lead, priority) = List.contains(priority, List.drop(1, lead.names))
+
+            behavior distinctNames : (lead: Lead) -> Bool
+            let distinctNames (lead) = List.contains(lead.picked, List.distinct(lead.names))
+
+            behavior leftOut : (lead: Lead, priority: Name) -> Bool
+            let leftOut (lead, priority) =
+                Set.contains(priority, Set.remove(lead.picked, lead.campaigns))
+
             data Ledger = { totals: Map<String, Int> }
+
+            behavior keysOfKept : (ledger: Ledger, wanted: String) -> Bool
+            let keysOfKept (ledger, wanted) =
+                List.contains(wanted, Map.keys(Map.filterEntries((_, v) -> v > 3, ledger.totals)))
+
+            behavior valuesOfKept : (ledger: Ledger, wanted: Int) -> Bool
+            let valuesOfKept (ledger, wanted) =
+                List.contains(wanted, Map.values(Map.filterEntries((_, v) -> v > 3, ledger.totals)))
+
+            behavior keysOfTaken : (ledger: Ledger, wanted: String) -> Bool
+            let keysOfTaken (ledger, wanted) =
+                List.contains(wanted, Map.keys(Map.remove("Z", ledger.totals)))
+
+            behavior valuesOfTaken : (ledger: Ledger, wanted: Int) -> Bool
+            let valuesOfTaken (ledger, wanted) =
+                List.contains(wanted, Map.values(Map.remove("Z", ledger.totals)))
+
+            behavior keysOfRewritten : (ledger: Ledger, wanted: String) -> Bool
+            let keysOfRewritten (ledger, wanted) =
+                List.contains(wanted, Map.keys(Map.mapValues((_, v) -> v + 1, ledger.totals)))
 
             behavior keyed : (ledger: Ledger, wanted: String) -> Bool
             let keyed (ledger, wanted) = Map.containsKey(wanted, ledger.totals)
+
+            behavior keyedWritten : (ledger: Ledger) -> Bool
+            let keyedWritten (ledger) = Map.containsKey("USD", ledger.totals)
+
+            data Roll = { codes: List<String>, sizes: List<Int> }
+
+            behavior listedWritten : (roll: Roll) -> Bool
+            let listedWritten (roll) = List.contains("USD", roll.codes)
+
+            behavior listedWrittenNumber : (roll: Roll) -> Bool
+            let listedWrittenNumber (roll) = List.contains(7, roll.sizes)
             """;
 
     @Test
@@ -133,7 +188,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.container();
                     case RowDemand.ForAll every -> every.container();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                         RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _,
+                         RowDemand.ForTheRun _ ->
                             throw new AssertionError("a membership is some element or every one: "
                                     + asked);
                 };
@@ -143,7 +199,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.holdingOne();
                     case RowDemand.ForAll every -> every.holdingNone();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                         RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _,
+                         RowDemand.ForTheRun _ ->
                             throw new AssertionError("a membership is some element or every one: "
                                     + asked);
                 };
@@ -170,7 +227,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     }
 
     /**
-     * A value written in the source stands at no position, and what is asked of an element is
+     * A value worked out of the input stands at no position, and what is asked of an element is
      * declined as that — read, and short of somewhere to read the value from — rather than as a
      * shape this has no words for. The container holding the value is still the container holding
      * something, which is asked: some element being it needs some element.
@@ -209,7 +266,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.ofAnElement().theWay();
                     case RowDemand.ForAll every -> every.ofEachElement().theWay();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> List.of();
+                         RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _,
+                         RowDemand.ForTheRun _ -> List.of();
                 };
                 assertTrue(ofAnElement.stream().noneMatch(one ->
                                 one.equals(new RowDemand.SameAs(wanted))
@@ -219,15 +277,56 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             assertTrue(stated.stream().anyMatch(each -> each instanceof OnTheWay.TakenIn taken
                             && (taken.demand().positions().contains(totals.key())
                                     || (taken.demand() instanceof RowDemand.ForTheRun(
-                                            Proposition.Some(DecisionSubject.AnInput(TermPath over),
+                                            Proposition.Some(
+                                                    DecisionSubject.AnInput(TermPath over, var _),
                                                     Proposition.SameValue(
-                                                            DecisionSubject.AnInput(TermPath one),
-                                                            DecisionSubject.AnInput(TermPath other),
+                                                            DecisionSubject.AnInput(TermPath one,
+                                                                    var _),
+                                                            Operand.At<DecisionSubject>(
+                                                                    DecisionSubject.AnInput(
+                                                                            TermPath other, var _)),
                                                             var _, var _), var _, var _),
-                                            var _, var _)
+                                            var _, var _, var _, var _)
                                     && over.equals(totals) && one.equals(totals.key())
                                     && other.equals(wanted)))),
                     () -> "the key is what is asked: " + stated);
+        }
+    }
+
+    /**
+     * A key the source wrote stands at no position, so what the map is asked is that it hold the
+     * value as a key, or that it hold none: the two classes of the map's place, as for a key
+     * another value names — with the value itself and not a position to read it from.
+     */
+    @Test
+    void aKeyWrittenIsAskedOfTheMapAsTheValueItself() {
+        Operand<TermPath> usd = new Operand.Written<>(Value.text("USD"));
+        RowDemand.Exists holds =
+                assertInstanceOf(RowDemand.Exists.class, asked("keyedWritten", true));
+        assertEquals("ledger.totals", holds.container().toString());
+        assertEquals(List.of(new RowDemand.KeyedAs(usd)), holds.ofAnElement().theWay());
+        RowDemand.ForAll fails =
+                assertInstanceOf(RowDemand.ForAll.class, asked("keyedWritten", false));
+        assertEquals("ledger.totals", fails.container().toString());
+        assertEquals(List.of(new RowDemand.NotKeyedAs(usd)), fails.ofEachElement().theWay());
+    }
+
+    /** A value written beside a list or a set is the element the container is asked to hold, or
+     *  to hold none equal to, whatever kind of value it is. */
+    @Test
+    void anElementWrittenIsAskedOfTheContainerAsTheValueItself() {
+        // A newtype's constructor writes the value it wraps, which the place wearing the name
+        // holds under it.
+        for (Map.Entry<String, Value> each : Map.of("listedWritten", Value.text("USD"),
+                "listedWrittenNumber", Value.number(7),
+                "namedWritten", Value.text("q")).entrySet()) {
+            Operand<TermPath> written = new Operand.Written<>(each.getValue());
+            assertEquals(List.of(new RowDemand.SameAs(written)),
+                    assertInstanceOf(RowDemand.Exists.class, asked(each.getKey(), true))
+                            .ofAnElement().theWay());
+            assertEquals(List.of(new RowDemand.DifferentFrom(written)),
+                    assertInstanceOf(RowDemand.ForAll.class, asked(each.getKey(), false))
+                            .ofEachElement().theWay());
         }
     }
 
@@ -240,6 +339,40 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(
                     new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))),
                     declined.whys());
+        }
+    }
+
+    /**
+     * The keys of a map made of another by keeping the entries meeting a statement are listed at
+     * the entries of the other, so the key asked for and what the entry was kept by are asked of
+     * one entry. The values are the value asked for and the one the entry was kept by in one, which
+     * the composer is not asked to write.
+     */
+    @Test
+    void theKeysOfAMapKeptByItsEntriesAreAskedOfOneEntryAndItsValuesAreLeftToTheRun() {
+        RowDemand.Exists keys = assertInstanceOf(RowDemand.Exists.class,
+                asked("keysOfKept", true));
+        assertEquals("ledger.totals", keys.container().toString());
+        assertEquals(2, keys.ofAnElement().theWay().size(), () -> "kept by, and keyed as: " + keys);
+        assertTrue(keys.ofAnElement().theWay().contains(new RowDemand.KeyedAs(
+                new Operand.At<>(TermPath.of("wanted")))), () -> "keyed as: " + keys);
+        assertInstanceOf(RowDemand.ForAll.class, asked("keysOfKept", false));
+        assertInstanceOf(RowDemand.ForTheRun.class, asked("valuesOfKept", true));
+    }
+
+    /** So does one holding some of the elements of another by where they stand or by what is left
+     *  out, since no statement says which, and so do the keys and the values of a map made so. */
+    @Test
+    void aContainerHoldingSomeOfAnothersElementsIsNoPosition() {
+        for (String behavior : List.of("taken", "takenAny", "dropped", "distinctNames", "leftOut",
+                "keysOfTaken", "valuesOfTaken", "keysOfRewritten")) {
+            for (boolean holding : List.of(true, false)) {
+                OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
+                        stated(behavior, holding), behavior);
+                assertEquals(List.of(new WhyNotTaken.MeaningUnread(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))),
+                        declined.whys(), behavior);
+            }
         }
     }
 
@@ -283,10 +416,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 
     private static String module() {

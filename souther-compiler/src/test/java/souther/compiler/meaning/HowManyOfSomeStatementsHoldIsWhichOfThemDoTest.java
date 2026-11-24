@@ -1,18 +1,21 @@
 package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
+import souther.test.Allocated;
+import souther.test.Growth;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -106,7 +109,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         Proposition.SoManyHold held = assertInstanceOf(Proposition.SoManyHold.class,
                 howMany(each, Rel.EQ, 1));
 
-        assertEquals(each.stream().sorted((a, b) -> a.key().compareTo(b.key())).toList(),
+        assertEquals(each.stream().sorted((a, b) -> a.spelledOut().compareTo(b.spelledOut())).toList(),
                 held.statements());
         assertEquals(List.of(1), held.admitted());
         assertTrue(held.weights().stream().allMatch(weight -> weight == 1), held::toString);
@@ -153,16 +156,17 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
      */
     @Test
     void choicesPastWhatAReaderIsHandedAreHandedToNone() {
-        assertEquals(new CountsWrittenOut.PastAFigure(CompositionBudget.READINGS_OF_ONE_CONDITION),
+        assertEquals(new CountsWrittenOut.PastAFigure(
+                        CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 CountsWrittenOut.of(howMany(distinct(18), Rel.EQ, 9)));
 
         int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(howMany(distinct(most), Rel.EQ, 1)));
         assertEquals(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure(),
                 new WhyNotTaken.MoreChoicesThanAreWrittenOut(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO).figure()
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()).figure()
                         .orElseThrow());
     }
 
@@ -177,7 +181,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         Proposition half = howMany(distinct(18), Rel.EQ, 9);
 
         assertEquals(new AnswerAsAnInput.Remade.PastAFigure(
-                        CompositionBudget.READINGS_OF_ONE_CONDITION),
+                        CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 AnswerAsAnInput.of(half, "$answer", null, null, Map.of()));
         assertEquals(Set.of(), AnswerAsAnInput.inputNumbersIn(half),
                 "about the input's truths, and so about none of its numbers");
@@ -189,14 +193,29 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
      * choices and not after: each choice names every statement, so the parts pass the figure a few
      * dozen choices in, and the walk stops there — not one thousand choices of a thousand
      * statements each written out whole and counted.
+     *
+     * <p>What the walk costs is what it allocates. Stopping at the figure, it writes out as many
+     * parts for two thousand statements as for one thousand, since a choice is twice as long and
+     * half as many are made; written out whole it writes four times as many.
      */
     @Test
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void exactlyOneOfAThousandIsRefusedBeforeItsChoicesAreWrittenOut() {
-        assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
-                CountsWrittenOut.of(howMany(distinct("t", 1000), Rel.EQ, 1)));
+        Proposition thousand = howMany(distinct("t", 1000), Rel.EQ, 1);
+        Proposition two = howMany(distinct("u", 2000), Rel.EQ, 1);
+        Proposition warm = howMany(distinct("w", 1000), Rel.EQ, 1);
+        CountsWrittenOut.of(warm);
+
+        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+        bySize.put(1000, Allocated.by(() -> assertEquals(PAST_THE_PARTS,
+                CountsWrittenOut.of(thousand))));
+        bySize.put(2000, Allocated.by(() -> assertEquals(PAST_THE_PARTS,
+                CountsWrittenOut.of(two))));
+        Growth.eachAtMost(bySize, 2, 1);
     }
+
+    private static final CountsWrittenOut.PastAFigure PAST_THE_PARTS =
+            new CountsWrittenOut.PastAFigure(
+                    CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached());
 
     /**
      * The parts the choices of a count are held to are the parts a step is counted in, however
@@ -213,7 +232,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
                 .partsWrittenOut(written.choices()), written.parts());
 
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(howMany(ofThirtyParts(100), Rel.EQ, 1)));
     }
 
@@ -232,7 +251,6 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
      * past it.
      */
     @Test
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void twoCountsOneReaderIsHandedAreHeldToOneFigure() {
         Proposition one = howMany(distinct("t", 250), Rel.EQ, 1);
         Proposition other = howMany(distinct("u", 250), Rel.EQ, 1);
@@ -240,25 +258,24 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         assertInstanceOf(CountsWrittenOut.Written.class, CountsWrittenOut.of(other));
 
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(Proposition.all(List.of(one, other))));
     }
 
     /**
-     * A count no choice comes to is no choice, found without looking at any: forty statements each
-     * written twice come to an even number however many hold, and every set of fewer than twenty
-     * of them comes short of thirty-nine.
+     * A count no choice comes to is no choice, found without looking at any: twelve statements each
+     * written twice come to an even number however many hold, so twenty-three of them is no row by
+     * the weights alone.
      */
     @Test
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void aCountNoChoiceComesToIsNoChoiceFoundWithoutLookingAtAny() {
         List<Proposition> twice = new ArrayList<>();
-        for (Proposition one : distinct(40)) {
+        for (Proposition one : distinct(12)) {
             twice.add(one);
             twice.add(one);
         }
 
-        assertEquals(new Proposition.Always(false), howMany(twice, Rel.EQ, 39));
+        assertEquals(new Proposition.Always(false), howMany(twice, Rel.EQ, 23));
     }
 
     /**
@@ -404,6 +421,29 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
             choices.add(Proposition.all(parts));
         }
         return Proposition.any(choices);
+    }
+
+    /**
+     * Choices past a figure name the figure whose number they were held to: four of eight are
+     * seventy choices, past sixteen of them by how many they are, and past sixteen parts long
+     * before they are past the choices.
+     */
+    @Test
+    void choicesPastAFigureNameTheFigureTheyWereHeldTo() {
+        List<Proposition> eight = new ArrayList<>();
+        for (int at = 0; at < 8; at++) {
+            eight.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("s" + at)),
+                    true));
+        }
+        WhichOfThemHold four = WhichOfThemHold.of(relation(eight, Rel.EQ, 4));
+        CompositionBudget sixteen = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG;
+
+        assertEquals(new WhichOfThemHold.Written(null, sixteen.reached(), 0),
+                four.written(sixteen, CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
+                "past the choices");
+        assertEquals(new WhichOfThemHold.Written(null, sixteen.reached(), 0),
+                four.written(CompositionBudget.READINGS_OF_ONE_CONDITION, sixteen),
+                "past the parts");
     }
 
     /** {@code #each - against} standing to nought as {@code rel} says. */

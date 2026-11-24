@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -50,10 +49,8 @@ class TheSizeOfWhatAnOperationAnswersIsReadThroughItsLawTest {
 
     private static AdequacyReport report() {
         if (report == null) {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            report = AdequacyReport.of(compilation);
+            report = AdequacyReport.of(
+                    ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport()));
         }
         return report;
     }

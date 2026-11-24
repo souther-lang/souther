@@ -8,6 +8,9 @@ import souther.compiler.coverage.DecidedBy;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
+import souther.compiler.source.SourceId;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
@@ -17,12 +20,14 @@ import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -140,9 +145,9 @@ class AMeasureWithNoNumberSaysWhyTest {
     void aSignatureWithCasesAndNoRowSaysNobodyMeasuredIt() {
         Compilation compilation = Compilation.ofSource(NO_ROWS, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String judge = behaviorBlock(
-                AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts())), "judge");
+                AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())), "judge");
 
         assertTrue(judge.contains("signature   not measured (no row names this behavior)"), judge);
     }
@@ -162,7 +167,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         if (measured == null) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             measured = compilation;
         }
         return measured;
@@ -171,7 +176,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static String human() {
         if (rendered == null) {
             rendered = AdequacyReport.of(compiled())
-                    .human(SourceRendering.namedByIdentity(compiled().texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(compiled().texts()));
         }
         return rendered;
     }
@@ -442,7 +447,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
     private static String humanAt(Adequacy.Level level) {
         Compilation at = compiledAt(level);
-        return AdequacyReport.of(at).human(SourceRendering.namedByIdentity(at.texts()));
+        return AdequacyReport.of(at).humanInEnglish(SourceRendering.namedByIdentity(at.texts()));
     }
 
     private static Map<String, Adequacy.BranchEvidence> branchesAt(Adequacy.Level level) {
@@ -452,7 +457,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static Compilation compiledAt(Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 
@@ -467,7 +472,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         for (BorderAssessment.Point line : lines) {
             assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
                     line.item().weakeningSource(line.border().border()).why(),
-                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at "
+                            + line.asked(WhereTheReadingsDiffer.NONE));
         }
     }
 
@@ -521,8 +527,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         Compilation compilation = Compilation.ofSources(UNSEEN,
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        // The attached source holds a declaration the model's own source has.
+        return ACompiledModel.refusedWith(List.of("E1906"), compilation);
     }
 
     /**
@@ -565,10 +571,12 @@ class AMeasureWithNoNumberSaysWhyTest {
             }
             assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
                     line.item().weakeningSource(line.border().border()).why(),
-                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at "
+                            + line.asked(WhereTheReadingsDiffer.NONE));
             assertEquals(MeasurementStatus.PARTIAL,
                     AdequacyReport.statusOf(line.item().weakeningSource(line.border().border())),
-                    line.border().origin().saidWithoutAPlace() + " at " + line.asked());
+                    line.border().origin().saidWithoutAPlace() + " at "
+                            + line.asked(WhereTheReadingsDiffer.NONE));
         }
     }
 
@@ -753,7 +761,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         Weakening b = new Weakening.ArmsUnsettled(
                 new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                         souther.compiler.types.SourceConstruct.IF));
-        Weakening c = new Weakening.OutputCasesUnreadable("take");
+        Weakening c = new Weakening.OutputCasesUnreadable("take",
+                Set.of(new RowRef("take", new SourceId("m.sou"), new RowIdentity.Unnamed(1))));
 
         assertEquals(WeakeningSet.of(a), WeakeningSet.of(a).union(WeakeningSet.none()));
         assertEquals(WeakeningSet.of(a), WeakeningSet.none().union(WeakeningSet.of(a)));

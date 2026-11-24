@@ -130,7 +130,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
 
         for (String region : List.of("North", "South")) {
             List<String> rows = rowsFor(said,
-                    Set.of("List.length(u.regions)/0 <= x < 2", region));
+                    Set.of("List.length(u.regions): 0 <= x < 2", region));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row ->
                             row.equals("Usage { regions = [" + region + "] }")),
                     () -> "one " + region + " beside a list of fewer than two: " + rows + " of "
@@ -148,7 +148,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
 
         for (String region : List.of("North", "South")) {
             List<String> rows = rowsFor(said,
-                    Set.of("Map.size(u.counts)/0 <= x < 2", region));
+                    Set.of("Map.size(u.counts): 0 <= x < 2", region));
             assertTrue(!rows.isEmpty() && rows.stream().allMatch(row ->
                             row.matches("Usage \\{ counts = \\[\\(" + region + ", [^)]*\\)] }")),
                     () -> "one entry under a " + region + " beside a map of fewer than two: "
@@ -169,9 +169,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
     }
 
     private static PartitionEvidence measured(String model, String module, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(module)).value();
         PartitionEvidence said = coverage == null ? null : coverage.get(behavior);
@@ -210,9 +208,7 @@ class AnElementsCaseMatchedInAClosureIsPairedWithTheListsLengthTest {
     }
 
     private static List<Adequacy.GenerationDisposition> generated(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(module));
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();

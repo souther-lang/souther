@@ -3,23 +3,53 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
+import souther.compiler.check.NumericMeasures;
+import souther.compiler.report.InEnglish;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.execute.RunStop;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberRegion;
+import souther.compiler.numeric.Rel;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.RowObservation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
+import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,37 +70,49 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String NOT_SHOWN = "not shown";
 
+    /** A parameter's type as written after its name: a name, or a name with the types it holds,
+     *  which a map holds two of. */
+    private static final String PARAMETER_TYPE = ": [A-Za-z]+(<[A-Za-z, ]+>)?";
+
     private static final String OVER_A_RUN = "over a run";
+
+    private static final String NOT_REACHED = "not reached";
+
+    private static final String TELLS_NOTHING_APART = "tells nothing apart";
 
     /** Each model measured once for the class: a test asks the words and the classes of one
      *  model, and only reads it. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    private static final Map<Compilation, String> REPORTS = new ConcurrentHashMap<>();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
+        REPORTS.clear();
     }
 
     /**
-     * The behavior {@code m} taking {@code inputs} and answering {@code body}, read for the lines
-     * its rules draw and no row composed at them: what is asked here is the word a place is left
-     * with and the classes it is parted into, which no composed row moves.
+     * The behavior {@code m} taking {@code inputs} and answering {@code body}, of type
+     * {@code answers}.
      */
-    private static Compilation measured(String inputs, String declarations, String body) {
-        return MEASURED.computeIfAbsent("""
+    private static Compilation measured(String inputs, String declarations, String answers,
+                                        String body) {
+        return measured(List.of(), inputs, declarations, answers, body);
+    }
+
+    /** The same, of a model that is refused with {@code codes}: none, for a model that compiles. */
+    private static Compilation measured(List<String> codes, String inputs, String declarations,
+                                        String answers, String body) {
+        return measured(codes, """
                 module w1
                 %s
-                behavior m : (%s) -> Bool
+                behavior m : (%s) -> %s
                 let m (%s) = %s
-                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z<>]+", ""), body),
-                source -> {
-                    Compilation compilation = Compilation.ofSource(source, "Main");
-                    compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-                    compilation.answerEverything();
-                    return compilation;
-                });
+                """.formatted(declarations, inputs, answers,
+                        inputs.replaceAll(PARAMETER_TYPE, ""), body));
     }
 
     /**
@@ -80,7 +122,19 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static List<String> classesAt(String inputs, String declarations, String body,
                                           String path) {
-        Compilation compilation = measured(inputs, declarations, body);
+        return classesAt(inputs, declarations, "Bool", body, path);
+    }
+
+    /** The same, of a behavior answering {@code answers}. */
+    private static List<String> classesAt(String inputs, String declarations, String answers,
+                                          String body, String path) {
+        return classesAt(List.of(), inputs, declarations, answers, body, path);
+    }
+
+    /** The same, of a model that is refused with {@code codes}. */
+    private static List<String> classesAt(List<String> codes, String inputs, String declarations,
+                                          String answers, String body, String path) {
+        Compilation compilation = measured(codes, inputs, declarations, answers, body);
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))
@@ -93,9 +147,65 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     private static Map<String, String> left(String inputs, String declarations, String body,
                                             String at) {
-        Compilation compilation = measured(inputs, declarations, body);
-        String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        return left(inputs, declarations, "Bool", body, at);
+    }
+
+    /** The same, of a behavior answering {@code answers}. */
+    private static Map<String, String> left(String inputs, String declarations, String answers,
+                                            String body, String at) {
+        return left(List.of(), inputs, declarations, answers, body, at);
+    }
+
+    /** The same, of a model that is refused with {@code codes}. */
+    private static Map<String, String> left(List<String> codes, String inputs,
+                                            String declarations, String answers, String body,
+                                            String at) {
+        return leftIn(codes, measured(codes, inputs, declarations, answers, body), at);
+    }
+
+    /** The same, of a model of module {@code w1} written out whole, whose behavior is {@code m}. */
+    private static Map<String, String> leftIn(String source, String at) {
+        return leftIn(measured(source), at);
+    }
+
+    /** The classes the axis at {@code path} of a model written out whole is divided into. */
+    private static List<String> classesIn(String source, String path) {
+        PartitionEvidence evidence = measured(source).db()
+                .ask(new Adequacy.Coverage("w1")).value().get("m");
+        return evidence.axes().stream().filter(axis -> axis.path().equals(path))
+                .flatMap(axis -> axis.classes().stream()).toList();
+    }
+
+    /**
+     * A model written out whole, read for the lines its rules draw and no row composed at them:
+     * what is asked here is the word a place is left with and the classes it is parted into, which
+     * no composed row moves.
+     */
+    private static Compilation measured(String source) {
+        return measured(List.of(), source);
+    }
+
+    /** The same, of a model that is refused with {@code codes}: none, for a model that compiles
+     *  — a model with no value of some data is refused. */
+    private static Compilation measured(List<String> codes, String source) {
+        return SHARED.refusedWith(codes, source, () -> {
+            Compilation made = Compilation.ofSource(source, "Main");
+            made.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            return made;
+        });
+    }
+
+    private static Map<String, String> leftIn(Compilation compilation, String at) {
+        return leftIn(List.of(), compilation, at);
+    }
+
+    /** The same, of a model that is refused with {@code codes}. */
+    private static Map<String, String> leftIn(List<String> codes, Compilation compilation,
+                                              String at) {
+        // The report does not depend on the place asked of it, which only picks lines out of it.
+        Compilation asked = ACompiledModel.refusedWith(codes, compilation);
+        String report = REPORTS.computeIfAbsent(compilation, _ -> AdequacyReport.of(asked)
+                .humanInEnglish(SourceRendering.namedByIdentity(asked.texts())));
         Map<String, String> out = new LinkedHashMap<>();
         for (String line : report.lines().map(String::strip).toList()) {
             if (!line.contains("comparison@" + at + " ") || !line.contains("about `")) {
@@ -107,7 +217,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
             String place = line.substring(line.lastIndexOf("about `") + 7, line.length() - 1);
             out.put(place, line.contains("rather than dividing the values here") ? RELATES
                     : line.contains("not shown to reach every value here") ? NOT_SHOWN
+                    : line.contains("not every value here is shown to get to it") ? NOT_REACHED
                     : line.contains("come to rather than about any one of them") ? OVER_A_RUN
+                    : line.contains("comes out one side of it") ? TELLS_NOTHING_APART
                     : line);
         }
         return out;
@@ -120,7 +232,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String amount = "data Amount = Int invariant value >= 0";
         assertEquals(Map.of("a", RELATES),
                 left("a: Amount, n: Int", amount, "n == a.value", "4:18"));
-        assertEquals(List.of("n/x <= -1", "n/-1 < x"),
+        assertEquals(List.of("n: x <= -1", "n: -1 < x"),
                 classesAt("a: Amount, n: Int", amount, "n == a.value", "n"));
     }
 
@@ -137,7 +249,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
         assertEquals(Map.of("g", RELATES),
                 left("g: Yen, d: Yen", yen, "d.value <= g.value", "4:24"));
-        assertEquals(List.of("d/0 <= x <= 0", "d/0 < x"),
+        assertEquals(List.of("d: 0 <= x <= 0", "d: 0 < x"),
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
@@ -176,6 +288,595 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "g.value >= r.d.value", 24));
     }
 
+    /** A record holding the amount beside a field of type {@code Held}, whose rule is
+     *  {@code rule}. */
+    private static String besideAHeld(String held, String rule) {
+        return """
+                data Yen = Int invariant value >= 0
+                data Held = %s invariant %s
+                data Rec = { h: Held, d: Yen }""".formatted(held, rule);
+    }
+
+    /**
+     * A rule saying only where one part of a date falls leaves the amount beside it alone: every
+     * part of a date the calendar has is a part of some date, so the first of any month is a
+     * value of the field, and the amount reaches every gross from nought on.
+     */
+    @Test
+    void aRuleOnOnePartOfADateLeavesAnAmountBesideItAlone() {
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.day(value) == 1"), "g.value >= r.d.value", 24));
+    }
+
+    /**
+     * A rule asking for two parts of a date at once is not shown to leave the field a value: each
+     * part the calendar has is a part of some date, and two of them are not thereby one date. So
+     * the amount is not shown to reach every gross, whether the parts are in two comparisons or in
+     * one.
+     */
+    @Test
+    void twoPartsOfADateAreNotShownToBeOneDate() {
+        for (String rule : List.of("Date.day(value) == 1 && Date.month(value) == 2",
+                "Date.day(value) == Date.month(value)")) {
+            assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+        }
+    }
+
+    /**
+     * A rule working something out beside the part it takes is not shown to leave the field a
+     * value, whatever it comes to. Under {@code Date.day(value) + 1 == 2} the first of a month is
+     * a date the sum gets through, and the rule is not shown to be that alone. What the bounds read
+     * of {@code Date.day(value) + M > 0} is a day above nought less the greatest {@code Int}, and
+     * no date gets through working it out, so the field holds nothing and nothing is said of the
+     * amount beside it. Cancelled away, as in {@code + M - M}, it is still worked out. A part held
+     * against a number as it is written — the length of a string, the year of a date — leaves one.
+     */
+    @Test
+    void aRuleWorkingSomethingOutBesideThePartIsNotShownToLeaveAValue() {
+        assertEquals(Map.of("g", NOT_SHOWN), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.day(value) + 1 == 2"), "g.value >= r.d.value", 24));
+        for (String rule : List.of("Date.day(value) + 9223372036854775807 > 0",
+                "Date.day(value) + 9223372036854775807 - 9223372036854775807 == 1")) {
+            assertEquals(Map.of(), leftAt(List.of("E1013"), "g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+        }
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("String", "String.length(value) == 3"), "g.value >= r.d.value", 24));
+        assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
+                besideAHeld("Date", "Date.year(value) == 99999"), "g.value >= r.d.value", 24));
+    }
+
+    /**
+     * A row whose run stops before the comparison is no row at it. Under {@code a + 1 == 0} the
+     * only row holding {@code b} at the greatest {@code Int} true is {@code a} there too, which
+     * stops at {@code a + 1}: no row gets to the comparison with {@code a} there, nor to it true
+     * with {@code b} there. Neither is said reached at every value, and since that is where the
+     * representation stops, no class of {@code b} starts there.
+     */
+    @Test
+    void aRowThatStopsBeforeTheComparisonIsNoRowAtIt() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "if a.value + 1 == 0 then false else a.value == b.value";
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+                left("a: Yen, b: Yen", yen, body, "4:60"));
+        assertTrue(classesAt("a: Yen, b: Yen", yen, body, "b").stream()
+                        .noneMatch(each -> each.contains("9223372036854775807")),
+                "where the representation stops is no line");
+    }
+
+    /**
+     * The left operand of {@code &&} is worked out before the right one is reached, and the right
+     * operand of {@code ||} is worked out only where the left came out false: past the first a run
+     * may stop on {@code a}, and the comparison on the left of the second is reached by every
+     * row, so what stops in the operand beside it takes none out.
+     */
+    @Test
+    void aLeftOperandIsWorkedOutBeforeTheRightIsReachedAndNeverTheOtherWayAbout() {
+        String yen = "data Yen = Int invariant value >= 0";
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED), left("a: Yen, b: Yen", yen,
+                "a.value + 1 >= 0 && a.value == b.value", "4:44"));
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left("a: Yen, b: Yen", yen,
+                "a.value == b.value || a.value + 1 == 0", "4:24"));
+    }
+
+    /**
+     * A {@code let} is worked out whether or not anything reads its name: the value of one nothing
+     * reads stops a run at {@code a + 1} as much as one the comparison is over. That is where the
+     * representation stops and no line: no class of {@code b} starts at the greatest {@code Int}.
+     */
+    @Test
+    void aLetNothingReadsStopsARunAsMuchAsOneThatIsRead() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "{\n    let unused = a.value + 1\n    a.value == b.value\n}";
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+                left("a: Yen, b: Yen", yen, body, "6:13"));
+        assertTrue(classesAt("a: Yen, b: Yen", yen, body, "b").stream()
+                        .noneMatch(each -> each.contains("9223372036854775807")),
+                "where the representation stops is no line");
+    }
+
+    /**
+     * A number the run itself narrows is not free to meet a disequality: past
+     * {@code let unused = p + M} every run holds {@code p} at nought, and {@code a != p} then
+     * keeps {@code a} from nought, and {@code b} from the one value at which {@code a} could meet
+     * it. That is where the representation stops, and no line of the model: neither is divided
+     * there, and neither is said reached at every value.
+     */
+    @Test
+    void aNumberTheRunNarrowsIsNotFreeToMeetADisequality() {
+        String body = "{\n    let unused = p.value + 9223372036854775807\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED), left("p: Yen, a: Yen, b: Yen",
+                "data Yen = Int invariant value >= 0", body, "8:18"));
+    }
+
+    /**
+     * Nor is one an operation the run works out reads where nothing says when it answers:
+     * {@code 1 / (p * p)} stops at nought, so past it {@code p} is one, and {@code a != p} takes
+     * {@code a} away from one. {@code b} is not shown to reach its true side at every value,
+     * where a free {@code p} would have left it related.
+     */
+    @Test
+    void aNumberAnUnsaidOperationReadsIsNotFreeToMeetADisequality() {
+        String body = "{\n    let unused = 1 / (p.value * p.value)\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN), left("p: Bit, a: Bit, b: Bit",
+                "data Bit = Int invariant value >= 0 && value <= 1", body, "8:18"));
+    }
+
+    /**
+     * Where the operation says when it answers, a quotient by {@code p} where {@code p} is not
+     * nought, a run that gets to the comparison has {@code p} at one and {@code a} at nought, so
+     * {@code b} is read: it is nought where the relation holds and one where it does not.
+     */
+    @Test
+    void aNumberAQuotientHoldsOffNoughtIsOneTheRunNarrowsTo() {
+        String body = "{\n    let unused = 1 / p.value\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES), left("p: Bit, a: Bit, b: Bit",
+                "data Bit = Int invariant value >= 0 && value <= 1", body, "8:18"));
+    }
+
+    /**
+     * Where what a run gets past leaves a place no value, no row arrives at the comparison, and
+     * it is read so: the reason says the rows that arrive hold no value at its line, and no class
+     * of either side is drawn. The region of the way is left as it was there, since the proof
+     * that nothing arrives is the walk's and is made from the same operators.
+     */
+    @Test
+    void aRunNoRowGetsPastLeavesTheComparisonNoRowAtIt() {
+        String body = "{\n    let unused = a.value + 9223372036854775807\n    a.value == b.value\n}";
+        String yen = "data Yen = Int invariant value >= 1";
+        Map<String, String> left = left("a: Yen, b: Yen", yen, body, "6:13");
+        assertEquals(Set.of("a", "b"), left.keySet());
+        left.values().forEach(each -> assertTrue(each.contains("no row that arrives at it"), each));
+        assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen, body, "a"));
+        assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen, body, "b"));
+    }
+
+    /**
+     * What the comparison works out itself narrows its numbers by one another as much as by
+     * themselves: {@code a + b + M - M} is an {@code Int} at every step only where {@code a + b}
+     * is nought, so the only row that reaches {@code >= 1} is the one at nought, and it fails.
+     * No line is drawn on either number, which would be drawn at the rows that stop.
+     */
+    @Test
+    void aSumTheComparisonWorksOutItselfNarrowsItsNumbersByEachOther() {
+        String bit = "data Small = Int invariant value >= 0 && value <= 1";
+        String body = "a.value + b.value + 9223372036854775807 - 9223372036854775807 >= 1";
+        assertEquals(List.of(), classesAt("a: Small, b: Small", bit, body, "a"));
+        assertEquals(List.of(), classesAt("a: Small, b: Small", bit, body, "b"));
+    }
+
+    /**
+     * A sum the run worked out narrows both its numbers by the other: {@code a + b} is an
+     * {@code Int} only where {@code b} is nought or one, for an {@code a} one below the greatest,
+     * so a {@code b} above it is no row of the comparison {@code a < b} and no line is drawn
+     * there. Two amounts the sum cannot stop on narrow nothing, and the comparison reads each as
+     * it does without the sum.
+     */
+    @Test
+    void aSumTheRunWorkedOutNarrowsItsTwoNumbersByEachOther() {
+        String almost = "data AlmostMax = Int invariant value == 9223372036854775806\n"
+                + "data NonNegative = Int invariant value >= 0";
+        String body = "{\n    let unused = a.value + b.value\n    a.value < b.value\n}";
+        assertEquals(List.of(),
+                classesAt("a: AlmostMax, b: NonNegative", almost, body, "b"));
+        String small = "data Yen = Int invariant value >= 0 && value <= 1000000";
+        assertEquals(classesAt("a: Yen, b: Yen", small,
+                        "{\n    let unused = 0\n    a.value < b.value\n}", "b"),
+                classesAt("a: Yen, b: Yen", small, body, "b"));
+    }
+
+    /**
+     * A closure handed to an operation of the library is applied by it, so what its body may stop
+     * on is what the run may stop on: {@code Int.floorMod(x, p * p)} applied to each of two numbers
+     * stops at {@code p} nought, as it does written out, and the divisor is no form the arithmetic
+     * composes, so what it stops on is left where nothing says. Where the divisor is {@code p}
+     * the stop is told, and is the same told in the closure as written out.
+     */
+    @Test
+    void whatTheBodyOfAClosureAppliedByTheLibraryMayStopOnIsWhatTheRunMayStopOn() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        String after = "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        String closure = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value * p.value),"
+                + " [1, 2])\n" + after;
+        String writtenOut = "{\n    let unused = Int.floorMod(1, p.value * p.value)\n" + after;
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
+                left("p: Bit, a: Bit, b: Bit", bits, closure, "8:18"));
+        assertEquals(left("p: Bit, a: Bit, b: Bit", bits, writtenOut, "8:18"),
+                left("p: Bit, a: Bit, b: Bit", bits, closure, "8:18"));
+        String toldClosure = "{\n    let unused = List.map(x -> Int.floorMod(x, p.value), [1, 2])\n"
+                + after;
+        String toldWrittenOut = "{\n    let unused = Int.floorMod(1, p.value)\n" + after;
+        assertEquals(left("p: Bit, a: Bit, b: Bit", bits, toldWrittenOut, "8:18"),
+                left("p: Bit, a: Bit, b: Bit", bits, toldClosure, "8:18"));
+    }
+
+    /**
+     * What may stop a run is asked of the one owner of it, at every node and not only those that
+     * always run: a call of a kernel, a part worked out where a condition came out one way, and
+     * an arm of a branch, each stop the run on the number they read, and past each of them
+     * {@code p} is the one value that lets a row on, which {@code a != p} then takes from
+     * {@code a}.
+     */
+    @Test
+    void whatMayStopARunIsAskedOfWhatEndsARunWhereverItIsWorkedOut() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        Map<String, String> notShown = Map.of("a", RELATES, "b", NOT_SHOWN);
+        for (String unused : List.of(
+                "Int.floorMod(1, p.value * p.value)",
+                "p.value == 0 && p.value + 9223372036854775807 + 1 > 0",
+                "if p.value == 0 then p.value + 9223372036854775807 + 1 else 0")) {
+            String body = "{\n    let unused = " + unused + "\n"
+                    + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+            assertEquals(notShown, left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"), unused);
+        }
+    }
+
+    /**
+     * A call of a kernel that ends a run on its divisor alone is told where the divisor is a
+     * form, as a quotient is: past {@code Int.floorMod(1, p)} {@code p} is one, and {@code b} is
+     * read, where the same call over a divisor no form says is not.
+     */
+    @Test
+    void aRemainderByAFormIsToldWhereItsDivisorIsNotNought() {
+        String bits = "data Bit = Int invariant value >= 0 && value <= 1";
+        String body = "{\n    let unused = Int.floorMod(1, p.value)\n"
+                + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
+        assertEquals(Map.of("a", RELATES), left("p: Bit, a: Bit, b: Bit", bits, body, "8:18"));
+    }
+
+    /**
+     * What the comparison works out itself is worked out on a row at it: {@code a + M - M} is
+     * {@code a} as a form and stops at every {@code a} above nought as written.
+     */
+    @Test
+    void aRowThatStopsInTheComparisonsOwnArithmeticIsNoRowAtIt() {
+        String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
+        assertEquals(List.of(), classesAt("a: Yen, b: Yen", yen,
+                "a.value + 9223372036854775807 - 9223372036854775807 + b.value >= 30", "a"));
+    }
+
+    /**
+     * A run that may stop before the relation on what no region says leaves no value of what the
+     * relation reads shown to get to it, and the relation is not read as dividing none of them.
+     * A square, a product of the two and a sum in an arm each stop a run on {@code a} where
+     * nothing says, and {@code a} and {@code b} are not shown reached, and so do they past a sum
+     * that keeps {@code a} from every value but nought, where the representation stops. A
+     * construction refusing nought, which is said as the run its clauses leave, the same
+     * arithmetic after the comparison and a stop on a number the relation does not read leave it
+     * relating the two.
+     */
+    @Test
+    void aRunThatMayStopBeforeARelationOnWhatItReadsLeavesNoValueShownToGetThere() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "a: Yen, b: Yen, p: Yen, c: Bool";
+        Map<String, String> notReached = Map.of("a", NOT_REACHED, "b", NOT_REACHED);
+        for (String before : List.of("a.value * a.value", "a.value * b.value",
+                "if c then a.value + 9223372036854775807 else 0")) {
+            assertEquals(notReached, left(inputs, yen,
+                    "{\n    let before = " + before + "\n    a.value == b.value\n}", "6:13"),
+                    before);
+        }
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left(inputs, yen,
+                "{\n    let before = p.value * p.value\n    a.value == b.value\n}", "6:13"));
+        assertEquals(Map.of("a", RELATES, "b", RELATES), left(inputs, yen,
+                "{\n    let r = a.value == b.value\n    let after = a.value * a.value\n    r\n}",
+                "5:21"));
+        assertEquals(notReached, left(inputs, yen,
+                "{\n    let before = a.value + 9223372036854775807\n    a.value == b.value\n}",
+                "6:13"));
+        assertEquals(Map.of("a", RELATES), left(inputs, yen,
+                "{\n    let before = Yen(a.value - 1)\n    a.value == b.value\n}", "6:13"));
+    }
+
+    /**
+     * A relation in a closure is reached at the application of an element, and the applications
+     * before it run the closure whole: here each divides by {@code p} past the comparison, and
+     * one at nought stops the run before the next element is handed over. A run with one element
+     * makes no application before, so where the way lets the list hold one, the relation is
+     * reached at every value — and where the walk is of the list reversed, which holds one where
+     * the list does. Where the way asks for two, the applications before are owed, and a
+     * division by a number the relation reads may stop them. A stop before the comparison in its own application is owed whatever
+     * the list holds: {@code p} is not shown reached at every value, and {@code r}, held against
+     * {@code p}, is not shown to be reached by it at every value.
+     */
+    @Test
+    void theApplicationsBeforeTheOneARelationIsReachedInAreOwedOnlyWhereARunMakesThem() {
+        String model = """
+                module w1
+                data A = { p: Int, q: Int, r: Int }
+                behavior m : (xs: List<A>) -> Bool
+                let m (xs) = %s
+                """;
+        String walk = "List.any(i -> i.p >= i.r && i.q / i.p >= 0, %s)";
+        Map<String, String> related = Map.of("xs[*].p", RELATES, "xs[*].r", RELATES);
+        Map<String, String> notReached = Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_REACHED);
+        assertEquals(related, leftIn(model.formatted(walk.formatted("xs")), "4:32"));
+        assertEquals(notReached, leftIn(model.formatted(
+                "List.length(xs) >= 2 && " + walk.formatted("xs")), "4:56"));
+        assertEquals(related, leftIn(model.formatted(walk.formatted("List.reverse(xs)")),
+                "4:32"));
+        assertEquals(Map.of("xs[*].p", RELATES, "xs[*].r", NOT_SHOWN), leftIn(model.formatted(
+                "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));    }
+
+    /**
+     * A join of collections stops a run only where it would hold more elements than a list holds,
+     * which parts no values: two lists a rule holds long enough together that the join doubling
+     * both never fits leave the relation in the walk of a third reached at every value, as they do
+     * without the rule; and so does a join of the two lists the walk reads itself, held past what
+     * a list holds together. The joins are said as stops of their own.
+     */
+    @Test
+    void aJoinPastWhatAListHoldsLeavesTheRelationReachedWhateverARuleHoldsTheListsTo() {
+        String model = """
+                module w1
+                data Bundles = { xs: List<Int>, ys: List<Int>, zs: List<Int> }
+                %s
+                behavior m : (b: Bundles, n: Int) -> Bool
+                let m (b, n) = {
+                    let joined = List.append(%s)
+                    List.any(z -> z == n, %s)
+                }
+                """;
+        String doubled = "List.append(b.xs, b.xs), List.append(b.ys, b.ys)";
+        String together = "    invariant List.length(xs) + List.length(ys) >= %s";
+        String heldTogether = model.formatted(together.formatted("2147483647"), doubled, "b.zs");
+        assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES), leftIn(heldTogether, "7:21"));
+        assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES),
+                leftIn(model.formatted("", doubled, "b.zs"), "7:21"));
+        assertEquals(RELATES, leftIn(model.formatted(together.formatted("2147483648"),
+                "b.xs, b.ys", "b.xs"), "7:21").get("b.xs[*]"));
+        assertEquals(List.of("List.append"), measured(heldTogether).db()
+                .ask(new Adequacy.Coverage("w1")).value().get("m").stopsPastTheRepresentation()
+                .stream().map(StopPastTheRepresentation::operation).distinct().toList());
+    }
+
+    /**
+     * A witness of one element meets what the way states of that element, and nothing it states
+     * of some other element: an element of the list with {@code q} at nought and one with it at
+     * one are two, so the walk applies its closure before the one the relation is reached in, and
+     * the division there may stop the run. A statement of the element at hand, as a choice the
+     * closure makes before the comparison, is one the element the relation is read at meets.
+     */
+    @Test
+    void aWitnessOfOneElementMeetsOnlyWhatTheWayStatesOfThatElement() {
+        String model = """
+                module w1
+                data A = { p: Int, q: Int, r: Int }
+                behavior m : (xs: List<A>) -> Bool
+                let m (xs) = %s
+                """;
+        assertEquals(Map.of("xs[*].p", NOT_REACHED, "xs[*].r", NOT_REACHED),
+                leftIn(model.formatted("List.any(e -> e.q == 0, xs) && List.any(e -> e.q == 1, xs)"
+                        + " && List.any(i -> i.p >= i.r && i.q / i.p >= 0, xs)"), "4:94"));
+        assertEquals(Map.of("xs[*].p", RELATES, "xs[*].r", RELATES), leftIn(model.formatted(
+                "List.any(i -> if i.q > 0 then i.p >= i.r && i.q / i.p >= 0 else false, xs)"),
+                "4:48"));
+    }
+
+    /**
+     * A stop only the applications before the one a relation is reached in make is owed of a run
+     * that makes them, on a number outside the list as on one inside it: {@code k * 10} past the
+     * comparison stops a run at a {@code k} whose tenfold is no {@code Int}, but only at an
+     * application after the first. Where the list may hold one element, every {@code k} gets to
+     * the comparison; where the way asks for two, a run may stop on the {@code k} the relation
+     * reads.
+     */
+    @Test
+    void aStopOnlyTheApplicationsBeforeMakeIsOwedOfARunThatMakesThem() {
+        String model = """
+                module w1
+                data A = { p: Int }
+                behavior m : (xs: List<A>, k: Int) -> Bool
+                let m (xs, k) = %s
+                """;
+        String walk = "List.any(i -> i.p >= k && k * 10 >= 0, xs)";
+        assertEquals(Map.of("xs[*].p", RELATES, "k", RELATES),
+                leftIn(model.formatted(walk), "4:35"));
+        assertEquals(Map.of("xs[*].p", NOT_REACHED, "k", NOT_REACHED),
+                leftIn(model.formatted("List.length(xs) >= 2 && " + walk), "4:59"));
+    }
+
+    /**
+     * A total of {@code Int}s stops a run only where the exact total is past an {@code Int}, however
+     * far a total on the way strays: a total of one value is that value, and the greatest
+     * {@code Int}, one and minus one come to the greatest, so a run gets past either and the two
+     * are related. The greatest and one come to one past it on every run, and no value is shown to
+     * get to the comparison.
+     */
+    @Test
+    void aTotalStopsARunOnlyWhereTheExactTotalIsNoInt() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "{\n    let total = List.sum(%s)\n    a.value == b.value\n}";
+        for (String list : List.of("[ a.value ]", "[ 9223372036854775807, 1, -1 ]")) {
+            assertEquals(Map.of("a", RELATES, "b", RELATES),
+                    left("a: Yen, b: Yen", yen, body.formatted(list), "6:13"), list);
+        }
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED), left("a: Yen, b: Yen", yen,
+                body.formatted("[ 9223372036854775807, 1 ]"), "6:13"));
+    }
+
+    /**
+     * A relation every row getting to it comes out one way at divides none of its places,
+     * whichever values get there: {@code n == String.length(s)} under the same statement is true
+     * wherever a row arrives, and past {@code n * n}, which may stop a run on {@code n}, the two
+     * are related as they are without it.
+     */
+    @Test
+    void aRelationThatComesOutOneWayWhereverARowGetsThereIsNotHeldBackByAStop() {
+        String decided = "if n == String.length(s) then n == String.length(s) else false";
+        Map<String, String> without = left("n: Int, s: String", "", decided, "4:48");
+        assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES), without);
+        assertEquals(without, left("n: Int, s: String", "",
+                "{\n    let before = n * n\n    " + decided + "\n}", "6:37"));
+    }
+
+    /**
+     * Parts no date has leave the field no value, and the record with it: no row reaches the
+     * comparison, and nothing is said of the amount or drawn on the gross.
+     */
+    @Test
+    void partsNoDateHasLeaveNothingToSayOfTheAmount() {
+        for (String rule : List.of("Date.day(value) == 31 && Date.month(value) == 2",
+                "Date.year(value) == 2023 && Date.month(value) == 2 && Date.day(value) == 29")) {
+            assertEquals(Map.of(), leftAt(List.of("E1013"), "g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+            assertEquals(List.of(), classesAt(List.of("E1013"), "g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "Bool", "g.value >= r.d.value", "g"), rule);
+        }
+    }
+
+    /** What {@code a.value + b.value >= 30} leaves {@code a} and {@code b} past a way where
+     *  {@code kept} does not hold, the behavior taking {@code inputs}. */
+    private static Map<String, String> pastAWayOffAValue(String inputs, String declarations,
+                                                         String kept) {
+        String body = "if " + kept + " then false else a.value + b.value >= 30";
+        String head = "let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ";
+        Map<String, String> out = new LinkedHashMap<>(leftAt(inputs, declarations, body,
+                head.length() + body.indexOf(">= 30") + 1));
+        for (String place : List.of("a", "b")) {
+            List<String> classes = classesAt(inputs, declarations, body, place);
+            if (classes.size() == 2 && classes.get(0).equals(place + ": 0 <= x < 30")
+                    && classes.get(1).startsWith(place + ": 30 <= x")) {
+                out.putIfAbsent(place, "divided at 30");
+            }
+        }
+        return out;
+    }
+
+    private static final String DIVIDED = "divided at 30";
+
+    /**
+     * A way keeping a sum off a number nothing else reads leaves the sum every value: whatever the
+     * sum is, the number holds some other value. So the comparison past it divides each side where
+     * it does without the way — a fixed wage held unequal to the one before it, and an amount beside
+     * the wage. A number of three terms leaves the rows' region no run it can show of a side, so the
+     * region is the one the rest of the way leaves. A sum is taken off only where it is worked out
+     * on every row, as two amounts each held below a million are.
+     */
+    @Test
+    void aWayKeepingASumOffAFreeNumberLeavesTheSidesAsTheyAre() {
+        String yen = "data Yen = Int invariant value >= 0";
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
+                pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen, "a.value == p.value"));
+        assertEquals(Map.of("a", DIVIDED, "b", DIVIDED),
+                pastAWayOffAValue("p: Yen, a: Yen, b: Yen, c: Yen",
+                        "data Yen = Int invariant value >= 0 && value <= 1000000",
+                        "a.value + c.value == p.value"));
+    }
+
+    /**
+     * A sum a row may not work out is not taken off the way: past {@code a + c != p}, a row whose
+     * {@code a} and {@code c} pass the greatest {@code Int} together stops before the comparison,
+     * whatever {@code p} is. And past {@code a + Date.day(d) != 0} no day lets a row with {@code a}
+     * at the greatest {@code Int} through, though the day takes every value from one to
+     * thirty-one and is read nowhere else.
+     */
+    @Test
+    void aSumARowMayNotWorkOutKeepsTheSidesBack() {
+        String yen = "data Yen = Int invariant value >= 0";
+        assertEquals(Map.of("a", DIVIDED, "b", NOT_SHOWN),
+                pastAWayOffAValue("p: Yen, a: Yen, b: Yen, c: Yen", yen,
+                        "a.value + c.value == p.value"));
+        assertEquals(Map.of("a", DIVIDED, "b", NOT_SHOWN),
+                pastAWayOffAValue("d: Date, a: Yen, b: Yen", yen, "a.value + Date.day(d) == 0"));
+    }
+
+    /**
+     * What the source works out stops runs where its form does not: {@code a + M - M != p} stops
+     * every run with {@code a} above nought, and {@code p + a + (M - 10) - (M - 10) != 0} every
+     * run with {@code p + a} above ten. That is where the representation stops, and no line of the
+     * model: the comparison past each is read as it is past the form, {@code a != p} and
+     * {@code p + a != 0}, which hold {@code a} to nothing narrower.
+     */
+    @Test
+    void aStopWhereTheRepresentationStopsDrawsNoLineOnTheWay() {
+        String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
+        String inputs = "p: Yen, a: Yen, b: Yen";
+        assertEquals(pastAWayOffAValue(inputs, yen, "a.value == p.value"),
+                pastAWayOffAValue(inputs, yen,
+                        "a.value + 9223372036854775807 - 9223372036854775807 == p.value"));
+        String relation = " then false else a.value + b.value >= 30";
+        assertEquals(classesAt(inputs, yen, "if p.value + a.value == 0" + relation, "b"),
+                classesAt(inputs, yen, "if p.value + a.value + 9223372036854775797"
+                        + " - 9223372036854775797 == 0" + relation, "b"));
+    }
+
+    /**
+     * Nor is a number something the way declined may name: what a dependency answered, held once
+     * to the length of {@code s} and once to one, holds the length at one, though neither reading
+     * names it. Past {@code x != String.length(s)}, {@code x} is then never one, and
+     * {@code x + y >= 2} is not shown to be reached on its true side: nothing is said of
+     * {@code x}, which only nought is left, and {@code y} is not shown to take every value.
+     */
+    @Test
+    void aNumberWhatTheWayDeclinedMayNameIsNotFree() {
+        String source = """
+                module w1
+                data Bit = Int invariant value >= 0 && value <= 1
+                data Row = { n: Int }
+                behavior look : (k: Int) -> List<Row>
+                behavior m : (s: String, x: Bit, y: Bit) -> Bool
+                    depends on look
+                let m (s, x, y, look) = {
+                    let rows = look(0)
+                    if List.any(r -> r.n == String.length(s), rows) && List.all(r -> r.n == 1, rows)
+                    then (if x.value == String.length(s) then false else x.value + y.value >= 2)
+                    else false
+                }
+                """;
+        List<String> lines = source.lines().toList();
+        int line = 0;
+        while (!lines.get(line).contains("x.value + y.value >= 2")) {
+            line++;
+        }
+        String at = (line + 1) + ":" + (lines.get(line).indexOf(">= 2") + 1);
+        assertEquals(Map.of("y", NOT_SHOWN), leftIn(source, at));
+    }
+
+    /**
+     * And not where the number is not free: one value of it, a side of the relation, a number a
+     * rule of the record around it names, or one another statement of the way reads. Then the way
+     * may take values of the side away, and nothing is shown of either side.
+     */
+    @Test
+    void aWayKeepingASideOffANumberThatIsNotFreeKeepsTheSidesBack() {
+        String yen = "data Yen = Int invariant value >= 0";
+        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN);
+        Map<String, String> aDividedOnly = Map.of("a", DIVIDED, "b", NOT_SHOWN);
+        assertEquals(Map.of("b", NOT_SHOWN), pastAWayOffAValue("p: Seven, a: Yen, b: Yen",
+                yen + "\ndata Seven = Int invariant value == 7", "a.value == p.value"));
+        assertEquals(notShown, pastAWayOffAValue("a: Yen, b: Yen", yen, "a.value == b.value"));
+        assertEquals(aDividedOnly, pastAWayOffAValue("r: R, a: Yen, b: Yen",
+                yen + "\ndata R = { p: Yen, q: Yen } invariant p.value <= q.value",
+                "a.value == r.p.value"));
+        assertEquals(aDividedOnly, pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
+                "a.value == p.value || p.value > 5"));
+    }
+
     /**
      * Two amounts held equal take the same values, however much of the rules beside one of them
      * was read: a rule of the record over another of its fields leaves the amount's ends not shown
@@ -195,9 +896,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void anAmountHeldBetweenTwoEndsIsDividedAtTheEndNothingReachesPast() {
         String yen = "data Yen = Int invariant value >= 0 && value <= 10";
         assertEquals(Map.of(), left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
-        assertEquals(List.of("g/0 <= x < 10", "g/10 <= x <= 10"),
+        assertEquals(List.of("g: 0 <= x < 10", "g: 10 <= x <= 10"),
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "g"));
-        assertEquals(List.of("d/0 <= x <= 0", "d/0 < x <= 10"),
+        assertEquals(List.of("d: 0 <= x <= 0", "d: 0 < x <= 10"),
                 classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
@@ -223,7 +924,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
         // Where what the gross reaches is shown, a deduction of nought settles the comparison
         // whatever the gross is, and is a class of its own.
-        assertEquals(Map.of("value >= 0 && value /= 5", Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
+        assertEquals(Map.of("value >= 0 && value /= 5", Map.of("g", NOT_SHOWN),
                 "value >= 0 && Int.floorMod(value, 2) == 0", Map.of("g", NOT_SHOWN),
                 "value >= 0 && value * value >= 4", Map.of("g", NOT_SHOWN)), eachRule);
         for (String rule : List.of("value >= \"b\" && String.length(value) <= 1",
@@ -240,11 +941,178 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aLengthReachesEveryNumberAtOrAboveNoughtAndNothingBelow() {
         assertEquals(Map.of("String.length(s)", RELATES),
                 left("n: Int, s: String", "data Unused = Int", "n == String.length(s)", "4:18"));
-        assertEquals(List.of("n/x <= -1", "n/-1 < x"), classesAt("n: Int, s: String",
+        assertEquals(List.of("n: x <= -1", "n: -1 < x"), classesAt("n: Int, s: String",
                 "data Unused = Int", "n == String.length(s)", "n"));
         assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES),
                 left("n: N, s: String", "data N = Int invariant value >= 0",
                         "n.value == String.length(s)", "4:24"));
+    }
+
+    /** A list of any length is an element repeated, as a string of any length is a character
+     *  repeated, so a position past a length is left as it is past a string's. Over an element
+     *  nothing here shows a value of, or a set whose elements run out, the sizes are not shown. */
+    @Test
+    void aSizeOfAContainerIsReachedWhereTheTypeShowsAValueForEachSize() {
+        Map<String, String> past = left("k: Int, s: String", "data Unused = Int",
+                "k > String.length(s)", "4:18");
+        assertEquals(Map.of("String.length(s)", RELATES), past);
+        assertEquals(Map.of("List.length(xs)", RELATES), left("k: Int, xs: List<Int>",
+                "data Unused = Int", "k > List.length(xs)", "4:19"));
+        assertEquals(Map.of("List.length(xs)", RELATES), left("k: Int, xs: List<Bool>",
+                "data Unused = Int", "k > List.length(xs)", "4:19"));
+        assertEquals(Map.of("Set.size(xs)", RELATES), left("k: Int, xs: Set<Int>",
+                "data Unused = Int", "k > Set.size(xs)", "4:19"));
+        // A set of booleans is capped at two, which the type shows, so the sizes it is compared
+        // with are the ones it has and the number is parted where they stop.
+        assertEquals(Map.of("Set.size(xs)", RELATES),
+                left("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
+        assertEquals(List.of("k: x <= 0", "k: 0 < x < 3", "k: 3 <= x"),
+                classesAt("k: Int, xs: Set<Bool>", "data Unused = Int", "k > Set.size(xs)", "k"));
+        // A name the module declares is as many as its parts: a data with nothing in it is one
+        // value, so a set of it holds none or that one.
+        assertEquals(List.of("k: x <= 0", "k: 0 < x < 2", "k: 2 <= x"),
+                classesAt("k: Int, xs: Set<Unit>", "data Unit", "k > Set.size(xs)", "k"));
+        // A name with a rule is shown the one value the rule leaves it, and a set of it is shown
+        // no more than that: how many differ is asked only of a type nothing is written on and of
+        // one whose values are counted out.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Digit>", "data Digit = Int invariant value >= 1 && value <= 3",
+                "k > Set.size(xs)", "4:19"));
+        // A rule with a hole in it is not read as the numbers between its ends.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Gap>",
+                "data Gap = Int invariant value >= 1 && value <= 3 && value /= 2",
+                "k > Set.size(xs)", "4:19"));
+        // The cases of an enumeration are as many values as it has, and are all it has.
+        assertEquals(List.of("k: x <= 0", "k: 0 < x < 4", "k: 4 <= x"), classesAt(
+                "k: Int, xs: Set<Side>",
+                "data Left\ndata Right\ndata Middle\ndata Side = Left | Right | Middle",
+                "k > Set.size(xs)", "k"));
+        // A date has more values than a container has elements, so a set of them is held at every
+        // size and the sizes are the ones the number is compared with.
+        assertEquals(Map.of("Set.size(xs)", RELATES), left(
+                "k: Int, xs: Set<Date>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
+        // A rule written over the fields of a record is a rule: the record is shown no value.
+        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+                "k: Int, xs: Set<Span>",
+                "data Span = { from: Int, to: Int } invariant from <= to",
+                "k > Set.size(xs)", "4:19"));
+        // A type written in terms of itself is shown only the values it can be given without
+        // itself.
+        assertEquals(Map.of("List.length(xs)", RELATES), left(
+                "k: Int, xs: List<Tree>", "data Tree = { kids: List<Tree> }",
+                "k > List.length(xs)", "4:19"));
+    }
+
+    /**
+     * The element an index written down picks of a list is read as that element: the number
+     * compared with it is read as it is with any value the elements may take, and the element
+     * itself, which is at no place of its own, is not. A list whose rules say what its elements
+     * are to one another leaves the number compared with one unread.
+     */
+    @Test
+    void anElementAnIndexPicksIsReadAsThatElement() {
+        assertEquals(Map.of("n", RELATES), left("n: Int, xs: List<Int>", UNUSED,
+                "match List.get(0, xs) with | Some v -> v == n | None -> false", "4:58"));
+        assertEquals(Map.of("n", RELATES), left("n: Int, xs: List<Int>", UNUSED,
+                "match List.get(3, xs) with | Some v -> v == n | None -> false", "4:58"));
+        // A field of the element is read where the element is shown to exist, as a record of
+        // fields that have a value is.
+        assertEquals(Map.of("n", RELATES),
+                left("n: Int, xs: List<Rec>", "data Rec = { a: Int }",
+                        "match List.get(0, xs) with | Some r -> r.a == n | None -> false",
+                        "4:60"));
+        // A rule over its fields that some value meets leaves it one, and a field of it any value
+        // the rule lets that field have.
+        assertEquals(Map.of("n", RELATES),
+                left("n: Int, xs: List<Span>",
+                        "data Span = { from: Int, to: Int } invariant from <= to",
+                        "match List.get(0, xs) with | Some r -> r.from == n | None -> false",
+                        "4:63"));
+        assertEquals(Map.of("n", RELATES),
+                left("n: Int, h: Holder", "data Holder = { items: List<Int> }",
+                        "match List.get(0, h.items) with | Some v -> v == n | None -> false",
+                        "4:62"));
+        String same = "data Same = { value: List<Int> } invariant"
+                + " List.all(x -> x == 1, value) || List.length(value) == 0";
+        assertEquals(Map.of("n", NOT_SHOWN),
+                left("n: Int, xs: Same", same,
+                        "match List.get(0, xs.value) with | Some v -> v > n | None -> false",
+                        "4:64"));
+        // And a container the rules keep shorter than the index has no element to be compared:
+        // no row takes the way to the comparison, which is said and not read as a relation.
+        String few = "data Few = { value: List<Int> } invariant List.length(value) <= 2";
+        assertTrue(left("n: Int, xs: Few", few,
+                "match List.get(5, xs.value) with | Some v -> v > n | None -> false", "4:64")
+                .get("n").contains("no row that arrives at it takes the way to the comparison"));
+    }
+
+    /** The report's own example: a requested position past the end of a list, with the rows the
+     *  generator offers for it, is adequate and leaves nothing unread. */
+    @Test
+    void aPositionPastTheEndOfAListWithItsRowsIsAdequate() {
+        Compilation compilation = Compilation.ofSource("""
+                module repro.relational
+
+                behavior pastEnd : (k: Int, xs: List<Int>) -> Bool
+
+                let pastEnd (k, xs) = k > List.length(xs)
+
+                example pastEnd
+                    | (1, []) -> true
+                    | (0, []) -> false
+                    | (2, []) -> true
+                    | (-1, []) -> false
+                    | (2, [0]) -> true
+                    | (2, [0, 0]) -> false
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("adequacy: satisfied"), report);
+        assertFalse(NotRead.in(report), report);
+    }
+
+    /**
+     * Which element, and not the elements: rows that put values only at the first element of a
+     * list say nothing of a comparison made of the second, and no class of the elements is covered
+     * by them.
+     */
+    @Test
+    void rowsAtAnotherElementCoverNothingOfThePickedOne() {
+        Compilation compilation = measured("""
+                module w1
+                behavior f : (xs: List<Int>) -> Bool
+                let f (xs) = match List.get(1, xs) with | Some v -> v >= 5 | None -> false
+                example f
+                    | ([5]) -> false
+                    | ([4]) -> false
+                    | ([]) -> false
+                """);
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        assertFalse(report.contains("equivalence partitions"), report);
+        assertFalse(report.contains("borders"), report);
+    }
+
+    /**
+     * Every position a walk hands its step is reached in some row, from nought to one below the
+     * most a container holds, so a number compared with one is read, and with the position moved
+     * by a constant. The most a container holds is where the language stops, so a size moved by a
+     * constant is read as a string's length is.
+     */
+    @Test
+    void aPositionInAWalkIsReachedAcrossTheRowsAndASizeIsEndedWhereTheLanguageEndsIt() {
+        String inputs = "n: Int, xs: List<Int>";
+        String same = "List.mapIndexed((i, _) -> i == n, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Bool>", same, "4:45"));
+        String moved = "List.mapIndexed((i, _) -> i + 1 == n, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Bool>", moved, "4:49"));
+        assertEquals(Map.of("String.length(s)", RELATES), left("n: Int, s: String", UNUSED,
+                "String.length(s) + 1 == n", "4:37"));
+        assertEquals(Map.of("List.length(xs)", RELATES),
+                left(inputs, UNUSED, "List.length(xs) + 1 == n", "4:37"));
     }
 
     private static final String NAT = "data Nat = Int invariant value >= 0";
@@ -257,21 +1125,721 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * undivided. A list of one element totals that element, so the total takes every value the
      * element does: never below nought, and every value from there. So a gross below nought fails
      * whatever the total is, and every other gross has a total on either side. Doubled, the total
-     * is still never below nought and never odd: what each element is made into is not what it
-     * takes, and nothing is shown of the gross.
+     * is still never below nought and never odd, and a list of one element totals twice that
+     * element: it takes the even numbers from nought, which is a total on either side of every
+     * gross as an order asks. The doubled total is left either way: every element is at least
+     * nought, so each doubling lies between nought and the total, and a run gets through
+     * wherever the total is an {@code Int}.
      */
     @Test
     void aTotalOverARunIsATermOfTheRelationAsTheCountIs() {
-        assertEquals(Map.of("List.length(ns)", RELATES, "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.length(ns)", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", 27));
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt(
+                "gross: Int, ns: List<Nat>", NAT, "gross >= List.length(ns)", "gross"));
         assertEquals(Map.of("List.sum(ns[*])", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT, "gross >= " + TOTAL, 27));
-        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt("gross: Int, ns: List<Nat>",
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt("gross: Int, ns: List<Nat>",
                 NAT, "gross >= " + TOTAL, "gross"));
-        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES,
-                        "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | ns[*]})", RELATES),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.sum(List.map(n -> 2 * n.value, ns))", 27));
+    }
+
+    /**
+     * A total of numbers held at minus one or less is nought for a list of none and every value
+     * from minus one down for a list of one, so it takes every value from nought down, as a total
+     * of numbers held at nought or more takes every value from nought up. Every gross has a total
+     * on either side of it below nought, and none above.
+     */
+    @Test
+    void aTotalOfNumbersBelowNoughtTakesNoughtAsOneAboveItDoes() {
+        String below = "data Neg = Int invariant value <= -1";
+        String body = "gross >= List.sum(List.map(n -> n.value, ns))";
+        assertEquals(Map.of("List.sum(ns[*])", RELATES),
+                leftAt("gross: Int, ns: List<Neg>", below, body, 27));
+        assertEquals(List.of("gross: x < 0", "gross: 0 <= x"),
+                classesAt("gross: Int, ns: List<Neg>", below, body, "gross"));
+    }
+
+    private static final String FIELDS_ADDED ="List.sum(List.map(n -> n.a.value + n.b.value, ns))";
+
+    private static final String THE_FIELDS_ADDED = "List.sum({1·a + 1·b + 0 | ns[*]})";
+
+    /**
+     * A total of two fields of each element takes what one element's fields add to, and nought
+     * for a list of none, once and not once a field. Fields of one or more add to two or more, so
+     * no list comes to one: the total reaches nought and every value from two, and a gross of one
+     * has no total on its far side that the rest are shown to reach. Fields of nought or more add
+     * to every value from nought, and the gross is divided as it is beside a total of one field.
+     */
+    @Test
+    void aTotalOfFieldsTakesNoughtOnceWhereTheListMayHoldNone() {
+        String inputs = "gross: Int, ns: List<N>";
+        String body = "gross >= " + FIELDS_ADDED;
+        String fromOne = "data Pos = Int invariant value >= 1\ndata N = { a: Pos, b: Pos }";
+        assertEquals(Map.of(THE_FIELDS_ADDED, RELATES, "gross", NOT_SHOWN),
+                left(inputs, fromOne, body, atThe(">=", fromOne, inputs, body)));
+        String fromNought = "data Nat = Int invariant value >= 0\ndata N = { a: Nat, b: Nat }";
+        assertEquals(Map.of(THE_FIELDS_ADDED, RELATES),
+                left(inputs, fromNought, body, atThe(">=", fromNought, inputs, body)));
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"),
+                classesAt(inputs, fromNought, body, "gross"));
+    }
+
+    /**
+     * Every sum of a value of each field is one element's only where nothing ties the fields to
+     * one another. Two fields held equal add to an even number and nothing else, which the run of
+     * each field says nothing of, so the gross beside such a total is not shown to be reached.
+     */
+    @Test
+    void aTotalOfFieldsIsEverySumOfThemOnlyWhereNoRuleTiesThem() {
+        String inputs = "gross: Int, ns: List<N>";
+        String body = "gross >= " + FIELDS_ADDED;
+        String tied = "data Nat = Int invariant value >= 0\n"
+                + "data N = { a: Nat, b: Nat } invariant a.value == b.value";
+        assertEquals(Map.of(THE_FIELDS_ADDED, RELATES, "gross", NOT_SHOWN),
+                left(inputs, tied, body, atThe(">=", tied, inputs, body)));
+    }
+
+    /**
+     * Held at nought or more beside the terms it is compared with, a total of amounts is at nought
+     * only where the list is empty or every element is, and there the relation holds whatever the
+     * others are. That is a line on a number taken over a run, which is no position: it parts the
+     * values of no place the total is read from, and the total stays a term of the relation as it
+     * is where the terms beside it are not held at nought.
+     */
+    @Test
+    void aTotalSettlingTheRelationAtNoughtDividesNoPlaceItIsReadFrom() {
+        String inputs = "a: Nat, b: Nat, ns: List<Nat>";
+        String sum = "a.value + b.value >= " + TOTAL;
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "a", RELATES, "b", RELATES),
+                left(inputs, NAT, sum, atThe(">=", NAT, inputs, sum)));
+        String alone = "a.value >= " + TOTAL;
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "a", RELATES),
+                left("a: Nat, ns: List<Nat>", NAT, alone,
+                        atThe(">=", NAT, "a: Nat, ns: List<Nat>", alone)));
+    }
+
+    /**
+     * A count of a list's elements, and what they sum to, are terms of the relation beside an input
+     * the list does not hold: a list of as many whole numbers as asked is a row at each count, and
+     * a list of one whole number is a row at that number. Where the declarations hold the list to
+     * two elements or more no list of one is a row, and the total is that of two: one number and
+     * the rest at nought, which a whole number is, so every total one element takes is a total
+     * of the list, and the input beside it is reached as the count is shown only from two.
+     */
+    @Test
+    void aCountAndATotalOfAListAreReachedWhereTheListMayHoldWhatTheyAreAskedAt() {
+        String inputs = "limit: Int, xs: List<Int>";
+        String count = "limit >= List.length(xs)";
+        assertEquals(Map.of("List.length(xs)", RELATES),
+                left(inputs, NAT, count, atThe(">=", NAT, inputs, count)));
+        String total = "limit >= List.sum(xs)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", RELATES),
+                left(inputs, NAT, total, atThe(">=", NAT, inputs, total)));
+        String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
+        String held = "limit: Int, p: Pair";
+        String heldTotal = "limit >= List.sum(p.value)";
+        assertEquals(Map.of("List.sum(p)", RELATES, "limit", RELATES),
+                left(held, pairs, heldTotal, atThe(">=", pairs, held, heldTotal)));
+        // Where the elements are held apart the rest are not at nought, and nothing is shown.
+        String apart = "data Apart = List<Int> invariant List.length(value) >= 2"
+                + " && Set.size(Set.fromList(value)) == List.length(value)";
+        String heldApart = "limit: Int, p: Apart";
+        assertEquals(Map.of("List.sum(p)", RELATES, "limit", NOT_SHOWN),
+                left(heldApart, apart, heldTotal, atThe(">=", apart, heldApart, heldTotal)));
+    }
+
+    /**
+     * A walk adding each element as it stands runs a total on the way that a sum does not, and
+     * that total passes the end of an {@code Int} for elements whose final total does not. A row
+     * of one element runs none, so the total is reached where one element may stand at it; a
+     * walk that adds anything else of each element, or a container the relation asks about
+     * elsewhere, has rows of more than one element and is not claimed.
+     */
+    @Test
+    void aWalkAddingEachElementIsReachedAsAnElementWrittenAloneIs() {
+        String list = "limit: Int, xs: List<Int>";
+        String added = "limit >= List.fold((acc, x) -> acc + x, 0, xs)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", RELATES),
+                left(list, NAT, added, atThe(">=", NAT, list, added)));
+        String map = "limit: Int, ms: Map<String, Int>";
+        String entries = "limit >= Map.fold((acc, k, q) -> acc + q, 0, ms)";
+        assertEquals(Map.of("List.sum(ms)", RELATES, "limit", RELATES),
+                left(map, NAT, entries, atThe(">=", NAT, map, entries)));
+        String doubled = "limit >= List.fold((acc, x) -> acc + x * 2, 0, xs)";
+        assertEquals(Map.of("List.sum({2·the element itself + 0 | xs[*]})", RELATES,
+                "limit", RELATES), left(list, NAT, doubled, atThe(">=", NAT, list, doubled)));
+        String beside = "limit >= List.length(xs) + List.fold((acc, x) -> acc + x, 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN, "List.sum(xs)", NOT_SHOWN,
+                "limit", NOT_SHOWN), left(list, NAT, beside, atThe(">=", NAT, list, beside)));
+        // A step composed to the same form with operations that were written is worked out with
+        // them: the product of an element by a million passes the end of an Int where the element
+        // alone does not.
+        String worked = "limit >= List.fold((acc, x) -> acc + x * 1000000 - x * 999999, 0, xs)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(list, NAT, worked, atThe(">=", NAT, list, worked)));
+        String seeded = "limit >= List.fold((acc, x) -> acc + x, 1 - 1, xs)";
+        assertEquals(Map.of("List.sum(xs)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(list, NAT, seeded, atThe(">=", NAT, list, seeded)));
+        String two = "limit: Int, xs: List<Int>, ys: List<Int>";
+        String untold = "limit >= List.fold((acc, x) -> acc + x, 0, xs)"
+                + " + List.fold((acc, y) -> acc + y * 2, 0, ys)";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "limit", NOT_SHOWN,
+                "List.sum({2·the element itself + 0 | ys[*]})", RELATES),
+                left(two, NAT, untold, atThe(">=", NAT, two, untold)));
+        // A third of a whole number added to the total is a rational sum, which stops no row: the
+        // walk is all that is told.
+        String other = "limit: Int, xs: List<Int>, k: Int";
+        String quotient = "limit >= List.fold((acc, x) -> acc + x, 0, xs) + k / 3";
+        assertEquals(Map.of("List.sum(xs)", RELATES, "k", RELATES, "limit", RELATES),
+                left(other, NAT, quotient, atThe(">=", NAT, other, quotient)));
+        String pairs = "data Pair = List<Int> invariant List.length(value) >= 2";
+        String held = "limit: Int, p: Pair";
+        String heldAdded = "limit >= List.fold((acc, x) -> acc + x, 0, p.value)";
+        assertEquals(Map.of("List.sum(p)", NOT_SHOWN, "limit", NOT_SHOWN),
+                left(held, pairs, heldAdded, atThe(">=", pairs, held, heldAdded)));
+    }
+
+    /**
+     * A total of products of fields of each element, which one element reaches with every field
+     * but one at one. That needs the fields apart: a rule tying them, or a step that works out
+     * more than the product, leaves the value of the total to more than one element.
+     */
+    @Test
+    void aTotalOfProductsOfFieldsIsReachedAsAnElementWrittenAloneIs() {
+        String line = "data Line = { price: Int, qty: Int }";
+        String inputs = "lines: List<Line>, limit: Int";
+        String summed = "limit >= List.sum(List.map(l -> l.price * l.qty, lines))";
+        String walked = "limit >= List.fold((acc, l) -> acc + l.price * l.qty, 0, lines)";
+        for (String body : List.of(summed, walked)) {
+            assertEquals(Map.of("List.sum({1·price·qty + 0 | lines[*]})", RELATES,
+                    "limit", RELATES), left(inputs, line, body, atThe(">=", line, inputs, body)));
+        }
+        String tied = line + " invariant price >= qty";
+        for (String body : List.of(summed, walked)) {
+            Map<String, String> held = left(inputs, tied, body, atThe(">=", tied, inputs, body));
+            assertTrue(held.containsValue(NOT_SHOWN), held.toString());
+        }
+        String more = "limit >= List.sum(List.map(l -> l.price * l.qty + l.price * l.qty"
+                + " - l.price * l.qty, lines))";
+        String moreWalked = "limit >= List.fold((acc, l) -> acc + (l.price * l.qty + l.price * l.qty"
+                + " - l.price * l.qty), 0, lines)";
+        for (String body : List.of(more, moreWalked)) {
+            Map<String, String> worked =
+                    left(inputs, line, body, atThe(">=", line, inputs, body));
+            assertTrue(worked.containsValue(NOT_SHOWN), worked.toString());
+        }
+    }
+
+    /**
+     * What two maps hold under one key is multiplied and added up by a walk over one of them: each
+     * entry's value times what the other holds under the entry's key, or nought. The total is
+     * reached with one key in both maps, the entry of the first at one and the entry of the
+     * second at the number. Another step is another number, and a lookup that is not of the
+     * entry's own key in another map of the same keys is no join.
+     */
+    @Test
+    void theProductsOfTwoMapsValuesUnderOneKeyAreReachedAsOneKeyInBothIs() {
+        String inputs = "limit: Int, agreed: Map<String, Int>, prices: Map<String, Int>";
+        String price = "(Map.get(k, prices) |> Option.withDefault(0))";
+        String joined = "limit >= Map.fold((acc, k, q) -> acc + q * " + price + ", 0, agreed)";
+        String swapped = "limit >= Map.fold((acc, k, q) -> acc + " + price + " * q, 0, agreed)";
+        for (String body : List.of(joined, swapped)) {
+            assertEquals(Map.of("List.sum({agreed[*] * prices[*] under one key})", RELATES,
+                    "limit", RELATES), left(inputs, NAT, body, atThe(">=", NAT, inputs, body)));
+        }
+        List<String> otherwise = List.of(
+                "limit >= Map.fold((acc, k, q) -> acc + q * " + price + " + 1, 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, prices)"
+                        + " |> Option.withDefault(1)), 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(\"a\", prices)"
+                        + " |> Option.withDefault(0)), 0, agreed)",
+                "limit >= Map.fold((acc, k, q) -> acc + q * (Map.get(k, agreed)"
+                        + " |> Option.withDefault(0)), 0, agreed)");
+        // No join, so no form: what each run worked out is all that places a row.
+        for (String body : otherwise) {
+            assertFalse(onItsRunsAbout(measured(inputs, NAT, "Bool", body), "limit").isEmpty(),
+                    body);
+        }
+    }
+
+    /**
+     * A step is the shape of a join only where everything it works out is a part of that shape.
+     * A binding is worked out whether or not anything reads it, so one the product does not read
+     * may stop a run — {@code Int.floorMod(1, d)} does where {@code d} is nought — and the walk is
+     * then no join, as a walk over one map with the same binding is not a total. A binding the
+     * product reads is a part of the shape.
+     */
+    @Test
+    void aBindingTheStepWorksOutAndNothingReadsKeepsItFromBeingAJoin() {
+        String inputs = "limit: Int, d: Int, agreed: Map<String, Int>, prices: Map<String, Int>";
+        String looked = "(Map.get(k, prices) |> Option.withDefault(0))";
+        String read = "limit >= Map.fold((acc, k, q) -> {\n    let price = " + looked
+                + "\n    acc + q * price\n}, 0, agreed)";
+        assertEquals(Map.of("List.sum({agreed[*] * prices[*] under one key})", RELATES,
+                "limit", RELATES), left(inputs, NAT, read, atThe(">=", NAT, inputs, read)));
+        String unread = "limit >= Map.fold((acc, k, q) -> {\n    let unused = Int.floorMod(1, d)\n"
+                + "    acc + q * " + looked + "\n}, 0, agreed)";
+        assertFalse(onItsRunsAbout(measured(inputs, NAT, "Bool", unread), "limit").isEmpty(),
+                unread);
+        // Not recognised as a join at all, and not merely reported unread for another reason.
+        assertTrue(left(inputs, NAT, unread, atThe(">=", NAT, inputs, unread)).keySet().stream()
+                .noneMatch(term -> term.contains("under one key")), unread);
+    }
+
+    private static final String FORECAST = """
+            module w1
+
+            data CurrencyCode = String
+                invariant String.matches("[A-Z]{3}", value)
+
+            data ConversionRate = Decimal
+                invariant value > 0.0m
+
+            data RateTable =
+                { base: CurrencyCode
+                , rates: Map<CurrencyCode, ConversionRate>
+                }
+                invariant baseIsUnity = baseAtOne(base, rates)
+
+            let baseAtOne (base: CurrencyCode, rates: Map<CurrencyCode, ConversionRate>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> Decimal.compare(r.value, 1.0m) == 0)
+                    |> Option.withDefault(false)
+
+            let yenRates = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
+                [ (CurrencyCode("JPY"), ConversionRate(1.0m))
+                , (CurrencyCode("USD"), ConversionRate(150.0m)) ]) }
+
+            data Deal = { currency: CurrencyCode, amount: Decimal }
+
+            behavior m : (deals: List<Deal>, rates: RateTable) -> Bool
+
+            let m (deals, rates) = {
+                let kept = List.filterMap(d -> Map.get(d.currency, rates.rates), deals)
+                List.length(kept) == List.length(deals)
+            }
+            """;
+
+    /**
+     * How many deals a rate is kept for, against how many deals there are. A run on the rates the
+     * model names, of one deal in a currency they rate and one in a currency they do not, shows
+     * the kept count holding of one element and not of another, so every count from nought to the
+     * length is reached and the comparison leaves the length undivided wherever there is a deal.
+     * With no deal the count is nought as the length is, and that settles the comparison: the
+     * length is parted at nought and the values above it. A step weighing each deal by its rate
+     * may stop on a product nothing here bounds, and is applied to the witness's elements alone,
+     * on which it answered: the same is shown of it.
+     *
+     * <p>With no rates named, the table is what the boundary builds from what stands for its type,
+     * and the deals tried beside it are one in its currency and one in another, so the count is
+     * shown as it is with the rates the model names.
+     */
+    @Test
+    void aCountAfterAFilterReachesEveryValueUpToTheLengthWhereARunShowsItHoldingAndFailing() {
+        String weighed = FORECAST.replace("d -> Map.get(d.currency, rates.rates)",
+                "d -> Option.map(r -> r.value * d.amount, Map.get(d.currency, rates.rates))");
+        for (String model : List.of(FORECAST, weighed)) {
+            Compilation named = reported(model);
+            assertEquals(Map.of(), leftIn(named, whereWritten(model, "== List")), model);
+            assertEquals(List.of("List.length(deals): 0 <= x <= 0", "List.length(deals): 0 < x"),
+                    named.db().ask(new Adequacy.Coverage("w1")).value().get("m").axes().stream()
+                            .filter(axis -> axis.path().equals("List.length(deals)"))
+                            .flatMap(axis -> axis.classes().stream()).toList(), model);
+        }
+        String unnamed = FORECAST.substring(0, FORECAST.indexOf("let yenRates"))
+                + FORECAST.substring(FORECAST.indexOf("data Deal"));
+        assertEquals(Map.of(), leftIn(reported(unnamed), whereWritten(unnamed, "== List")));
+    }
+
+    /**
+     * A witness is one run, and the rows the count is read over are its elements over again, so
+     * whatever stands between it and those rows leaves the length as nothing is shown of it. A
+     * helper calling itself on the deals before the comparison may stop a run on some list of them
+     * where nothing here says. A way that asks every deal for an amount above nought lets through
+     * some of the deals the witness's elements make, and one asking how many rates there are asks
+     * what the statement reads outside the element. A way through a value of a third parameter is
+     * met by a witness only where some run is found meeting it, which no value tried here does.
+     * And deals held in a record whose rule is that no two share a currency are not every list of
+     * the witness's elements over again: what a witness is found for is a list standing as a
+     * parameter on its own, which no rule of a value around it reads.
+     */
+    @Test
+    void aCountIsReadOverTheWitnessesElementsOverAgainOnlyWhereNothingStandsBetween() {
+        String stops = FORECAST.replace("behavior m :", """
+                partial let walked (ds: List<Deal>): Int =
+                    match List.get(0, ds) with
+                        | None -> 0
+                        | Some first -> 1 + walked(List.drop(1, ds))
+
+                behavior m :""").replace("    List.length(kept) == List.length(deals)",
+                "    let n = walked(deals)\n"
+                        + "    if List.length(kept) == List.length(deals) then n >= 0 else false");
+        String picked = FORECAST.replace("    List.length(kept) == List.length(deals)",
+                "    if List.all(d -> d.amount > 0.0m, deals) then"
+                        + " List.length(kept) == List.length(deals) else false");
+        String unique = FORECAST.replace("(deals: List<Deal>,", "(book: Book,")
+                .replace("let m (deals, rates)", "let m (book, rates)")
+                .replace("rates.rates), deals)", "rates.rates), book.deals)")
+                .replace("List.length(deals)", "List.length(book.deals)")
+                .replace("behavior m :", """
+                        data Book = { deals: List<Deal> }
+                            invariant List.length(List.distinct(List.map(d -> d.currency, deals)))
+                                == List.length(deals)
+
+                        behavior m :""")
+                + """
+
+                example m
+                    | "one deal a rate is kept for and one it is not" :
+                        (Book { deals = [ Deal { currency = CurrencyCode("USD"), amount = 1.0m }
+                                        , Deal { currency = CurrencyCode("AAA"), amount = 1.0m } ] },
+                         yenRates) -> false
+                """;
+        String third = FORECAST.replace("rates: RateTable) -> Bool", "rates: RateTable, flag: Int)"
+                        + " -> Bool")
+                .replace("let m (deals, rates)", "let m (deals, rates, flag)")
+                .replace("    List.length(kept) == List.length(deals)",
+                        "    if Int.floorMod(flag, 7919) == 5000 then"
+                                + " List.length(kept) == List.length(deals) else false");
+        String ratesAsked = FORECAST.replace("    List.length(kept) == List.length(deals)",
+                "    if Map.size(rates.rates) >= 2 then"
+                        + " List.length(kept) == List.length(deals) else false");
+        for (String model : List.of(stops, picked, third, ratesAsked)) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(Map.of("List.length(deals)", NOT_SHOWN),
+                    leftIn(compilation, whereWritten(model, "== List.length(deals")), model);
+        }
+        Compilation once = reported(unique);
+        assertEquals(List.of(), once.errors(), unique);
+        assertEquals(Map.of("List.length(book.deals)", NOT_SHOWN),
+                leftIn(once, whereWritten(unique, "== List.length(book")));
+    }
+
+    /**
+     * Two more parameters, each of a type the model names some values of, and a way through a sum
+     * of them no pair of those values meets. With one named of each, the search tries every row it
+     * has and finds none, and the length is not shown. With seventeen of each, the pairs are more
+     * rows than it tries, it stops short of the last of them, and the place says which figure it
+     * stopped at — a run allowed more may find what this one did not.
+     */
+    @Test
+    void aSearchForAWitnessThatStoppedShortSaysWhereItStopped() {
+        assertEquals(List.of(), figuresSaidOfTheLength(1));
+        assertEquals(List.of("VALUES_AN_ELEMENT_IS_CHOSEN_AMONG"), figuresSaidOfTheLength(17));
+    }
+
+    /** The figures the report names beside what nothing is shown of at the length, where the
+     *  model names {@code named} values of each of two more parameters. */
+    private static List<String> figuresSaidOfTheLength(int named) {
+        StringBuilder tags = new StringBuilder("data Tag = Int\n\n");
+        for (int i = 1; i <= named; i++) {
+            tags.append("let tag").append(i).append(" = Tag(").append(i).append(")\n");
+        }
+        String model = FORECAST.replace("rates: RateTable) -> Bool",
+                        "rates: RateTable, a: Tag, b: Tag) -> Bool")
+                .replace("behavior m :", tags + "\nbehavior m :")
+                .replace("let m (deals, rates)", "let m (deals, rates, a, b)")
+                .replace("    List.length(kept) == List.length(deals)",
+                        "    if a.value + b.value == 1000 then"
+                                + " List.length(kept) == List.length(deals) else false");
+        return figuresSaidOf(model, "deals");
+    }
+
+    /**
+     * The figures the report names beside what nothing is shown of at how many {@code container}
+     * holds, where the comparison of the count against it is written {@code == List.length(}.
+     */
+    private static List<String> figuresSaidOf(String model, String container) {
+        String length = "List.length(" + container + ")";
+        Compilation compilation = reported(model);
+        assertEquals(List.of(), compilation.errors(), model);
+        assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
+                .get(length), model);
+        String at = "comparison@" + whereWritten(model, "== List.length(") + " ";
+        List<String> figures = new ArrayList<>();
+        AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
+                .lines().map(String::strip)
+                .filter(line -> line.startsWith("· not read: " + at)
+                        && line.endsWith("about `" + length + "`"))
+                .forEach(line -> {
+                    Matcher stopped = Pattern.compile("\\(([A-Z_]+), \\d+\\)").matcher(line);
+                    while (stopped.find()) {
+                        figures.add(stopped.group(1));
+                    }
+                });
+        return figures;
+    }
+
+    /**
+     * Whatever cut short the values a witness is sought among is named, and the elements tried are
+     * held to the figure however each is come by. No number is both above a thousand and below
+     * nought, so the search finds no element the count holds of and tries all it has. A row of ten is
+     * all of it, and no figure is named. A row of sixty-five was kept only so far by the run that
+     * read it, and the figure it was cut at is named. Five rows of sixty, each kept whole, write
+     * more elements between them than the search tries, and its own figure is named.
+     */
+    @Test
+    void whatCutTheValuesAWitnessIsSoughtAmongShortIsNamed() {
+        assertEquals(List.of(), figuresSaidOf(numbersInRows(1, 10), "xs"));
+        assertEquals(List.of("OBSERVED_ELEMENTS"), figuresSaidOf(numbersInRows(1, 65), "xs"));
+        assertEquals(List.of("VALUES_AN_ELEMENT_IS_CHOSEN_AMONG"),
+                figuresSaidOf(numbersInRows(5, 60), "xs"));
+    }
+
+    /** How many of a list of numbers are above a thousand, against how many it holds, and
+     *  {@code rows} rows each writing the next {@code each} numbers from nought. */
+    private static String numbersInRows(int rows, int each) {
+        StringBuilder written = new StringBuilder();
+        for (int row = 0; row < rows; row++) {
+            StringBuilder numbers = new StringBuilder();
+            for (int i = 0; i < each; i++) {
+                numbers.append(i == 0 ? "" : ", ").append(row * each + i);
+            }
+            written.append("    | \"numbers ").append(row).append("\" : ([ ").append(numbers)
+                    .append(" ]) -> false\n");
+        }
+        return """
+                module w1
+                behavior m : (xs: List<Int>) -> Bool
+                let m (xs) = {
+                    let kept = List.filter(x -> x > 1000 && x < 0, xs)
+                    List.length(kept) == List.length(xs)
+                }
+
+                example m
+                %s""".formatted(written);
+    }
+
+    /** A list of small numbers, how many of which are above some bound, and a row of one above
+     *  every bound below and one below, which the search takes the elements of. */
+    private static final String SMALL = """
+            module w1
+            data Small = Int invariant value >= 0 && value <= 5
+            behavior m : (xs: List<Small>) -> Bool
+            let m (xs) = %s
+
+            example m
+                | "one above and one below" : ([ Small(5), Small(0) ]) -> false
+            """;
+
+    /** The count bound to a name before the comparison, kept by {@code keep}. */
+    private static String countedAfterALet(String keep) {
+        return SMALL.formatted("{\n    let kept = List.filter(x -> " + keep + ", xs)\n"
+                + "    List.length(kept) == List.length(xs)\n}");
+    }
+
+    /** The same count written inside the comparison. */
+    private static String countedInline(String keep) {
+        return SMALL.formatted("List.length(List.filter(x -> " + keep + ", xs))"
+                + " == List.length(xs)");
+    }
+
+    /**
+     * A count is read alike however it is written. Of the numbers above two, bound to a name
+     * first or written inside the comparison, a row of five and of nought is a witness, and the
+     * length is parted at nought. Of the numbers above how many there are, the statement reads the
+     * container as well as the element: the rows made of the witness hold more elements than it
+     * does, and what the statement says of the same element changes with them, so nothing is
+     * shown, written either way.
+     */
+    @Test
+    void aCountIsReadOfAStatementAboutTheElementAloneHoweverItIsWritten() {
+        for (String model : List.of(countedAfterALet("x.value > 2"), countedInline("x.value > 2"))) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(List.of("List.length(xs): 0 <= x <= 0", "List.length(xs): 0 < x"),
+                    compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m").axes()
+                            .stream().filter(axis -> axis.path().equals("List.length(xs)"))
+                            .flatMap(axis -> axis.classes().stream()).toList(), model);
+        }
+        for (String model : List.of(countedAfterALet("x.value > List.length(xs)"),
+                countedInline("x.value > List.length(xs)"))) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
+                    .get("List.length(xs)"), model);
+        }
+    }
+
+    /**
+     * A witness found, the count of a statement about the element alone is read against the
+     * length, which it leaves either way wherever there is an element and settles at none; the
+     * count of one that also reads the container shows nothing of the length, witness or none. The
+     * rows made of the witness hold its elements over again, and a statement reading how many
+     * there are, or another of them, may say something else of the same element in each.
+     *
+     * <p>Asked of the relation itself, handed a witness for every count: a body whose statement
+     * reads the container reads it in the step that keeps the elements too, and what is worked out
+     * before the comparison would refuse that first.
+     */
+    @Test
+    void aCountOfAStatementReadingTheContainerIsReadOfNoRowsMadeOfAWitness() {
+        Compilation compilation = reported(FORECAST);
+        InputReading read = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("m")
+                .reading(RuleReadings.of(compilation, "w1"));
+        TermPath deals = TermPath.of("deals");
+        Type list = read.domain().typeAt(deals, read.rules());
+        NumericTerm.TakenOf length = NumericTerm.TakenOf.howManyHeldAt(
+                NumericMeasures.takenOf(list, read.rules().inners()), deals, list,
+                read.rules().inners(), read.rules().symbols());
+        ComparisonWitnesses.AtAComparison everyCount = _ -> new CountWitnesses.Sought(Optional.of(
+                new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
+                        FixtureTemplate.integer(1), FixtureTemplate.integer(1),
+                        CountWitnesses.Expansion.REPEATED_ELEMENT)),
+                Set.of(), Set.of());
+        DecisionSubject.AnInput currency =
+                new DecisionSubject.AnInput(deals.element().then("currency"));
+        Map<Proposition, Boolean> undividedBy = new LinkedHashMap<>();
+        undividedBy.put(new Proposition.SameValue(currency,
+                new DecisionSubject.AnInput(TermPath.of("rates").then("base")), true), true);
+        undividedBy.put(new Proposition.SameValue(currency,
+                new DecisionSubject.AnInput(deals), true), false);
+        undividedBy.forEach((statement, expected) -> {
+            Quantity.HowManyMeet count =
+                    new Quantity.HowManyMeet(new DecisionSubject.AnInput(deals), statement);
+            UndividedByARelation relation = UndividedByARelation.ofAForm(
+                    new LinearForm<>(ExactRatio.ZERO, Map.of(count, ExactRatio.ONE,
+                            new DecisionAtom.OfTheInput(length), ExactRatio.ONE.negated())),
+                    Rel.EQ);
+            UndividedByARelation.WhatItLeaves left = relation.left(read, everyCount);
+            assertEquals(expected, left.undivided().contains(FilingCoordinate.of(length))
+                    || left.settled().containsKey(length), statement.toString());
+        });
+    }
+
+    /**
+     * A figure a search stopped at is said at the places of the relation it searched for, and at
+     * no other. Of two relations read of one comparison, about two places, the count's search for
+     * a witness stops at a figure and the other relation asks for none: the length the count is
+     * read against is shown nothing of at that figure, and the other place is told nothing of it.
+     */
+    @Test
+    void aFigureASearchStoppedAtIsSaidOnlyAtThePlacesOfTheRelationItSearchedFor() {
+        Compilation compilation = reported(FORECAST);
+        InputReading read = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("m")
+                .reading(RuleReadings.of(compilation, "w1"));
+        NumericTerm.TakenOf deals = lengthOf(TermPath.of("deals"), read);
+        NumericTerm.TakenOf rates = lengthOf(TermPath.of("rates").then("rates"), read);
+        Quantity.HowManyMeet count = new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(TermPath.of("deals")),
+                new Proposition.SameValue(new DecisionSubject.AnInput(
+                        TermPath.of("deals").element().then("currency")),
+                        new DecisionSubject.AnInput(TermPath.of("rates").then("base")), true));
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        ComparisonWitnesses.AtAComparison stoppedShort =
+                _ -> new CountWitnesses.Sought(Optional.empty(), Set.of(stopped), Set.of());
+        UndividedByARelation counted = UndividedByARelation.ofAForm(
+                new LinearForm<>(ExactRatio.ZERO, Map.of(count, ExactRatio.ONE,
+                        new DecisionAtom.OfTheInput(deals), ExactRatio.ONE.negated())),
+                Rel.EQ);
+        UndividedByARelation sized = UndividedByARelation.ofAForm(
+                new LinearForm<>(ExactRatio.of(-3), Map.of(new DecisionAtom.OfTheInput(rates),
+                        ExactRatio.ONE)), Rel.GE);
+        ComparisonAssessment.AgainstAnotherValue both = assertInstanceOf(
+                ComparisonAssessment.AgainstAnotherValue.class,
+                new ComparisonAssessment.AgainstAnotherValue(
+                        List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
+                        List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
+                        Map.of(), Set.of(), Map.of(), Map.of())
+                        .whereRowsArrive(read, List.of(), stoppedShort));
+        Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
+        both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
+        assertEquals(new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped)),
+                left.get(FilingCoordinate.of(deals)));
+        assertFalse(left.get(FilingCoordinate.of(rates))
+                instanceof BlockReason.RelationNotShownWhereTheSearchStopped, left.toString());
+    }
+
+    /** How many {@code container} holds, as a term read off the position. */
+    private static NumericTerm.TakenOf lengthOf(TermPath container, InputReading read) {
+        Type list = read.domain().typeAt(container, read.rules());
+        return NumericTerm.TakenOf.howManyHeldAt(
+                NumericMeasures.takenOf(list, read.rules().inners()), container, list,
+                read.rules().inners(), read.rules().symbols());
+    }
+
+    /**
+     * What a run works out inside the comparison is worked out as what it works out before it is.
+     * Sizes taken one more than the count and the length are worked out by an operator that may
+     * end a run on what nothing here bounds, on a container the witness never held; and a step
+     * written inline that walks the whole container beside reading its element — what it keeps
+     * turns on the element alone — is applied on containers the witness never held. Nothing is
+     * shown of either.
+     */
+    @Test
+    void whatTheComparisonWorksOutIsHeldToWhatIsWorkedOutBeforeIt() {
+        String oneMore = countedAfterALet("x.value > 2").replace(
+                "List.length(kept) == List.length(xs)",
+                "List.length(kept) + 1 == List.length(xs) + 1");
+        String stepWalksIt = countedInline("{\n        let n = walked(xs)\n        x.value > 2 }")
+                + """
+
+                partial let walked (ys: List<Small>): Int =
+                    match List.get(0, ys) with
+                        | None -> 0
+                        | Some first -> 1 + walked(List.drop(1, ys))
+                """;
+        for (String model : List.of(oneMore, stepWalksIt)) {
+            Compilation compilation = reported(model);
+            assertEquals(List.of(), compilation.errors(), model);
+            assertEquals(NOT_SHOWN, leftIn(compilation, whereWritten(model, "== List.length("))
+                    .get("List.length(xs)"), model);
+        }
+    }
+
+    /**
+     * A count is let through for the call the reading says it was read off, and no other. The
+     * count of what a filter keeps, read off that filter, gets through. A count of the same list
+     * the reading names no call for gets through nowhere: nothing then says which walk the rows
+     * made of a witness are walked by.
+     *
+     * <p>Not the only thing that refuses it today: every operation of the language handed a
+     * function is one whose ending nothing here says ({@link
+     * souther.compiler.check.WhatARunMayEndFor}), so a walk the count is not named for is refused
+     * as well. What is held here is that the count is let through for the walk the reading names
+     * and not for whichever one is found.
+     */
+    @Test
+    void aCountIsLetThroughOnlyForTheCallTheReadingSaysItWasReadOff() {
+        CountWitnesses.Sought found = new CountWitnesses.Sought(Optional.of(
+                new CountWitnesses.Witness(List.of(), 0, FixtureTemplate.integer(0),
+                        FixtureTemplate.integer(1), FixtureTemplate.integer(1),
+                        CountWitnesses.Expansion.REPEATED_ELEMENT)),
+                Set.of(), Set.of());
+        ComparisonWitnesses.AtComparisons always = _ -> _ -> found;
+        String filtered = countedInline("x.value > 2");
+        ReadComparisons read = ReadComparisons.ofTheAnalysis(filtered, "m", always);
+        List<Boolean> through = new ArrayList<>();
+        for (ComparisonReadings.Reading each : read.comparisons()) {
+            if (each.statement() instanceof ComparisonReadings.Stated.AComparison(var comparison)) {
+                Pullback.ofAComparisonOnTheInput(comparison, each.reads(),
+                        read.inputs().reading(read.rules())).readOff().keySet()
+                        .forEach(count -> through.add(
+                                each.witnesses().of(count).found().isPresent()));
+            }
+        }
+        assertEquals(List.of(true), through, filtered);
+        Quantity.HowManyMeet namedNowhere = new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(TermPath.of("xs")),
+                new Proposition.SameValue(new DecisionSubject.AnInput(TermPath.of("xs").element()),
+                        new DecisionSubject.AnInput(TermPath.of("limit")), true));
+        assertEquals(List.of(), read.comparisons().stream()
+                .filter(each -> each.witnesses().of(namedNowhere).found().isPresent())
+                .map(each -> each.at().toString()).toList(), filtered);
+    }
+
+    /** {@code source} measured as a report of what the rules say, with the rows it runs recording
+     *  where they went, which a witness of a count is found by. No value is composed at a point:
+     *  nothing here asks what a row at one would be. */
+    private static Compilation reported(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.observe(RowObservation.RECORD_ARMS);
+        return ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -287,7 +1855,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aTotalTakesWhatOneElementTakesAndNoughtWhereTheListMayBeEmpty() {
         String positive = "data Pos = Int invariant value >= 1\n";
-        assertEquals(List.of("gross/x <= -1", "gross/-1 < x"), classesAt(
+        assertEquals(List.of("gross: x <= -1", "gross: -1 < x"), classesAt(
                 "gross: Int, ns: List<Pos>", positive, "gross >= " + TOTAL, "gross"));
         assertEquals(NOT_SHOWN, leftAt("gross: Int, ns: Ps",
                 positive + "data Ps = List<Pos> invariant List.length(value) >= 1",
@@ -302,17 +1870,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Reached along a way holding the list to two elements or more, no list there totals one
-     * element, and which totals two reach is not asked. Along a way holding every element to five
+     * element, and the total is that of two: an element and the rest at nought, so the gross is
+     * reached as it is where one element stands alone. Along a way holding every element to five
      * or less, an element is not every value the declarations leave it. Held by a rule of the list
-     * to a total of ten or less, an element is not every value it takes alone. Each time the total
-     * is shown to take nothing, and nothing is shown of the gross — though under the third a gross
-     * of eleven or more holds whatever a total is.
+     * to a total of ten or less, an element is not every value it takes alone. Each of those two
+     * times the total is shown to take nothing, and nothing is shown of the gross — though under
+     * the second a gross of eleven or more holds whatever a total is.
      */
     @Test
-    void aTotalIsWhatOneElementTakesOnlyWhereOneElementStandsAlone() {
+    void aTotalIsWhatOneElementTakesWhereTheRestAreAtNought() {
         String inputs = "gross: Int, ns: List<Nat>";
         String body = "if List.length(ns) >= 2 then gross >= " + TOTAL + " else false";
-        assertEquals(NOT_SHOWN, left(inputs, NAT, body,
+        assertEquals(null, left(inputs, NAT, body,
                 atThe(">= List.sum", NAT, inputs, body)).get("gross"));
         String small = "if List.all(n -> n.value <= 5, ns) then gross >= " + TOTAL + " else false";
         assertEquals(NOT_SHOWN, left(inputs, NAT, small,
@@ -326,7 +1895,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  {@code declarations}. */
     private static String atThe(String operator, String declarations, String inputs,
                                 String body) {
-        String head = "let m (" + inputs.replaceAll(": [A-Za-z<>]+", "") + ") = ";
+        String head = "let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ";
         return (declarations.lines().count() + 3) + ":" + (head.length() + body.indexOf(operator)
                 + 1);
     }
@@ -341,6 +1910,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * nought in one row, and each of them is apart from the others and takes nought, a list of
      * none totalling nought. Held above nought, none of them takes nought, and nothing is shown of
      * the gross: that a value as near nought as asked of is taken shows no row at nought.
+     *
+     * <p>Held at nought or more each is taken apart at nought, whichever other two are put at
+     * what they are: the gross less the total is worked out over the total as the list of that
+     * one number sums to, at the places the number is written with, and the rows built with it
+     * so get past taking it off. Only the rows built so are shown to; the same number as the sum
+     * of a list written at another scale is no row of these.
      */
     @Test
     void aTotalHeldStillBesideOtherTermsAtNoughtLeavesTheRestEitherWay() {
@@ -389,7 +1964,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void howOftenAValueOccursTakesEveryCountItsListMayHoldElementsTo() {
-        assertEquals(List.of("atLeast/x <= 1", "atLeast/1 < x"),
+        assertEquals(List.of("atLeast: x <= 1", "atLeast: 1 < x"),
                 classesAt("issues: List<Issue>, atLeast: Int", LABELLED, BUSY, "atLeast"));
         assertEquals(List.of(), classesAt("board: Board, atLeast: Int", LABELLED + """
 
@@ -412,6 +1987,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * drawn on it; the bar is parted by its line at one. A rule putting the bar at the greatest
      * {@code Int} at most draws the same line as the model's, and a count has no position to draw
      * it at.
+     *
+     * <p>Read so, the count gets to the comparison at every value: a count of so many is a list of
+     * so many issues each carrying the label once, whose labels a list holds, and counting each
+     * label adds one to how many came before it, which are fewer than a list holds.
      */
     @Test
     void aCountSettledOnlyWhereTheOtherTypeStopsIsRead() {
@@ -443,14 +2022,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A way keeping {@code b} from nought where it already keeps it above nought, as a quotient's
      * way keeps its divisor, leaves {@code b} every value from one: the line on {@code a} it
      * draws is the one {@code b > 0} alone draws. Kept from five instead, {@code b} runs with a
-     * gap, and every value of {@code a} between the settling ones is not shown reached.
+     * gap, and the line is the same: an order asks only for a value of {@code b} on each side of
+     * what {@code a} asks, and the gap leaves one on each side of every value of {@code a}.
      */
     @Test
-    void aValueHeldApartOutsideTheRunTakesNothingFromIt() {
+    void aValueHeldApartFromANumberTakesNothingFromAnOrderOverIt() {
         Map<String, String> above = keptAbove("");
         assertFalse(above.containsKey("a"), () -> "a is parted at what settles it: " + above);
         assertEquals(above, keptAbove(" && b /= 0"));
-        assertEquals(NOT_SHOWN, keptAbove(" && b /= 5").get("a"));
+        assertEquals(above, keptAbove(" && b /= 5"));
     }
 
     /** What {@code a >= 100 * b} leaves its places along a way keeping {@code b} above nought and
@@ -463,22 +2043,342 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /** Beside a total, two positions are each a term of the relation and not of the run. The
-     *  adjustment held at nought, the gross stands at every value the total takes. */
+     *  adjustment held at nought, the gross stands at every value the total takes; and the total
+     *  held at nought, the gross and the adjustment stand at each other's values wherever a row is
+     *  computed, which leaves out only those beside the ends of the type. The total is left
+     *  undivided as well: the totals past the greatest {@code Int} are none a row stands at, so
+     *  they are no run past the rows. */
     @Test
     void positionsBesideATotalAreAskedOfTheRelation() {
-        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", NOT_SHOWN,
-                        "gross", NOT_SHOWN),
+        assertEquals(Map.of("List.sum(ns[*])", RELATES, "adjustment", RELATES,
+                        "gross", RELATES),
                 leftAt("gross: Int, adjustment: Int, ns: List<Nat>", NAT,
                         "gross + adjustment >= " + TOTAL, 52));
     }
 
     /** A count of the elements meeting a statement, held against a position, divides that
-     *  position as far as the relation shows, and says nothing of the run of it. */
+     *  position as far as the relation shows, and says nothing of the run of it. Where the count
+     *  is not shown to be reached, the places its statement reads are left as the comparison is
+     *  filed at them. */
     @Test
     void aPositionBesideACountOfWhatMeetsAStatementIsAskedOfTheRelation() {
         assertEquals(Map.of("gross", NOT_SHOWN, "ns[*]", NOT_SHOWN),
                 leftAt("gross: Int, ns: List<Nat>", NAT,
                         "gross >= List.length(List.filter(n -> n.value > 3, ns))", 27));
+    }
+
+    private static final String UNUSED = "data Unused = Int";
+
+    /** Each element of {@code xs} answered one where {@code test} holds of where it stands. */
+    private static final String STANDING = "List.mapIndexed((i, x) -> if %s then 1 else 0, xs)";
+
+    /**
+     * Where an element stands in a walk over a list lies from nought to one below how many the
+     * list holds, and a row of so many hands the walk every one of those. So at a list of one the
+     * one element is the last, and every longer list has a last element and one before it: the
+     * comparison is parted on the length at one, and where the element stands is not asked apart
+     * from it. Moved by two, the line moves with it; held two below, the list of one is the one
+     * whose element is never there.
+     */
+    @Test
+    void whereAnElementStandsPartsHowManyItsListHoldsWhereEveryPositionComesOutOneWay() {
+        String inputs = "xs: List<Int>";
+        for (String test : List.of("i == List.length(xs) - 1", "i + 1 >= List.length(xs)",
+                "i == List.length(xs) - 2")) {
+            assertEquals(List.of("List.length(xs): 0 <= x <= 1", "List.length(xs): 1 < x"),
+                    classesAt(inputs, UNUSED, "List<Int>", STANDING.formatted(test),
+                            "List.length(xs)"), test);
+        }
+        assertEquals(List.of("List.length(xs): 0 <= x <= 2", "List.length(xs): 2 < x"),
+                classesAt(inputs, UNUSED, "List<Int>",
+                        STANDING.formatted("List.length(xs) - i <= 2"), "List.length(xs)"));
+        String body = STANDING.formatted("i == List.length(xs) - 1");
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * What is said of a length is said of every position a row of it compares. With K a third of
+     * the greatest {@code Int} less one, {@code i + K * List.length(xs) - (M - 1) <= 0} holds at
+     * every position of a list of one or two. A list of three compares its first two positions —
+     * the third passes the type, and the walk stops there — and those come out one each way. A
+     * list of four passes it at its first. So the length is parted at two: a list of three is a row
+     * the comparison comes out both ways in, though not every position of it computes.
+     */
+    @Test
+    void aLengthSomeOfWhosePositionsComputeIsReadAtThose() {
+        String inputs = "xs: List<Int>";
+        String body = STANDING.formatted(
+                "i + 3074457345618258602 * List.length(xs) - 9223372036854775806 <= 0");
+        assertEquals(List.of("List.length(xs): 0 <= x <= 2", "List.length(xs): 2 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
+    }
+
+    /**
+     * And a line the model draws stands however long the lists at it are.
+     * {@code i - List.length(xs) + M - 1 <= 0}, M the greatest {@code Int}, fails at every
+     * position of a list shorter than M - 1: past two elements a list passes the type at its third
+     * position, and the first two it compares come out false. Only the lists that long hold it at
+     * the first, so the length is parted at M - 2. The line at M that the walk stopping draws is
+     * the arithmetic's, and none of the model's.
+     */
+    @Test
+    void aLineTheModelDrawsWhereFewPositionsComputeIsDrawn() {
+        String inputs = "xs: List<Int>";
+        String body = STANDING.formatted("i - List.length(xs) + 2147483646 <= 0");
+        assertEquals(List.of("List.length(xs): 0 <= x <= 2147483645",
+                        "List.length(xs): 2147483645 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", body, "List.length(xs)"));
+    }
+
+    /** An integer whose square is two, which no value is, and which the reading of the
+     *  declarations does not refuse on its own: a product of two unknowns is not something it
+     *  reads. */
+    private static final String NO_VALUE = "data Never = Int invariant value * value == 2";
+
+    /**
+     * How many a container holds is a count rows take only where an element can be written. The
+     * rules on the numbers leave a list of any length, and a list of elements no value is holds
+     * none: no row has a last element, so nothing is shown of the length, and no line is drawn on
+     * it.
+     */
+    @Test
+    void aCountOfElementsNoValueIsTakesNothingButNought() {
+        String inputs = "xs: List<Never>";
+        String body = STANDING.formatted("i == List.length(xs) - 1");
+        assertEquals(List.of(), classesAt(inputs, NO_VALUE, "List<Int>", body,
+                "List.length(xs)"));
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, NO_VALUE, "List<Int>",
+                body, atThe("==", NO_VALUE, inputs, body)));
+    }
+
+    /**
+     * A rule reading inside the elements says how many can stand together, which no number does:
+     * every element one, and no two alike, leave a box one element at most. So nothing is shown of
+     * the lengths past that, and no line is drawn on them.
+     */
+    @Test
+    void aRuleReadingInsideTheElementsLeavesHowManyTheyCanBeUnshown() {
+        String box = "data Box = { xs: List<Int> }\n"
+                + "    invariant List.all(x -> x == 1, xs) && List.allDistinctBy(x -> x, xs)";
+        String inputs = "box: Box";
+        String body = "List.mapIndexed((i, x) -> if i == List.length(box.xs) - 1 then 1 else 0,"
+                + " box.xs)";
+        assertEquals(Map.of("List.length(box.xs)", NOT_SHOWN), left(inputs, box, "List<Int>",
+                body, atThe("==", box, inputs, body)));
+    }
+
+    /**
+     * Where the step works something else out of the position, that may stop the walk at a
+     * position before the comparison is reached there: {@code Int.max + i} passes the type at the
+     * second. Nothing is shown.
+     */
+    @Test
+    void aPositionWorkedOutBeforeTheComparisonLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> { let total = 9223372036854775807 + i\n"
+                + "    if i == List.length(xs) - 1 then total else 0 }, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                body, "5:10"));
+    }
+
+    /**
+     * Anything else the step works out stops the walk where it stops, made of the position or
+     * not: of the element, of the length, of nothing. A position past the first is compared only
+     * where the step got through at every position before, so where something says the step
+     * answers only somewhere, the length is not parted. Where the way to the comparison shows no
+     * row of a list holding anything gets there — past {@code Int.max} plus its length — that is
+     * what is said of it.
+     */
+    @Test
+    void anythingElseTheStepWorksOutLeavesTheLengthNotShownWhereItMayStop() {
+        String inputs = "xs: List<Int>";
+        for (String worked : List.of("9223372036854775807 + x",
+                "9223372036854775807 + List.length(xs)", "9223372036854775807 + 1")) {
+            String body = ("List.mapIndexed((i, x) -> { let total = %s\n"
+                    + "    if i == List.length(xs) - 1 then total else 0 }, xs)").formatted(worked);
+            Map<String, String> left = left(inputs, UNUSED, "List<Int>", body, "5:10");
+            assertTrue(left.containsKey("List.length(xs)"), () -> worked + ": " + left);
+        }
+        String ofAnElement = "List.mapIndexed((i, x) -> { let total = 9223372036854775807 + x\n"
+                + "    if i == List.length(xs) - 1 then total else 0 }, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                ofAnElement, "5:10"));
+        String after = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + (9223372036854775807 + x), xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                after, atThe("==", UNUSED, inputs, after)));
+    }
+
+    /**
+     * Where nothing says where it stops — a product of two values nothing bounds — the length is
+     * read, and what may stop the walk is on the way to the comparison as what may stop a run
+     * there, which is where it is for a comparison anywhere else.
+     */
+    @Test
+    void aStepNothingSaysWhereItStopsIsReadAndMayStopOnTheWay() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + x * x, xs)";
+        assertEquals(Map.of(), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * And after it: the second position compares and then stops the walk, so no position past it
+     * is compared.
+     */
+    @Test
+    void aPositionWorkedOutAfterTheComparisonLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " + (9223372036854775807 + i), xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>",
+                body, atThe("==", UNUSED, inputs, body)));
+    }
+
+    /** A list of one value over again, counted for how often it occurs, is no row either where the
+     *  value is none: no bar is parted by it. */
+    @Test
+    void howOftenAValueNoValueIsOccursTakesNothing() {
+        assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int",
+                LABELLED.replace("Set<String>", "Set<Never>")
+                        .replace("Set.toList(i.labels)", "List.map(l -> l.value, Set.toList(i.labels))")
+                        .replace("Map<String, Int>", "Map<Int, Int>")
+                        + "\n" + NO_VALUE, BUSY, "atLeast"));
+    }
+
+    /**
+     * A way stating something of where the element stands picks some positions out as a way
+     * stating something of the elements does: under {@code i > 0} a list of one never reaches the
+     * comparison, and a list of two reaches it at its last position only. Nothing is shown.
+     */
+    @Test
+    void aWayStatingWhereTheElementStandsLeavesTheLengthNotShown() {
+        String inputs = "xs: List<Int>";
+        String body = "List.mapIndexed((i, x) -> if i > 0 then (if i == List.length(xs) - 1"
+                + " then 1 else 0) else 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Int>", body,
+                atThe("==", UNUSED, inputs, body)));
+    }
+
+    /**
+     * Where the step reads the position is asked of the one account of what runs when: in an arm
+     * of a match, or on the right of an operator that stops once its answer is settled, it is read
+     * at the applications that get there, and nothing is shown; in the body of a {@code let} it is
+     * read whenever the step runs, and the length is parted as with no {@code let} around it.
+     */
+    @Test
+    void aPositionReadInAnArmIsReadAtTheApplicationsThatEnterIt() {
+        String inputs = "xs: List<Int>";
+        String places = "data Later = { at: Int }\ndata First = { at: Int }\n"
+                + "data Place = Later | First";
+        String inAnArm = "List.mapIndexed((i, x) -> match (if i > 0 then Later { at = i } else"
+                + " First { at = i }) with | Later -> (if i == List.length(xs) - 1 then 1 else 0)"
+                + " | First -> 0, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, places, "List<Int>",
+                inAnArm, atThe("== List", places, inputs, inAnArm)));
+    }
+
+    /** The same on the right of an operator that stops once its answer is settled. */
+    @Test
+    void aPositionReadOnTheRightOfAStopEarlyOperatorIsReadWhereTheLeftLetsItRun() {
+        String inputs = "xs: List<Int>";
+        String onTheRight = "List.mapIndexed((i, x) -> x > 0 && i == List.length(xs) - 1, xs)";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left(inputs, UNUSED, "List<Bool>",
+                onTheRight, atThe("== List", UNUSED, inputs, onTheRight)));
+    }
+
+    /** And in the body of a {@code let}, which runs whenever the step does. */
+    @Test
+    void aPositionReadInTheBodyOfALetIsReadWheneverTheStepRuns() {
+        String inputs = "xs: List<Int>";
+        String inALet = "List.mapIndexed((i, x) -> { let last = List.length(xs) - 1\n"
+                + "    if i == last then 1 else 0 }, xs)";
+        assertEquals(List.of("List.length(xs): 0 <= x <= 1", "List.length(xs): 1 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", inALet, "List.length(xs)"));
+    }
+
+    /**
+     * Against another list's length, where an element of the walked list stands is no number
+     * of it: the positions reach every value a longer list is compared at, so that length is
+     * parted at nought, where no position is compared, and nowhere else. Nothing is shown where the way picks out some of
+     * the elements: the walk is
+     * handed every position, and the comparison is asked at those of the elements the way lets
+     * through, which may leave out the last.
+     */
+    @Test
+    void whereAnElementStandsIsReadOnlyAgainstItsOwnListAllOfWhichTheWayLeaves() {
+        String inputs = "xs: List<Int>, ys: List<Int>";
+        String another = STANDING.formatted("i == List.length(ys) - 1");
+        assertEquals(List.of("List.length(ys): 0 <= x <= 0", "List.length(ys): 0 < x"),
+                classesAt(inputs, UNUSED, "List<Int>", another, "List.length(ys)"));
+        String picked = "if List.all(x -> x > 0, xs) then "
+                + STANDING.formatted("i == List.length(xs) - 1") + " else []";
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN), left("xs: List<Int>", UNUSED,
+                "List<Int>", picked, atThe("== List", UNUSED, "xs: List<Int>", picked)));
+    }
+
+    /** A rate a dependency keeps for each kind, and the one in force on a day. */
+    private static final String RATED = """
+            module w1
+            data Change = { from: Int, rate: Int }
+            behavior changesOf : (kind: Int) -> List<Change>
+            let rateAsOf (changes: List<Change>, on: Int): Option<Int> =
+                Option.map(c -> c.rate, List.find(c -> c.from <= on, changes))
+            behavior m : (xs: List<Int>, kind: Int, on: Int) -> List<Int>
+                depends on changesOf
+            let m (xs, kind, on, changesOf) =
+                match rateAsOf(changesOf(kind), %s) with
+                    | Some r -> List.mapIndexed((i, x) -> if i == List.length(xs) - 1 then r else 0, xs)
+                    | None -> []
+            """;
+
+    /**
+     * The arm a rate is found in is entered by what the dependency answered and the day asked
+     * about, which no row writes and nothing here takes in. That says nothing of the list the
+     * comparison inside it is about: the day is another parameter, and no declaration relates one
+     * parameter to another, so the list is parted at one as it is with no arm around it. Asked
+     * about the list's own length, the arm says something of the list nothing reads, and nothing
+     * is shown.
+     */
+    @Test
+    void anArmADependencysAnswerEntersLeavesTheParametersItNamesNothingOfAsTheyWere() {
+        String onADay = RATED.formatted("on");
+        assertEquals(List.of("List.length(xs): 0 <= x <= 1", "List.length(xs): 1 < x"),
+                classesIn(onADay, "List.length(xs)"));
+        assertEquals(Map.of(), leftIn(onADay, whereWritten(onADay, "== List")));
+        String onTheLength = RATED.formatted("List.length(xs)");
+        assertEquals(Map.of("List.length(xs)", NOT_SHOWN),
+                leftIn(onTheLength, whereWritten(onTheLength, "== List")));
+    }
+
+    /** Where {@code text} is first written in {@code source}, as a report names a place. */
+    private static String whereWritten(String source, String text) {
+        List<String> lines = source.lines().toList();
+        for (int i = 0; i < lines.size(); i++) {
+            int column = lines.get(i).indexOf(text);
+            if (column >= 0) {
+                return (i + 1) + ":" + (column + 1);
+            }
+        }
+        throw new IllegalArgumentException("`" + text + "` is not written in the model");
+    }
+
+    /**
+     * A relation that comes out one way at every value a term may hold comes out that way in every
+     * row, so it divides none of its places, as one a way decides does not: every element of a
+     * list stands below its length, and two lengths of strings add up to nought or more.
+     */
+    @Test
+    void aRelationSettledOneWayAtEveryValueDividesNothing() {
+        String body = STANDING.formatted("i < List.length(xs)");
+        assertEquals(Map.of("List.length(xs)", RELATES), left("xs: List<Int>", UNUSED,
+                "List<Int>", body, atThe("<", UNUSED, "xs: List<Int>", body)));
+        String lengths = "String.length(s) + String.length(t) >= 0";
+        assertEquals(Map.of("String.length(s)", RELATES, "String.length(t)", RELATES),
+                left("s: String, t: String", UNUSED, lengths,
+                        atThe(">=", UNUSED, "s: String, t: String", lengths)));
     }
 
     /** A total held against a number, or against another total, is about what the runs come to
@@ -506,7 +2406,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void anHourReachesTheHoursOfADay() {
         assertEquals(Map.of("Time.hour(t)", RELATES),
                 left("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "4:18"));
-        assertEquals(List.of("n/x <= -1", "n/-1 < x < 24", "n/24 <= x"),
+        assertEquals(List.of("n: x <= -1", "n: -1 < x < 24", "n: 24 <= x"),
                 classesAt("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "n"));
         assertEquals(Map.of("h", RELATES, "Time.hour(t)", RELATES),
                 left("h: H, t: Time", "data H = Int invariant value >= 0 && value <= 23",
@@ -520,14 +2420,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aYearReachesTheYearsADateCanBeWrittenInAndNoGapARuleLeaves() {
         assertEquals(Map.of("Date.year(d)", RELATES),
                 left("y: Int, d: Date", "data Unused = Int", "y == Date.year(d)", "4:18"));
-        assertEquals(List.of("y/x <= -1000000000", "y/-1000000000 < x < 1000000000",
-                "y/1000000000 <= x"), classesAt("y: Int, d: Date", "data Unused = Int",
+        assertEquals(List.of("y: x <= -1000000000", "y: -1000000000 < x < 1000000000",
+                "y: 1000000000 <= x"), classesAt("y: Int, d: Date", "data Unused = Int",
                 "y == Date.year(d)", "y"));
         String heldYear = "data Y = Int invariant value >= 1 && value <= 9999";
         assertEquals(Map.of("y", RELATES),
                 left("y: Y, d: Date", heldYear, "y.value == Date.year(d)", "4:24"));
-        assertEquals(List.of("Date.year(d)/-999999999 <= x <= 0", "Date.year(d)/0 < x < 10000",
-                        "Date.year(d)/10000 <= x <= 999999999"),
+        assertEquals(List.of("Date.year(d): -999999999 <= x <= 0", "Date.year(d): 0 < x < 10000",
+                        "Date.year(d): 10000 <= x <= 999999999"),
                 classesAt("y: Y, d: Date", heldYear, "y.value == Date.year(d)", "Date.year(d)"));
         assertEquals(Map.of("Date.year(d)", RELATES, "y", NOT_SHOWN),
                 left("y: Int, d: D", "data D = Date invariant value == Date(\"2020-01-01\")"
@@ -540,14 +2440,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * they stand, and only how far apart they are settles it. A date and a count of days are not
      * moved together: a count past the days from the first date to the last or short of those to
      * the first settles the comparison, which is where the dates stop and no line the model
-     * draws, so the count is read; the days to a date past which no count runs are not shown.
+     * draws, so the count is read; every date has a count either side of its days from the
+     * first, so the date is related to the count and no date is parted.
      */
     @Test
     void twoValuesADayApartRelateEachOther() {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
                         "4:39"));
-        assertEquals(Map.of("a", NOT_SHOWN, "n", RELATES),
+        assertEquals(Map.of("a", RELATES, "n", RELATES),
                 left("a: Date, n: Int", "data Unused = Int",
                         "Date.daysBetween(Date(\"2026-01-01\"), a) <= n", "4:56"));
     }
@@ -563,16 +2464,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void anEndAModelHoldsIsAValueTheRelationDivides() {
         String stage = "data Stage = Prospecting | Negotiation | Won | Lost";
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
-                left("a: Stage, b: Stage", stage, "a < b", "4:18"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of(), left("a: Stage, b: Stage", stage, "a < b", "4:18"));
+        assertEquals(Map.of(),
                 left("a: Stage, b: Stage", stage, "if a <= b then a < b else false", "4:33"));
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Stage, b: Stage", stage, "a == b", "4:18"));
         assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
                 left("a: String, b: String", stage, "a < b", "4:18"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
-                left("a: Time, b: Time", stage, "a < b", "4:18"));
+        assertEquals(Map.of(), left("a: Time, b: Time", stage, "a < b", "4:18"));
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Int, b: Int", stage, "a < b", "4:18"));
     }
@@ -614,9 +2513,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 let m (p) = true
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("p.a holds 4 classes"), report);
         assertTrue(report.contains("p.w holds 2 classes"), report);
     }
@@ -625,19 +2524,26 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  {@code declarations}. */
     private static Map<String, String> leftAt(String inputs, String declarations, String body,
                                               int column) {
-        return left(inputs, declarations, body,
+        return leftAt(List.of(), inputs, declarations, body, column);
+    }
+
+    /** The same, of a model refused with {@code codes}. */
+    private static Map<String, String> leftAt(List<String> codes, String inputs,
+                                              String declarations, String body, int column) {
+        return left(codes, inputs, declarations, "Bool", body,
                 (declarations.lines().count() + 3) + ":" + column);
     }
 
     /**
-     * No two dates are ten trillion days apart, so the comparison holds for none of them; and
-     * four hundred billion days apart are only dates nearer the two ends than the middle is.
-     * Three hundred billion days leave the middle date partners either side.
+     * No two dates are ten trillion days apart, so the comparison holds for none of them, and
+     * every date has a row at it: they are related and nothing parts them. The same holds past
+     * four hundred billion days. Three hundred billion days leave the middle date partners
+     * either side.
      */
     @Test
     void aDifferenceHasToBeOneTheMiddleOfTheTypeReachesBothWays() {
         for (String apart : List.of("10000000000000", "400000000000")) {
-            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+            assertEquals(Map.of("a", RELATES, "b", RELATES),
                     left("a: Date, b: Date", "data Unused = Int",
                             "Date.daysBetween(a, b) > " + apart, "4:39"), apart);
         }
@@ -662,9 +2568,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 let m (d) = true
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         for (String place : List.of("d.from", "d.to")) {
             assertTrue(report.lines().anyMatch(line -> line.contains("invariant Deal #1")
                     && line.contains("not shown to reach every value here")
@@ -702,9 +2608,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     | (Date("2026-09-01"), Date("2026-07-25")) -> TooEarly { days = 38 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(report.contains("not shown to reach every value here"), report);
         for (String place : List.of("deadline", "today")) {
@@ -726,7 +2632,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int",
                         "if " + apart + " >= 0 then " + apart + " <= 14 else false", "4:75"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of("a", RELATES),
                 left("a: Date, b: Date", "data Unused = Int",
                         "if a >= Date(\"2020-01-01\") then " + apart + " <= 14 else false",
                         "4:71"));
@@ -754,7 +2660,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES),
                 left("a: Int, b: Int", "data Unused = Int", "if a > 0 then a < b else false",
                         "4:32"));
-        assertEquals(List.of("b/x <= 1", "b/1 < x"), classesAt("a: Int, b: Int",
+        assertEquals(List.of("b: x <= 1", "b: 1 < x"), classesAt("a: Int, b: Int",
                 "data Unused = Int", "if a > 0 then a < b else false", "b"));
     }
 
@@ -768,14 +2674,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String declarations = "data Y = Int invariant value >= -10 && value <= -5";
         String fromFour = "if h >= 4 && h <= 11 then 2 * h + y.value < 0 else false";
         assertEquals(Map.of(), left("h: Int, y: Y", declarations, fromFour, "4:58"));
-        assertEquals(List.of("h/x < 4", "h/4 <= x < 5", "h/5 <= x <= 11", "h/11 < x"),
+        assertEquals(List.of("h: x < 4", "h: 4 <= x < 5", "h: 5 <= x <= 11", "h: 11 < x"),
                 classesAt("h: Int, y: Y", declarations, fromFour, "h"));
-        assertEquals(List.of("y/-10 <= x < -8", "y/-8 <= x <= -5"),
+        assertEquals(List.of("y: -10 <= x < -8", "y: -8 <= x <= -5"),
                 classesAt("h: Int, y: Y", declarations, fromFour, "y"));
         String fromNought = "if h >= 0 && h <= 20 then 2 * h + y.value < 0 else false";
         assertEquals(Map.of("y", RELATES), left("h: Int, y: Y", declarations, fromNought, "4:58"));
-        assertEquals(List.of("h/x < 0", "h/0 <= x <= 2", "h/2 < x < 5", "h/5 <= x <= 20",
-                "h/20 < x"), classesAt("h: Int, y: Y", declarations, fromNought, "h"));
+        assertEquals(List.of("h: x < 0", "h: 0 <= x <= 2", "h: 2 < x < 5", "h: 5 <= x <= 20",
+                "h: 20 < x"), classesAt("h: Int, y: Y", declarations, fromNought, "h"));
     }
 
     /**
@@ -788,15 +2694,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aMonthIsDividedAtTheEndOfTheNumbersAGuardHoldsTheOtherSideTo() {
         String months = "if k >= 1 && k <= 12 then Date.month(d) >= k else false";
         assertEquals(Map.of(), left("d: Date, k: Int", "data Unused = Int", months, "4:56"));
-        assertEquals(List.of("Date.month(d)/1 <= x < 12", "Date.month(d)/12 <= x <= 12"),
+        assertEquals(List.of("Date.month(d): 1 <= x < 12", "Date.month(d): 12 <= x <= 12"),
                 classesAt("d: Date, k: Int", "data Unused = Int", months, "Date.month(d)"));
-        assertEquals(List.of("k/x < 1", "k/1 <= x <= 1", "k/1 < x <= 12", "k/12 < x"),
+        assertEquals(List.of("k: x < 1", "k: 1 <= x <= 1", "k: 1 < x <= 12", "k: 12 < x"),
                 classesAt("d: Date, k: Int", "data Unused = Int", months, "k"));
         String wider = "if k >= 0 && k <= 13 then Date.month(d) >= k else false";
         assertEquals(Map.of("Date.month(d)", RELATES),
                 left("d: Date, k: Int", "data Unused = Int", wider, "4:56"));
-        assertEquals(List.of("k/x < 0", "k/0 <= x <= 1", "k/1 < x < 13", "k/13 <= x <= 13",
-                "k/13 < x"), classesAt("d: Date, k: Int", "data Unused = Int", wider, "k"));
+        assertEquals(List.of("k: x < 0", "k: 0 <= x <= 1", "k: 1 < x < 13", "k: 13 <= x <= 13",
+                "k: 13 < x"), classesAt("d: Date, k: Int", "data Unused = Int", wider, "k"));
     }
 
     /**
@@ -811,9 +2717,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "if p.value == g.value then false else p.value < g.value";
         assertEquals(Map.of(), left("p: Amount, g: Amount", amount, body, "4:62"),
                 "neither is left unshown: each is parted at the value that settles it");
-        assertEquals(List.of("p/0 <= x <= 0", "p/0 < x"),
+        assertEquals(List.of("p: 0 <= x <= 0", "p: 0 < x"),
                 classesAt("p: Amount, g: Amount", amount, body, "p"));
-        assertEquals(List.of("g/0 <= x <= 0", "g/0 < x"),
+        assertEquals(List.of("g: 0 <= x <= 0", "g: 0 < x"),
                 classesAt("p: Amount, g: Amount", amount, body, "g"));
     }
 
@@ -842,22 +2748,459 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * Two choices on places apart are proved along every way of taking them together, and not
-     * along each alternative once: {@code y} reaches every {@code x} along three of the four, and
-     * along the last — {@code x} from twenty, {@code y} up to ten — it reaches none.
+     * along each alternative once: {@code y} reaches every {@code x} along three of the four.
+     * Along the last — {@code x} from twenty, {@code y} up to twenty-five — the values of
+     * {@code x} past twenty-five come out false whatever {@code y} is, and those below come out
+     * either way, so {@code x} is parted there and not left undivided. With {@code y} up to ten
+     * instead, the last comes out false in every row along it, and divides no value of {@code x}
+     * any more than a way deciding it does.
      */
     @Test
     void choicesOnPlacesApartAreProvedAlongEveryWayOfTakingThemTogether() {
+        String body = "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
+                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 25)"
+                + " then x == y else false";
         assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                left("x: Int, y: Int", "data Unused = Int", body, "4:112"));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
                 left("x: Int, y: Int", "data Unused = Int",
-                        "if (x >= 0 && x <= 10 || x >= 20 && x <= 30)"
-                                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 10)"
-                                + " then x == y else false", "4:112"));
+                        body.replace("y <= 25", "y <= 10"), "4:112"));
+    }
+
+    /** Five choices of two ways each on values no relation below reads: thirty-two ways
+     *  together, more than a way is looked along each of. */
+    private static final String FIVE_APART = "(b1 || c1) && (b2 || c2) && (b3 || c3)"
+            + " && (b4 || c4) && (b5 || c5)";
+
+    private static final String THE_FIVE = ", b1: Bool, c1: Bool, b2: Bool, c2: Bool,"
+            + " b3: Bool, c3: Bool, b4: Bool, c4: Bool, b5: Bool, c5: Bool";
+
+    /**
+     * The words the comparison {@code comparison} leaves each place with, under {@code guard} —
+     * and, where {@code beside} is true, under the five choices apart as well.
+     */
+    private static Map<String, String> leftPast(String inputs, String declarations, String guard,
+                                                String comparison, boolean beside) {
+        String taking = beside ? inputs + THE_FIVE : inputs;
+        String body = "if " + (beside ? FIVE_APART + " && " : "") + guard + " then " + comparison
+                + " else false";
+        int at = ("let m (" + taking.replaceAll(PARAMETER_TYPE, "") + ") = ").length()
+                + body.indexOf(comparison) + comparison.indexOf("==") + 1;
+        return left(taking, declarations, body, "4:" + at);
+    }
+
+    /**
+     * A way past more choices than are looked along is read, for a relation, as what the choices
+     * leave the values it reads: ways that differ only in values it does not read are one way to
+     * it. With five choices on {@code Bool}s beside it, {@code x == y} leaves each where it does
+     * without them — and so it does with a choice one of whose ways asks for an {@code Int} no
+     * value is, where the other is met.
+     */
+    @Test
+    void aWayPastTheFigureIsReadAsWhatItLeavesTheValuesTheRelationReads() {
+        Map<String, String> free = Map.of("x", RELATES, "y", RELATES);
+        assertEquals(free, leftPast("x: Int, y: Int", "data Unused = Int", "true", "x == y",
+                true));
+        assertEquals(free, leftPast("x: Int, y: Int, z: Int, w: Bool", "data Unused = Int",
+                "(z > 0 && z < 1 || w)", "x == y", true));
+    }
+
+    /**
+     * A way open is not a way some value takes. Where the only way of a choice asking nothing of
+     * what the relation reads asks for an {@code Int} above nought and below one, no row takes
+     * it, so a row past the choice holds {@code x} at five or more and {@code y} below five never
+     * stands beside one: the choice is kept as it is, and read as it is without the five beside
+     * it. So it is where what holds the value out is written on the way beside the choice.
+     */
+    @Test
+    void aChoiceWhoseWayApartNoValueIsShownToMeetIsKeptAsItIs() {
+        for (String apart : List.of("z > 0 && z < 1",
+                "z >= 0 && z <= 1 && z /= 0 && z /= 1")) {
+            String guard = "(" + apart + " || x >= 5)";
+            Map<String, String> alone = leftPast("x: Int, y: Int, z: Int, v: Int",
+                    "data Unused = Int", guard, "x == y", false);
+            assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone, apart);
+            assertEquals(alone, leftPast("x: Int, y: Int, z: Int, v: Int", "data Unused = Int",
+                    guard, "x == y", true), apart);
+        }
+        String heldOutOnTheWay = "(z >= 0 && z <= 1 || x >= 5) && z /= 0 && z /= 1";
+        Map<String, String> alone = leftPast("x: Int, y: Int, z: Int", UNUSED, heldOutOnTheWay,
+                "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, z: Int", UNUSED, heldOutOnTheWay, "x == y",
+                true), "and so where what holds it out is on the way beside the choice");
+    }
+
+    /**
+     * A value held out is passed over for the next: {@code z /= 0} is met at one, and
+     * {@code z + w /= 0} at nought and one, so past the five a choice with such a way apart comes
+     * to nothing for {@code x == y}, which leaves each where it does with no condition at all. So
+     * do five such choices on a way of their own, past the figure without anything beside them.
+     */
+    @Test
+    void aValueAWayApartHoldsOutIsPassedOverForTheNext() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int";
+        Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", RELATES), free);
+        for (String apart : List.of("z /= 0 && z /= 1", "z + w /= 0")) {
+            assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
+                    true), apart);
+        }
+
+        String fiveOfTheirOwn = "x: Int, y: Int, z1: Int, z2: Int, z3: Int, z4: Int, z5: Int";
+        String each = "(z1 /= 0 || x >= 5) && (z2 /= 0 || x >= 5) && (z3 /= 0 || x >= 5)"
+                + " && (z4 /= 0 || x >= 5) && (z5 /= 0 || x >= 5)";
+        assertEquals(leftPast(fiveOfTheirOwn, UNUSED, "true", "x == y", false),
+                leftPast(fiveOfTheirOwn, UNUSED, each, "x == y", false));
+    }
+
+    /**
+     * A way read again for a relation is read for it alone. Past the five, {@code (z >= 1 || w)}
+     * written twice comes to nothing for {@code x == y}, which leaves each where it does with no
+     * condition at all — and each writing is still a condition of its own, owed a row at each
+     * point of its line.
+     */
+    @Test
+    void aConditionWrittenTwiceOnAWayReadAgainIsOwedAtEachWriting() {
+        String inputs = "x: Int, y: Int, z: Int, w: Bool" + THE_FIVE;
+        String body = "if (z >= 1 || w) && " + FIVE_APART + " && (z >= 1 || w) then x == y"
+                + " else false";
+        int from = ("let m (" + inputs.replaceAll(PARAMETER_TYPE, "") + ") = ").length() + 1;
+        Compilation compilation = measured(inputs, UNUSED, "Bool", body);
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
+                leftIn(compilation, "4:" + (from + body.indexOf("=="))));
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        for (int writing : List.of(body.indexOf(">="), body.lastIndexOf(">="))) {
+            String at = "point (comparison@4:" + (from + writing) + ")";
+            assertEquals(List.of("ON", "OFF", "IN", "OUT"), report.lines()
+                    .filter(line -> line.contains("whether a row is at the ") && line.contains(at))
+                    .map(line -> line.substring(line.indexOf("at the ") + 7,
+                            line.indexOf(" point")))
+                    .toList(), at);
+        }
+    }
+
+    /**
+     * A value given a number apart is one its type holds. {@code z + w} at the greatest
+     * {@code Int} with {@code w} at minus one puts {@code z} one past it, which no {@code Int} is,
+     * so no row takes that way and the choice is kept as it is, read as it is without the five.
+     */
+    @Test
+    void aValueGivenANumberApartIsOneItsTypeHolds() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int";
+        String guard = "(z + w == 9223372036854775807 && w == -1 || x >= 5)";
+        Map<String, String> alone = leftPast(inputs, UNUSED, guard, "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast(inputs, UNUSED, guard, "x == y", true));
+    }
+
+    /**
+     * Numbers a way apart fixes together are worked out from one another: {@code z + w == 2}
+     * puts {@code z} at {@code 2 - w}, so {@code z - w == 0} puts {@code w} at one. A choice with
+     * such a way apart comes to nothing for {@code x == y} past the five. Where no whole numbers
+     * are fixed so — {@code z} and {@code w} a half each, or {@code z} half an odd number once
+     * {@code w} and {@code v} are one value — it is kept as it is, and read as it is without the
+     * five.
+     */
+    @Test
+    void numbersAWayApartFixesTogetherAreWorkedOutFromOneAnother() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int, v: Int";
+        Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
+        for (String apart : List.of("z + w == 2 && w + v == 2 && z + v == 2",
+                "2 * z + 3 * w == 7 && z - w == 1")) {
+            assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
+                    true), apart);
+        }
+        for (String apart : List.of("z + w == 1 && z - w == 0",
+                "2 * z + w + v == 1 && w - v == 0")) {
+            String guard = "(" + apart + " || x >= 5)";
+            Map<String, String> alone = leftPast(inputs, UNUSED, guard, "x == y", false);
+            assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone, apart);
+            assertEquals(alone, leftPast(inputs, UNUSED, guard, "x == y", true), apart);
+        }
+    }
+
+    /**
+     * Numbers a way apart bounds together are given values where the bounds together leave them.
+     * {@code z + w} at two or more and at two or less, and {@code z - w} at nought or more and at
+     * nought or less, put each at one, though no one of the four does: such a choice comes to
+     * nothing for {@code x == y} past the five, as it does written with two equalities, however the
+     * bounds are written and in whatever order, and so it does with {@code 2z + 3w} held at five
+     * from both sides. Where the bounds together leave no whole numbers — {@code z + w} above
+     * nought and below one, or {@code z} one past every {@code Int} — or a value they leave is held
+     * out, the choice is kept as it is, and read as it is without the five.
+     */
+    @Test
+    void numbersAWayApartBoundsTogetherAreGivenValuesWhereTheBoundsTogetherLeaveThem() {
+        String inputs = "x: Int, y: Int, z: Int, w: Int, v: Int";
+        Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
+        for (String apart : List.of("z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0",
+                "2 - w <= z && z + w < 3 && w - z <= 0 && z <= w",
+                "2 * z + 3 * w >= 5 && 2 * z + 3 * w <= 5 && 3 * z - 3 * w >= 0 && z <= w")) {
+            assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
+                    true), apart);
+        }
+        for (String apart : List.of("z + w > 0 && z + w < 1",
+                "z - w >= 9223372036854775807 && z - w <= 9223372036854775807 && w >= 1",
+                "z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0 && z + 2 * w /= 3")) {
+            String guard = "(" + apart + " || x >= 5)";
+            Map<String, String> alone = leftPast(inputs, UNUSED, guard, "x == y", false);
+            assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone, apart);
+            assertEquals(alone, leftPast(inputs, UNUSED, guard, "x == y", true), apart);
+        }
+    }
+
+    /** Four choices of two ways each on numbers a way apart holds below {@code z}: sixteen ways
+     *  together, which beside a choice of two that bear on {@code x} are more than a way is looked
+     *  along each of. */
+    private static final String BELOW_Z = " && w1 <= z + 100 && w2 <= z + 100"
+            + " && w3 <= z + 100 && w4 <= z + 100 && (w1 <= 0 || w1 >= 1) && (w2 <= 0 || w2 >= 1)"
+            + " && (w3 <= 0 || w3 >= 1) && (w4 <= 0 || w4 >= 1)";
+
+    private static final String WITH_Z = "x: Int, y: Int, z: Int, w1: Int, w2: Int, w3: Int,"
+            + " w4: Int";
+
+    /**
+     * Where every way of a choice names what the relation reads and what it does not, each way
+     * is met apart by a value of its own: no {@code z} is at or below nought and at twenty or
+     * above, and each alternative of {@code (x <= 0 && z <= 0 || x >= 10 && z >= 20)} has its
+     * own beside the choices below {@code z}. So the choice comes to its parts naming {@code x},
+     * and the way to what {@code (x <= 0 || x >= 10)} leaves.
+     */
+    @Test
+    void eachWayOfAChoiceIsMetApartByAValueOfItsOwn() {
+        Map<String, String> named = leftPast(WITH_Z, UNUSED, "(x <= 0 || x >= 10)", "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), named);
+        assertEquals(named, leftPast(WITH_Z, UNUSED,
+                "(x <= 0 && z <= 0 || x >= 10 && z >= 20)" + BELOW_Z, "x == y", false));
+    }
+
+    /**
+     * A way of taking two choices' alternatives together that no row takes asks nothing of the
+     * values apart: past {@code (x <= 0 && z <= 0 || x >= 10 && z >= 20)} and
+     * {@code (x <= 3 && z <= 0 || x >= 7 && z >= 20)}, no {@code z} is at or below nought and at
+     * twenty or above, and no {@code x} at or below nought and at seven or above either.
+     */
+    @Test
+    void aWayOfTheAlternativesNoRowTakesAsksNoValueApart() {
+        Map<String, String> named = leftPast(WITH_Z, UNUSED,
+                "(x <= 0 || x >= 10) && (x <= 3 || x >= 7)", "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), named);
+        assertEquals(named, leftPast(WITH_Z, UNUSED, "(x <= 0 && z <= 0 || x >= 10 && z >= 20)"
+                + " && (x <= 3 && z <= 0 || x >= 7 && z >= 20)" + BELOW_Z, "x == y", false));
+    }
+
+    /**
+     * A choice on a place the declarations tie to one the relation reads bears on the relation,
+     * and so does one on a place tied to it through another the way relates both to: the choice
+     * on {@code z} is read as it is, past the five as without them.
+     */
+    @Test
+    void aChoiceOnAPlaceTiedToTheRelationsIsReadAsItIs() {
+        String tied = "data P = { x: Int, z: Int } invariant x <= z";
+        for (String onZ : List.of("(p.z <= 3 || p.z >= 10)", "p.z <= 3")) {
+            Map<String, String> byTheRule = leftPast("p: P, y: Int", tied, onZ, "p.x == y",
+                    false);
+            assertEquals(Map.of("p.x", RELATES, "y", NOT_SHOWN), byTheRule, onZ);
+            assertEquals(byTheRule, leftPast("p: P, y: Int", tied, onZ, "p.x == y", true), onZ);
+        }
+
+        String through = "w <= z && x <= w && (z <= 3 || z >= 10)";
+        Map<String, String> onTheWay = leftPast("x: Int, y: Int, w: Int, z: Int",
+                "data Unused = Int", through, "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), onTheWay);
+        assertEquals(onTheWay, leftPast("x: Int, y: Int, w: Int, z: Int", "data Unused = Int",
+                through, "x == y", true));
+    }
+
+    /**
+     * A number a rule of its record bounds alone is given a value apart: {@code p.z} held between
+     * nought and thirty-one by two rules naming nothing else is met by {@code 17}, so the choice
+     * on it comes to nothing for {@code p.x == y} past the five. Two numbers a rule holds beside
+     * each other are not: each of {@code q.a} and {@code q.b} is held between nought and ten, yet
+     * {@code q.a >= 8 && q.b <= 2} is met by no row of {@code q.a <= q.b}, so the choice is kept
+     * as it is.
+     */
+    @Test
+    void aNumberItsRecordBoundsAloneIsGivenAValueApart() {
+        String bounded = "data P = { x: Int, z: Int } invariant z >= 0 invariant z <= 31";
+        assertEquals(Map.of("p.x", RELATES, "y", RELATES),
+                leftPast("p: P, y: Int", bounded, "(p.z >= 17 || p.x >= 5)", "p.x == y", true));
+
+        String held = "data Q = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+                + " invariant b >= 0 invariant b <= 10 invariant a <= b";
+        String guard = "(q.a >= 8 && q.b <= 2 || x >= 5)";
+        Map<String, String> alone = leftPast("x: Int, y: Int, q: Q", held, guard, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, q: Q", held, guard, "x == y", true));
+
+        String apart = "data Q = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+                + " invariant b >= 0 invariant b <= 10";
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
+                leftPast("x: Int, y: Int, q: Q", apart, guard, "x == y", true));
+
+        String worked = "(q.a + q.b == 16 && q.a - q.b == 4 || x >= 5)";
+        Map<String, String> restored = leftPast("x: Int, y: Int, q: Q", held, worked, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), restored);
+        assertEquals(restored, leftPast("x: Int, y: Int, q: Q", held, worked, "x == y", true));
+
+        String around = "data Z = { a: Int, b: Int } invariant a >= 0 invariant a <= 10"
+                + " invariant b >= 0 invariant b <= 10"
+                + " data W = { p: Z, q: Z } invariant p.a <= q.a";
+        String across = "(w.p.a >= 8 && w.q.a <= 2 || x >= 5)";
+        Map<String, String> crossed = leftPast("x: Int, y: Int, w: W", around, across, "x == y",
+                false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), crossed);
+        assertEquals(crossed, leftPast("x: Int, y: Int, w: W", around, across, "x == y", true));
+    }
+
+    /**
+     * The rules of a record are told apart by what each reads and not by how many clauses they are
+     * written in: the same bounds on {@code q.a} and {@code q.b} come to the same whether they are
+     * four clauses, two, or one joined with {@code &&}. A rule that reads both numbers ties them
+     * however it is joined, whether it compares them or is a choice between them.
+     */
+    @Test
+    void rulesJoinedInOneClauseAreToldApartByWhatEachReads() {
+        String guard = "(q.a >= 8 && q.b <= 2 || x >= 5)";
+        String inputs = "x: Int, y: Int, q: Q";
+        Map<String, String> apart = Map.of("x", RELATES, "y", RELATES);
+        for (String bounds : List.of(
+                "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10",
+                "invariant a >= 0 && b >= 0 invariant a <= 10 && b <= 10")) {
+            assertEquals(apart, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
+                    "x == y", true), bounds);
+        }
+
+        Map<String, String> tied = Map.of("x", RELATES, "y", NOT_SHOWN);
+        for (String bounds : List.of(
+                "invariant a <= b && b <= 10 && a >= 0 && b >= 0",
+                "invariant a >= 0 && a <= 10 && b >= 0 && b <= 10 && (a >= 8 || b >= 8)")) {
+            assertEquals(tied, leftPast(inputs, "data Q = { a: Int, b: Int } " + bounds, guard,
+                    "x == y", true), bounds);
+        }
+    }
+
+    /**
+     * A choice naming what the relation reads and what it does not comes to the first, where a
+     * value is shown to meet the second: past {@code !(x >= 70 && a && !d)}, {@code a} false
+     * lets every {@code x} through, so {@code y} reaches every value as {@code x} does. Where no
+     * value is — a number held at nought or above is never below it — the choice still keeps
+     * {@code x} below seventy, and {@code y} from seventy on stands beside no {@code x}. And
+     * where every way of it names both, it comes to the parts naming {@code x}, each a way of
+     * its own: {@code x} from seventy or up to ten, and no {@code x} between for {@code y}.
+     */
+    @Test
+    void aChoiceNamingBothComesToWhatItLeavesTheRelationOnlyWhereTheRestIsMet() {
+        assertEquals(Map.of("x", RELATES, "y", RELATES),
+                leftPast("x: Int, y: Int, a: Bool, d: Bool", "data Unused = Int",
+                        "Bool.not(x >= 70 && a && Bool.not(d))", "x == y", true));
+        String eachNamesBoth = "(x >= 70 && a || x <= 10 && d)";
+        Map<String, String> alone = leftPast("x: Int, y: Int, a: Bool, d: Bool",
+                "data Unused = Int", eachNamesBoth, "x == y", false);
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, a: Bool, d: Bool", "data Unused = Int",
+                eachNamesBoth, "x == y", true));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
+                leftPast("x: Int, y: Int, z: N", "data N = Int invariant value >= 0",
+                        "Bool.not(x >= 70 && z.value >= 0)", "x == y", true));
+    }
+
+    /**
+     * A condition nothing was read of may hold anything beside anything, so a way with one on it
+     * is not read as less than it is: the relation is shown nothing of past the five, as it is
+     * without them.
+     */
+    @Test
+    void aWayWithAConditionNothingWasReadOfIsNotReadAsLess() {
+        String guard = "(String.startsWith(\"a\", s) || w)";
+        Map<String, String> alone = leftPast("x: Int, y: Int, s: String, w: Bool",
+                "data Unused = Int", guard, "x == y", false);
+        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN), alone);
+        assertEquals(alone, leftPast("x: Int, y: Int, s: String, w: Bool", "data Unused = Int",
+                guard, "x == y", true));
+    }
+
+    /**
+     * Ways that leave the relation's values apart are each still a way to it: past the five, the
+     * choices on {@code x} and {@code y} are proved along every way of taking them together, as
+     * {@link #choicesOnPlacesApartAreProvedAlongEveryWayOfTakingThemTogether} has them without.
+     * And ways more than are looked along that each leave the relation's values something of
+     * their own are shown nothing of, as before.
+     */
+    @Test
+    void waysLeavingTheRelationsValuesApartAreStillApart() {
+        String guard = "(x >= 0 && x <= 10 || x >= 20 && x <= 30)"
+                + " && (y >= 0 && y <= 30 || y >= 0 && y <= 25)";
+        assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),
+                leftPast("x: Int, y: Int", "data Unused = Int", guard, "x == y", true));
+        assertEquals(Map.of("x", RELATES, "y", NOT_SHOWN),
+                leftPast("x: Int, y: Int", "data Unused = Int", guard.replace("y <= 25", "y <= 10"),
+                        "x == y", true));
+
+        String eachItsOwn = "(x1 >= 0 || x1 <= -5) && (x2 >= 0 || x2 <= -5)"
+                + " && (x3 >= 0 || x3 <= -5) && (x4 >= 0 || x4 <= -5) && (x5 >= 0 || x5 <= -5)";
+        Map<String, String> summed = leftPast("x1: Int, x2: Int, x3: Int, x4: Int, x5: Int, y: Int",
+                "data Unused = Int", eachItsOwn, "x1 + x2 + x3 + x4 + x5 == y", true);
+        assertEquals(Map.of("x1", NOT_SHOWN, "x2", NOT_SHOWN, "x3", NOT_SHOWN, "x4", NOT_SHOWN,
+                "x5", NOT_SHOWN, "y", NOT_SHOWN), summed);
+    }
+
+    /**
+     * Where a relation is shown nothing of a way past the figure, the figure is why, and the
+     * relation says so: a run allowed more ways would split the way and read each. Five choices on
+     * what {@code x1 + x2 + x3 + x4 + x5 == y} reads are thirty-two ways, each of which bears on
+     * it. Where every way is looked along and a way leaves a value no row beside it reaches, no
+     * figure is why, and none is named.
+     */
+    @Test
+    void aRelationShownNothingOfAWayPastTheFigureSaysTheFigureStoppedIt() {
+        String figure = InEnglish.said(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.countsSaid());
+        String inputs = "x1: Int, x2: Int, x3: Int, x4: Int, x5: Int, y: Int";
+        String body = "if (x1 >= 0 || x1 <= -5) && (x2 >= 0 || x2 <= -5) && (x3 >= 0 || x3 <= -5)"
+                + " && (x4 >= 0 || x4 <= -5) && (x5 >= 0 || x5 <= -5)"
+                + " then x1 + x2 + x3 + x4 + x5 == y else false";
+        List<String> past = linesAbout(measured(inputs, UNUSED, "Bool", body), "x1");
+        assertFalse(past.isEmpty());
+        assertTrue(past.stream().allMatch(line -> line.contains(figure)), past::toString);
+
+        String within = "if (x >= 0 && x <= 10 || x >= 20 && x <= 30) then x == y else false";
+        List<String> about = linesAbout(measured("x: Int, y: Int", UNUSED, "Bool", within), "y");
+        assertFalse(about.isEmpty());
+        assertTrue(about.stream().noneMatch(line -> line.contains("stopped at")), about::toString);
+    }
+
+    /** The lines saying a rule at {@code place} is measured on what its runs worked out. */
+    private static List<String> onItsRunsAbout(Compilation compilation, String place) {
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(
+                        compilation.texts())).lines().map(String::strip)
+                .filter(line -> line.startsWith("· no line")
+                        && line.contains(WhyAPlaceIsUndividedIsSaid.of(
+                                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS))
+                        && line.endsWith("about `" + place + "`"))
+                .toList();
+    }
+
+    /** The lines of a report about {@code place} that say it was not read. */
+    private static List<String> linesAbout(Compilation compilation, String place) {
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(
+                        compilation.texts())).lines().map(String::strip)
+                .filter(line -> line.startsWith("· not read") && line.endsWith("about `" + place + "`"))
+                .toList();
     }
 
     /**
      * A run whose end the rules put at a third is handed over from a hair below it, which no
      * value of {@code x} is, so it is not taken as a run {@code x} fills — here, where the values
-     * asked of it are all above a third, as anywhere. An end at a half is written as it is.
+     * asked of it are all above a third, as anywhere.
+     *
+     * <p>An end at a half is taken as a run, since nothing rounds it: a {@code Decimal} sum stops no
+     * run, so every value of {@code y} is got to by the row that holds the same value of
+     * {@code x}.
      *
      * <p>The places named are the ones left unshown or related: {@code x} is neither, being parted
      * by lines at the ends of the run {@code y} takes.
@@ -914,7 +3257,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String body = "if b >= 0 && a >= b then a < c else false";
         assertEquals(Map.of("a", RELATES),
                 left("a: Int, b: Int, c: Int", "data Unused = Int", body, "4:46"));
-        assertEquals(List.of("c/x <= 0", "c/0 < x"),
+        assertEquals(List.of("c: x <= 0", "c: 0 < x"),
                 classesAt("a: Int, b: Int, c: Int", "data Unused = Int", body, "c"));
     }
 
@@ -930,7 +3273,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("level", RELATES, "cap", RELATES),
                 left("level: Level, cap: Level", declarations,
                         "if level >= Low then level == cap else false", "4:49"));
-        assertEquals(Map.of("level", RELATES, "cap", NOT_SHOWN),
+        assertEquals(Map.of("level", RELATES),
                 left("level: Level, cap: Level", declarations,
                         "if level >= Mid then level == cap else false", "4:49"));
     }
@@ -989,25 +3332,32 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     | "equal bounds" : (Pending { me = EmpId("xx"), boss = EmpId("x"), low = 0, high = 0 }, EmpId("x")) -> Granted
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-
-        assertEquals(List.of(), compilation.errors(), "the rows hold");
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("adequacy: satisfied"), report);
     }
 
-    /** A rule of the record that names the field compared may hold it back, whether it ties it to
-     *  another field or bounds it alone. */
+    /** A rule of the record that ties the field compared to another field may hold it back, so the
+     *  boss is still every string the partner can come to and the approver is not shown. */
     @Test
-    void aRuleOfTheRecordNamingTheFieldComparedIsNotShownToLeaveItReachingEveryValue() {
-        for (String rule : List.of("invariant boss == me",
-                "invariant String.length(boss.value) >= 2")) {
-            assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", NOT_SHOWN),
-                    left("p: Pending, approver: EmpId", EMPLOYEE
-                            + "\ndata Pending = { me: EmpId, boss: EmpId } " + rule,
-                            "approver == p.boss", "5:32"), rule);
-        }
+    void aRuleOfTheRecordTyingTheFieldComparedToAnotherIsNotShownToLeaveItReachingEveryValue() {
+        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
+                left("p: Pending, approver: EmpId", EMPLOYEE
+                        + "\ndata Pending = { me: EmpId, boss: EmpId } invariant boss == me",
+                        "approver == p.boss", "5:32"));
+    }
+
+    /** A rule of the record that bounds the field compared alone is a rule of that field, as the
+     *  same rule on the field's own type is: the approver is parted by whether the boss can be it,
+     *  and no word is left of it. */
+    @Test
+    void aRuleOfTheRecordBoundingTheFieldComparedAloneIsReadAsARuleOfThatField() {
+        assertEquals(Map.of("p.boss", TELLS_NOTHING_APART),
+                left("p: Pending, approver: EmpId", EMPLOYEE
+                        + "\ndata Pending = { me: EmpId, boss: EmpId }"
+                        + " invariant String.length(boss.value) >= 2",
+                        "approver == p.boss", "5:32"));
     }
 
     private static final String QUOTE = "data Quote = { issuedOn: Int, expiresOn: Int } invariant ";
@@ -1036,7 +3386,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String rules = QUOTE + "issuedOn >= 0 && expiresOn >= issuedOn";
         assertEquals(Map.of("q.expiresOn", RELATES),
                 leftAt("q: Quote, today: Int", rules, "today <= q.expiresOn", 26));
-        assertEquals(List.of("today/x <= 0", "today/0 < x"),
+        assertEquals(List.of("today: x <= 0", "today: 0 < x"),
                 classesAt("q: Quote, today: Int", rules, "today <= q.expiresOn", "today"));
     }
 
@@ -1149,9 +3499,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 let m (v) = true
                 """.formatted(declaration, name), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, Set<String>> out = new LinkedHashMap<>();
         Pattern about = Pattern.compile("about `([^`]+)`$");
         for (String line : report.lines().map(String::strip).toList()) {
@@ -1211,7 +3561,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("e: Envelope, approver: EmpId", pending
                         + "\ndata Envelope = { pending: Pending } invariant pending.low <= pending.high",
                         "approver == e.pending.boss", "6:32"));
-        assertEquals(Map.of("approver", NOT_SHOWN, "e.pending.boss", NOT_SHOWN),
+        assertEquals(Map.of("approver", NOT_SHOWN, "e.pending.boss", TELLS_NOTHING_APART),
                 left("e: Envelope, approver: EmpId", pending
                         + "\ndata Envelope = { pending: Pending } invariant pending.boss == pending.me",
                         "approver == e.pending.boss", "6:32"));
@@ -1219,7 +3569,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 left("p: WrappedPending, approver: EmpId", pending
                         + "\ndata WrappedPending = Pending invariant value.low <= value.high",
                         "approver == p.value.boss", "6:32"));
-        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", NOT_SHOWN),
+        assertEquals(Map.of("approver", NOT_SHOWN, "p.boss", TELLS_NOTHING_APART),
                 left("p: WrappedPending, approver: EmpId", pending
                         + "\ndata WrappedPending = Pending invariant value.boss == value.me",
                         "approver == p.value.boss", "6:32"));
@@ -1266,9 +3616,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("champ", RELATES, "ds.members[*]", RELATES), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = { members: Set<EmpId> } invariant Set.size(members) >= 1",
                 "Set.contains(champ, ds.members)", "5:21"));
-        assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
+        // Held to none, no element is any value, so the membership draws its line at a value
+        // the other side never holds.
+        assertTrue(left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) <= 0",
-                "Set.contains(champ, ds.value)", "5:21").get("champ"));
+                "Set.contains(champ, ds.value)", "5:21").get("champ")
+                .contains("draws its line outside what the quantity it cuts ever holds"));
     }
 
     /** Held to more than one, a set's elements are that many values apart, which is a question
@@ -1278,5 +3631,791 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) == 2",
                 "Set.contains(champ, ds.value)", "5:21").get("champ"));
+    }
+
+    private static final String HOURS =
+            "data Hours = Decimal invariant value >= 0.0m && value <= 168.0m";
+
+    /**
+     * Weighed by four, hours from nought to 168 reach every standard below four times them and
+     * every one from it, and run out at 42: from there on no standard is above four times them.
+     * A standard past nought has hours below a quarter of it, which a decimal from nought has, so
+     * only the standard of nought settles the comparison. Weighed three to four, the hours run out
+     * at 126. A decimal product stops no run, so every run the ends settle is taken.
+     */
+    @Test
+    void aWeightOnADecimalDrawsTheLineWhereTheOtherRunsOut() {
+        String inputs = "h: Hours, s: Hours";
+        for (String body : List.of("h.value * 4.0m >= s.value",
+                "h.value * 4.0m >= s.value * 3.0m")) {
+            assertEquals(Map.of(),
+                    left(inputs, HOURS, body, atThe(">=", HOURS, inputs, body)), body);
+            assertEquals(List.of("s: 0 <= x <= 0", "s: 0 < x <= 168"),
+                    classesAt(inputs, HOURS, body, "s"), body);
+        }
+        assertEquals(List.of("h: 0 <= x < 42", "h: 42 <= x <= 168"),
+                classesAt(inputs, HOURS, "h.value * 4.0m >= s.value", "h"));
+        assertEquals(List.of("h: 0 <= x < 126", "h: 126 <= x <= 168"),
+                classesAt(inputs, HOURS, "h.value * 4.0m >= s.value * 3.0m", "h"));
+    }
+
+    /**
+     * Weighed by two, an amount past half the greatest {@code Int} has no row at all, its double
+     * past the type, and every amount before it has an insured amount at its double and one above:
+     * the revenue is related and the line is the arithmetic's. The greatest insured amount is
+     * above every double a row has, so it settles the comparison on its own, and is a class of
+     * its own beside the ones before it. Beside an insured amount not shown to take every value
+     * between its ends, nothing is shown of the revenue.
+     */
+    @Test
+    void aWeightOnAWholeNumberLeavesTheValuesPastHalfTheTypeToTheArithmetic() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String body = "r.value * 2 >= i.value";
+        assertEquals(Map.of("r", RELATES),
+                left("r: Yen, i: Yen", yen, body, atThe(">=", yen, "r: Yen, i: Yen", body)));
+        assertEquals(List.of("i: 0 <= x <= 0", "i: 0 < x < 9223372036854775807",
+                        "i: 9223372036854775807 <= x"),
+                classesAt("r: Yen, i: Yen", yen, body, "i"));
+        String gap = yen + "\ndata Gap = Int invariant value <= 10 || value >= 20";
+        assertEquals(NOT_SHOWN, left("r: Yen, i: Gap", gap, body,
+                atThe(">=", gap, "r: Yen, i: Gap", body)).get("r"));
+    }
+
+    /**
+     * Asked where an earlier comparison of the same two left {@code w <= t}, {@code t > w} is about
+     * how far apart they are, and the earlier one keeps them nought apart or more. A tax of nought
+     * has only a withholding of nought, and fails; every other has one below it and one at it, and
+     * every withholding has a tax at it and one above. Held apart by anything but their difference
+     * the two are not read so. And along {@code w >= t} with {@code w} held to ten, the way
+     * holds {@code t} to ten as well: a tax past it takes the other way, and the one at ten has
+     * no withholding above it. The earlier comparison draws its own lines on the tax beside
+     * that: at nought, below which no withholding is, and from eleven, where every one is below.
+     */
+    @Test
+    void aComparisonUnderTheArmOfAnEarlierOneOfTheSameTwoIsReadOfTheirDifference() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "t: Yen, w: Yen";
+        String body = "if w.value > t.value then false else t.value > w.value";
+        assertEquals(Map.of("w", RELATES),
+                left(inputs, yen, body, atThe("> w.value", yen, inputs, body)));
+        assertEquals(List.of("t: 0 <= x <= 0", "t: 0 < x"), classesAt(inputs, yen, body, "t"));
+        String twice = "if w.value > 2 * t.value then false else t.value > w.value";
+        assertEquals(Map.of("t", NOT_SHOWN, "w", NOT_SHOWN),
+                left(inputs, yen, twice, atThe("> w.value", yen, inputs, twice)));
+        String small = yen + "\ndata Small = Int invariant value >= 0 && value <= 10";
+        String kept = "if w.value < t.value then false else w.value > t.value";
+        assertEquals(Map.of(), left("t: Yen, w: Small", small, kept,
+                atThe("> t.value", small, "t: Yen, w: Small", kept)));
+        assertEquals(List.of("t: 0 <= x <= 0", "t: 0 < x < 10", "t: 10 <= x < 11", "t: 11 <= x"),
+                classesAt("t: Yen, w: Small", small, kept, "t"));
+    }
+
+    /**
+     * Along the arm where an allowance is above its cap, the cap stands in for it on one side and
+     * the allowance on the other, so the two do not cancel: {@code a + c - s - 150000 >= 0} with
+     * {@code c} from 150001. Held there, {@code c} leaves {@code a} against {@code s} one apart,
+     * and each {@code a} has an {@code s} at one above it and two above it. Where nothing shows the
+     * allowance takes a value above its cap, nothing is shown of {@code a} along that arm.
+     *
+     * <p>The arm is expanded into a relation of its own, which carries the operations its arm works
+     * out and none of the other's: {@code a + c}, and the cap or {@code c} added to {@code s}.
+     * Along the arm where {@code c} is under the cap it is on both sides and cancels from the
+     * form; it is held at the value nearest nought it takes, where those operations are told, so
+     * {@code a} and {@code s} are read along both arms.
+     */
+    @Test
+    void aTermHeldAboveItsCapAlongAnArmIsHeldWhereItStarts() {
+        String capped = """
+                module w1
+                data Yen = Int invariant value >= 0
+                %s
+                behavior m : (a: Yen, c: %s, s: Yen) -> Bool
+                let m (a, c, s) = {
+                    let capped = if c.value > 150000 then 150000 else c.value
+                    a.value + c.value >= capped + s.value
+                }
+                """;
+        String written = capped.formatted("data Unused = Int", "Yen");
+        String at = "7:" + (written.lines().toList().get(6).indexOf(">=") + 1);
+        assertEquals(Set.of(), notReadIn(written, at));
+        String unshown = capped.formatted(
+                "data Gap = Int invariant value <= 150000 || Int.floorMod(value, 2) == 0", "Gap");
+        assertTrue(notReadIn(unshown, at).contains("a"), () -> notReadIn(unshown, at).toString());
+    }
+
+    /**
+     * A sum kept under a name and worked on after it is held against a number is computed in an
+     * {@code Int}, so its terms come to at most the greatest {@code Int}. That limit on a sum
+     * leaves each term every value up to what the others leave it, and the number the sum is held
+     * against the values the terms can come to: the sum read is the sum written out twice, and a
+     * term capped on an arm of an earlier comparison reads as it does without the cap.
+     */
+    @Test
+    void aSumKeptUnderANameAndHeldAgainstANumberLeavesEachTermAndTheNumberTheirRun() {
+        String named = """
+                module w1
+                data Yen = Int invariant value >= 0
+                behavior m : (a: Yen, b: Yen, c: Yen) -> Yen | Exceeds
+                    constructs Yen
+                let m (a, b, c) = {
+                    let g = a + b
+                    guard g >= c else Exceeds
+                    Yen(g.value - c.value)
+                }
+                """;
+        // The sum of two amounts is built into a Yen, whose invariant leaves the numbers from
+        // nought up. A run stops at that construction where the sum is below nought, which is
+        // told as an operation over the sum, so the places of the comparison are shown the way
+        // the sum written over Int shows them.
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(named, whereWritten(named, ">= c")));
+        assertEquals(List.of("c: 0 <= x <= 0", "c: 0 < x"), classesIn(named, "c"));
+        assertEquals(Set.of(), notReadIn(named, whereWritten(named, ">= c")));
+
+        String writtenOut = named.replace("let g = a + b\n    guard g >= c",
+                "guard a + b >= c").replace("g.value", "a.value + b.value");
+        assertEquals(Set.of(), notReadIn(writtenOut, whereWritten(writtenOut, ">= c")));
+
+        String payroll = """
+                module w1
+                data Yen = Int invariant value >= 0
+                data Pay = { base: Yen, commuting: Yen, other: Yen }
+                let capped (p: Pay): Yen =
+                    if p.commuting > Yen(150000) then Yen(150000) else p.commuting
+                behavior m : (p: Pay, uplift: Yen, insurance: Yen) -> Yen | Exceeds
+                    constructs Yen
+                let m (p, uplift, insurance) = {
+                    let gross = p.base + p.commuting + p.other + uplift
+                    let subtracted = capped(p) + insurance
+                    guard gross >= subtracted else Exceeds
+                    Yen(gross.value - subtracted.value)
+                }
+                """;
+        // The capped allowance is a call whose arms are expanded into relations of their own. On
+        // the arm where the allowance is under its cap it is the allowance itself, which cancels
+        // from the form and is still added to the base and to the insurance. It is held at the
+        // value nearest nought it takes, where the operations over it are told, so the places
+        // beside it are read; the allowance is read as well, a constant built into a Yen being
+        // inside its run.
+        assertEquals(Set.of(), notReadIn(payroll, whereWritten(payroll, ">= subtracted")));
+    }
+
+    private static final String CONSTRUCTED_ABOVE = """
+            module w1
+            data Yen = Int invariant value >= 0
+            %s
+            behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
+                constructs %s
+            let m (a, b, d) = {
+                %s
+                Yen(d.value)
+            }
+            """;
+
+    /**
+     * What a newtype's value is when it is taken off the construction that gave it is what the
+     * construction is: the number it wraps, with the check made when it is made told as an
+     * operation over that number. Written as the construction with the value read off it, with
+     * the construction bound to a name first, or as the sum of the type, the sum of two amounts
+     * is read the same, and as the same arithmetic over {@code Int} is.
+     */
+    @Test
+    void aNewtypesValueTakenOffItsConstructionIsReadAsTheConstructionIs() {
+        Map<String, String> related = Map.of("a", RELATES, "b", RELATES);
+        for (String body : List.of(
+                "guard Yen(a.value + b.value).value >= d.value else Exceeds",
+                "let g = Yen(a.value + b.value)\n    guard g.value >= d.value else Exceeds",
+                "guard (a + b).value >= d.value else Exceeds")) {
+            String source = CONSTRUCTED_ABOVE.formatted("", "Yen", body);
+            assertEquals(related, leftIn(source, whereWritten(source, ">= d.value")), body);
+            assertEquals(List.of("d: 0 <= x <= 0", "d: 0 < x"), classesIn(source, "d"), body);
+        }
+    }
+
+    /**
+     * A construction is told as an operation only where the rules of its type leave a run of
+     * numbers and every number of it. A type that holds a number out of its run, or leaves two
+     * numbers and none between, refuses the construction at numbers its ends admit, and the sum
+     * built into it is not told as stopping at its ends: nothing is shown of the places.
+     */
+    @Test
+    void aConstructionOfATypeWithHolesInItsRunIsNotToldAtItsEnds() {
+        for (String amount : List.of(
+                "data Amount = Int invariant value >= 0 && value /= 50",
+                "data Amount = Int invariant value == 0 || value == 100")) {
+            String source = CONSTRUCTED_ABOVE.formatted(amount, "Yen, Amount",
+                    "guard Amount(a.value + b.value).value >= d.value else Exceeds");
+            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
+                    leftIn(source, whereWritten(source, ">= d.value")), amount);
+        }
+    }
+
+    /**
+     * A value taken off one of several constructions is not taken off any one of them: the check
+     * that is made is the one of the construction the run reaches, and the arithmetic over
+     * {@code Int} of the same choice is read the way the choice of constructions is.
+     */
+    @Test
+    void aValueTakenOffOneOfSeveralConstructionsIsNotToldAsTheCheckOfAny() {
+        String choice = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard (if a.value > b.value then Yen(a.value + b.value) else Yen(b.value)).value"
+                        + " >= d.value else Exceeds");
+        String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard (if a.value > b.value then a.value + b.value else b.value)"
+                        + " >= d.value else Exceeds");
+        Map<String, String> notShown = Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN);
+        assertEquals(notShown, leftIn(choice, whereWritten(choice, ">= d.value")));
+        assertEquals(notShown, leftIn(ofInt, whereWritten(ofInt, ">= d.value")));
+    }
+
+    /**
+     * A construction written inside another is not the value a field is read off: the access takes
+     * the field out of the outer one, whose other parts are made all the same. Here {@code other}
+     * is refused at some {@code d}, and a run stops there, so the field read is not told as the
+     * check of the inner construction alone.
+     *
+     * <p>Where the clauses of {@code other} leave one run, its check is told as the operation it
+     * is: {@code Yen(0 - d)} refuses every {@code d} above nought, so a row at the comparison holds
+     * {@code d} at nought and the comparison relates what it reads, as it does past any operator
+     * of its own that stops a run. Where they leave a hole, what stops a run there is not told,
+     * and nothing is shown reached.
+     */
+    @Test
+    void aFieldTakenOffAConstructionInsideAnotherIsNotToldAsTheInnerOnesCheck() {
+        String model = """
+                module w1
+                data Yen = Int invariant value >= 0
+                data Hole = Int invariant value == 0 || value == 100
+                data Pay = { base: Yen, other: %s }
+                behavior m : (a: Yen, b: Yen, d: Yen) -> Yen | Exceeds
+                    constructs Yen, Hole, Pay
+                let m (a, b, d) = {
+                    guard Pay { base = Yen(a.value + b.value), other = %s(0 - d.value) }
+                        .base.value >= d.value else Exceeds
+                    Yen(Hole(d.value).value)
+                }
+                """;
+        String told = model.formatted("Yen", "Yen");
+        assertEquals(Map.of("a", RELATES, "b", RELATES, "d", RELATES),
+                leftIn(told, whereWritten(told, ">= d.value")));
+        String untold = model.formatted("Hole", "Hole");
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN, "d", NOT_SHOWN),
+                leftIn(untold, whereWritten(untold, ">= d.value")));
+    }
+
+    /**
+     * A type whose rules say nothing refuses nothing, so the construction ends no run and the sum
+     * built into it is read as the sum of {@code Int} is.
+     */
+    @Test
+    void aConstructionOfATypeWithNoRuleEndsNoRun() {
+        String source = CONSTRUCTED_ABOVE.formatted("data Id = Int", "Yen, Id",
+                "guard Id(a.value + b.value).value >= d.value else Exceeds");
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(source, whereWritten(source, ">= d.value")));
+    }
+
+    /**
+     * A name that stands for one element of a list written out is one of the values the list
+     * holds, and is read the way the walk reads a name that is one of several, however many there
+     * are. The construction written in the list is made before the comparison reads the element,
+     * and stops a run only where the sum it wraps is below nought or past an {@code Int}, which
+     * is where the same list of {@code Int} stops one: the two are read alike.
+     */
+    @Test
+    void aNameForTheOnlyElementOfAListOfConstructionsIsReadAsOneOfSeveral() {
+        String over = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard List.any(g -> g.value >= d.value, [Yen(a.value + b.value)]) else Exceeds");
+        String ofInt = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                "guard List.any(g -> g >= d.value, [a.value + b.value]) else Exceeds");
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(over, whereWritten(over, ">= d.value")));
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                leftIn(ofInt, whereWritten(ofInt, ">= d.value")));
+    }
+
+    /**
+     * What an earlier binding works out is read the same whether the value a comparison is read of
+     * is a construction or the number it wraps: a binding the comparison does not read adds
+     * nothing to what is told of it either way.
+     */
+    @Test
+    void aBindingBeforeAConstructionIsReadAsItIsBeforeTheNumberItWraps() {
+        String earlier = "let unused = a.value + 9223372036854775807\n    ";
+        String built = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                earlier + "guard Yen(b.value).value >= d.value else Exceeds");
+        String number = CONSTRUCTED_ABOVE.formatted("", "Yen",
+                earlier + "guard b.value >= d.value else Exceeds");
+        assertEquals(leftIn(number, whereWritten(number, ">= d.value")),
+                leftIn(built, whereWritten(built, ">= d.value")));
+    }
+
+    /**
+     * A premise nothing proves, over positions none of the sum's are related to, leaves the sum's
+     * positions the runs their ends give them: it bounds nothing of them, and some row holds it.
+     * The sum is then read as beside a premise that is proved.
+     */
+    @Test
+    void aPremiseNothingProvesOverOtherPositionsLeavesASumItsRun() {
+        String declared = HOURS + "\ndata Yen = Int invariant value >= 0"
+                + "\ndata Rem = { base: Yen, sched: Yen }";
+        String inputs = "h: Hours, s: Hours, r: Rem";
+        for (String premise : List.of("h.value * 4.0m >= s.value * 3.0m", "h.value >= 30.0m")) {
+            String body = "if " + premise + " then false"
+                    + " else r.base.value + r.sched.value < 88000";
+            assertEquals(Map.of(), left(inputs, declared, body,
+                    atThe("< 88000", declared, inputs, body)), premise);
+        }
+    }
+
+    /**
+     * A way only values past the greatest {@code Int} take leaves no row to the comparison behind
+     * it, so no row arrives there and the amounts are not said to reach each other: {@code a - b >= M}
+     * beside {@code b >= 1}, which the box and its differences prove, and {@code a - 2b >= M - 1}
+     * beside it, which nothing proves, are each held by an {@code a} past {@code M} alone. A way
+     * some pair of {@code Int}s holds leaves the amounts every value they take.
+     */
+    @Test
+    void aWayOnlyValuesPastTheirTypeTakeLeavesNoRowToReachAnything() {
+        String yen = "data Yen = Int invariant value >= 0";
+        String inputs = "a: Int, b: Int, x: Yen, y: Yen";
+        for (String way : List.of("b >= 1 && a - b >= 9223372036854775807",
+                "b >= 1 && a - 2 * b >= 9223372036854775806")) {
+            String body = "if " + way + " then x.value >= y.value else false";
+            String said = left(inputs, yen, body, atThe(">= y.value", yen, inputs, body)).get("x");
+            assertTrue(said.contains("no row that arrives at it"), way + ": " + said);
+        }
+        String some = "if b >= 1 && a - 2 * b >= 9223372036854775805 then x.value >= y.value"
+                + " else false";
+        assertEquals(RELATES, left(inputs, yen, some, atThe(">= y.value", yen, inputs, some))
+                .get("x"));
+    }
+
+    /**
+     * And of a behavior over such a declaration: no {@code D} is held by two lists further apart
+     * than the greatest {@code Int}, so it is refused, and nothing the body compares is said to
+     * reach anything. One less apart, a list of the greatest length beside one of one holds it,
+     * and the amounts relate.
+     */
+    @Test
+    void aDeclarationOnlyLengthsPastWhereAnIntStopsHoldLeavesABehaviorNoRowToReachAnything() {
+        for (String apart : List.of("9223372036854775807", "9223372036854775806")) {
+            String declared = """
+                    data Yen = Int invariant value >= 0
+                    data D = { g: Yen, d: Yen, ys: List<Int>, zs: List<Int> }
+                        invariant List.length(zs) >= 1
+                            && List.length(ys) - List.length(zs) >= %s""".formatted(apart);
+            String body = "v.g.value >= v.d.value";
+            boolean none = apart.endsWith("7");
+            List<String> refused = none ? List.of("E1013") : List.of();
+            assertEquals(refused, measured(refused, "v: D", declared, "Bool",
+                    body).diagnostics().values().stream().flatMap(List::stream)
+                    .map(each -> each.diagnostic().code().toString()).toList(), apart);
+            assertEquals(none ? Map.of() : Map.of("v.g", RELATES), left(refused, "v: D", declared,
+                    "Bool", body, atThe(">=", declared, "v: D", body)), apart);
+        }
+    }
+
+    /**
+     * The same of a declaration's rules over lengths, since a length is an {@code Int} and stops
+     * where one does: {@code List.length(ys) - List.length(zs) >= M} beside
+     * {@code List.length(zs) >= 1} is held by no two lists, so the amounts the rule beside it
+     * relates are not shown to reach each other. One less than {@code M} is held by a list of
+     * {@code M} beside a list of one.
+     */
+    @Test
+    void aRuleOnlyLengthsPastWhereAnIntStopsHoldLeavesNoRowToReachAnything() {
+        for (String apart : List.of("9223372036854775807", "9223372036854775806")) {
+            Compilation compilation = Compilation.ofSource("""
+                    module w1
+                    data Yen = Int invariant value >= 0
+                    data D = { g: Yen, d: Yen, ys: List<Int>, zs: List<Int> }
+                        invariant g.value >= d.value && List.length(zs) >= 1
+                            && List.length(ys) - List.length(zs) >= %s
+                    behavior m : (x: D) -> Bool
+                    let m (x) = true
+                    """.formatted(apart), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            boolean heldByNoTwoLists = apart.endsWith("7");
+            ACompiledModel.refusedWith(heldByNoTwoLists ? List.of("E1013") : List.of(),
+                    compilation);
+            String report = AdequacyReport.of(compilation)
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+            String said = heldByNoTwoLists ? "not shown to reach every value here"
+                    : "it relates the value here to another value rather than dividing";
+            for (String place : List.of("x.g", "x.d")) {
+                assertTrue(report.lines().anyMatch(line -> line.contains("invariant D #1")
+                        && line.contains(said) && line.endsWith("about `" + place + "`")),
+                        apart + "\n" + report);
+            }
+        }
+    }
+
+    /**
+     * Over decimals from nought, {@code a >= s + 5}: every {@code s} has an {@code a} at five
+     * above it and one below, the {@code a} needed running on without end on an order that has
+     * none, and an {@code a} below five holds it for no {@code s}. The addition of decimals can
+     * stop a run at a scale, and the run past every value has no end to build a row at, so the
+     * sum is worked out on no row of it and the relation is not shown to reach.
+     */
+    private static final String UNIT =
+            "data Unit = Decimal invariant value >= 0.0m && value <= 1.0m";
+
+    /**
+     * Weighed by three, the unit run turns at a third, which no decimal is. The line is drawn at
+     * the number it is, and the rows that show a computed row either side of it are built at
+     * decimals next to it. Weighed by the other term it is the same line, on the term it divides.
+     * The order of the axis then holds a line at a decimal ({@code s = 0}) and one at a third,
+     * which are compared by the numbers they count to.
+     */
+    @Test
+    void aLineAtANumberNoDecimalWritesIsDrawnAndItsRowsAreBuiltNextToIt() {
+        String inputs = "a: Unit, s: Unit";
+        String over = "a.value * 3.0m >= s.value";
+        assertEquals(Map.of(), left(inputs, UNIT, over, atThe(">=", UNIT, inputs, over)));
+        assertEquals(List.of("a: 0 <= x and 3 * x <= 1", "a: 1 < 3 * x and x <= 1"),
+                classesAt(inputs, UNIT, over, "a"));
+        String under = "a.value >= s.value * 3.0m";
+        assertEquals(Map.of("a", RELATES),
+                left(inputs, UNIT, under, atThe(">=", UNIT, inputs, under)));
+        assertEquals(List.of("s: 0 <= x <= 0", "s: 0 < x and 3 * x <= 1", "s: 1 < 3 * x and x <= 1"),
+                classesAt(inputs, UNIT, under, "s"));
+    }
+
+    /**
+     * An operation of decimals stops no row, whatever scale its operands are at: a number written
+     * in the program, the answer of an operation before it, a place of the input, and a call's
+     * answer, whose scale nothing here reads, alike. Each chain is the line it draws and no more.
+     */
+    @Test
+    void anOperationOfDecimalsStopsNoRowWhateverItsOperandsAre() {
+        String inputs = "h: Hours, s: Hours";
+        for (String each : List.of("h.value * (2.0m + 2.0m) >= s.value",
+                "(h.value * 4.0m) * 1.0m >= s.value", "h.value * 4.0m + 0.0m >= s.value",
+                "h.value * Decimal.round(1, HALF_UP, 4.00m) >= s.value")) {
+            assertEquals(Map.of(), left(inputs, HOURS, each, atThe(">=", HOURS, inputs, each)),
+                    each);
+            assertEquals(List.of("h: 0 <= x < 42", "h: 42 <= x <= 168"),
+                    classesAt(inputs, HOURS, each, "h"), each);
+        }
+    }
+
+    /**
+     * A place some of whose settling numbers have no row shown computed is left with those
+     * numbers, and not with the word for a relation nothing is shown of; a place shown
+     * undivided keeps what it was shown, whatever is said of the numbers.
+     */
+    @Test
+    void aPlaceWithNumbersNoRowIsShownComputedInIsLeftWithThoseNumbers() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours, rest), Set.of(rest), Map.of(), Map.of(), Set.of(),
+                Map.of(hours, Set.of(FROM_FIVE)), Map.of());
+        assertEquals(new BlockReason.RelationRowsNotShownComputed(FROM_FIVE), left.get(0).why());
+        assertEquals(new BlockReason.ComparisonRelatingTwoValues(), left.get(1).why());
+    }
+
+    private static final NumberRegion FROM_FIVE = NumberRegion.of(List.of(
+            new NumberRegion.Run(ExactCut.inclusive(ExactRatio.of(5)), null)));
+
+    private static final NumberRegion BELOW_ONE = NumberRegion.of(List.of(
+            new NumberRegion.Run(null, ExactCut.exclusive(ExactRatio.ONE))));
+
+    /**
+     * Numbers no row is shown computed in are told at a place whether or not it is shown
+     * undivided, and neither is dropped for the other. The reading does not make a place both,
+     * but what is told does not depend on that.
+     */
+    @Test
+    void aPlaceShownUndividedIsStillToldTheNumbersNoRowIsShownComputedIn() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours), Set.of(hours), Map.of(), Map.of(), Set.of(),
+                Map.of(hours, Set.of(FROM_FIVE)), Map.of());
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues(),
+                new BlockReason.RelationRowsNotShownComputed(FROM_FIVE)),
+                left.stream().map(ComparisonAssessment.LeftAt::why).toList());
+    }
+
+    /**
+     * The numbers of two terms are told at the coordinate of each, as the reading files them
+     * ({@link FilingCoordinate#of}): the numbers of one term are not numbers of the other, and a
+     * place told the other's region would be told numbers it does not hold. Two relations settling
+     * one term give it two regions, told apart.
+     */
+    @Test
+    void theNumbersOfEachTermAreToldAtThatTermsCoordinate() {
+        Compilation compilation = reported(FORECAST);
+        InputReading read = compilation.db().ask(new Adequacy.Inputs("w1")).value().get("m")
+                .reading(RuleReadings.of(compilation, "w1"));
+        NumericTerm.TakenOf deals = lengthOf(TermPath.of("deals"), read);
+        NumericTerm.TakenOf rates = lengthOf(TermPath.of("rates").then("rates"), read);
+
+        Map<FilingCoordinate, Set<NumberRegion>> unshown =
+                ComparisonAssessment.noRowShownComputedAt(List.of(
+                        Map.entry(deals, noRowIn(FROM_FIVE)),
+                        Map.entry(rates, noRowIn(BELOW_ONE)),
+                        Map.entry(deals, noRowIn(BELOW_ONE))));
+
+        assertEquals(Map.of(FilingCoordinate.of(deals), Set.of(FROM_FIVE, BELOW_ONE),
+                FilingCoordinate.of(rates), Set.of(BELOW_ONE)), unshown);
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)), Set.of(),
+                Map.of(), Map.of(), Set.of(), unshown, Map.of());
+        assertEquals(List.of(
+                new ComparisonAssessment.LeftAt(FilingCoordinate.of(deals),
+                        new BlockReason.RelationRowsNotShownComputed(BELOW_ONE)),
+                new ComparisonAssessment.LeftAt(FilingCoordinate.of(deals),
+                        new BlockReason.RelationRowsNotShownComputed(FROM_FIVE)),
+                new ComparisonAssessment.LeftAt(FilingCoordinate.of(rates),
+                        new BlockReason.RelationRowsNotShownComputed(BELOW_ONE))), left);
+    }
+
+    /** A term settling a relation in {@code numbers}, in none of which is a row shown computed. */
+    private static WhatARelationLeavesUndivided.Leaves.Settled noRowIn(NumberRegion numbers) {
+        return new WhatARelationLeavesUndivided.Leaves.Settled(List.of(), null, null, false,
+                List.of(), numbers.runs().stream()
+                .map(run -> new WhatARelationLeavesUndivided.SettledRun(run.from(), run.to(), false))
+                .toList());
+    }
+
+    /**
+     * A place a search stopped at a figure for and some of whose numbers have no row shown
+     * computed is told both, and neither hides the other: the figure is one a run allowed more may
+     * get past, and the numbers are not.
+     */
+    @Test
+    void aFigureASearchStoppedAtIsNotHiddenByNumbersNoRowIsShownComputedIn() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours), Set.of(), Map.of(hours, Set.of(stopped)), Map.of(), Set.of(),
+                Map.of(hours, Set.of(FROM_FIVE)), Map.of());
+        assertEquals(List.of(new BlockReason.RelationRowsNotShownComputed(FROM_FIVE),
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
+                left.stream().map(ComparisonAssessment.LeftAt::why).toList());
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
+                UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                left.stream().map(each -> ReportedReason.of(each.why())).toList());
+    }
+
+    /**
+     * A place a search tried rows for whose runs stopped is told where they stopped, in place of
+     * the bare word, and beside the figures where the search stopped at some as well: a run that
+     * stopped is no figure, and a figure is no run that stopped. A place none of whose rows was
+     * run is told the bare word, as before.
+     */
+    @Test
+    void wherePlacesRowsStoppedIsToldBesideTheFiguresAndInPlaceOfTheBareWord() {
+        FilingCoordinate hours = new FilingCoordinate.AtPosition(TermPath.of("h"));
+        FilingCoordinate rest = new FilingCoordinate.AtPosition(TermPath.of("s"));
+        FilingCoordinate none = new FilingCoordinate.AtPosition(TermPath.of("n"));
+        Figure stopped = CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG.figure();
+        WhereARunStopped ensures = new WhereARunStopped(
+                new RunStop.AtAnEnsures("m", "f", Optional.of("small")), Optional.empty());
+        List<ComparisonAssessment.LeftAt> left = ComparisonAssessment.relatingAt(
+                List.of(hours, rest, none), Set.of(), Map.of(rest, Set.of(stopped)),
+                Map.of(hours, Set.of(ensures), rest, Set.of(ensures)), Set.of(), Map.of(),
+                Map.of());
+
+        BlockReason.RelationNotShownWhereItsRowsStopped rowsStopped =
+                new BlockReason.RelationNotShownWhereItsRowsStopped(List.of(ensures));
+        assertEquals(List.of(
+                new ComparisonAssessment.LeftAt(hours, rowsStopped),
+                new ComparisonAssessment.LeftAt(rest,
+                        new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped))),
+                new ComparisonAssessment.LeftAt(rest, rowsStopped),
+                new ComparisonAssessment.LeftAt(none,
+                        new BlockReason.RelationNotShownToReachEveryValue())), left);
+        // One word for all three, told apart by what is beside it.
+        assertEquals(Set.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                left.stream().map(each -> ReportedReason.of(each.why()))
+                        .collect(Collectors.toSet()));
+        assertEquals(RunSensitivity.UNAFFECTED, rowsStopped.runSensitivity());
+        assertEquals(List.of(), rowsStopped.figures());
+        assertEquals(List.of(ensures), ReportedReason.runsStopped(rowsStopped));
+    }
+
+    /**
+     * A decimal sum stops no row, so a run of the amount with no end is asked as one with an end
+     * is: every amount has a row with the other at nought and one with it past the amount and
+     * five, and both amounts are left undivided.
+     */
+    @Test
+    void aDecimalRunsOnPastEveryValueAnotherIsNeededAt() {
+        String amount = "data Amount = Decimal invariant value >= 0.0m";
+        String body = "a.value >= s.value + 5.0m";
+        assertEquals(Map.of("s", RELATES), left("a: Amount, s: Amount", amount, body,
+                atThe(">=", amount, "a: Amount, s: Amount", body)));
+        // The sum reads only the amount put beside the one asked of, so rows past five are
+        // computed whichever amount they stand at, and the row built at the end the run has shows
+        // both sides of the boundary at five.
+        assertEquals(List.of("a: 0 <= x < 5", "a: 5 <= x"),
+                classesAt("a: Amount, s: Amount", amount, body, "a"));
+    }
+
+    private static final String KEYED = """
+            module w1
+            data Code = String invariant String.length(value) >= 1 && String.length(value) <= 3
+            data Rate = Int invariant value > 0
+            data Table = { base: Code, rates: Map<Code, Rate> }
+                invariant %s
+            let baseIsOne (base: Code, rates: Map<Code, Rate>): Bool =
+                Map.get(base, rates)
+                    |> Option.map(r -> r.value == 1)
+                    |> Option.withDefault(false)
+            behavior m : (codes: List<Code>, t: Table) -> Bool
+            let m (codes, t) = List.any(c -> Map.containsKey(c, t.rates), codes)
+            """;
+
+    private static final String KEYED_BY_TEXT = """
+            module w1
+            data Table = { base: String, rates: Map<String, Int> }
+                invariant %s
+            behavior m : (ks: List<String>, t: Table) -> Bool
+            let m (ks, t) = List.any(k -> Map.containsKey(k, t.rates), ks)
+            """;
+
+    /**
+     * A rule that looks up the entry under one key and cannot be true without it reads that entry
+     * and no other. The keys of the map beside it are every code, as a second entry takes any
+     * code that is not the one the rule names, so a code asked for and the keys the map holds
+     * reach each other. Written out in the rule, or in a helper it hands the map to, it is the
+     * same lookup, and a key written as a constant is needed the same.
+     */
+    @Test
+    void aRuleLookingUpOneKeyLeavesTheOtherKeysOfTheMapEveryValue() {
+        for (String rule : List.of("Map.containsKey(base, rates)", "baseIsOne(base, rates)")) {
+            String model = KEYED.formatted(rule);
+            Map<String, String> left = leftIn(model, whereWritten(model, "Map.containsKey(c"));
+            assertEquals(Map.of("t.rates[key]", RELATES, "codes[*]", RELATES), left, rule);
+            assertEquals(theLookupWrittenAsAComparison(model), left, rule);
+        }
+    }
+
+    @Test
+    void aKeyWrittenAsAConstantIsNeededTheSame() {
+        for (String rule : List.of("Map.containsKey(\"a\", rates)",
+                "Map.containsKey(base, rates) && Map.containsKey(\"a\", rates)")) {
+            String model = KEYED_BY_TEXT.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "ks[*]", RELATES),
+                    leftIn(model, whereWritten(model, "Map.containsKey(k")), rule);
+        }
+    }
+
+    /**
+     * A rule that reads the entry under a key is not one that has the key there. Where it wants
+     * the key missing, or is true without the lookup, some keys are the ones it keeps out, and
+     * the map accepts none with them: a map with room for more is not a map every key is in.
+     */
+    @Test
+    void aRuleNotNeedingTheEntryLeavesTheKeysNoRunToReach() {
+        for (String rule : List.of("Map.containsKey(\"a\", rates) == false",
+                "Bool.not(Map.containsKey(base, rates))",
+                "base == \"a\" && Bool.not(Map.containsKey(base, rates))",
+                "Map.containsKey(base, rates) || Map.size(rates) == 0")) {
+            String model = KEYED_BY_TEXT.formatted(rule);
+            assertEquals(Map.of("t.rates[key]", RELATES, "ks[*]", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "Map.containsKey(k")), rule);
+        }
+    }
+
+    private static final String MEMBERED = """
+            module w1
+            data Table = { main: String, members: %s<String> }
+                invariant %s
+            behavior m : (ks: List<String>, t: Table) -> Bool
+            let m (ks, t) = List.any(k -> %s.contains(k, t.members), ks)
+            """;
+
+    /**
+     * A set or a list is read the way a map is: a rule that cannot be true without a member there
+     * leaves the other members every value, and one that merely reads it, or wants it missing,
+     * leaves them none.
+     */
+    @Test
+    void theMembersOfASetOrAListAreReadTheWayTheKeysOfAMapAre() {
+        for (String container : List.of("Set", "List")) {
+            String needed = MEMBERED.formatted(container,
+                    container + ".contains(main, members)", container);
+            assertEquals(Map.of("t.members[*]", RELATES, "ks[*]", RELATES),
+                    leftIn(needed, whereWritten(needed, container + ".contains(k")), container);
+            String missing = MEMBERED.formatted(container,
+                    container + ".contains(main, members) == false", container);
+            assertEquals(Map.of("t.members[*]", RELATES, "ks[*]", NOT_SHOWN),
+                    leftIn(missing, whereWritten(missing, container + ".contains(k")), container);
+        }
+    }
+
+    /**
+     * What the keys of the map are left with by the rule of its record, asked of the same lookup
+     * written as the comparison of each key with the code: {@code Map.containsKey(c, t.rates)} and
+     * {@code List.any(own -> own == c, Map.keys(t.rates))} state one relation, and are read as one.
+     */
+    private static Map<String, String> theLookupWrittenAsAComparison(String model) {
+        String any = model.replace("Map.containsKey(c, t.rates)",
+                "List.any(own -> own == c, Map.keys(t.rates))");
+        return leftIn(any, whereWritten(any, "== c"));
+    }
+
+    /**
+     * What a rule leaves the keys is the entry it reads only while the map may hold a second one.
+     * With room for one entry the only key is the one the rule names, and a rule reading every
+     * key holds each to what it says. Neither leaves a key every code.
+     */
+    @Test
+    void aRuleThatPinsTheKeysLeavesThemNoRunToReach() {
+        for (String rule : List.of("Map.containsKey(base, rates) && Map.size(rates) <= 1",
+                "Map.containsKey(base, rates) && List.all(k -> k == base, Map.keys(rates))")) {
+            String model = KEYED.formatted(rule);
+            Map<String, String> left = leftIn(model, whereWritten(model, "Map.containsKey(c"));
+            assertEquals(theLookupWrittenAsAComparison(model), left, rule);
+            assertEquals(NOT_SHOWN, left.get("codes[*]"), rule);
+        }
+    }
+
+    /**
+     * What a rule leaves the keys it leaves nothing of the values: the entry under the key the
+     * rule names is held to what it says, and an entry under another key takes a value only if
+     * the type has a second key. With one code the only entry is the one held to one, so no number
+     * but one reaches the values of the map, while those values do reach each number; with many,
+     * the values are still not read as every value.
+     */
+    @Test
+    void aRuleLookingUpOneKeyLeavesTheValuesOfTheMapNoRunToReach() {
+        for (String code : List.of("String.matches(\"JPY\", value)",
+                "String.length(value) >= 1 && String.length(value) <= 3")) {
+            String model = """
+                    module w1
+                    data Code = String invariant %s
+                    data Rate = Int invariant value > 0
+                    data Table = { base: Code, rates: Map<Code, Rate> }
+                        invariant baseIsOne(base, rates)
+                    let baseIsOne (base: Code, rates: Map<Code, Rate>): Bool =
+                        Map.get(base, rates)
+                            |> Option.map(r -> r.value == 1)
+                            |> Option.withDefault(false)
+                    behavior m : (n: Int, t: Table) -> Bool
+                    let m (n, t) = List.any(r -> r.value == n, Map.values(t.rates))
+                    """.formatted(code);
+            assertEquals(Map.of("t.rates[*]", RELATES, "n", NOT_SHOWN),
+                    leftIn(model, whereWritten(model, "== n")), code);
+        }
+    }
+
+    /** The places some comparison at {@code at} of a model written out whole is not read about. */
+    private static Set<String> notReadIn(String source, String at) {
+        Compilation compilation = measured(source);
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        Set<String> out = new TreeSet<>();
+        for (String line : report.lines().map(String::strip).toList()) {
+            if (line.startsWith("· not read") && line.contains("comparison@" + at + " ")
+                    && line.contains("about `")) {
+                out.add(line.substring(line.lastIndexOf("about `") + 7, line.length() - 1));
+            }
+        }
+        return out;
     }
 }

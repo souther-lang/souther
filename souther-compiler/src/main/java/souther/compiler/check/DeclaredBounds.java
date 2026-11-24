@@ -1,14 +1,19 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -178,6 +183,41 @@ public final class DeclaredBounds {
      */
     public record Range(Endpoint min, Endpoint max, Carrier carrier) {}
 
+    /**
+     * What the rules of a type leave the number {@code read} takes off a value of it, or null
+     * where it takes none off one or the rules leave it open: a value of the type exists only
+     * where its rules held, whatever made it. A newtype's own value is what its rules leave it,
+     * and a field of a record is what the record's rules place on that field, the ends a position
+     * of the input holding it is bounded by. A run that makes the value may still stop, which is
+     * asked of what makes it.
+     */
+    public static Range ofTheValueReadOff(Core read, RuleReadingSource rules,
+                                          DeclarationNewtypes newtypes, RuleReadingContext reading) {
+        Core.FieldAccess access = switch (Core.withoutStanding(read)) {
+            case Core.FieldAccess one -> one;
+            case Core.FieldProjection projection -> projection.lastAccess();
+            default -> null;
+        };
+        if (access == null) {
+            return null;
+        }
+        Type from = access.target().type();
+        if (!Location.isStep(from, access.field(), newtypes)) {
+            return of(TypeView.asWritten(from, rules.symbols(), rules.kinds(), rules.sums()),
+                    reading);
+        }
+        Carrier carrier = Carrier.ofPrimitive(access.type());
+        if (carrier == null || !(TypeView.shapeOf(from, rules.inners(), rules.symbols(),
+                rules.kinds(), rules.sums()) instanceof Shape.Product(
+                        TypeSymbol.AtModule record, var _))) {
+            return null;
+        }
+        Bounds placed = placed(FieldDomains.of(record, reading)
+                .placedAt(TermPath.ruleKeyOf(List.of(new TermPath.Step.Field(access.field())))),
+                NumberAt.OfWhatNumber.OWN_VALUE, carrier);
+        return placed == null ? null : placed.range();
+    }
+
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
     public static Range of(TypeView view, RuleReadingContext reading) {
@@ -231,12 +271,92 @@ public final class DeclaredBounds {
             return everything;
         }
         NumberAt.OfWhatNumber kind = measure == null
-                ? new NumberAt.OfWhatNumber.OfItsOwnValue()
+                ? NumberAt.OfWhatNumber.OWN_VALUE
                 : new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(measure,
                         TakenArguments.NONE, ValueTransformation.NONE);
         FieldDomains own = FieldDomains.of(outermost, reading);
         Bounds bounds = placed(own.placedAt(RuleKey.THE_VALUE), kind, carrier);
         return bounds == null ? everything : bounds.range();
+    }
+
+    /**
+     * The run of numbers the rules of the type {@code view} wears leave its value, every one of
+     * which they leave it — or null where the bounds are not shown to be the whole of what the
+     * rules say.
+     *
+     * <p>Not {@link #of}: that is where the rules stop the value, and a rule such as
+     * {@code value /= 50} or {@code value == 0 || value == 100} leaves holes inside it. Making a
+     * value of the type stops a run at exactly the numbers outside this one, so a caller telling
+     * where a construction stops asks this and takes nothing from the other.
+     */
+    public static NumericDomain.Bounds wholeRunOf(TypeView view, RuleReadingContext reading) {
+        if (!(view.outermostName() instanceof TypeSymbol.AtModule outermost)) {
+            return null;
+        }
+        return FieldDomains.of(outermost, reading).wholeRunAt(RuleKey.THE_VALUE);
+    }
+
+    /**
+     * The run of numbers the rules of the record {@code record} leave the place they call
+     * {@code place}, every one of which is the number there of some value of the record its rules
+     * all hold of — or null where the bounds are not shown to be the whole of what the rules leave
+     * it ({@link FieldDomains#wholeRunAt}).
+     */
+    public static NumericDomain.Bounds wholeRunAt(TypeSymbol.AtModule record, RuleKey place,
+                                                  RuleReadingContext reading) {
+        return FieldDomains.of(record, reading).wholeRunAt(place);
+    }
+
+    /**
+     * Where making {@code construct}, a value of {@code type}, answers: for the numbers the whole
+     * run its clauses leave ({@link #wholeRunOf}) holds, as the number it wraps is. Over an
+     * {@code Int} that is the run within the ends of an {@code Int}
+     * ({@link WhereAnOperatorAnswers.WhereItsExactValueIsHeld}), and over any other number the run
+     * itself ({@link WhereAnOperatorAnswers.WhereItsNumberLiesWithin}). Null where they leave none
+     * that is shown to be the whole of what they say, or what it wraps is no number.
+     *
+     * <p>Every reader that tells a construction as the operation it is asks this, so a run is held
+     * to the same numbers at a construction whichever reading meets it.
+     */
+    public static WhereAnOperatorAnswers whereMakingSucceeds(
+            Core.Construct construct, TypeView type, RuleReadingContext reading) {
+        Type wrapped = construct.values().get(0).value().type();
+        if (wrapped == Type.INT) {
+            return whereMakingSucceedsOverAnInt(type, reading);
+        }
+        if (wrapped != Type.DECIMAL && wrapped != Type.RATIONAL) {
+            return null;
+        }
+        NumericDomain.Bounds run = wholeRunOf(type, reading);
+        return run == null ? null : new WhereAnOperatorAnswers.WhereItsNumberLiesWithin(run);
+    }
+
+    private static WhereAnOperatorAnswers.WhereItsExactValueIsHeld whereMakingSucceedsOverAnInt(
+            TypeView type, RuleReadingContext reading) {
+        NumericDomain.Bounds run = wholeRunOf(type, reading);
+        if (run == null) {
+            return null;
+        }
+        WhereAnOperatorAnswers.WhereItsExactValueIsHeld ofAnInt =
+                WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS;
+        BigInteger least = ofAnInt.least();
+        BigInteger greatest = ofAnInt.greatest();
+        if (run.min() != null) {
+            BigInteger end = run.min().wholeAdmitted(true);
+            if (end == null) {
+                return null;
+            }
+            least = least.max(end);
+        }
+        if (run.max() != null) {
+            BigInteger end = run.max().wholeAdmitted(false);
+            if (end == null) {
+                return null;
+            }
+            greatest = greatest.min(end);
+        }
+        return least.compareTo(greatest) > 0 ? null
+                : new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest);
     }
 
     /**

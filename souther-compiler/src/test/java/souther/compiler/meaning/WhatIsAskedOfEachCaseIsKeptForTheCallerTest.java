@@ -6,7 +6,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -46,7 +48,8 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
             new DecidingCase.Cases.EachOf(List.of(one(A), one(B))),
             new DecidingCase.Cases.EachOf(List.of(one(C), one(D)))));
 
-    /** Asks, answering each condition by {@code answer} and keeping what was asked. */
+    /** Asks of cases a row may be in, every one, answering each condition by {@code answer} and
+     *  keeping what was asked. */
     private record Asking<T>(Function<Proposition, T> answer, List<Proposition> asked) {
 
         Asking(Function<Proposition, T> answer) {
@@ -57,7 +60,7 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
             return CasesOfALineAsked.atomsOf(new DecidingCase(SAID, cases), condition -> {
                 asked.add(condition);
                 return answer.apply(condition);
-            });
+            }, _ -> true);
         }
     }
 
@@ -118,21 +121,117 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
 
         assertEquals(List.of(), atoms.each());
         assertEquals(List.of(), asking.asked());
-        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
+        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
                 atoms.notWorkedOut());
+    }
+
+    /**
+     * Of the cases some row may be in, a part chosen so far no row is in leaves every case past it
+     * unanswered: of the ways nine choices make, the one case no part of which leaves no row is
+     * answered.
+     */
+    @Test
+    void aPartNoRowIsInLeavesTheCasesPastItUnanswered() {
+        List<DecidingCase.Cases> choices = new ArrayList<>();
+        List<Proposition> everyKept = new ArrayList<>();
+        Set<Proposition> noRow = new HashSet<>();
+        for (int i = 0; i < 9; i++) {
+            Proposition kept = truth("k" + i);
+            Proposition left = truth("n" + i);
+            everyKept.add(kept);
+            noRow.add(left);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(one(left), one(kept))));
+        }
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(choices);
+        List<Proposition> answered = new ArrayList<>();
+        List<Proposition> askedOfRows = new ArrayList<>();
+
+        CasesOfALineAsked.Atoms<Boolean> atoms = CasesOfALineAsked.atomsOf(
+                new DecidingCase(SAID, cases), condition -> answered.add(condition),
+                condition -> {
+                    askedOfRows.add(condition);
+                    return (condition instanceof Proposition.All all ? all.parts()
+                            : List.of(condition)).stream().noneMatch(noRow::contains);
+                });
+
+        assertEquals(List.of(Proposition.all(everyKept)), answered);
+        assertEquals(List.of(new CasesOfALineAsked.Atom<>(Proposition.all(everyKept), true)),
+                atoms.each());
+        assertEquals(Set.of(), atoms.notWorkedOut());
+        assertEquals(18, askedOfRows.size(), "each part asked once, beside the kept before it");
     }
 
     /** The cases walked to are kept beside the figure the others were stopped at. */
     @Test
     void whatWasWalkedToIsKeptBesideWhatStoppedTheRest() {
         DecidingCase.Cases readTooLong = new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN);
+                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
 
         CasesOfALineAsked.Atoms<Boolean> atoms = new Asking<Boolean>(_ -> true).of(
                 new DecidingCase.Cases.EachOf(List.of(readTooLong, one(A))));
 
         assertEquals(List.of(new CasesOfALineAsked.Atom<>(A, true)), atoms.each());
-        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
+        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()),
                 atoms.notWorkedOut());
+    }
+
+    private static CasesOfALineAsked.Some<Boolean> someCaseAnswering(DecidingCase.Cases cases,
+                                                                     List<Proposition> asked,
+                                                                     Proposition wanted) {
+        return CasesOfALineAsked.someCaseAnswers(new DecidingCase(SAID, cases), condition -> {
+            asked.add(condition);
+            return condition.equals(wanted);
+        }, _ -> true, answer -> answer, CasesOfALineAsked.QuestionsOfAStatement.fresh());
+    }
+
+    /** The first case with the answer wanted is found, and the cases chosen after it are not
+     *  asked. */
+    @Test
+    void askingForACaseWithAnAnswerStopsAtTheFirst() {
+        List<Proposition> asked = new ArrayList<>();
+
+        CasesOfALineAsked.Some<Boolean> some = someCaseAnswering(FOUR, asked, both(A, D));
+
+        assertEquals(Optional.of(new CasesOfALineAsked.Atom<>(both(A, D), true)), some.first());
+        assertEquals(List.of(both(A, C), both(A, D)), asked);
+    }
+
+    /** No case with the answer wanted, every case worked out: there is none. */
+    @Test
+    void noCaseWithTheAnswerWantedAmongCasesAllWorkedOutIsNone() {
+        List<Proposition> asked = new ArrayList<>();
+
+        CasesOfALineAsked.Some<Boolean> some = someCaseAnswering(FOUR, asked, SAID);
+
+        assertEquals(Optional.empty(), some.first());
+        assertEquals(Set.of(), some.notWorkedOut());
+        assertEquals(4, asked.size());
+    }
+
+    /** No case found where some were not worked out: there may be one, and the figure is said. A
+     *  case found makes what stopped the others no matter. */
+    @Test
+    void noCaseFoundAmongCasesNotWorkedOutMayHaveOneAmongThem() {
+        DecidingCase.Cases readTooLong = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
+        DecidingCase.Cases cases = new DecidingCase.Cases.EachOf(List.of(readTooLong, one(A)));
+
+        CasesOfALineAsked.Some<Boolean> none = someCaseAnswering(cases, new ArrayList<>(), B);
+        CasesOfALineAsked.Some<Boolean> found = someCaseAnswering(cases, new ArrayList<>(), A);
+
+        assertEquals(Optional.empty(), none.first());
+        assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()),
+                none.notWorkedOut());
+        assertEquals(Optional.of(new CasesOfALineAsked.Atom<>(A, true)), found.first());
+        assertEquals(Set.of(), found.notWorkedOut());
+    }
+
+    /** A case said alone is the one case, and is found where it has the answer. */
+    @Test
+    void aCaseSaidAloneWithTheAnswerWantedIsFound() {
+        CasesOfALineAsked.Some<Boolean> some =
+                someCaseAnswering(one(SAID), new ArrayList<>(), SAID);
+
+        assertEquals(Optional.of(new CasesOfALineAsked.Atom<>(SAID, true)), some.first());
     }
 }

@@ -45,10 +45,8 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
 
     private static Said of(String behavior, String name) {
         Compilation compilation = Compilation.ofSource(HEAD + behavior, "Main");
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         List<String> notRead = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each : report.modules().get(0).behaviors()) {
@@ -112,10 +110,8 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                     | "the first empty" : ([], ["y"]) -> 1
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
     }
 
     @Test
@@ -192,24 +188,125 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
     }
 
     /**
-     * Only what is read is said to be read: of the elements a filter kept, or of a value worked
-     * out of each, the number is no number of the container and the rule stays a rule nobody read.
+     * Only what is read is said to be read: of a value worked out of each element, the number is
+     * no number of the container and the rule stays a rule nobody read. Of the elements a filter
+     * kept, it is how many different values those hold, which is a line of its own
+     * ({@code partition.HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest}).
      */
     @Test
-    void aProjectionOfSomeElementsOrOfAValueWorkedOutOfEachIsStillARuleNobodyRead() {
+    void aProjectionOfAValueWorkedOutOfEachIsStillARuleNobodyRead() {
         String model = """
                 data Forecast = { currency: String, amount: Int }
 
                 behavior f : (fs: List<Forecast>) -> Int
                 let f (fs) = if %s then 1 else 0
                 """;
+        Said worked = of(model.formatted(
+                "Set.size(Set.fromList(List.map(f -> f.amount + 1, fs))) == 1"), "f");
+        assertEquals(List.of("rule_unread"), worked.weakening());
+        Said kept = of(model.formatted("Set.size(Set.fromList(List.map(.currency,"
+                + " List.filter(f -> f.amount > 0, fs)))) == 1"), "f");
+        assertFalse(kept.weakening().contains("rule_unread"), kept.weakening().toString());
+    }
+
+    /**
+     * A walk adding each value it is handed to a set, or filing each under a key, ends with as many
+     * as there are different values among them, and those are read down the list it walks: a map
+     * taking a place out of each element, or the lists inside each element put end to end. A step
+     * written as a helper's call is the helper's body, its parameters standing for what it was
+     * handed.
+     */
+    @Test
+    void howManyDifferentValuesAWalkGathersIsAskedOfWhatItsListIsTakenOf() {
+        String model = """
+                data Forecast = { currency: String, amount: Int }
+                data Desk = { forecasts: List<Forecast> }
+
+                let filed (cs: List<String>): Map<String, Int> =
+                    List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
+
+                let added (acc: Set<String>, f: Forecast): Set<String> = Set.insert(f.currency, acc)
+
+                let bumped (acc: Map<String, Int>, f: Forecast): Map<String, Int> =
+                    Map.updateOrInsert(f.currency, 1, n -> n + 1, acc)
+
+                let byCurrency (fs: List<Forecast>): Map<String, Int> =
+                    List.fold((acc, f) -> bumped(acc, f), Map.empty, fs)
+
+                behavior f : (fs: List<Forecast>, desks: List<Desk>) -> Int
+                let f (fs, desks) = if %s then 1 else 0
+                """;
         for (String condition : List.of(
-                "Set.size(Set.fromList(List.map(f -> f.amount + 1, fs))) == 1",
-                "Set.size(Set.fromList(List.map(.currency,"
-                        + " List.filter(f -> f.amount > 0, fs)))) == 1")) {
-            Said said = of(model.formatted(condition), "f");
-            assertEquals(List.of("rule_unread"), said.weakening(), condition);
+                "Set.size(List.fold((acc, c) -> Set.insert(c, acc), Set.empty,"
+                        + " List.map(.currency, fs))) == 1",
+                "Set.size(List.fold((acc, f) -> added(acc, f), Set.empty, fs)) == 1",
+                "Map.size(byCurrency(fs)) == 1",
+                "Map.size(filed(List.map(f -> f.currency, fs))) == 1")) {
+            relatesValues(of(model.formatted(condition), "f"), List.of("fs[*].currency"));
         }
+        for (String condition : List.of(
+                "Set.size(List.fold((acc, c) -> Set.insert(c, acc), Set.empty,"
+                        + " List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1",
+                "Map.size(filed(List.flatMap(d -> List.map(.currency, d.forecasts), desks))) == 1",
+                // However many steps the closure's answer is read down to the list it stands for.
+                "Map.size(filed(List.flatMap(d -> " + "List.reverse(".repeat(16)
+                        + "List.map(.currency, d.forecasts)" + ")".repeat(16) + ", desks))) == 1")) {
+            relatesValues(of(model.formatted(condition), "f"),
+                    List.of("desks[*].forecasts[*].currency"));
+        }
+    }
+
+    /**
+     * And only what is read is said to be read there too: a walk over a value worked out of each
+     * element gathers no place's values, and one over the lists inside each element of an outer
+     * list gathers some of the occurrences of the place. A walk over the elements a filter kept
+     * gathers how many different values meet a statement, and how many keys of a map a statement
+     * keeps is how many keys have a gathered value meeting it: both are read, as lines of their
+     * own ({@code partition.HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest}).
+     */
+    @Test
+    void aWalkGatheringAValueWorkedOutOfEachIsStillARuleNobodyRead() {
+        String model = """
+                data Forecast = { currency: String, amount: Int }
+
+                let filed (cs: List<String>): Map<String, Int> =
+                    List.fold((acc, c) -> Map.updateOrInsert(c, 1, n -> n + 1, acc), Map.empty, cs)
+
+                behavior f : (fs: List<Forecast>) -> Int
+                let f (fs) = if %s then 1 else 0
+                """;
+        // Read as no count of a place's values, and measured on what each run worked out.
+        Said worked = of(model.formatted(
+                "Set.size(List.fold((acc, f) -> Set.insert(f.amount + 1, acc), Set.empty, fs))"
+                        + " == 1"), "f");
+        assertEquals(List.of(), worked.weakening());
+        assertEquals(List.of("fs RULE_MEASURED_ON_ITS_RUNS",
+                "fs[*].amount RULE_MEASURED_ON_ITS_RUNS"), worked.notRead());
+        for (String condition : List.of(
+                "Set.size(List.fold((acc, f) -> Set.insert(f.currency, acc), Set.empty,"
+                        + " List.filter(f -> f.amount > 0, fs))) == 1",
+                "Map.size(filed(List.map(.currency, List.filter(f -> f.amount > 0, fs)))) == 1",
+                "Map.size(Map.filterEntries((_, n) -> n > 0, filed(List.map(.currency, fs)))) >= 2")) {
+            Said said = of(model.formatted(condition), "f");
+            assertFalse(said.weakening().contains("rule_unread"), condition + " " + said);
+        }
+        // A walk over the lists inside one element of an outer list gathers some of the
+        // occurrences of the place, and no number of them all.
+        Said inEachFloor = of("""
+                data Forecast = { currency: String, amount: Int }
+                data Desk = { forecasts: List<Forecast> }
+                data Floor = { desks: List<Desk> }
+
+                behavior f : (floors: List<Floor>) -> List<Bool>
+                let f (floors) = List.map(l -> Set.size(List.fold((acc, c) -> Set.insert(c, acc),
+                    Set.empty, List.flatMap(d -> List.map(.currency, d.forecasts), l.desks))) == 1,
+                        floors)
+                """, "f");
+        assertEquals(List.of(), inEachFloor.weakening());
+        assertFalse(inEachFloor.notRead().isEmpty());
+        assertTrue(inEachFloor.notRead().stream()
+                .allMatch(each -> each.endsWith(" RULE_MEASURED_ON_ITS_RUNS")),
+                inEachFloor.notRead().toString());
     }
 
     /**

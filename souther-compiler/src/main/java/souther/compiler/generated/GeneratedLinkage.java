@@ -1,0 +1,148 @@
+package souther.compiler.generated;
+
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
+/**
+ * What a failure out of a generated class says about the compiler's own output.
+ *
+ * <p>A generated class that the JVM refuses to link ({@code VerifyError}, {@code ClassFormatError},
+ * {@code NoSuchMethodError}) is this compiler's output, or the library it was generated against,
+ * failing. It is not about any row or any example, so a reader that turns it into "nothing could be
+ * observed" sends the author to look at something that is fine, and one that reads the empty result
+ * as agreement lets a broken back end report every model consistent.
+ *
+ * <p>Two things that look the same are not defects. A class of the runtime that cannot be found
+ * ({@link #runtimeAbsent}): the runtime is {@code provided}, so a build that compiles Souther without
+ * it can generate the classes and not load them, and what reads it can go on without the observation
+ * the class would have made. A class initializer that threw: that is the evaluated code failing, and
+ * what it failed with is read from its cause.
+ *
+ * <p>Only for code this compile generated. The question has no answer from the failure alone, since
+ * a class of another build, a supplied implementation and the runtime link or fail to link the same
+ * way, so it is asked where the call into generated code was made and is not asked of what a
+ * supplied implementation ended with ({@link Attributed}).
+ *
+ * <p>Asked of the throwable and of every cause under it, because the failure is raised inside the
+ * generated code and reaches a catch through whatever stands between: a reflective call wraps it in
+ * an {@code InvocationTargetException}, and a layer that reports its own failure carries it as a
+ * cause. Read off the outermost throwable only, a defect wrapped once is a value that could not be
+ * built.
+ */
+public final class GeneratedLinkage {
+
+    private static final String RUNTIME_PACKAGE = "souther.runtime.";
+
+    /** What the JVM says of a class whose initializer already failed once. */
+    private static final String INITIALIZER_FAILED = "Could not initialize class ";
+
+    private GeneratedLinkage() {}
+
+    /**
+     * Whether {@code thrown}, or a cause under it, is a class of the runtime not being found.
+     *
+     * <p>Read through the causes for the reason {@link #rejectDefect} is: a reflective call wraps
+     * what the callee threw. That is all it says. It does not say the runtime is not on the class
+     * path: a runtime of another version that lacks a class the generated code names fails the same
+     * way, and so is read as absent here. Nor is a return from {@link #rejectDefect} evidence of
+     * it, since an initializer that failed returns from that as well.
+     */
+    public static boolean runtimeAbsent(Throwable thrown) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
+            if (isRuntimeClassMissing(each)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isRuntimeClassMissing(Throwable one) {
+        return one instanceof NoClassDefFoundError missing
+                && missing.getMessage() != null
+                && missing.getMessage().replace('/', '.').startsWith(RUNTIME_PACKAGE);
+    }
+
+    /**
+     * Rethrows a defect that was already found in {@code thrown} or under it, and returns where
+     * there is none. It decides nothing about a link failure that has not been judged: that is
+     * {@link #rejectDefect}'s, and it is asked only where the code that failed is known to be this
+     * compile's.
+     *
+     * <p>For a catch that cannot say whose a failure is and so lets it go as a value that cannot be
+     * read, which must still not take a defect that something below it found for one. A defect is an
+     * {@link Error}, so a catch of {@code RuntimeException} does not meet it bare; it arrives under
+     * whatever a reflective call or a worker wrapped it in, and this finds it there.
+     */
+    public static void rethrowClassified(Throwable thrown) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
+            if (each instanceof GeneratedClassDefect already) {
+                throw already;
+            }
+        }
+    }
+
+    /**
+     * Returns where nothing in {@code thrown} or its causes is a generated class failing to link,
+     * and otherwise throws what a compiler failing at its own output is: a
+     * {@link GeneratedClassDefect}, which the command line reports as an internal compiler error.
+     */
+    public static void rejectDefect(Throwable thrown) {
+        // A defect found already is found under anything, an attributed carrier included: what that
+        // carrier's attribution settles is a link failure not yet judged, not one that was.
+        rethrowClassified(thrown);
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
+            if (each instanceof Attributed) {
+                return;
+            }
+            if (each instanceof LinkageError failure && isDefect(failure)) {
+                throw new GeneratedClassDefect(failure);
+            }
+        }
+    }
+
+    private static boolean isDefect(LinkageError failure) {
+        if (isRuntimeClassMissing(failure) || failure instanceof ExceptionInInitializerError) {
+            return false;
+        }
+        return !(failure instanceof NoClassDefFoundError
+                && failure.getMessage() != null
+                && failure.getMessage().startsWith(INITIALIZER_FAILED));
+    }
+
+    /**
+     * A throwable that carries what some code ended with, made after whoever ran that code decided
+     * whose it was.
+     *
+     * <p>A link failure says which class could not be linked and not whose it is: a class this
+     * compile generated, a class of another build or one supplied from outside, and the runtime
+     * all fail the same way. Only the code that made the call knows which it called. So a
+     * carrier of such a failure is made after that was decided: the code that ran its own generated
+     * classes has asked {@link #rejectDefect} before wrapping, and the code that ran what was
+     * supplied has not, because a supplied implementation whose dependency is broken is that
+     * implementation failing and not this compiler's output. {@link #rejectDefect} does not look
+     * under one.
+     */
+    public interface Attributed {}
+
+    /**
+     * A class this compiler generated that the JVM refused to link.
+     *
+     * <p>An {@link Error} and not a {@code RuntimeException}. A catch that turns a failure into an
+     * answer about a value, a row or a module is written for what evaluating them throws, and it is
+     * a {@code RuntimeException} that it takes; a defect of the compiler's own output is not such an
+     * answer and must not be one that any of those catches can hold. The command line reports it.
+     */
+    public static final class GeneratedClassDefect extends Error {
+
+        private static final long serialVersionUID = 1L;
+
+        GeneratedClassDefect(LinkageError cause) {
+            super("a generated class does not link, which is this compiler's output and not the"
+                    + " model: " + cause, cause);
+        }
+    }
+}

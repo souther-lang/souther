@@ -16,14 +16,19 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
+import souther.compiler.inputs.WhereAnEquationHolds;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
+import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesAtLengths;
+import souther.compiler.values.ValuesWithin;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -175,10 +180,39 @@ public final class BehaviorSetStatements {
         return Sameness.Block.of(term);
     }
 
-    /** One rule read as far as the plans for its two sides, waiting on its position's group. */
+    /**
+     * One rule read as far as the plans for its two sides, waiting on its position's group.
+     *
+     * @param notShown the plan for the strings shown on neither side, or null where every string
+     *                 is shown on one
+     * @param heldTo the lengths a value of {@code whenTrue} or {@code notShown} is held to, as
+     *                 numbers, and every other length being the false side's; null where the plans
+     *                 hold every length they name
+     * @param shownAt  the lengths a value of {@code whenTrue} is shown to hold the rule at, and
+     *                 every other length of it left open for the operations; null where it is
+     *                 shown at every length
+     * @param notReached the strings of the lengths no run gets to the relation at, which are on
+     *                 neither side
+     * @param notCounted the plans for the strings holding so few or so many code points of a class
+     *                 that no run gets to the relation with them, which are on neither side as
+     *                 those of {@code notReached} are, and are built with the rest of the
+     *                 position's plans
+     */
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
-                         AdmittedPlan whenTrue, AdmittedPlan whenFalse) {}
+                         AdmittedPlan whenTrue, AdmittedPlan whenFalse,
+                         AdmittedPlan notShown,
+                         LengthRuns heldTo, LengthRuns shownAt,
+                         List<ValuesWithin> notReached,
+                         BlockReason.OperationsNotShown operations,
+                         List<AdmittedPlan> notCounted) {
+
+        Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
+              AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
+            this(by, states, term, whenTrue, whenFalse, null, null, null,
+                    List.of(), BlockReason.OperationsNotShown.NONE, List.of());
+        }
+    }
 
     /**
      * What {@code read} states, built under {@code allowance}.
@@ -200,10 +234,92 @@ public final class BehaviorSetStatements {
                           Map<BindingId, String> parameters, ElementBindings elements,
                           Allowance<NumericTerm.FromOnePosition> allowance,
                           List<ComparisonReadings.ForkMet> forks,
-                          RuleReachNumbering reaches) {
+                          RuleReachNumbering reaches, List<Partnered> partnered) {
         return of(behavior,
                 PredicateReadings.of(behavior, body, stated, read, parameters, elements, reaches),
-                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read));
+                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read), partnered);
+    }
+
+    /** The same, of a behavior no equality of whose strings states anything. */
+    public static Read of(String behavior, AnalysisBody body, StatedContract stated,
+                          InputReading read,
+                          Map<BindingId, String> parameters, ElementBindings elements,
+                          Allowance<NumericTerm.FromOnePosition> allowance,
+                          List<ComparisonReadings.ForkMet> forks,
+                          RuleReachNumbering reaches) {
+        return of(behavior, body, stated, read, parameters, elements, allowance, forks, reaches,
+                List.of());
+    }
+
+    /**
+     * What an equality between the strings at two positions states of one of them: the strings the
+     * other can hold, which are the only ones the equality can come out true at.
+     *
+     * <p>A rule of a comparison read as a set told from the rest, so it is built here with the
+     * rest and under the same allowance. Whether the position holds values on both sides of it is
+     * settled where its values are known ({@link Classing}), as for any rule that states a set.
+     *
+     * <p>As far as each value is shown, which is the three regions {@code holds} keeps: the
+     * values shown to be the partner's, those shown to be none of its values, and the rest, told
+     * neither way, which are in no class this draws and are said to be left open
+     * ({@link SetStatement#notShown}). Held as the one value they are read off, so what is open is
+     * said in one place.
+     *
+     * @param by    which reading of which comparison this is
+     * @param term  the position it is about
+     * @param holds the strings or the numbers the partner can hold, as far as each is shown
+     */
+    public record Partnered(PredicateOrigin by, NumericTerm.FromOnePosition term,
+                            PartnerHolds holds) {
+
+        public Partnered {
+            if (by == null || term == null || holds == null) {
+                throw new IllegalArgumentException(
+                        "an equality states of a position what its partner can hold");
+            }
+        }
+
+        /** What it states, called by the partner it is relative to. */
+        PredicateStatement states() {
+            return new PredicateStatement.CanBeTheValueOf(holds.partner());
+        }
+    }
+
+    /**
+     * What the other side of an equality can hold, which is the one thing a number and a string
+     * share: the values shown to be its, and the values outside which none is.
+     *
+     * <p>Two kinds and not one record read by both. What is held of strings is shown at the
+     * lengths a run gets to the relation at, and past the way's own statements of them; none of
+     * that is a fact of a number, and a number's classes stay as they are the day a rule about
+     * the lengths of strings is read otherwise.
+     */
+    public sealed interface PartnerHolds
+            permits UndividedByARelation.StringsAPartnerCanHold,
+                    UndividedByARelation.NumbersAPartnerCanHold {
+
+        /** What the model calls the partner. */
+        String partner();
+    }
+
+    /**
+     * What an equality between numbers states of a position: the numbers shown to be the
+     * partner's, those outside which none is, and the rest, which are told neither way.
+     *
+     * <p>Held as the numbers they are. They have no length to be shown at and no operation's image
+     * to be open for, so none of what a string's reach says reaches them.
+     */
+    private static Asked askedOfNumbers(Partnered each, WhereAnEquationHolds holds) {
+        ValueSet canBe = ValueSet.wholeNumberSet(holds.shown());
+        ValueSet mayBe = ValueSet.wholeNumberSet(holds.possible());
+        AdmittedPlan shown = canBe.isEmpty() ? AdmittedPlan.NONE : AdmittedPlan.of(canBe);
+        boolean everyOneShown = canBe.holdsTheSameValuesAs(mayBe);
+        AdmittedPlan notShown = everyOneShown ? null
+                : AdmittedPlan.meeting(List.of(AdmittedPlan.of(mayBe),
+                        canBe.isEmpty() ? AdmittedPlan.ANY : AdmittedPlan.without(canBe)));
+        return new Asked(each.by(), each.states(), each.term(), shown,
+                AdmittedPlan.without(mayBe), notShown, null, null, List.of(),
+                BlockReason.OperationsNotShown.NONE, List.of());
     }
 
     /**
@@ -218,9 +334,84 @@ public final class BehaviorSetStatements {
                    Allowance<NumericTerm.FromOnePosition> allowance,
                    List<ComparisonReadings.ForkMet> forks,
                    RuleReachNumbering reaches, WhatAnAnswerTakesUp dependencies) {
+        return of(behavior, read, reading, allowance, forks, reaches, dependencies, List.of());
+    }
+
+    /** The same, with the strings the partners of equalities can hold. */
+    static Read of(String behavior, PredicateReadings read, InputReading reading,
+                   Allowance<NumericTerm.FromOnePosition> allowance,
+                   List<ComparisonReadings.ForkMet> forks,
+                   RuleReachNumbering reaches, WhatAnAnswerTakesUp dependencies,
+                   List<Partnered> partnered) {
         Symbols symbols = reading.symbols();
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
+        for (Partnered each : partnered) {
+            if (each.holds() instanceof UndividedByARelation.NumbersAPartnerCanHold numbers) {
+                asked.add(askedOfNumbers(each, numbers.holds()));
+                continue;
+            }
+            UndividedByARelation.StringsAPartnerCanHold strings =
+                    (UndividedByARelation.StringsAPartnerCanHold) each.holds();
+            // A partner none of whose values is shown leaves the true side empty, and every string
+            // it may be told neither way.
+            AdmittedPlan shown = strings.canBe().isEmpty() ? AdmittedPlan.NONE
+                    : AdmittedPlan.of(strings.canBe());
+            AdmittedPlan notShown = strings.canBe().equals(strings.mayBe()) ? AdmittedPlan.NONE
+                    : AdmittedPlan.meeting(List.of(AdmittedPlan.of(strings.mayBe()),
+                            strings.canBe().isEmpty() ? AdmittedPlan.ANY
+                                    : AdmittedPlan.without(strings.canBe())));
+            AdmittedPlan whenFalse = AdmittedPlan.without(strings.mayBe());
+            // A string of a length the run does not get to the equality at is on neither side,
+            // whichever it would be on.
+            List<ValuesWithin> notReached = List.of();
+            List<AdmittedPlan> notCounted = List.of();
+            AdmittedPlan reaching = AdmittedPlan.ANY;
+            if (strings.reached() != null) {
+                PatternPlan reached = strings.reached().strings();
+                if (reached == null) {
+                    continue;
+                }
+                reaching = new AdmittedPlan.Pattern(reached);
+                shown = AdmittedPlan.meeting(List.of(shown, reaching));
+                whenFalse = AdmittedPlan.meeting(List.of(whenFalse, reaching));
+                // What is left open is asked only of the strings a run gets to the equality with:
+                // one it does not get there with is no string the relation leaves unshown.
+                if (!notShown.equals(AdmittedPlan.NONE)) {
+                    notShown = AdmittedPlan.meeting(List.of(notShown, reaching));
+                }
+                switch (strings.reached()) {
+                    case LengthRuns runs -> notReached = runs.outside();
+                    case CodePointsPastTheWay counts -> notCounted = counts.outside().stream()
+                            .<AdmittedPlan>map(AdmittedPlan.Pattern::new).toList();
+                }
+            }
+            // The partner is the other side's only at the lengths a run gets to the equality with
+            // it, so a string of this side is its value only if it is of one of those, and is shown
+            // to be none of its values at any other — where the run gets to the equality with it.
+            // Held as the numbers they are where the strings of every other length are the whole
+            // of the false side, which is then the runs of lengths outside them; made into strings
+            // otherwise, to be joined with what the false side holds.
+            LengthRuns heldTo = null;
+            LengthRuns lengths = strings.partnerHeldTo() instanceof LengthRuns runs ? runs : null;
+            if (lengths != null && strings.mayBe().isAny() && strings.reached() == null
+                    && !lengths.isEvery()) {
+                heldTo = lengths;
+            } else if (strings.partnerHeldTo() != null) {
+                PatternPlan held = strings.partnerHeldTo().strings();
+                PatternPlan outside = strings.partnerHeldTo().stringsOutside();
+                if (held == null || outside == null) {
+                    continue;
+                }
+                shown = AdmittedPlan.meeting(List.of(shown, new AdmittedPlan.Pattern(held)));
+                notShown = AdmittedPlan.meeting(List.of(notShown, new AdmittedPlan.Pattern(held)));
+                whenFalse = AdmittedPlan.joining(List.of(whenFalse, AdmittedPlan.meeting(
+                        List.of(new AdmittedPlan.Pattern(outside), reaching))));
+            }
+            asked.add(new Asked(each.by(), each.states(), each.term(),
+                    shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
+                    heldTo, strings.shownAt(), notReached, strings.operations(), notCounted));
+        }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
         for (PredicateReadings.Reading each : read.predicates()) {
@@ -251,6 +442,10 @@ public final class BehaviorSetStatements {
                     byTerm.computeIfAbsent(each.term(), _ -> new LinkedHashSet<>());
             plans.add(each.whenTrue());
             plans.add(each.whenFalse());
+            if (each.notShown() != null) {
+                plans.add(each.notShown());
+            }
+            plans.addAll(each.notCounted());
         }
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
         byTerm.forEach((term, plans) ->
@@ -330,9 +525,20 @@ public final class BehaviorSetStatements {
                                DeclarationNewtypes newtypes,
                                souther.compiler.coverage.Arrivals answering) {
         // Where the rule's subject stands, read where the rule stands.
-        PathResolution stands = each.reads().pathOf(each.subject(), newtypes);
-        if (!(stands instanceof PathResolution.At at)) {
-            return saidWithoutADenominator(each, stands, symbols, newtypes, answering);
+        // A call about the pieces of a string is about the string, which the reading of the call
+        // already found at a position.
+        if (each.ofPieces() instanceof PredicateReadings.OfPieces pieces) {
+            AdmittedPlan within =
+                    new AdmittedPlan.Pattern(PatternPlan.of(pieces.accepts().meaning()));
+            AdmittedPlan outside =
+                    new AdmittedPlan.Pattern(PatternPlan.notMatching(pieces.accepts().meaning()));
+            return new Outcome.OfADistinction(new Asked(each.origin(), pieces.statement(),
+                    new NumericTerm.ValueOf(pieces.at()),
+                    pieces.outside() ? outside : within, pieces.outside() ? within : outside));
+        }
+        ValuesAt stands = each.reads().pathOf(each.subject(), newtypes);
+        if (!(stands instanceof ValuesAt.At at)) {
+            return whereItsValueCameFrom(each, symbols, newtypes, answering);
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
         return switch (each.reading()) {
@@ -349,36 +555,18 @@ public final class BehaviorSetStatements {
     }
 
     /**
-     * What a rule whose subject stands at no one position comes to, and where to say it.
+     * What a rule whose subject stands at no one position comes to, and where to say it: read out
+     * of where its value came from, which holds the places the subject may stand at as well as
+     * those it was made out of.
      *
      * <p>Two ways for that, and they are different sentences. A value an operation made out of what
      * stands somewhere is about that value, and what the rule says about the values at the position
      * it came from would take reading the operation backwards. A value that <em>is</em> what stands
      * somewhere, in a block handed to more than one walk, is about the input at whichever of the
      * places it may stand at this run is — nothing was made out of it and there is no operation to
-     * read backwards.
-     *
-     * <p>Both are said at every place they may be about, and neither holds a position's classes
-     * open: what is missing is not a distinction the classes would have been composed from, it is
-     * which position the rule was of.
-     */
-    private static Outcome saidWithoutADenominator(PredicateReadings.Reading each,
-                                                   PathResolution stands, Symbols symbols,
-                                                   DeclarationNewtypes newtypes,
-                                                   souther.compiler.coverage.Arrivals answering) {
-        return switch (stands) {
-            case PathResolution.MayStandAt several ->
-                    saying(OwedWhereItCameFrom.ofSeveral(several));
-            case PathResolution.NotAPosition _, PathResolution.MadeOf _ ->
-                    whereItsValueCameFrom(each, symbols, newtypes, answering);
-            // The caller asks this only where the subject stands at no one place.
-            case PathResolution.At at -> throw new IllegalArgumentException(
-                    "a rule whose subject stands at " + at.path() + " has a denominator");
-        };
-    }
-
-    /**
-     * The same for a subject that is at no one position, read out of what its value is made of.
+     * read backwards. Both are said at every place they may be about, and neither holds a
+     * position's classes open: what is missing is not a distinction the classes would have been
+     * composed from, it is which position the rule was of.
      *
      * <p>Asked of {@link ValueOrigin}, which is where what an expression is made of is worked out
      * for every reader of a body, and read off the arms of it that say where a value came from
@@ -390,7 +578,7 @@ public final class BehaviorSetStatements {
      * and an author who wrote a rule about the joined string is owed the sentence at each — filed
      * at one of them, the other comes back as a position the model says nothing about.
      *
-     * <p>A subject that <em>is</em> what stands at more than one place is asked first, and of the
+     * <p>A subject that <em>is</em> what stands at more than one place is asked first, of the
      * reading rather than of what the value is made of. That is the other sentence — nothing was
      * made out of it and there is no operation to read backwards — and it is not the choice a body
      * writes: what may stand at several places is one name whose position differs from run to run,
@@ -482,9 +670,51 @@ public final class BehaviorSetStatements {
             case Realizations.NotBuilt it -> blocked.add(new ClassingBlocker(each.term(), each.by(),
                     new BlockReason.BehaviorDistinctionsTooCostly(
                             Classing.ofTheDistinctions(it.refused()))));
-            case Realizations.Exact built -> statements.add(new RuleEvidence.BySet(
-                    new SetStatement(each.term(), built.of(each.whenTrue()),
-                            built.of(each.whenFalse()), each.states(), each.by())));
+            case Realizations.Exact built -> {
+                LengthRuns held = each.heldTo() == null ? LengthRuns.EVERY : each.heldTo();
+                ValueSet holding = built.of(each.whenTrue());
+                List<ValuesWithin> notShown = new ArrayList<>();
+                if (each.notShown() != null && !built.of(each.notShown()).isEmpty()) {
+                    notShown.addAll(held.over(built.of(each.notShown())));
+                }
+                // The true side's strings of the lengths it is not shown at are open for the
+                // operations, beside those of no length the partner is held to.
+                LengthRuns shown = held;
+                if (each.shownAt() != null) {
+                    shown = held.and(each.shownAt());
+                    for (ValuesWithin other : each.shownAt().outside()) {
+                        for (ValuesWithin open : held.and(
+                                LengthRuns.of(LengthsPastTheWay.Lengths.of(other)))
+                                .over(holding)) {
+                            if (!open.shownToHoldNone()) {
+                                notShown.add(open);
+                            }
+                        }
+                    }
+                }
+                // The true side is its strings at each run of the lengths it is shown at.
+                List<ValuesWithin> trueRegions = shown.over(holding);
+                List<ValuesWithin> failing = new ArrayList<>();
+                ValueSet whenFalse = built.of(each.whenFalse());
+                if (each.heldTo() == null) {
+                    failing.add(ValuesWithin.all(whenFalse));
+                } else {
+                    for (ValuesWithin run : each.heldTo().outside()) {
+                        failing.add(run.over(ValueSet.ANY));
+                    }
+                }
+                // The strings of the lengths no run gets to the relation at, and those of the counts
+                // it does not: a length bounds none of the second, so they are the whole of each.
+                List<ValuesWithin> notReached = new ArrayList<>(each.notReached());
+                each.notCounted().forEach(
+                        plan -> notReached.add(ValuesWithin.all(built.of(plan))));
+                statements.add(new RuleEvidence.BySet(new SetStatement(each.term(),
+                        trueRegions.isEmpty()
+                                ? ValuesAtLengths.of(ValuesWithin.all(ValueSet.NONE))
+                                : new ValuesAtLengths(trueRegions),
+                        new ValuesAtLengths(failing),
+                        each.states(), each.by(), notShown, notReached, each.operations())));
+            }
         }
     }
 
@@ -541,7 +771,7 @@ public final class BehaviorSetStatements {
                                 && other.states(part)))
                         .toList();
                 if (!parts.isEmpty()) {
-                    left.add(new Unread(was.atom(), parts));
+                    left.add(new Unread(was.atom(), parts, was.stoppedFor()));
                 }
             }
             if (left.isEmpty()) {
@@ -558,7 +788,7 @@ public final class BehaviorSetStatements {
 
     /** One part of a condition that no reader answers for, and the parts of what it decides that
      *  the reading was left with — each read where it is written. */
-    private record Unread(Denotation atom, List<Denotation> parts) {}
+    private record Unread(Denotation atom, List<Denotation> parts, List<WhyUnread> stoppedFor) {}
 
     /** One fork that states a rule of its own, before any of its parts is asked whether another
      *  one's rule is what it states. */
@@ -610,11 +840,15 @@ public final class BehaviorSetStatements {
             // asked about, which is not what the fork turns on.
             List<Unread> unread = new ArrayList<>();
             for (ComparisonReadings.Atom atom : each.leftHere()) {
+                // A part the conditions before it keep from being evaluated is owed nothing: the
+                // fork is reached where it is not, and a question about what it would have said of
+                // a row has no row to be about.
                 List<Denotation> parts = ComparisonReadings.leftUnread(atom, read).stream()
                         .filter(part -> !dependencies.part(part.value(), part.at()))
+                        .filter(part -> each.mayEvaluate(part.value(), reading))
                         .toList();
                 if (!parts.isEmpty()) {
-                    unread.add(new Unread(atom.at(), parts));
+                    unread.add(new Unread(atom.at(), parts, atom.stoppedFor()));
                 }
             }
             if (unread.isEmpty()) {
@@ -680,16 +914,17 @@ public final class BehaviorSetStatements {
             // positions it names, and a term over a place nothing settled is a term at whichever
             // place a reader picked. Asked first, so a fork over such a part is filed at each of
             // them rather than at none — which is where the rule the author wrote would go.
-            if (part.at().pathOf(part.value(), newtypes)
-                    instanceof PathResolution.MayStandAt(var among)) {
-                among.forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at),
-                        new BlockReason.RuleAboutAnElementOfSeveralContainers()));
+            if (part.at().pathOf(part.value(), newtypes) instanceof ValuesAt.MayStandAt) {
+                part.at().cameFrom(part.value(), newtypes).places().forEach(at ->
+                        filed.putIfAbsent(FilingCoordinate.at(at),
+                                new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 continue;
             }
             GuardThresholds.Names names = GuardThresholds.namesIn(part.value(), part.at(),
                     symbols, newtypes, answering);
-            BlockReason.RuleReadingStopped why =
-                    UnreadComparison.notAboutOwnValues(names.origin());
+            BlockReason.RuleReadingStopped stopped = stoppedAt(each.stoppedFor());
+            BlockReason.RuleReadingStopped why = stopped != null ? stopped
+                    : UnreadComparison.notAboutOwnValues(names.origin());
             names.met().keySet().forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at), why));
             }
         }
@@ -698,11 +933,28 @@ public final class BehaviorSetStatements {
                 reaches.anchorOf(fork.occurrence().origin(), fork.at())), filed);
     }
 
+    /**
+     * What a reading of the comparison a part is the whole of stopped at, where it stopped at a
+     * figure or a step of its own — or null where it did not stop, or stopped at a part each place
+     * words for itself, which a reader is told by what the value is made of.
+     *
+     * <p>Said as the comparison says it ({@link Cutting#whatStopsSay}), so that a fork over a part
+     * a reading gave up is told the figure that stopped it and not that the rule is about a
+     * derived value, which is true of it whether or not the reading was made.
+     */
+    private static BlockReason.RuleReadingStopped stoppedAt(List<WhyUnread> stops) {
+        if (stops.isEmpty()) {
+            return null;
+        }
+        BlockReason.WhatItStatesIsNoLine said = Cutting.whatStopsSay(stops);
+        return said != null && Cutting.saysMoreThanAPartNotRead(said) ? said : null;
+    }
+
     /** Whether {@code part} names a position of the input, however the reading gets there. */
     private static boolean namesSomething(Denotation part, Symbols symbols,
                                           DeclarationNewtypes newtypes,
                                           souther.compiler.coverage.Arrivals answering) {
-        return part.at().pathOf(part.value(), newtypes) instanceof PathResolution.MayStandAt
+        return part.at().pathOf(part.value(), newtypes) instanceof ValuesAt.MayStandAt
                 || !GuardThresholds.namesIn(part.value(), part.at(), symbols, newtypes, answering)
                         .met().isEmpty();
     }

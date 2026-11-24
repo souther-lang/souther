@@ -785,9 +785,8 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     void andTheProgramSaysEveryWayThatKernelCanEndWithoutAValue() {
         CheckedProgram program = checked(ROUNDS);
 
-        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
-                program.kernel(Kernel.DECIMAL_ROUND).aborts().kinds(),
-                "Decimal.round aborts where the rounded value has no place at the scale asked");
+        assertTrue(program.kernel(Kernel.DECIMAL_ROUND).aborts().isEmpty(),
+                "Decimal.round answers a decimal for every number and every scale");
         assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
                 program.kernel(Kernel.INT_TRUNCATING_DIVIDE).aborts().kinds(),
                 "truncatingDivide answers a zero divisor as a case and aborts only on the one pair"

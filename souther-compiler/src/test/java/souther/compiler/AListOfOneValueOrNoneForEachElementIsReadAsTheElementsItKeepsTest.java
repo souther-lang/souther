@@ -78,9 +78,7 @@ class AListOfOneValueOrNoneForEachElementIsReadAsTheElementsItKeepsTest {
     private static List<String> notRead(String behavior) {
         Compilation compilation = Compilation.ofSource(HEAD + behavior, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
         List<String> said = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each :
                 AdequacyReport.of(compilation).modules().get(0).behaviors()) {
@@ -223,7 +221,7 @@ class AListOfOneValueOrNoneForEachElementIsReadAsTheElementsItKeepsTest {
         Compilation compilation = Compilation.ofSource(HEAD + leastOver("acts: List<Act>",
                 "List.flatMap(a -> datesOf(a), acts)"), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         JsonNode written = JsonMapper.builder().build().readTree(json);
@@ -279,8 +277,9 @@ class AListOfOneValueOrNoneForEachElementIsReadAsTheElementsItKeepsTest {
                         + "constant=-3, coefs={nums[*].n=1}], proposition=GT] by key)"
                         + " RULE_ABOUT_A_RUN"),
                 notRead(leastOfKept("p.n", "List.filter(p -> p.n > 3, nums)")));
-        assertEquals(List.of("least({1·n + 1 | nums[*]} kept by nums meeting Affine[form="
-                        + "LinearForm[constant=-3, coefs={nums[*].n=1}], proposition=GT] by key)"
+        // A constant added to every element is added to the end, which is the end of the place.
+        assertEquals(List.of("least(nums[*].n kept by nums meeting Affine[form=LinearForm["
+                        + "constant=-3, coefs={nums[*].n=1}], proposition=GT] by key)"
                         + " RULE_ABOUT_A_RUN"),
                 notRead(leastOfKept("p.n + 1", "List.filter(p -> p.n > 3, nums)")));
         // Kept by two statements one after the other is kept by both, which is no one statement
@@ -459,9 +458,6 @@ class AListOfOneValueOrNoneForEachElementIsReadAsTheElementsItKeepsTest {
                 + "\nexample leastOfTheCase\n" + leastOfTheCase + "\nexample leastDayOfA\n"
                 + leastDay, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
     }
 }

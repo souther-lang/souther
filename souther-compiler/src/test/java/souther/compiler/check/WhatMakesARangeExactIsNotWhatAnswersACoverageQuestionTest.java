@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ValueTransformation;
@@ -47,14 +49,14 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
     }
 
     private static FieldDomains read(String source, String type) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     /**
@@ -132,7 +134,18 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
      */
     @Test
     void aScaledBoundIsExact() {
-        assertEquals(EXACT_AND_ANSWERED, Answers.of("invariant said = value * 2 >= 4"));
+        assertEquals(EXACT_AND_ANSWERED, Answers.of("""
+                invariant said = value * 2 >= 4
+                    invariant ceiling = value <= 1000"""));
+    }
+
+    /**
+     * The same with nothing to hold the product to the numbers an {@code Int} holds: the product
+     * stops at the greatest {@code Int}, so the range up to it is not what the rule leaves.
+     */
+    @Test
+    void aScaledBoundWithNoCeilingIsNotExact() {
+        assertEquals(ANSWERED_AND_LOSSY, Answers.of("invariant said = value * 2 >= 4"));
     }
 
     /**
@@ -151,10 +164,13 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
     }
 
     /** A rule nothing took in is unanswered as well, which is the one row where the two agree that
-     *  something is missing — and they are answering different questions to get there. */
+     *  something is missing — and they are answering different questions to get there.
+     *
+     *  <p>And the operation stops a run at the least {@code Int}, whose absolute value is no
+     *  {@code Int}, which nothing here says the region of: a second cause beside the first. */
     @Test
     void aRuleNothingReadIsUnansweredAndLeavesTheRangeApproximate() {
-        assertEquals(UNANSWERED_AND_UNREPRESENTED,
+        assertEquals(new Answers(false, "Unrepresented, OperatorsNotShownToAnswer"),
                 Answers.of("invariant said = Int.abs(value) >= 2"));
     }
 
@@ -199,11 +215,14 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
 
                 data R = { n: Int }
                     invariant odd = n * n >= 4
+                    invariant range = n >= 1 && n <= 1000
                 """, "R");
         assertEquals("Unrepresented", named(onARecord.projection()));
 
         assertEquals(UNANSWERED_AND_UNREPRESENTED,
-                Answers.of("invariant odd = value * value >= 4"),
+                Answers.of("""
+                        invariant odd = value * value >= 4
+                            invariant range = value >= 1 && value <= 1000"""),
                 "and the same on a newtype");
     }
 
@@ -217,10 +236,11 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
     @Test
     void aConjunctTheBoundsDoNotHoldIsNotAnsweredForByTheOneBesideIt() {
         Answers apart = Answers.of("""
-                invariant a = value >= 1
+                invariant a = value >= 1 && value <= 1000
                     invariant b = value * value >= 4""");
         assertEquals(UNANSWERED_AND_UNREPRESENTED, apart);
-        assertEquals(apart, Answers.of("invariant c = value >= 1 && value * value >= 4"),
+        assertEquals(apart,
+                Answers.of("invariant c = value >= 1 && value <= 1000 && value * value >= 4"),
                 "and one rule written with `&&` says what the two written apart say");
     }
 
@@ -372,7 +392,7 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 module example.rooms
 
                 data Length = { a: Int, b: Int }
-                    invariant both = a >= 1 && b * b >= 4
+                    invariant both = a >= 1 && b >= 1 && b <= 1000 && b * b >= 4
                 """, "Length");
         assertEquals(List.of("b"), paths(together),
                 "`a >= 1` is in the bounds, so `a` is not what is missing from them");
@@ -382,7 +402,7 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
 
                 data Length = { a: Int, b: Int }
                     invariant one = a >= 1
-                    invariant two = b * b >= 4
+                    invariant two = b >= 1 && b <= 1000 && b * b >= 4
                 """, "Length");
         assertEquals(paths(together), paths(apart));
     }

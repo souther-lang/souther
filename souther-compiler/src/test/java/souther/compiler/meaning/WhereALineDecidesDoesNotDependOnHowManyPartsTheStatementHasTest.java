@@ -95,7 +95,7 @@ class WhereALineDecidesDoesNotDependOnHowManyPartsTheStatementHasTest {
 
         List<DecidingCase> cases = casesOf(stated);
         assertEquals(others.size(), cases.size(), cases::toString);
-        assertTrue(conditions(cases).stream().noneMatch(each -> each.key().contains("q")),
+        assertTrue(conditions(cases).stream().noneMatch(each -> each.spelledOut().contains("q")),
                 () -> "no case asks q: " + cases);
     }
 
@@ -141,7 +141,7 @@ class WhereALineDecidesDoesNotDependOnHowManyPartsTheStatementHasTest {
 
         assertEquals(1, cases.size(), cases::toString);
         assertEquals(List.of(new DecidingCase.Cases.NotTakenApart(
-                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached())),
                 notTakenApart(cases.getFirst().standsFor()), cases::toString);
     }
 
@@ -159,8 +159,8 @@ class WhereALineDecidesDoesNotDependOnHowManyPartsTheStatementHasTest {
 
     /** Where {@link #LINE} decides in {@code stated}. */
     static List<DecidingCase> casesOf(Proposition stated) {
-        for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated)) {
-            if (each.line().key().equals(LINE.key())) {
+        for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated, term -> false)) {
+            if (each.line().spelledOut().equals(LINE.spelledOut())) {
                 return each.cases();
             }
         }

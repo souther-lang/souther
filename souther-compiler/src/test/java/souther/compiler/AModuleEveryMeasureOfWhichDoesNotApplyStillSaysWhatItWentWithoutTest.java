@@ -54,8 +54,7 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1923"), compilation);
     }
 
     /** Every measure counted over the rows has nothing to be about, which is the case this is for. */

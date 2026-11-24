@@ -133,14 +133,15 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
 
     private static OnTheWay.TakenIn awayFrom(NumericTerm.FromOnePosition term, long value) {
         return new OnTheWay.TakenIn(WHERE,
-                new RowDemand.Relational(new TakenConstraint.AwayFrom(term, Count.of(value))));
+                new RowDemand.Relational(new TakenConstraint.AwayFrom(term, Count.of(value))),
+                NamedElements.NONE);
     }
 
     private static OnTheWay.TakenIn overAForm(NumericTerm.FromOnePosition one,
                                               NumericTerm.FromOnePosition other) {
         return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(new TakenConstraint.Affine(
                 LinearForm.<NumericTerm>sumOfAtoms(one, other),
-                Rel.GE)));
+                Rel.GE)), NamedElements.NONE);
     }
 
     private static NumbersAskedFor asked(NumericDomain.Bounds leaves, OnTheWay.TakenIn... cuts) {
@@ -218,7 +219,8 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
     @Test
     void aFormOfOneTermIsAlreadyWhatTheRegionLeaves() {
         OnTheWay.TakenIn ofOne = new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
-                new TakenConstraint.Affine(LinearForm.<NumericTerm>atom(LENGTH), Rel.GE)));
+                new TakenConstraint.Affine(LinearForm.<NumericTerm>atom(LENGTH), Rel.GE)),
+                NamedElements.NONE);
         NumbersAskedFor asked = asked(
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(2)), null), ofOne);
 

@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -134,11 +135,20 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
                 () -> "and most places have exactly one: " + byWays);
     }
 
+    /** Sources, and the errors they are written to be refused with, which is none for a source
+     *  written to compile. */
+    private record Written(List<String> sources, List<String> refusedWith) {
+
+        static Written clean(String source) {
+            return new Written(List.of(source), List.of());
+        }
+    }
+
     /** The addresses of every place of every body of {@code source}, as text, from a fresh
      *  compile. */
     private static Set<String> namesIn(String source) {
         Set<String> out = new LinkedHashSet<>();
-        for (Map.Entry<String, Core> body : bodiesOf(List.of(List.of(source)))) {
+        for (Map.Entry<String, Core> body : bodiesOf(List.of(Written.clean(source)))) {
             NodeAddresses.of(body.getKey(), body.getValue()).all().values()
                     .forEach(at -> out.add(at.toString()));
         }
@@ -146,18 +156,19 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
     }
 
     private static List<Map.Entry<String, Core>> everyBody() {
-        List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
-        sources.add(List.of(SPLICED));
-        sources.add(List.of(NESTED));
-        return bodiesOf(sources);
+        List<Written> models = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus ->
+                models.add(new Written(corpus.sources(), corpus.refusedWith())));
+        models.add(Written.clean(SPLICED));
+        models.add(Written.clean(NESTED));
+        return bodiesOf(models);
     }
 
-    private static List<Map.Entry<String, Core>> bodiesOf(List<List<String>> sources) {
+    private static List<Map.Entry<String, Core>> bodiesOf(List<Written> models) {
         List<Map.Entry<String, Core>> out = new ArrayList<>();
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (Written each : models) {
+            Compilation compilation = Compilation.ofSources(each.sources(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(each.refusedWith(), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

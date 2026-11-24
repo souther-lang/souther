@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.Compiler;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Bodies;
 
 import java.util.Map;
@@ -34,7 +34,7 @@ class AValueBuiltByTwoBehaviorsIsTypedOnceTest {
 
     @Test
     void bothBehaviorsReadTheOneTemplate() {
-        Map<String, AnalysisBody> analysed = Compiler.compiled(MODEL, "m").db()
+        Map<String, AnalysisBody> analysed = ACompiledModel.answered(MODEL).db()
                 .ask(new Bodies.Checked("m")).value().analysisBodies();
 
         AnalysisBody f = analysed.get("f");

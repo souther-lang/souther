@@ -5,6 +5,7 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
@@ -21,6 +22,7 @@ import souther.compiler.check.DeclaredLine;
 import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.StatementNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -37,10 +39,12 @@ import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.ConditionsStoppedAtAFigure;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowWitnesses;
+import souther.compiler.query.ToBeChangedFirst;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.Citation;
@@ -111,7 +115,7 @@ final class AReportOfOneBorder {
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
                                 java.util.Optional.of(new ClauseName("cap")))), 0),
-                        0)),
+                        StatementNumber.of(0))),
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
@@ -140,7 +144,8 @@ final class AReportOfOneBorder {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY),
+                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY,
+                        Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
@@ -166,7 +171,7 @@ final class AReportOfOneBorder {
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
                                 java.util.Optional.of(new ClauseName("cap")))), 0),
-                        0)),
+                        StatementNumber.of(0))),
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
@@ -220,7 +225,7 @@ final class AReportOfOneBorder {
             items.put(point, new ItemAssessment.Owed(border.demand(point).criterion(),
                     coverage.apply(border.roleOf(point)),
                     ItemAssessment.WritabilityProjection.PROVEN,
-                    souther.compiler.query.SearchOutcomes.none()));
+                    souther.compiler.query.SearchOutcomes.none(), false));
         }
         // Every line this fixture builds is on one position, which has no line one step from it:
         // weighed one less it is nothing, and weighed one more it is the same line. So there is
@@ -318,7 +323,8 @@ final class AReportOfOneBorder {
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
                 java.util.Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE,
-                Map.of(), Map.of());
+                Map.of(), List.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of(),
+                ConditionsStoppedAtAFigure.Stopped.NOTHING, ToBeChangedFirst.Left.NOTHING);
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),
@@ -327,7 +333,8 @@ final class AReportOfOneBorder {
                         new AdequacyReport.DeclarationsShown(
                                 new Adequacy.DeclaredBoundaries(List.of(), List.of(), List.of(),
                                         Map.of()),
-                                AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()))))
+                                AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()),
+                        WhereTheReadingsDiffer.NONE)))
                 .adequacy();
     }
 

@@ -1,27 +1,46 @@
 package souther.compiler.inputs;
 
+import souther.compiler.abort.GetsPast;
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.TypeView;
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.ARounding;
+import souther.compiler.check.Choice;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.Location;
+import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ValueStanding;
+import souther.compiler.check.WholeRounding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -35,6 +54,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * What a closure computed from one element of a walk, for a closure whose answer is not a place of
@@ -79,14 +99,74 @@ public sealed interface ElementValue {
      */
     default boolean readsThePosition() {
         return switch (this) {
-            case Affine _ -> false;
-            case ByPosition _, Indexed _ -> true;
-            case Choose choice -> choice.whenSet().readsThePosition()
+            case Affine _, Multilinear _ -> false;
+            case Indexed _ -> true;
+            case Choose choice -> choice.test().readsThePosition()
+                    || choice.whenHolds().readsThePosition()
                     || choice.otherwise().readsThePosition();
             case OfItsCase choice -> (choice.rest() != null && choice.rest().readsThePosition())
                     || choice.arms().stream().anyMatch(arm -> arm.value().readsThePosition());
             case SumOfChoices sum -> sum.besides().readsThePosition()
                     || sum.chosen().keySet().stream().anyMatch(ElementValue::readsThePosition);
+        };
+    }
+
+    /**
+     * Whether this comes to a number written out for every element, chosen only by tests of what
+     * the element holds and cases of values of it, and reads no number of the element beside
+     * them.
+     *
+     * <p>A total of such numbers counts the elements meeting each choice, weighed by the number
+     * chosen, so it is a count of what meets a condition and no run of values. A test of where the
+     * element stands is of the row's order and of nothing the element meets.
+     */
+    default boolean weighsOnlyWhatTheElementMeets() {
+        return switch (this) {
+            case Affine form -> form.form().coefs().isEmpty();
+            case Choose choice -> !choice.test().readsThePosition()
+                    && choice.whenHolds().weighsOnlyWhatTheElementMeets()
+                    && choice.otherwise().weighsOnlyWhatTheElementMeets();
+            case OfItsCase choice -> (choice.rest() == null
+                    || choice.rest().weighsOnlyWhatTheElementMeets())
+                    && choice.arms().stream()
+                            .allMatch(arm -> arm.value().weighsOnlyWhatTheElementMeets());
+            case SumOfChoices sum -> sum.besides().weighsOnlyWhatTheElementMeets()
+                    && sum.chosen().keySet().stream()
+                            .allMatch(ElementValue::weighsOnlyWhatTheElementMeets);
+            case Indexed _, Multilinear _ -> false;
+        };
+    }
+
+    /**
+     * What this comes to for the element standing at {@code position}, as a form of its fields —
+     * or null where it is no form there: where it turns on a flag of the element or the case of a
+     * value of it, which no form of the fields says, where it multiplies fields or rounds, which a
+     * fixed position leaves as it is, or where the exact arithmetic cannot hold it.
+     *
+     * <p>The position is fixed, so every choice made by it is made and every number made of it is
+     * one number: {@code (if i mod 2 = 0 then 1 else 3)·c} is {@code c} at nought and {@code 3·c}
+     * at one, and {@code (i + 2)·c} is {@code 2·c} at nought.
+     */
+    default LinearForm<ElementProjection> atPosition(long position) {
+        return switch (this) {
+            case Affine form -> form.form();
+            case Indexed form -> form.perPosition().form().times(ExactRatio.of(position))
+                    .flatMap(moved -> moved.plus(form.base().form())).orNull();
+            case Choose choice when choice.test() instanceof PositionTest test ->
+                    (test.holdsOf(position) ? choice.whenHolds() : choice.otherwise())
+                            .atPosition(position);
+            case Choose _, OfItsCase _, Multilinear _ -> null;
+            case SumOfChoices sum -> {
+                LinearForm<ElementProjection> total = sum.besides().atPosition(position);
+                for (Map.Entry<ElementValue, ExactRatio> each : sum.chosen().entrySet()) {
+                    LinearForm<ElementProjection> sofar = total;
+                    LinearForm<ElementProjection> one = sofar == null ? null
+                            : each.getKey().atPosition(position);
+                    total = one == null ? null : one.times(each.getValue())
+                            .flatMap(sofar::plus).orNull();
+                }
+                yield total;
+            }
         };
     }
 
@@ -114,6 +194,9 @@ public sealed interface ElementValue {
 
         /** Whether the flag at {@code field} is set, or null where the element holds none there. */
         Boolean flag(ElementProjection field);
+
+        /** The string at {@code field}, or null where the element holds none there. */
+        String text(ElementProjection field);
 
         /**
          * Which case the value at {@code subject} is, as the test of whether it is one of the cases
@@ -157,14 +240,9 @@ public sealed interface ElementValue {
         return switch (one) {
             case Form form -> added(form, other);
             case Choose choice -> {
-                ElementValue yes = plus(choice.whenSet(), other);
-                ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
-                yield no == null ? null : choosing(choice.flag(), yes, no);
-            }
-            case ByPosition choice -> {
                 ElementValue yes = plus(choice.whenHolds(), other);
                 ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
-                yield no == null ? null : choosingByPosition(choice.test(), yes, no);
+                yield no == null ? null : choosing(choice.test(), yes, no);
             }
             case OfItsCase choice -> {
                 List<OfItsCase.Arm> arms = new ArrayList<>();
@@ -181,7 +259,37 @@ public sealed interface ElementValue {
             }
             case SumOfChoices sum -> added(sum.besides(), other) instanceof Form besides
                     ? new SumOfChoices(besides, sum.chosen()) : null;
+            // A form of the fields is a sum of products of one field each. One made of the
+            // position is no product of fields.
+            case Multilinear products -> {
+                LinearForm<Monomial> asProducts = other instanceof Affine form
+                        ? asProducts(form) : null;
+                yield asProducts != null && products.form().plus(asProducts)
+                        instanceof ExactAnswer.Held<LinearForm<Monomial>>(var summed)
+                        ? multilinear(summed) : null;
+            }
         };
+    }
+
+    /**
+     * What {@code one} and {@code other} come to added, for each element; or null where this holds
+     * no value of it.
+     *
+     * <p>A form is added as {@link #plus} adds one, and two sums of products are one sum of all of
+     * their products. Two choices are not added here: each is made for the element on its own, and
+     * a sum of them is what {@link SumOfChoices} holds, put together where the choices are read.
+     */
+    static ElementValue sumOf(ElementValue one, ElementValue other) {
+        if (other instanceof Form form) {
+            return plus(one, form);
+        }
+        if (one instanceof Form form) {
+            return plus(other, form);
+        }
+        return one instanceof Multilinear first && other instanceof Multilinear second
+                && first.form().plus(second.form())
+                        instanceof ExactAnswer.Held<LinearForm<Monomial>>(var summed)
+                ? multilinear(summed) : null;
     }
 
     /** What {@code value} comes to weighed by {@code weight}, for each element, pushed into every
@@ -191,15 +299,13 @@ public sealed interface ElementValue {
             case Affine form -> form.form().times(weight)
                     instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var weighed)
                     ? new Affine(weighed) : null;
+            case Multilinear products -> products.form().times(weight)
+                    instanceof ExactAnswer.Held<LinearForm<Monomial>>(var weighed)
+                    ? multilinear(weighed) : null;
             case Choose choice -> {
-                ElementValue yes = times(choice.whenSet(), weight);
-                ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
-                yield no == null ? null : choosing(choice.flag(), yes, no);
-            }
-            case ByPosition choice -> {
                 ElementValue yes = times(choice.whenHolds(), weight);
                 ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
-                yield no == null ? null : choosingByPosition(choice.test(), yes, no);
+                yield no == null ? null : choosing(choice.test(), yes, no);
             }
             case Indexed indexed -> times(indexed.perPosition(), weight) instanceof Affine per
                     && times(indexed.base(), weight) instanceof Affine base
@@ -243,7 +349,7 @@ public sealed interface ElementValue {
      *
      * <p>Each choice is made for the element on its own, so the sum is as large as its choices
      * together and not as the number of ways they can fall out together. Two or more, and each a
-     * choice ({@link Choose}, {@link OfItsCase}, {@link ByPosition}): one choice takes the form into
+     * choice ({@link Choose}, {@link OfItsCase}): one choice takes the form into
      * its answers ({@link #plus}), and a form is no choice.
      *
      * <p>One value however its terms were written. The choices are a mapping, so two of these are
@@ -325,14 +431,14 @@ public sealed interface ElementValue {
     /** Whether {@code value} is a choice, which a form is not and a sum of choices is several of. */
     private static boolean isAChoice(ElementValue value) {
         return switch (value) {
-            case Choose _, OfItsCase _, ByPosition _ -> true;
-            case Affine _, Indexed _, SumOfChoices _ -> false;
+            case Choose _, OfItsCase _ -> true;
+            case Affine _, Indexed _, SumOfChoices _, Multilinear _ -> false;
         };
     }
 
     /**
      * {@code constant + Σ weight·place + Σ weight·choice}, each of {@code chosen} a choice
-     * ({@link Choose}, {@link OfItsCase}, {@link ByPosition}) met once; or null where the exact
+     * ({@link Choose}, {@link OfItsCase}) met once; or null where the exact
      * arithmetic cannot hold it.
      *
      * <p>Without a choice it is a form; with one, that choice with the form in its answers; with
@@ -357,15 +463,35 @@ public sealed interface ElementValue {
     }
 
     /**
-     * The choice of {@code whenSet} or {@code otherwise} by {@code flag}, with a choice between
-     * two answers that are one answer being that answer.
+     * The choice of {@code whenHolds} or {@code otherwise} by {@code test}, with a choice between
+     * two answers that are one answer being that answer, and a test that holds of every element
+     * or of none ({@link Test#decided}) choosing the one answer every element takes.
      *
      * <p>The one way a choice is made, so that what a choice comes to is not two values by whether
-     * its flag was asked about. A flag the answer does not turn on is no field the number reads.
+     * its test was asked about. A test the answer does not turn on is no field the number reads,
+     * and an answer that does not turn on the position claims nothing about the order of the
+     * elements, so a run of it is owed no more than any other run is.
      */
-    static ElementValue choosing(ElementProjection flag, ElementValue whenSet,
-                                 ElementValue otherwise) {
-        return whenSet.equals(otherwise) ? whenSet : new Choose(flag, whenSet, otherwise);
+    static ElementValue choosing(Test test, ElementValue whenHolds, ElementValue otherwise) {
+        if (whenHolds.equals(otherwise)) {
+            return whenHolds;
+        }
+        // A test is held the way it is stated, and its denial as the test with the answers the
+        // other way round: `if code /= "A" then 0 else v` is `if code == "A" then v else 0`.
+        Test stated = switch (test) {
+            case Test.Written(var place, var written, boolean equal) when !equal ->
+                    new Test.Written(place, written, true);
+            case Test.Compared(var form, Rel relation)
+                    when relation == Rel.LT || relation == Rel.LE || relation == Rel.NE ->
+                    new Test.Compared(form, relation.denied());
+            case Test.Flag _, Test.Written _, Test.Compared _, PositionTest _ -> null;
+        };
+        if (stated != null) {
+            return choosing(stated, otherwise, whenHolds);
+        }
+        Boolean decided = test.decided();
+        return decided == null ? new Choose(test, whenHolds, otherwise)
+                : decided ? whenHolds : otherwise;
     }
 
     /** {@code const + Σ coef·field}. */
@@ -418,73 +544,169 @@ public sealed interface ElementValue {
         }
     }
 
-    /** {@code whenSet} where the element's flag {@code flag} is set, and {@code otherwise} where it
-     *  is not. */
-    record Choose(ElementProjection flag, ElementValue whenSet, ElementValue otherwise)
-            implements ElementValue {
+    /**
+     * What a choice of an element is made by: a flag it holds, a form of its fields set against
+     * nought, or where it stands ({@link PositionTest}).
+     *
+     * <p>Where it stands is no field of the element. It is the element's place among the others
+     * in the container the walk was handed, so which answer an element takes by it is fixed by the
+     * row and not by any value the element holds — and two elements holding the same values may
+     * take different answers.
+     */
+    sealed interface Test permits Test.Flag, Test.Compared, Test.Written, PositionTest {
 
-        public Choose {
-            if (flag == null || whenSet == null || otherwise == null) {
-                throw new IllegalArgumentException("a choice is of a flag and both of its answers");
+        /** The flag at {@code place} is set. */
+        record Flag(ElementProjection place) implements Test {
+
+            public Flag {
+                Objects.requireNonNull(place, "a flag stands somewhere");
+            }
+
+            @Override
+            public String toString() {
+                return place.toString();
             }
         }
 
-        @Override
-        public Set<ElementProjection> reads() {
-            Set<ElementProjection> all = new LinkedHashSet<>();
-            all.add(flag);
-            all.addAll(whenSet.reads());
-            all.addAll(otherwise.reads());
-            return Set.copyOf(all);
+        /**
+         * {@code form} stands to nought as {@code relation} says. Made by {@link #compared}, so
+         * one comparison is one test however its sides were written.
+         */
+        record Compared(LinearForm<ElementProjection> form, Rel relation) implements Test {
+
+            public Compared {
+                Objects.requireNonNull(form, "a comparison is of a form");
+                Objects.requireNonNull(relation, "a form is compared some way");
+            }
+
+            @Override
+            public String toString() {
+                return new Affine(form) + " " + relation.written() + " 0";
+            }
         }
 
-        @Override
-        public ExactAnswer<ExactRatio> at(OneElement element) {
-            Boolean set = element.flag(flag);
-            return set == null ? null : (set ? whenSet : otherwise).at(element);
+        /**
+         * The string at {@code place} is the one {@code written} where {@code equal}, and is not
+         * where it is not: equal as the language's {@code ==} is, the same scalar values in the
+         * same order.
+         */
+        record Written(ElementProjection place, String written, boolean equal) implements Test {
+
+            public Written {
+                Objects.requireNonNull(place, "a string stands somewhere");
+                Objects.requireNonNull(written, "a string is compared with one written out");
+            }
+
+            @Override
+            public String toString() {
+                return place + (equal ? " == " : " /= ") + CstLexer.literalOf(written);
+            }
         }
 
-        /** A choice is made of the element and is not a field of it. */
-        @Override
-        public ElementProjection asAPlace() {
-            return null;
+        /**
+         * {@code form} set against nought by {@code relation}, scaled so the weight of the field
+         * whose spelling sorts first is one, the relation turned where that took a negative scale;
+         * or null where the exact arithmetic cannot hold it. {@code 10 < price},
+         * {@code price - 10 > 0} and {@code 2·price > 20} are one test.
+         */
+        static Compared compared(LinearForm<ElementProjection> form, Rel relation) {
+            ElementProjection first = form.coefs().keySet().stream()
+                    .min(Comparator.comparing(ElementProjection::toString)).orElse(null);
+            if (first == null) {
+                return new Compared(form, relation);
+            }
+            ExactRatio lead = form.coefs().get(first);
+            if (!(ExactRatio.ONE.dividedBy(lead.abs()) instanceof ExactAnswer.Held<ExactRatio>(
+                    ExactRatio per))) {
+                return null;
+            }
+            ExactRatio by = lead.signum() < 0 ? per.negated() : per;
+            return form.times(by) instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(
+                    var scaled) ? new Compared(scaled, lead.signum() < 0 ? relation.turned()
+                            : relation) : null;
         }
 
-        @Override
-        public String toString() {
-            return "if " + flag + " then " + whenSet + " else " + otherwise;
+        /** The fields of the element this reads. */
+        default Set<ElementProjection> reads() {
+            return switch (this) {
+                case Flag flag -> Set.of(flag.place());
+                case Written written -> Set.of(written.place());
+                case Compared compared -> compared.form().coefs().keySet();
+                case PositionTest _ -> Set.of();
+            };
+        }
+
+        /** Whether this is of where the element stands. */
+        default boolean readsThePosition() {
+            return this instanceof PositionTest;
+        }
+
+        /**
+         * Whether this holds of every element there can be, or of none — or null where it turns
+         * on the element.
+         */
+        default Boolean decided() {
+            return switch (this) {
+                case Flag _, Written _ -> null;
+                case Compared(var form, Rel relation) -> form.coefs().isEmpty()
+                        ? relation.holds(form.constant().signum()) : null;
+                case PositionTest test -> test.holdsOfEveryPosition() ? Boolean.TRUE
+                        : test.holdsOfNoPosition() ? Boolean.FALSE : null;
+            };
+        }
+
+        /**
+         * Whether this holds of {@code element}, or null where the element holds nothing at a
+         * place it reads.
+         */
+        default ExactAnswer<Boolean> of(OneElement element) {
+            return switch (this) {
+                case Flag flag -> {
+                    Boolean set = element.flag(flag.place());
+                    yield set == null ? null : ExactAnswer.held(set);
+                }
+                case Written written -> {
+                    String text = element.text(written.place());
+                    yield text == null ? null
+                            : ExactAnswer.held(text.equals(written.written()) == written.equal());
+                }
+                case Compared(var form, Rel relation) -> {
+                    ExactAnswer<ExactRatio> value = new Affine(form).at(element);
+                    yield value == null ? null : value.map(v -> relation.holds(v.signum()));
+                }
+                case PositionTest test -> ExactAnswer.held(test.holdsOf(element.position()));
+            };
         }
     }
 
-    /**
-     * {@code whenHolds} for an element whose position {@code test} holds of, and {@code otherwise}
-     * for the rest.
-     *
-     * <p>The position is no field of the element. It is where the element stands among the others
-     * in the container the walk was handed, so which answer an element takes is fixed by the row
-     * and not by any value the element holds — and two elements holding the same values may take
-     * different answers.
-     */
-    record ByPosition(PositionTest test, ElementValue whenHolds, ElementValue otherwise)
+    /** {@code whenHolds} for an element {@code test} holds of, and {@code otherwise} for the
+     *  rest. Made by {@link #choosing}. */
+    record Choose(Test test, ElementValue whenHolds, ElementValue otherwise)
             implements ElementValue {
 
-        public ByPosition {
+        public Choose {
             if (test == null || whenHolds == null || otherwise == null) {
-                throw new IllegalArgumentException("a choice by position is of a test of it and"
-                        + " both of its answers");
+                throw new IllegalArgumentException("a choice is of a test and both of its answers");
             }
         }
 
         @Override
         public Set<ElementProjection> reads() {
-            Set<ElementProjection> all = new LinkedHashSet<>(whenHolds.reads());
+            Set<ElementProjection> all = new LinkedHashSet<>(test.reads());
+            all.addAll(whenHolds.reads());
             all.addAll(otherwise.reads());
             return Set.copyOf(all);
         }
 
         @Override
         public ExactAnswer<ExactRatio> at(OneElement element) {
-            return (test.holdsOf(element.position()) ? whenHolds : otherwise).at(element);
+            ExactAnswer<Boolean> holds = test.of(element);
+            return switch (holds) {
+                case null -> null;
+                case ExactAnswer.Held<Boolean>(Boolean yes) ->
+                        (yes ? whenHolds : otherwise).at(element);
+                case ExactAnswer.Unheld<Boolean>(var why) -> ExactAnswer.unheld(why);
+            };
         }
 
         /** A choice is made of the element and is not a field of it. */
@@ -600,6 +822,348 @@ public sealed interface ElementValue {
     }
 
     /**
+     * One term of a sum of products: fields of the element multiplied together, no two of them one
+     * field — {@code q·p·d} — or a rounding of a number made of the element, standing alone.
+     *
+     * <p>A set, so the order the factors were written in is no part of it. A field times itself is
+     * a square, which fixing every other field leaves no form of, and is not one of these. A
+     * rounding is multiplied by nothing: what it comes to is a step of what it rounds, and a step
+     * times a field is no step of anything.
+     *
+     * @param fields   the factors; a product of one field is that field. None where this is a
+     *                 rounding
+     * @param rounding the rounding this is, or null where it is a product of fields
+     */
+    public record Monomial(Set<ElementProjection> fields, Rounding rounding) {
+
+        public Monomial {
+            if (fields == null || fields.isEmpty() == (rounding == null)) {
+                throw new IllegalArgumentException("a term of a sum of products is fields of the"
+                        + " element multiplied, or a rounding alone");
+            }
+            fields = Set.copyOf(fields);
+        }
+
+        /** The product of {@code fields}. */
+        public static Monomial of(Set<ElementProjection> fields) {
+            return new Monomial(fields, null);
+        }
+
+        /** {@code rounding}, as a term. */
+        public static Monomial of(Rounding rounding) {
+            return new Monomial(Set.of(), rounding);
+        }
+
+        /** The field this is, where it is one field and nothing made of it, or null. */
+        ElementProjection asAField() {
+            return fields.size() == 1 ? fields.iterator().next() : null;
+        }
+
+        /** Every field of the element this reads, a rounding reading what it rounds. */
+        public Set<ElementProjection> reads() {
+            return rounding == null ? fields : rounding.inner().reads();
+        }
+
+        /** The product of this and {@code other}, or null where the two share a field and the
+         *  product is a square of it, or where either is a rounding. */
+        Monomial times(Monomial other) {
+            if (rounding != null || other.rounding() != null) {
+                return null;
+            }
+            Set<ElementProjection> all = new LinkedHashSet<>(fields);
+            for (ElementProjection each : other.fields()) {
+                if (!all.add(each)) {
+                    return null;
+                }
+            }
+            return of(all);
+        }
+
+        /** What this comes to for {@code element}, or null where it holds no number this needs. */
+        ExactAnswer<ExactRatio> at(OneElement element) {
+            if (rounding != null) {
+                return rounding.at(element);
+            }
+            ExactAnswer<ExactRatio> product = ExactAnswer.held(ExactRatio.ONE);
+            for (ElementProjection field : fields) {
+                ExactRatio held = element.number(field);
+                if (held == null) {
+                    return null;
+                }
+                product = product.flatMap(sofar -> sofar.times(held));
+            }
+            return product;
+        }
+
+        @Override
+        public String toString() {
+            return rounding != null ? rounding.toString()
+                    : fields.stream().map(ElementProjection::toString).sorted()
+                            .collect(Collectors.joining("·"));
+        }
+    }
+
+    /**
+     * A number made of the element, rounded to a whole multiple of ten to the minus
+     * {@code scale} the way {@code way} says — what {@code Decimal.round(scale, mode, x)} answers
+     * of the element, read off the law the library states of the operation.
+     *
+     * @param scale how many places the number keeps; below nought, how many it rounds off before
+     *              the point. One the run time has room to round at, since a rounding at another
+     *              is written by no run ({@link ARounding#hasRoomAtAScale})
+     * @param way   how it is rounded
+     * @param inner what is rounded
+     * @param stepsOf the operation whose step of a coarser order this is, where it is the floor of
+     *              a count over the unit that operation declares ({@code CountsTheWholeUnitsOf});
+     *              null for a rounding of a decimal
+     */
+    public record Rounding(BigInteger scale, WholeRounding way, ElementValue inner,
+                           ValueName.Stdlib stepsOf) {
+
+        public Rounding {
+            Objects.requireNonNull(scale, "a number is rounded at a scale");
+            Objects.requireNonNull(way, "some way");
+            Objects.requireNonNull(inner, "and a number is rounded");
+            if (!ARounding.hasRoomAtAScale(scale)) {
+                throw new IllegalArgumentException("the run time has no room to round at " + scale);
+            }
+            if (stepsOf != null && (scale.signum() != 0 || way != WholeRounding.FLOOR)) {
+                throw new IllegalArgumentException("the step of a coarser order is the floor of a"
+                        + " count, at the scale of whole numbers: " + stepsOf);
+            }
+        }
+
+        /** A rounding of a decimal, which is the step of no order. */
+        public Rounding(BigInteger scale, WholeRounding way, ElementValue inner) {
+            this(scale, way, inner, null);
+        }
+
+        /** Ten to the {@code scale}, held as its exponents: how many of the steps this rounds to
+         *  make one. */
+        public ExactRatio stepsInOne() {
+            return ExactRatio.tenTo(scale.longValueExact());
+        }
+
+        /** What this comes to for {@code element}, or null where it holds no number this needs. */
+        ExactAnswer<ExactRatio> at(OneElement element) {
+            ExactAnswer<ExactRatio> rounded = inner.at(element);
+            if (rounded == null) {
+                return null;
+            }
+            ExactRatio steps = stepsInOne();
+            return rounded.flatMap(value -> value.times(steps).flatMap(scaled -> {
+                // A number on a step rounds to itself, and its steps are not written out to say so.
+                if (scaled.isWhole()) {
+                    return ExactAnswer.held(value);
+                }
+                BigInteger whole = way.of(scaled);
+                return whole == null ? ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER)
+                        : ExactRatio.of(whole).dividedBy(steps);
+            }));
+        }
+
+        @Override
+        public String toString() {
+            return stepsOf != null ? stepsOf.qualified() + "(" + inner + ")"
+                    : "round(" + scale + ", " + way + ", " + inner + ")";
+        }
+    }
+
+    /**
+     * A sum of products of fields of the element and of roundings of numbers made of it, each at
+     * its weight, and a constant beside: {@code q·p − q·p·d}, or
+     * {@code round(2, HALF_UP, q·p·(1 − d)) − 0.6·round(2, HALF_UP, q·p)}.
+     *
+     * <p>The number a closure makes of an element by multiplying its fields, or by rounding what
+     * it made of them. A product is no form of the fields, but it is linear in each field taken
+     * alone: with every other field fixed it is a form of the one left, a rounding being taken as
+     * the number it rounds ({@link ElementValue#solvedThrough}), so a total of it is reached by
+     * fixing all of an element's fields but one and solving for that one, as a total of a form is.
+     *
+     * <p>One value however it was written. The terms are a mapping to their weights, so
+     * {@code q·p·(1 − d)} and {@code p·q − d·q·p} are one value, and the arithmetic that adds and
+     * scales them is {@link AffineForms}'s.
+     *
+     * <p>The value of an element wherever working it out answers, and only that. Two writings of
+     * one product stop on different elements — {@code (a·b)·c} stops where {@code a·b} is past a
+     * long and {@code a·(b·c)} does not when {@code c} is nought — and that is told of the
+     * operators as they were written, and a row is taken to stand where it was run and answered.
+     * Where both answer they answer this.
+     *
+     * @param form each term at its weight, at least one of them no single field: a product of two
+     *             fields or more, or a rounding
+     */
+    record Multilinear(LinearForm<Monomial> form) implements ElementValue {
+
+        public Multilinear {
+            if (form == null || form.coefs().keySet().stream()
+                    .allMatch(term -> term.asAField() != null)) {
+                throw new IllegalArgumentException("a sum of products multiplies two fields or"
+                        + " rounds somewhere, or it is a form: " + form);
+            }
+        }
+
+        @Override
+        public Set<ElementProjection> reads() {
+            Set<ElementProjection> all = new LinkedHashSet<>();
+            form.coefs().keySet().forEach(term -> all.addAll(term.reads()));
+            return Set.copyOf(all);
+        }
+
+        @Override
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            ExactAnswer<ExactRatio> total = ExactAnswer.held(form.constant());
+            for (Map.Entry<Monomial, ExactRatio> each : form.coefs().entrySet()) {
+                ExactAnswer<ExactRatio> term = each.getKey().at(element);
+                if (term == null) {
+                    return null;
+                }
+                ExactAnswer<ExactRatio> one = term.flatMap(made -> made.times(each.getValue()));
+                total = total.flatMap(sofar -> one.flatMap(sofar::plus));
+            }
+            return total;
+        }
+
+        /** Whether this rounds anywhere. */
+        public boolean rounds() {
+            return form.coefs().keySet().stream().anyMatch(term -> term.rounding() != null);
+        }
+
+        /** A sum of products is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            List<String> terms = new ArrayList<>();
+            form.coefs().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparing(Monomial::toString)))
+                    .forEach(each -> terms.add(each.getValue() + "·" + each.getKey()));
+            terms.add(form.constant().toString());
+            return String.join(" + ", terms);
+        }
+    }
+
+    /**
+     * What a total of {@code form} is solved for {@code free} through, with every other field at
+     * the number {@code fixed} holds of it: the sum of products as a form of {@code free}, with a
+     * rounding of a number that reads {@code free} taken as the number it rounds — or null where
+     * {@code fixed} holds no number at a field the sum reads, a rounding rounds what is no form or
+     * sum of products, or the exact arithmetic cannot hold one.
+     *
+     * <p>A rounding answers what it rounds wherever that lies on the steps it rounds to, so an
+     * element whose number does is written by solving through it, and the row is read back for
+     * what it comes to. One whose number lies between two steps comes to another total than it was
+     * solved for, and is filed where it does.
+     */
+    static LinearForm<ElementProjection> solvedThrough(LinearForm<Monomial> form,
+                                                       ElementProjection free,
+                                                       Map<ElementProjection, ExactRatio> fixed) {
+        ExactAnswer<LinearForm<ElementProjection>> total =
+                ExactAnswer.held(LinearForm.constant(form.constant()));
+        for (Map.Entry<Monomial, ExactRatio> each : form.coefs().entrySet()) {
+            Rounding rounding = each.getKey().rounding();
+            if (rounding != null) {
+                LinearForm<ElementProjection> rounded = roundingHeldStill(rounding, free, fixed);
+                if (rounded == null) {
+                    return null;
+                }
+                ExactAnswer<LinearForm<ElementProjection>> term = rounded.times(each.getValue());
+                total = total.flatMap(sofar -> term.flatMap(sofar::plus));
+                continue;
+            }
+            ExactAnswer<ExactRatio> weight = ExactAnswer.held(each.getValue());
+            boolean freeIn = false;
+            for (ElementProjection field : each.getKey().fields()) {
+                if (field.equals(free)) {
+                    freeIn = true;
+                    continue;
+                }
+                ExactRatio held = fixed.get(field);
+                if (held == null) {
+                    return null;
+                }
+                weight = weight.flatMap(sofar -> sofar.times(held));
+            }
+            boolean weighsFree = freeIn;
+            ExactAnswer<LinearForm<ElementProjection>> term = weight.map(w -> weighsFree
+                    ? LinearForm.weighing(free, w) : LinearForm.constant(w));
+            total = total.flatMap(sofar -> term.flatMap(sofar::plus));
+        }
+        return total.orNull();
+    }
+
+    /**
+     * What {@code rounding} comes to with every field but {@code free} at the number {@code fixed}
+     * holds of it: the number it rounds to where it reads none but fixed fields, and where it reads
+     * {@code free}, what it rounds held the same way — or null otherwise.
+     */
+    private static LinearForm<ElementProjection> roundingHeldStill(
+            Rounding rounding, ElementProjection free, Map<ElementProjection, ExactRatio> fixed) {
+        if (!rounding.inner().reads().contains(free)) {
+            ExactAnswer<ExactRatio> rounded = rounding.at(new HeldAt(fixed));
+            return rounded == null ? null : rounded.map(LinearForm::<ElementProjection>constant)
+                    .orNull();
+        }
+        LinearForm<Monomial> inner = switch (rounding.inner()) {
+            case Affine affine -> asProducts(affine);
+            case Multilinear products -> products.form();
+            case Choose _, Indexed _, OfItsCase _, SumOfChoices _ -> null;
+        };
+        return inner == null ? null : solvedThrough(inner, free, fixed);
+    }
+
+    /** An element holding the numbers {@code fixed} holds and nothing else. */
+    record HeldAt(Map<ElementProjection, ExactRatio> fixed) implements OneElement {
+
+        @Override
+        public ExactRatio number(ElementProjection field) {
+            return fixed.get(field);
+        }
+
+        @Override
+        public Boolean flag(ElementProjection field) {
+            return null;
+        }
+
+        @Override
+        public String text(ElementProjection field) {
+            return null;
+        }
+
+        @Override
+        public Predicate<CasesLeft> caseAt(ElementProjection subject) {
+            return null;
+        }
+
+        @Override
+        public long position() {
+            throw new IllegalStateException("an element held at fixed numbers stands nowhere");
+        }
+    }
+
+    /** {@code form} as a sum of products of one field each, or null where the exact arithmetic
+     *  cannot hold it. */
+    static LinearForm<Monomial> asProducts(Affine form) {
+        return form.form().over(field -> LinearForm.atom(Monomial.of(Set.of(field))));
+    }
+
+    /**
+     * {@code form} as what it is: a form of the element's fields where every term in it is one
+     * field, and a sum of products where one multiplies two or rounds.
+     */
+    static ElementValue multilinear(LinearForm<Monomial> form) {
+        if (form.coefs().keySet().stream().anyMatch(term -> term.asAField() == null)) {
+            return new Multilinear(form);
+        }
+        Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+        form.coefs().forEach((term, weight) -> places.put(term.asAField(), weight));
+        return new Affine(new LinearForm<>(form.constant(), places));
+    }
+
+    /**
      * A comparison of an element's position, or of what is left of it divided by a whole number
      * with the quotient floored, against a whole number.
      *
@@ -608,7 +1172,7 @@ public sealed interface ElementValue {
      * @param relation how what is compared stands to {@code against}
      * @param against  what it is compared against
      */
-    record PositionTest(long divisor, Rel relation, long against) {
+    record PositionTest(long divisor, Rel relation, long against) implements Test {
 
         /** The position is compared as it is and not what is left of it. */
         public static final long THE_POSITION_ITSELF = 0;
@@ -676,23 +1240,6 @@ public sealed interface ElementValue {
     }
 
     /**
-     * The choice of {@code whenHolds} or {@code otherwise} by {@code test} of the position, with a
-     * choice between two answers that are one answer being that answer — and a test that holds of
-     * every position, or of none, choosing the one answer every element takes.
-     *
-     * <p>As {@link #choosing} is for a flag, and for more than tidiness: an answer that does not
-     * turn on the position claims nothing about the order of the elements, and a run of it is
-     * owed no more than any other run is.
-     */
-    static ElementValue choosingByPosition(PositionTest test, ElementValue whenHolds,
-                                           ElementValue otherwise) {
-        if (whenHolds.equals(otherwise) || test.holdsOfEveryPosition()) {
-            return whenHolds;
-        }
-        return test.holdsOfNoPosition() ? otherwise : new ByPosition(test, whenHolds, otherwise);
-    }
-
-    /**
      * What {@code weight} and the form {@code by} come to multiplied, for each element, where every
      * answer the choice {@code weight} gives is a number of no field — or null where it is no such
      * choice, or the exact arithmetic cannot hold an answer.
@@ -710,14 +1257,9 @@ public sealed interface ElementValue {
             case Affine form -> form.form().coefs().isEmpty()
                     ? times(by, form.form().constant()) : null;
             case Choose choice -> {
-                ElementValue yes = weighedBy(choice.whenSet(), by);
-                ElementValue no = yes == null ? null : weighedBy(choice.otherwise(), by);
-                yield no == null ? null : choosing(choice.flag(), yes, no);
-            }
-            case ByPosition choice -> {
                 ElementValue yes = weighedBy(choice.whenHolds(), by);
                 ElementValue no = yes == null ? null : weighedBy(choice.otherwise(), by);
-                yield no == null ? null : choosingByPosition(choice.test(), yes, no);
+                yield no == null ? null : choosing(choice.test(), yes, no);
             }
             // The position weighed by a number of no field, times a form of no position: the form
             // at each step. The position times itself is no form of the elements.
@@ -740,7 +1282,7 @@ public sealed interface ElementValue {
                 yield choice.rest() != null && rest == null ? null
                         : choosingByCase(choice.subject(), arms, rest);
             }
-            case SumOfChoices _ -> null;
+            case SumOfChoices _, Multilinear _ -> null;
         };
     }
 
@@ -835,6 +1377,115 @@ public sealed interface ElementValue {
     }
 
     /**
+     * A number of the element that is {@code weight} times a number made of places alone, and
+     * {@code constant} beside it.
+     *
+     * @param ofPlaces what the number is without the weight and the constant: a place, or a choice
+     *                 by case among places
+     */
+    public record MultipleOfPlaces(ExactRatio weight, ExactRatio constant, ElementValue ofPlaces) {
+
+        public MultipleOfPlaces {
+            if (weight == null || constant == null || ofPlaces == null || weight.signum() == 0) {
+                throw new IllegalArgumentException("a multiple is by some weight of something");
+            }
+        }
+    }
+
+    /**
+     * {@code value} as a multiple of places and a constant, or null where it is not one: a form of
+     * one place, or a choice by case every arm of which is the same multiple of a place of its own.
+     * The weight and the constant are the same across the arms, which is what lets an end of the
+     * numbers be taken of the places and the multiple applied to it.
+     */
+    public static MultipleOfPlaces asAMultipleOfPlaces(ElementValue value) {
+        StepsOfAPlace steps = asTheStepsOfAPlace(value);
+        if (steps != null) {
+            return new MultipleOfPlaces(steps.weight(), steps.constant(), steps.alone());
+        }
+        return switch (value) {
+            case Affine(LinearForm<ElementProjection> form) when form.coefs().size() == 1 -> {
+                Map.Entry<ElementProjection, ExactRatio> only =
+                        form.coefs().entrySet().iterator().next();
+                yield new MultipleOfPlaces(only.getValue(), form.constant(),
+                        new Affine(LinearForm.atom(only.getKey())));
+            }
+            case OfItsCase choice when choice.rest() == null -> {
+                MultipleOfPlaces first = null;
+                List<OfItsCase.Arm> arms = new ArrayList<>();
+                for (OfItsCase.Arm arm : choice.arms()) {
+                    MultipleOfPlaces each = asAMultipleOfPlaces(arm.value());
+                    if (each == null || (first != null && (!first.weight().equals(each.weight())
+                            || !first.constant().equals(each.constant())))) {
+                        yield null;
+                    }
+                    first = each;
+                    arms.add(new OfItsCase.Arm(arm.cases(), each.ofPlaces()));
+                }
+                yield new MultipleOfPlaces(first.weight(), first.constant(),
+                        choosingByCase(choice.subject(), arms, null));
+            }
+            default -> null;
+        };
+    }
+
+    /**
+     * A number of the element that is {@code weight} times the step a place of it falls in, and
+     * {@code constant} beside it, where one step is {@code perUnit} steps of the place's order.
+     *
+     * @param place   the place of the element whose steps are counted
+     * @param perUnit how many steps of the place's order make one step
+     */
+    public record StepsOfAPlace(ValueName.Stdlib operation, ElementProjection place, long perUnit,
+                                ExactRatio weight, ExactRatio constant) {
+
+        public StepsOfAPlace {
+            if (operation == null || place == null || perUnit < 2 || weight == null
+                    || constant == null || weight.signum() == 0) {
+                throw new IllegalArgumentException("a multiple of the steps a place falls in is by"
+                        + " some weight of a place, counted in units of at least two steps");
+            }
+        }
+
+        /** The steps the place falls in, with no weight and nothing beside. */
+        public ElementValue alone() {
+            ExactRatio per = ExactRatio.ONE.dividedBy(ExactRatio.of(perUnit)).orNull();
+            return multilinear(LinearForm.atom(Monomial.of(new Rounding(BigInteger.ZERO,
+                    WholeRounding.FLOOR, new Affine(LinearForm.weighing(place, per)), operation))));
+        }
+    }
+
+    /**
+     * {@code value} as a weight times the step one place of the element falls in, and a constant —
+     * or null where it is not one: the rounding down of one place over a whole unit, alone.
+     *
+     * <p>Such a number keeps the order of the places and turns it over for a negative weight, which
+     * is what lets an end of the numbers be taken of the places and the step of it worked out once.
+     */
+    public static StepsOfAPlace asTheStepsOfAPlace(ElementValue value) {
+        if (!(value instanceof Multilinear products) || products.form().coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<Monomial, ExactRatio> only = products.form().coefs().entrySet().iterator().next();
+        Rounding rounding = only.getKey().rounding();
+        if (rounding == null || rounding.stepsOf() == null
+                || !(rounding.inner() instanceof Affine(LinearForm<ElementProjection> inner))
+                || inner.coefs().size() != 1 || !inner.constant().isZero()) {
+            return null;
+        }
+        Map.Entry<ElementProjection, ExactRatio> place =
+                inner.coefs().entrySet().iterator().next();
+        ExactRatio unit = ExactRatio.ONE.dividedBy(place.getValue()).orNull();
+        if (unit == null || !unit.isWhole() || unit.signum() <= 0
+                || !(unit.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                || whole.compareTo(BigInteger.TWO) < 0 || whole.bitLength() >= Long.SIZE) {
+            return null;
+        }
+        return new StepsOfAPlace(rounding.stepsOf(), place.getKey(), whole.longValueExact(),
+                only.getValue(), products.form().constant());
+    }
+
+    /**
      * The choice by case of {@code arms} and {@code rest}, with a choice whose every answer is one
      * answer being that answer.
      *
@@ -875,6 +1526,31 @@ public sealed interface ElementValue {
                              RuleReadingSource source, ElementsAt elements) {
         return new Reader(answer.parameter(), answer.position(), Map.of(), held, source, elements,
                 null).value(answer.body());
+    }
+
+    /**
+     * Each whole-number operation a closure works out of its element on the way to its answer, in
+     * the order it works them out, as a form of the numbers at the places of the elements, and
+     * the product of two of them: what each comes to where it is worked out, and not what the
+     * answer comes to once the arithmetic has simplified it — {@code (x + 2) - 1} comes to
+     * {@code x + 1}, and a run stops at the {@code x + 2}. Null where one of them is not read so:
+     * one a choice in the answer holds, which some runs do not work out, or one that is no such
+     * form.
+     */
+    static List<LinearForm<NumericTerm>> operationsOf(ElementAnswer answer,
+                                                      Map<BindingId, Core> held,
+                                                      RuleReadingSource source,
+                                                      ElementsAt elements) {
+        return Reader.operationsOf(answer, held, source, elements);
+    }
+
+    /**
+     * The test of the element a closure answering whether to keep it makes, read as a choice in
+     * a closure's answer is ({@link Test}) — or null where it is no such test.
+     */
+    static Test testOf(ElementAnswer kept, Map<BindingId, Core> held, RuleReadingSource source) {
+        return new Reader(kept.parameter(), kept.position(), Map.of(), held, source, null, null)
+                .testOf(kept.body());
     }
 
     /**
@@ -945,6 +1621,14 @@ public sealed interface ElementValue {
         /** The number of the input standing the same for every element a leaf is, or null
          *  where no such number is read. */
         private final Function<Core, NumericTerm> invariantAt;
+        /** Each whole-number operation the answer composes, as a form of what it comes to, where
+         *  they are asked for ({@link #operationsOf}); null where they are not. */
+        private List<LinearForm<Atom>> operations;
+        /** How many choices deep the walk is: what a choice holds is worked out on some runs. */
+        private int insideChoices;
+        /** Whether an operation the answer works out was left out of {@link #operations}, being
+         *  in an arm or read as no form, so that they are not every one. */
+        private boolean leftSome;
 
         private Reader(BindingId element, BindingId position,
                        Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
@@ -957,6 +1641,97 @@ public sealed interface ElementValue {
             this.source = source;
             this.elements = elements;
             this.invariantAt = invariantAt;
+        }
+
+        /** What {@link ElementValue#operationsOf} says: each operation the answer composes, as a
+         *  form of places of the element alone, or null where one is not. */
+        private static List<LinearForm<NumericTerm>> operationsOf(
+                ElementAnswer answer, Map<BindingId, Core> held, RuleReadingSource source,
+                ElementsAt elements) {
+            Reader reader = new Reader(answer.parameter(), answer.position(), Map.of(), held,
+                    source, elements, null);
+            reader.operations = new ArrayList<>();
+            reader.recordOperationsOf(answer.body());
+            List<LinearForm<NumericTerm>> out = new ArrayList<>();
+            for (LinearForm<Atom> form : reader.operations) {
+                Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
+                // A form with no number in it is a number written out, which a run stops at where
+                // it is past the type — {@code ((x - x) + max) + 1} — and is no form this cannot
+                // hold: whether it can is not whether it has a number.
+                boolean ofPlaces = true;
+                for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
+                    if (each.getKey() instanceof Atom.Place(ElementProjection place)) {
+                        terms.put(new NumericTerm.ValueOf(place.from(elements.at())),
+                                each.getValue());
+                    } else if (!aProductOfTwoFieldsIn(each, terms, elements)) {
+                        ofPlaces = false;
+                        break;
+                    }
+                }
+                if (!ofPlaces) {
+                    return null;
+                }
+                out.add(new LinearForm<>(form.constant(), terms));
+            }
+            return reader.leftSome ? null : out;
+        }
+
+        /**
+         * Records the operations a run works out whenever it works {@code e} out: those of the
+         * number {@code e} is read as, where it is one, and otherwise those of the parts of it
+         * that run whenever it does ({@link Evaluated#inOrder}) and of the body of a
+         * {@code let}, which runs once its value has — so a tuple, a list or a record the answer
+         * makes of arithmetic is asked of what it makes it of.
+         */
+        private void recordOperationsOf(Core e) {
+            if (value(e) != null) {
+                return;
+            }
+            Core here = Core.withoutStanding(e);
+            Set<Core> recorded = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Evaluated.Step step : Evaluated.inOrder(here)) {
+                if (step instanceof Evaluated.Step.Always(Core part)) {
+                    recorded.add(part);
+                    recordOperationsOf(part);
+                }
+            }
+            if (here instanceof Core.LetIn let) {
+                recorded.add(let.body());
+                recordOperationsOf(let.body());
+            }
+            // What runs only on some runs, an arm or the right of `&&`, is not recorded: where it
+            // may end a run, the operations kept are not every one. A function made here runs
+            // nothing. Nor is what the node itself works out, which read as no number of the
+            // element: a product of a choice and a number beside the element is one.
+            BehaviorAnswers answers = source.declarations().answers();
+            Core.forEachChild(here, child -> leftSome |= !recorded.contains(child)
+                    && !Evaluated.makesAFunction(child)
+                    && !ARowsRun.getsPastBeneath(child, answers));
+            leftSome |= !(ARowsRun.completionOf(here, answers) instanceof GetsPast.Always);
+        }
+
+        /**
+         * Whether {@code atom}, at its weight, is the product of two places of the element, and
+         * so put into {@code terms} as the product of the numbers at them, turned as the product
+         * is written ({@link NumericTerm.ProductOf#signed}).
+         */
+        private static boolean aProductOfTwoFieldsIn(Map.Entry<Atom, ExactRatio> atom,
+                                                     Map<NumericTerm, ExactRatio> terms,
+                                                     ElementsAt elements) {
+            if (!(atom.getKey() instanceof Atom.Product(Monomial made))
+                    || made.rounding() != null || made.fields().size() != 2) {
+                return false;
+            }
+            List<ElementProjection> two = List.copyOf(made.fields());
+            NumericTerm.ProductOf.Signed signed = NumericTerm.ProductOf.signed(
+                    LinearForm.atom(new NumericTerm.ValueOf(two.get(0).from(elements.at()))),
+                    LinearForm.atom(new NumericTerm.ValueOf(two.get(1).from(elements.at()))));
+            if (signed == null || !(signed.sign().times(atom.getValue())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight))) {
+                return false;
+            }
+            terms.put(signed.product(), weight);
+            return true;
         }
 
         /** The same reading, inside an arm whose name {@code bound} stands at {@code at}. */
@@ -1021,18 +1796,54 @@ public sealed interface ElementValue {
                     case Atom.Invariant _ -> {
                         return null;
                     }
-                    case Atom.Place _, Atom.ThePosition _, Atom.PositionTimes _ ->
+                    case Atom.Place _, Atom.ThePosition _, Atom.PositionTimes _, Atom.Product _ ->
                             ofTheElement.put(each.getKey(), each.getValue());
                 }
             }
-            return ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
+            return ofAtoms(form.constant(), ofTheElement, chosen);
         }
 
         /**
-         * {@code constant} and the atoms that are no choice, as the form they are: the places of
-         * the element, the position, and the position times a place.
+         * {@code constant}, the atoms that are no choice and the choices, as the value they come
+         * to: a form with the choices beside it, as {@link #summed} puts them, or a sum of products
+         * where a product of fields is among the atoms — or null where the exact arithmetic cannot
+         * hold it.
+         *
+         * <p>A product of fields beside a choice, or beside a number made of the position, is not
+         * read: each element would come to a product in one answer and to something else in
+         * another, which no sum of products holds.
          *
          * @param atoms each of them at its weight; none a {@link Atom.Chosen}
+         */
+        private static ElementValue ofAtoms(ExactRatio constant, Map<Atom, ExactRatio> atoms,
+                                            Map<ElementValue, ExactRatio> chosen) {
+            if (atoms.keySet().stream().noneMatch(Atom.Product.class::isInstance)) {
+                return ElementValue.summed(formOf(constant, atoms), chosen);
+            }
+            if (!chosen.isEmpty()) {
+                return null;
+            }
+            Map<Monomial, ExactRatio> products = new LinkedHashMap<>();
+            for (Map.Entry<Atom, ExactRatio> each : atoms.entrySet()) {
+                switch (each.getKey()) {
+                    case Atom.Place(ElementProjection place) ->
+                            products.put(Monomial.of(Set.of(place)), each.getValue());
+                    case Atom.Product(Monomial product) -> products.put(product, each.getValue());
+                    case Atom.ThePosition _, Atom.PositionTimes _, Atom.Chosen _,
+                         Atom.Invariant _ -> {
+                        return null;
+                    }
+                }
+            }
+            return multilinear(new LinearForm<>(constant, products));
+        }
+
+        /**
+         * {@code constant} and the atoms that are no choice and no product, as the form they are:
+         * the places of the element, the position, and the position times a place.
+         *
+         * @param atoms each of them at its weight; none a {@link Atom.Chosen} or a
+         *              {@link Atom.Product}
          */
         private static Form formOf(ExactRatio constant, Map<Atom, ExactRatio> atoms) {
             Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
@@ -1044,8 +1855,9 @@ public sealed interface ElementValue {
                     case Atom.PositionTimes(ElementProjection place) ->
                             moved.put(place, each.getValue());
                     case Atom.ThePosition _ -> step = each.getValue();
-                    case Atom.Chosen _, Atom.Invariant _ -> throw new IllegalArgumentException(
-                            "a choice, or a number beside the element, is no part of a form: "
+                    case Atom.Chosen _, Atom.Invariant _, Atom.Product _ ->
+                            throw new IllegalArgumentException("a choice, a product of fields or"
+                                    + " a number beside the element is no part of a form: "
                                     + each);
                 }
             }
@@ -1056,14 +1868,26 @@ public sealed interface ElementValue {
 
         /**
          * What an atom of what a closure computed is: a place of the element, the position, the
-         * position times a place, or a choice made of the element.
+         * position times a place, a product of places, or a choice made of the element.
          *
-         * <p>The first three are linear in one another, so a sum of them is the one form however it
+         * <p>The first four are linear in one another, so a sum of them is the one value however it
          * was written, and the arithmetic that adds and scales them is {@link AffineForms}'s.
          */
         private sealed interface Atom {
 
             record Place(ElementProjection place) implements Atom {}
+
+            /** Places of the element multiplied, two of them or more, or a rounding of a number
+             *  made of the element. */
+            record Product(Monomial product) implements Atom {
+
+                public Product {
+                    if (product.asAField() != null) {
+                        throw new IllegalArgumentException("a product of one place is the place: "
+                                + product);
+                    }
+                }
+            }
 
             /** Where the element stands, as a number. */
             record ThePosition() implements Atom {}
@@ -1077,21 +1901,139 @@ public sealed interface ElementValue {
             record Invariant(NumericTerm term) implements Atom {}
         }
 
-        /** What a branch on a flag of the element or on a test of its position comes to, or null
-         *  where it is not read. */
+        /**
+         * What a rounding of a number made of the element comes to, as the one term of a sum of
+         * products it is — or null where {@code e} rounds nothing, its scale is no whole number
+         * written down, its policy no one case of the policy where it is read, or what it rounds
+         * is no number this reads.
+         *
+         * <p>Which call rounds, which of its arguments are the scale, the policy and the number,
+         * and what each case of the policy does are what the library says the operation computes
+         * ({@link BoundOperationFacts#roundsToAStep}); one rounding to a whole number takes the
+         * scale nought.
+         */
+        private ElementValue roundingOf(Core e, Map<BindingId, Core> at) {
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            ARounding rounds = applied == null ? null
+                    : DefaultBoundOperationFacts.get().rounding(applied);
+            if (rounds == null) {
+                return null;
+            }
+            Long scale = rounds.scale() == null ? Long.valueOf(0) : wholeNumberOf(rounds.scale());
+            WholeRounding way = rounds.wayOf(followed(rounds.policy()));
+            if (scale == null || way == null
+                    || !ARounding.hasRoomAtAScale(BigInteger.valueOf(scale))) {
+                return null;
+            }
+            LinearForm<Atom> form = AffineForms.of(rounds.rounded(), at, atoms());
+            ElementValue inner = form == null ? null : valueOf(form);
+            return inner == null ? null : multilinear(LinearForm.atom(Monomial.of(
+                    new Rounding(BigInteger.valueOf(scale), way, inner))));
+        }
+
+        /**
+         * The step of a coarser order that a number made of the element falls in, as the rounding
+         * down of that number over the unit — or null where {@code e} counts no whole units or
+         * what it counts is no number this reads.
+         *
+         * <p>Which call counts whole units, of which argument and in what unit is what the library
+         * says the operation computes ({@link BoundOperationFacts#wholeUnitsCountedIn}). The step
+         * is a floor and no truncation, so it is the rounding that goes toward minus infinity.
+         */
+        private ElementValue wholeUnitsOf(Core e, Map<BindingId, Core> at) {
+            BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            Core counted = facts.wholeUnitsCountedIn(applied);
+            if (counted == null) {
+                return null;
+            }
+            LinearForm<Atom> form = AffineForms.of(counted, at, atoms());
+            ElementValue inner = form == null ? null : valueOf(form);
+            ExactRatio unit = ExactRatio.of(facts.wholeUnitsPerStep(applied.operation())
+                    .orElseThrow());
+            ElementValue overTheUnit = inner == null || !(ExactRatio.ONE.dividedBy(unit) instanceof
+                    ExactAnswer.Held<ExactRatio>(ExactRatio per)) ? null : times(inner, per);
+            return overTheUnit == null ? null : multilinear(LinearForm.atom(Monomial.of(
+                    new Rounding(BigInteger.ZERO, WholeRounding.FLOOR, overTheUnit,
+                            (ValueName.Stdlib) applied.operation()))));
+        }
+
+        /** What a branch on a test of the element ({@link #testOf}) comes to, or null where it is
+         *  not read. */
         private ElementValue byCondition(Core.If branch) {
-            ElementProjection flag = placeOf(branch.cond(), held);
-            PositionTest test = flag == null ? positionTestOf(branch.cond()) : null;
-            if (flag == null && test == null) {
+            Test test = testOf(branch.cond());
+            ElementValue yes = test == null ? null : inAnArm(branch.then());
+            ElementValue no = yes == null ? null : inAnArm(branch.els());
+            return no == null ? null : ElementValue.choosing(test, yes, no);
+        }
+
+        /** What {@code arm}, the body of one arm of a choice, comes to: what it works out is
+         *  worked out on the runs that take it and on no others. What decides the choice is
+         *  worked out before any arm, on every run. */
+        private ElementValue inAnArm(Core arm) {
+            insideChoices++;
+            try {
+                return value(arm);
+            } finally {
+                insideChoices--;
+            }
+        }
+
+        /**
+         * The test of the element {@code condition} is, or null where it is none: a flag of the
+         * element, a test of its position, or two numbers made of its fields compared.
+         */
+        Test testOf(Core condition) {
+            ElementProjection flag = placeOf(condition, held);
+            if (flag != null) {
+                return new Test.Flag(flag);
+            }
+            PositionTest test = positionTestOf(condition);
+            if (test != null) {
+                return test;
+            }
+            Test.Compared compared = comparedOf(condition);
+            return compared != null ? compared : writtenOf(condition);
+        }
+
+        /**
+         * The test that the string at a place of the element is, or is not, one written out, which
+         * {@code condition} is — or null where it is none.
+         */
+        private Test.Written writtenOf(Core condition) {
+            if (!(followed(condition) instanceof Core.Binary binary)) {
                 return null;
             }
-            ElementValue yes = value(branch.then());
-            ElementValue no = yes == null ? null : value(branch.els());
-            if (no == null) {
+            Comparison compared = Comparison.of(binary).orElse(null);
+            Rel relation = compared == null ? null : compared.claim().statedRelation();
+            if (relation != Rel.EQ && relation != Rel.NE) {
                 return null;
             }
-            return flag != null ? ElementValue.choosing(flag, yes, no)
-                    : ElementValue.choosingByPosition(test, yes, no);
+            Core left = followed(compared.left());
+            Core.Str written = left instanceof Core.Str str ? str
+                    : followed(compared.right()) instanceof Core.Str other ? other : null;
+            ElementProjection place = written == null ? null
+                    : placeOf(written == left ? compared.right() : compared.left(), held);
+            return place == null ? null
+                    : new Test.Written(place, written.value(), relation == Rel.EQ);
+        }
+
+        /**
+         * The comparison {@code condition} makes of two forms of the element's fields, as their
+         * difference against nought — or null where it compares anything else.
+         */
+        private Test.Compared comparedOf(Core condition) {
+            if (!(followed(condition) instanceof Core.Binary binary)) {
+                return null;
+            }
+            Comparison compared = Comparison.of(binary).orElse(null);
+            if (compared == null || !(value(compared.left()) instanceof Affine left)
+                    || !(value(compared.right()) instanceof Affine right)) {
+                return null;
+            }
+            return right.form().times(ExactRatio.of(-1)).flatMap(left.form()::plus)
+                    instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var difference)
+                    ? Test.compared(difference, compared.claim().statedRelation()) : null;
         }
 
         /**
@@ -1193,6 +2135,126 @@ public sealed interface ElementValue {
         }
 
         /**
+         * What a {@code match} on an option that holds an element of a list written out comes to:
+         * the arm that takes a present option, read with its name standing for that element — or
+         * null where the option is no such lookup.
+         *
+         * <p>Which element it is is {@link WhatAnOptionHolds}'s, which the discharge of a rule and
+         * the reading of an input follow as well; and it is there on every run, so the option is
+         * present on every run and the arm taking an absent one is taken by none. The same value
+         * for every element, so the arm's answer is read as any other part of the answer is.
+         */
+        private ElementValue byAWrittenOption(Core.Match match) {
+            Core picked = WhatAnOptionHolds.of(match.scrutinee(), held, new WrittenOut());
+            if (picked == null) {
+                return null;
+            }
+            for (Core.Case arm : match.cases()) {
+                boolean takesIt = arm.pattern() == null
+                        || (arm.pattern() instanceof Core.ResolvedPattern.Single one
+                                && one.selected().refinement()
+                                        instanceof souther.compiler.types.Refinement.OptionPresent);
+                if (!takesIt) {
+                    continue;
+                }
+                Map<BindingId, Core> named = new LinkedHashMap<>(held);
+                if (arm.binder() != null && arm.binder().binding() != null) {
+                    named.put(arm.binder().binding(), switch (arm.binding()) {
+                        case Core.ArmBinding.Payload _ -> picked;
+                        case Core.ArmBinding.Selected _, Core.ArmBinding.Unbound _ ->
+                                match.scrutinee();
+                    });
+                }
+                return new Reader(element, position, standing, Map.copyOf(named), source, elements,
+                        invariantAt).value(arm.body());
+            }
+            return null;
+        }
+
+        /**
+         * How {@link WhatAnOptionHolds} reads names here: through what the body bound them to,
+         * never through the element or its position, and with nothing but a value written down
+         * answered — an option made of the element is a place of it, which {@link #placeOf} reads.
+         */
+        private final class WrittenOut implements WhatAnOptionHolds.Reading<Map<BindingId, Core>,
+                Core> {
+
+            @Override
+            public Symbols symbols() {
+                return source.symbols();
+            }
+
+            @Override
+            public ElementsWrittenOut.Stood<Map<BindingId, Core>> standing(Core e,
+                    Map<BindingId, Core> at) {
+                Core here = Core.withoutStanding(e);
+                Set<BindingId> seen = new HashSet<>();
+                while (here instanceof Core.Read read && seen.add(read.binding())
+                        && !read.binding().equals(element) && !read.binding().equals(position)
+                        && at.get(read.binding()) != null) {
+                    here = Core.withoutStanding(at.get(read.binding()));
+                }
+                return new ElementsWrittenOut.Stood<>(here, at);
+            }
+
+            @Override
+            public Map<BindingId, Core> handing(Map<BindingId, Core> at, BindingId parameter,
+                    ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
+                Map<BindingId, Core> wider = new LinkedHashMap<>(at);
+                wider.put(parameter, value.value());
+                return wider;
+            }
+
+            @Override
+            public Map<BindingId, Core> choosing(Map<BindingId, Core> at,
+                                                 Choice.Decides decidedBy) {
+                return at;
+            }
+
+            @Override
+            public Optional<Object> folded(ElementsWrittenOut.Stood<Map<BindingId, Core>> value) {
+                return Optional.empty();
+            }
+
+            // What this reads is a closure's answer and the bindings of its body as they were read
+            // before a fold was rewritten into a build (ElementBindings), so no build reaches here
+            // to be asked about.
+            @Override
+            public ElementBindings.AssembledWalk assembledAt(BindingId element,
+                                                             Map<BindingId, Core> at) {
+                return null;
+            }
+
+            @Override
+            public Core anElement(ElementsWrittenOut.Stood<Map<BindingId, Core>> one) {
+                return one.value();
+            }
+
+            @Override
+            public Core madeByAClosure(ElementsWrittenOut.Stood<Map<BindingId, Core>> answered,
+                                       Core handed) {
+                return null;
+            }
+
+            @Override
+            public Map<BindingId, Core> holding(Map<BindingId, Core> at, BindingId parameter,
+                                                Core handed) {
+                return at;
+            }
+
+            @Override
+            public Core otherwise(ElementsWrittenOut.Stood<Map<BindingId, Core>> option,
+                                  AnOperationApplied applied) {
+                return null;
+            }
+
+            @Override
+            public Core unsaid() {
+                return null;
+            }
+        }
+
+        /**
          * What a {@code match} on a place of the element comes to: each arm read with its name
          * standing at the place the arm narrowed, or null where any arm is not read.
          *
@@ -1207,7 +2269,10 @@ public sealed interface ElementValue {
          */
         private ElementValue byCase(Core.Match match) {
             ElementProjection subject = placeOf(match.scrutinee(), held);
-            if (subject == null || elements == null) {
+            if (subject == null) {
+                return byAWrittenOption(match);
+            }
+            if (elements == null) {
                 return null;
             }
             TermPath at = subject.from(elements.at());
@@ -1260,8 +2325,9 @@ public sealed interface ElementValue {
          * stopped at a branch on a flag of the element or a {@code match} on a place of it, that
          * choice.
          */
-        private AffineForms.Reading<Atom, Map<BindingId, Core>> atoms() {
-            return new Names<>() {
+        private AffineForms.RunTelling<Atom, Map<BindingId, Core>> atoms() {
+            final class Telling extends Names<Atom>
+                    implements AffineForms.RunTelling<Atom, Map<BindingId, Core>> {
 
                 @Override
                 public LinearForm<Atom> leafOf(Core e, Map<BindingId, Core> at) {
@@ -1279,23 +2345,120 @@ public sealed interface ElementValue {
                     ElementValue choice = switch (Core.withoutStanding(e)) {
                         case Core.If branch -> byCondition(branch);
                         case Core.Match match -> byCase(match);
-                        case null, default -> null;
+                        case null, default -> {
+                            ElementValue rounded = roundingOf(e, at);
+                            yield rounded != null ? rounded : wholeUnitsOf(e, at);
+                        }
                     };
                     return choice == null ? null : termsOf(choice);
                 }
 
-                /** The position times a form of the places of the element, which is a form of the
-                 *  places and of the position times them ({@link #movedByThePosition}); or a
-                 *  choice of numbers times a form, which weighs it ({@link ElementValue#weighedBy}).
-                 *  And nothing else. */
+                /** Whether the operations the walk tells of are being kept: asked for, and not in an
+                 *  arm, which some runs do not work out. */
+                private boolean keeping() {
+                    return operations != null && insideChoices == 0;
+                }
+
+                /** Told of each operator and not only of the whole, so that {@code (x + 1) - 1},
+                 *  which comes to {@code x}, is a run's to stop in at the {@code x + 1}. */
                 @Override
-                public LinearForm<Atom> productOf(LinearForm<Atom> left, LinearForm<Atom> right) {
+                public void composed(Core operation, LinearForm<Atom> form,
+                                     List<LinearForm<Atom>> operands) {
+                    if (Type.INT.equals(Core.withoutStanding(operation).type())) {
+                        keep(form);
+                    }
+                }
+
+                /** {@code form}, an operation the answer works out, kept where operations are;
+                 *  one in an arm is left out, and that one was is told. */
+                private void keep(LinearForm<Atom> form) {
+                    if (keeping()) {
+                        operations.add(form);
+                    } else if (operations != null) {
+                        leftSome = true;
+                    }
+                }
+
+                @Override
+                public void composedAsAProduct(Core operation, LinearForm<Atom> form,
+                                               List<LinearForm<Atom>> operands) {
+                    composed(operation, form, operands);
+                }
+
+                /** A library call read as arithmetic over its arguments stops a run where its
+                 *  answer is past the ends of its type, as an operator does. */
+                @Override
+                public void answeredByTheLibrary(Core call, LinearForm<Atom> form,
+                                                 WhereAnOperatorAnswers where) {
+                    if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld
+                            && Type.INT.equals(Core.withoutStanding(call).type())) {
+                        keep(form);
+                    }
+                }
+
+                /** A value bound and not read by the body is worked out first all the same. */
+                @Override
+                public void bound(Core.LetIn binding, Map<BindingId, Core> at) {
+                    if (operations != null) {
+                        recordOperationsOf(binding.value());
+                    }
+                }
+
+                /** An operation the walk could not read has no form to keep: what it works out is
+                 *  told by nobody here, so the operations kept are not every one. */
+                @Override
+                public void unobserved(Core node) {
+                    if (operations != null) {
+                        leftSome = true;
+                    }
+                }
+
+                /** A call that folds to a number is the same on every run that has one, and
+                 *  stops none where it is the number. */
+                @Override
+                public void folded(Core e, Map<BindingId, Core> at) {
+                }
+
+                /** Never asked: a total of a list written out is read as no form here
+                 *  ({@link Reading#readsATotalOfWhatIsWrittenOut} is false), and the elements of
+                 *  that list are parts a run works out whenever it works the call out, which
+                 *  {@link #recordOperationsOf} asks of. */
+                @Override
+                public void totalled(Core call, LinearForm<Atom> total, List<Core> elements) {
+                }
+
+                /** The elements of a list written out that a count is taken of are parts a run
+                 *  works out whenever it works the call out, which {@link #recordOperationsOf}
+                 *  asks of. */
+                @Override
+                public void counted(Core call, List<Core> elements, Map<BindingId, Core> at) {
+                }
+
+                /** A newtype's construction stops a run by the clauses of its type, which is told
+                 *  of the comparison that stands over the number and not of an element's answer. */
+                @Override
+                public void constructed(Core.Construct construct, TypeView type,
+                                        LinearForm<Atom> value, Map<BindingId, Core> at) {
+                }
+
+                /** The position times a form of the places of the element, which is a form of the
+                 *  places and of the position times them ({@link #movedByThePosition}); two sums
+                 *  of places and products of them, which multiply out ({@link #multipliedOut}); or
+                 *  a choice of numbers times a form, which weighs it
+                 *  ({@link ElementValue#weighedBy}). And nothing else. */
+                @Override
+                public LinearForm<Atom> productOf(Core.Binary operation, LinearForm<Atom> left,
+                                                  LinearForm<Atom> right) {
                     LinearForm<Atom> moved = movedByThePosition(left, right);
                     if (moved == null) {
                         moved = movedByThePosition(right, left);
                     }
                     if (moved != null) {
                         return moved;
+                    }
+                    LinearForm<Atom> multiplied = multipliedOut(left, right);
+                    if (multiplied != null) {
+                        return multiplied;
                     }
                     ElementValue one = valueOf(left);
                     ElementValue other = one == null ? null : valueOf(right);
@@ -1313,7 +2476,8 @@ public sealed interface ElementValue {
                     return by instanceof Form form && isAChoice(weight)
                             ? ElementValue.weighedBy(weight, form) : null;
                 }
-            };
+            }
+            return new Telling();
         }
 
         /**
@@ -1347,8 +2511,61 @@ public sealed interface ElementValue {
         }
 
         /**
+         * {@code left · right}, where each is a constant and places of the element and products of
+         * them; or null where either holds anything else, where two of the products multiplied
+         * would take one place twice, or where the exact arithmetic cannot hold a weight.
+         *
+         * <p>{@code (a + Σ w·m) · (b + Σ v·n)} is {@code a·b + Σ b·w·m + Σ a·v·n + Σ w·v·(m·n)},
+         * each product an atom, so it is one sum of products however its factors were grouped. A
+         * place times itself is a square, and is not read.
+         */
+        private static LinearForm<Atom> multipliedOut(LinearForm<Atom> left,
+                                                      LinearForm<Atom> right) {
+            LinearForm<Monomial> one = asProducts(left);
+            LinearForm<Monomial> other = one == null ? null : asProducts(right);
+            if (other == null) {
+                return null;
+            }
+            ExactAnswer<LinearForm<Monomial>> total = one.times(other.constant())
+                    .flatMap(weighed -> new LinearForm<>(ExactRatio.ZERO, other.coefs())
+                            .times(one.constant()).flatMap(weighed::plus));
+            for (Map.Entry<Monomial, ExactRatio> a : one.coefs().entrySet()) {
+                for (Map.Entry<Monomial, ExactRatio> b : other.coefs().entrySet()) {
+                    Monomial product = a.getKey().times(b.getKey());
+                    ExactRatio weight = product == null ? null
+                            : a.getValue().times(b.getValue()).orNull();
+                    if (weight == null) {
+                        return null;
+                    }
+                    total = total.flatMap(sofar -> sofar.plus(LinearForm.weighing(product,
+                            weight)));
+                }
+            }
+            LinearForm<Monomial> multiplied = total.orNull();
+            return multiplied == null ? null : termsOf(multilinear(multiplied));
+        }
+
+        /** {@code form} as a constant and products of places, a place being a product of one; or
+         *  null where it holds the position or a choice. */
+        private static LinearForm<Monomial> asProducts(LinearForm<Atom> form) {
+            Map<Monomial, ExactRatio> products = new LinkedHashMap<>();
+            for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
+                switch (each.getKey()) {
+                    case Atom.Place(ElementProjection place) ->
+                            products.put(Monomial.of(Set.of(place)), each.getValue());
+                    case Atom.Product(Monomial product) -> products.put(product, each.getValue());
+                    case Atom.ThePosition _, Atom.PositionTimes _, Atom.Chosen _,
+                         Atom.Invariant _ -> {
+                        return null;
+                    }
+                }
+            }
+            return new LinearForm<>(form.constant(), products);
+        }
+
+        /**
          * {@code value} as terms of a form: a form is its own places, a sum of choices its form
-         * and each of its choices, and a choice one term.
+         * and each of its choices, a sum of products each product, and a choice one term.
          *
          * <p>What a branch or a {@code match} came to need not be a choice — two answers that are
          * one are that answer, and arms adding choices up are a sum of them — and is put into the
@@ -1381,8 +2598,14 @@ public sealed interface ElementValue {
                             all.put(new Atom.Chosen(choice), weight));
                     yield new LinearForm<>(besides.constant(), all);
                 }
-                case Choose _, OfItsCase _, ByPosition _ ->
-                        LinearForm.atom(new Atom.Chosen(value));
+                case Multilinear products -> {
+                    Map<Atom, ExactRatio> all = new LinkedHashMap<>();
+                    products.form().coefs().forEach((product, weight) -> all.put(
+                            product.asAField() != null ? new Atom.Place(product.asAField())
+                                    : new Atom.Product(product), weight));
+                    yield new LinearForm<>(products.form().constant(), all);
+                }
+                case Choose _, OfItsCase _ -> LinearForm.atom(new Atom.Chosen(value));
             };
         }
 
@@ -1402,10 +2625,12 @@ public sealed interface ElementValue {
          * constant, and a step adding nothing else of the element adds that many for each of them.
          *
          * <p>A choice of the element the step adds is read as it is in a closure's answer
-         * ({@link #value}): {@code acc + (if a.debit then a.q else 0)} adds the choice. A choice
-         * holding the answer so far is no choice of the element, and is not read.
+         * ({@link #value}): {@code acc + (if a.debit then a.q else 0)} adds the choice, and so
+         * does {@code if a.debit then acc + a.q else acc} ({@link #addedByEachArm}). A choice
+         * decided by the answer so far is no choice of the element, and is not read.
          */
         private Added addedTo(Core answer, BindingId accumulator) {
+            Set<BindingId> carried = WhatABodyReads.namesMadeOf(answer, Set.of(accumulator));
             LinearForm<TheStep> form = AffineForms.of(answer, held, new Names<TheStep>() {
 
                 @Override
@@ -1417,6 +2642,14 @@ public sealed interface ElementValue {
                     ElementProjection counted = countedAt(e, element, at, source);
                     if (counted != null) {
                         return LinearForm.atom(new TheStep.HowManyAt(counted));
+                    }
+                    LinearForm<Atom> eachArmAdds = addedByEachArm(e, accumulator, carried);
+                    if (eachArmAdds != null) {
+                        Map<TheStep, ExactRatio> terms = new LinkedHashMap<>();
+                        terms.put(new TheStep.TheAnswerSoFar(), ExactRatio.ONE);
+                        eachArmAdds.coefs().forEach((atom, weight) ->
+                                terms.put(new TheStep.OfTheElement(atom), weight));
+                        return new LinearForm<>(eachArmAdds.constant(), terms);
                     }
                     LinearForm<Atom> ofTheElement = atoms().leafOf(e, at);
                     if (ofTheElement == null) {
@@ -1431,12 +2664,13 @@ public sealed interface ElementValue {
                 /** A product of what is of the element alone is the element's own ({@link
                  *  #atoms}); one with the answer so far or a count is not a step this reads. */
                 @Override
-                public LinearForm<TheStep> productOf(LinearForm<TheStep> left,
+                public LinearForm<TheStep> productOf(Core.Binary operation,
+                                                     LinearForm<TheStep> left,
                                                      LinearForm<TheStep> right) {
                     LinearForm<Atom> one = ofTheElementAlone(left);
                     LinearForm<Atom> other = one == null ? null : ofTheElementAlone(right);
                     LinearForm<Atom> product = other == null ? null
-                            : atoms().productOf(one, other);
+                            : atoms().productOf(operation, one, other);
                     if (product == null) {
                         return null;
                     }
@@ -1473,9 +2707,76 @@ public sealed interface ElementValue {
                     case TheStep.TheAnswerSoFar _ -> { }
                 }
             });
-            ElementValue adds = ElementValue.summed(formOf(form.constant(), ofTheElement), chosen);
+            ElementValue adds = ofAtoms(form.constant(), ofTheElement, chosen);
             return adds == null ? null : new Added(adds, counted);
         }
+
+        /**
+         * What a choice adds to the answer so far, where every arm of it answers that answer once
+         * and something more, and nothing the answer so far is made of decides which arm is
+         * taken: the choice of what each arm adds, which is the choice read with the answer so
+         * far as nought. {@code if a.debit then acc + a.q else acc} adds
+         * {@code if a.debit then a.q else 0}, the number
+         * {@code acc + (if a.debit then a.q else 0)} adds. Null where {@code e} is no such choice.
+         *
+         * @param carried the answer so far and every name the step binds to a value made of it
+         */
+        private LinearForm<Atom> addedByEachArm(Core e, BindingId accumulator,
+                                                Set<BindingId> carried) {
+            Core fork = Core.withoutStanding(e);
+            Core decides = switch (fork) {
+                case Core.If iff -> iff.cond();
+                case Core.Match match -> match.scrutinee();
+                case null, default -> null;
+            };
+            if (decides == null || WhatABodyReads.anyOf(decides, carried)) {
+                return null;
+            }
+            for (Choice.Arm arm : Choice.of(fork).arms()) {
+                if (!addsToTheAnswerSoFar(arm.answers(), accumulator, carried)) {
+                    return null;
+                }
+            }
+            Map<BindingId, Core> nought = new LinkedHashMap<>(held);
+            nought.put(accumulator, new Core.Int(0, Type.INT, fork.pos()));
+            ElementValue chosen = new Reader(element, position, standing, Map.copyOf(nought),
+                    source, elements, invariantAt).value(fork);
+            return chosen == null ? null : termsOf(chosen);
+        }
+
+        /** Whether {@code arm} answers the answer so far, at a weight of one, and beside it
+         *  nothing made of it — an arm that is itself such a choice included. */
+        private boolean addsToTheAnswerSoFar(Core arm, BindingId accumulator,
+                                             Set<BindingId> carried) {
+            LinearForm<SoFar> form = AffineForms.of(arm, held, new Names<SoFar>() {
+
+                @Override
+                public LinearForm<SoFar> leafOf(Core e, Map<BindingId, Core> at) {
+                    if (Core.withoutStanding(e) instanceof Core.Read read
+                            && read.binding().equals(accumulator)) {
+                        return LinearForm.atom(SoFar.THE_ANSWER);
+                    }
+                    if (addedByEachArm(e, accumulator, carried) != null) {
+                        return LinearForm.atom(SoFar.THE_ANSWER).plus(LinearForm.atom(SoFar.MORE))
+                                .orNull();
+                    }
+                    return WhatABodyReads.anyOf(e, carried) ? null : LinearForm.atom(SoFar.MORE);
+                }
+
+                @Override
+                public LinearForm<SoFar> productOf(Core.Binary operation,
+                                                   LinearForm<SoFar> left,
+                                                   LinearForm<SoFar> right) {
+                    return left.coefs().containsKey(SoFar.THE_ANSWER)
+                            || right.coefs().containsKey(SoFar.THE_ANSWER) ? null
+                            : LinearForm.atom(SoFar.MORE);
+                }
+            });
+            return form != null && ExactRatio.ONE.equals(form.coefs().get(SoFar.THE_ANSWER));
+        }
+
+        /** What an arm of a step is made of, as far as whether it adds to the answer so far. */
+        private enum SoFar { THE_ANSWER, MORE }
 
         /** What an atom of a step is: the answer so far, an atom of the element, or how many the
          *  container at a place of the element holds. */
@@ -1525,9 +2826,15 @@ public sealed interface ElementValue {
                 return null;
             }
 
+            /**
+             * A newtype's value read off something that is no place of the element is the thing
+             * itself: what a {@code match} on the element answers as an amount is the amount, and
+             * its value is read case by case as the amount is.
+             */
             @Override
             public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
-                return false;
+                return placeOf(fa.target(), at) == null
+                        && !Location.isStep(fa.target().type(), fa.field(), source.newtypes());
             }
         }
     }

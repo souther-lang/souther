@@ -29,7 +29,7 @@ class WhereStandingInASetTurnsIsEveryPlaceItsMembershipChangesTest {
 
     private static final int FAR = 12;
 
-    private static final List<NumericSet> SETS = List.of(
+    private static final List<NumericSet.OfRuns> SETS = List.of(
             new NumericSet.At(Count.of(3)),
             new NumericSet.AwayFrom(List.of(Count.of(-2), Count.of(5))),
             new NumericSet.InARun(run(1, true, 4, false)),
@@ -38,7 +38,7 @@ class WhereStandingInASetTurnsIsEveryPlaceItsMembershipChangesTest {
 
     @Test
     void wheneverTwoNeighboursAreOnEitherSideOfTheSetOneOfThemIsAPlaceItTurnsAt() {
-        for (NumericSet set : SETS) {
+        for (NumericSet.OfRuns set : SETS) {
             List<Place> turns = set.turnsAt();
             for (int k = -FAR; k < FAR; k++) {
                 Count here = Count.of(k);
@@ -60,7 +60,7 @@ class WhereStandingInASetTurnsIsEveryPlaceItsMembershipChangesTest {
      */
     @Test
     void aRunOfStringsNothingNamesAValueInIsSaidAndNotLeftEmpty() {
-        NumericSet awayFromEmpty = new NumericSet.AwayFrom(List.of(Text.of("")));
+        NumericSet.OfRuns awayFromEmpty = new NumericSet.AwayFrom(List.of(Text.of("")));
         Set<CompositionRepertoire> unnamed = EnumSet.noneOf(CompositionRepertoire.class);
 
         List<Place> chosen = CardinalityComposer.valuesAlongAnOrder(Carrier.TEXT,

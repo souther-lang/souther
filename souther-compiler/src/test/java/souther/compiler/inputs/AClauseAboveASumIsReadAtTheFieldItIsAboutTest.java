@@ -2,21 +2,30 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,6 +78,60 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                     String.valueOf(valuesAt(at).ownEnds()),
                     "the clause draws the end it draws, wherever the reading came through");
         }
+    }
+
+    /**
+     * What a clause above holds a total of a shared container to stands at that container under
+     * each case, as it does where no sum is in the way.
+     */
+    @Test
+    void aTotalAboveStandsAtTheSharedContainerUnderEachCase() {
+        String model = """
+                module g
+
+                data Line = { amount: Int }
+                data Paging = { lines: List<Line> }
+                data A = { ...Paging, x: Int }
+                data B = { ...Paging, y: Int }
+                data Q = A | B
+
+                data Holder = { q: HELD }
+                    invariant big = List.sum(List.map(.amount, q.lines)) >= 100
+
+                data Ok
+
+                behavior read : (h: Holder) -> Ok
+                """;
+        Endpoint aHundred = Endpoint.inclusive(Count.of(100));
+
+        assertEquals(aHundred, totalOfTheAmounts(model.replace("HELD", "A"), null).min(),
+                "the clause holds the total with no sum in the way");
+        for (String each : List.of("A", "B")) {
+            assertEquals(aHundred, totalOfTheAmounts(model.replace("HELD", "Q"), each).min(),
+                    () -> "where the clause holds it, under " + each);
+        }
+    }
+
+    /**
+     * Where the region leaves what a body adding up the amounts of the lines of {@code source}
+     * reads — the lines under the case named {@code under}, or with no case where it is null.
+     */
+    private static NumericDomain.Bounds totalOfTheAmounts(String source, String under) {
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
+        String module = compilation.modules().get(0);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        InputDomain input = reading(source);
+        TermPath q = TermPath.of("h").then("q");
+        TermPath lines = (under == null ? q : q.refine(caseNamed(input, under))).then("lines");
+        NumericTerm total = NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"),
+                new RunSource.ProjectedOccurrences(lines.element().then("amount")), Type.INT,
+                rules.inners(), rules.symbols());
+        NumericDomain.FormProjection.Within within = assertInstanceOf(
+                NumericDomain.FormProjection.Within.class,
+                input.quantities(rules).region().projectionOf(total));
+        assertNotNull(within.bounds(), "the total is held");
+        return within.bounds();
     }
 
     /**
@@ -278,7 +341,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
 
                 behavior read : (h: Holder) -> Ok
                 """;
-        InputDomain sum = reading(model.replace("HELD", "Q"));
+        InputDomain sum = readingRefused(model.replace("HELD", "Q"), List.of("E1319"));
 
         for (String each : List.of("A", "B")) {
             Position at = sum.at(TermPath.of("h").then("q")
@@ -287,7 +350,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                     () -> "the clause of `Holder` about this field went unread, and the field says "
                             + "so under case " + each);
         }
-        assertFalse(reading(model.replace("HELD", "A"))
+        assertFalse(readingRefused(model.replace("HELD", "A"), List.of("E1319"))
                         .at(TermPath.of("h").then("q").then("limit")).rulesLeftUnread().isEmpty(),
                 "which is what the same clause leaves where no sum is in the way");
     }
@@ -301,7 +364,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
      */
     @Test
     void aQuestionRaisedAboveIsRaisedAtEachCase() {
-        InputDomain read = reading("""
+        InputDomain read = readingRefused("""
                 module g
 
                 data Code = String invariant shaped = String.length(value) >= 2
@@ -316,7 +379,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
                 data Ok
 
                 behavior read : (h: Holder) -> Ok
-                """);
+                """, List.of("E1105"));
 
         for (String each : List.of("A", "B")) {
             Position at = read.at(TermPath.of("h").then("q")
@@ -442,6 +505,76 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
         }
     }
 
+    /** A choice of ranges above a sum whose case `A` states {@code CASE} of the shared field. */
+    private static final String A_CHOICE_ABOVE = """
+            module g
+
+            data Paging = { limit: Int }
+            data A = { ...Paging, x: Int }
+                invariant own = CASE
+            data B = { ...Paging, y: Int }
+            data Q = A | B
+
+            data Holder = { q: Q }
+                invariant apart = q.limit > 100 || q.limit < 0
+
+            data Ok
+
+            behavior read : (h: Holder) -> Ok
+            """;
+
+    /** What the order leaves the shared field under {@code each}. */
+    private static OrderedRuns orderedUnder(InputDomain sum, String each) {
+        return sum.at(TermPath.of("h").then("q").refine(caseNamed(sum, each)).then("limit"))
+                .orderedRegion();
+    }
+
+    /** Whether {@code end} is the whole number {@code at}. */
+    private static boolean at(Endpoint end, long at) {
+        return end != null && end.at().sameAs(Count.of(at));
+    }
+
+    /**
+     * A choice of ranges the value above leaves the shared field is a gap in it under each case,
+     * met with what the case's own rules leave it: both runs where the case's rule cuts one short.
+     */
+    @Test
+    void theRunsAChoiceAboveLeavesStandUnderEachCaseMetWithTheCasesOwn() {
+        InputDomain sum = reading(A_CHOICE_ABOVE.replace("CASE", "limit <= 150"));
+
+        OrderedRuns underB = orderedUnder(sum, "B");
+        assertEquals(2, underB.runs().size(), underB::toString);
+        assertTrue(at(underB.runs().getFirst().high(), -1), underB::toString);
+        assertNull(underB.runs().getLast().high(),
+                "under `B`, which has no rule of its own, the upper run runs on");
+        OrderedRuns underA = orderedUnder(sum, "A");
+        assertEquals(2, underA.runs().size(), underA::toString);
+        assertTrue(at(underA.runs().getLast().high(), 150),
+                "and under `A` the upper run stops where `A`'s own rule stops it: " + underA);
+    }
+
+    /**
+     * And where the case's own rule leaves one of the runs, the field is that run — which is where
+     * it stops, and not the ends around both runs met with the case's rule.
+     */
+    @Test
+    void aCaseLeavingOneOfTheRunsAboveLeavesTheFieldThatRun() {
+        OrderedRuns underA = orderedUnder(reading(A_CHOICE_ABOVE.replace("CASE", "limit >= 0")),
+                "A");
+
+        assertEquals(1, underA.runs().size(), underA::toString);
+        assertTrue(at(underA.runs().getFirst().low(), 101), underA::toString);
+    }
+
+    /** And where it leaves neither, the field holds nothing under that case. */
+    @Test
+    void aCaseLeavingNeitherOfTheRunsAboveLeavesTheFieldNothing() {
+        InputDomain sum = reading(A_CHOICE_ABOVE.replace("CASE", "limit >= 0 && limit <= 100"));
+
+        assertTrue(orderedUnder(sum, "A").holdsNothing(), () -> orderedUnder(sum, "A").toString());
+        assertEquals(2, orderedUnder(sum, "B").runs().size(), "and `B` still has both");
+    }
+
     /** The narrowing that names this case of the sum standing at {@code sum}. */
     private static Refinement caseNamedAt(InputDomain read, TermPath sum, String name) {
         for (Case each : read.at(sum).obligationCases()) {
@@ -481,14 +614,26 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     }
 
     private static InputDomain reading(String source, String behavior) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        return readingOf(ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY)),
+                behavior);
+    }
+
+    /** The reading of a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static InputDomain readingRefused(String source, List<String> refusedFor) {
+        Compilation compilation = Compilation.ofSources(List.of(source),
+                souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(refusedFor, compilation);
+        return readingOf(compilation, "read");
+    }
+
+    private static InputDomain readingOf(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(sigs.get(behavior), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());

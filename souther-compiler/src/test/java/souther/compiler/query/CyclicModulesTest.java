@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
@@ -69,6 +70,13 @@ class CyclicModulesTest {
         return byId;
     }
 
+    /** The two documents compiled, the cycle between them reported. */
+    private static Compilation cyclic(String first, String second) {
+        Compilation compilation = Compilation.ofDocuments(documents(first, second), Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(List.of("E1501"), compilation);
+    }
+
     @Test
     void anEditorIsToldAboutACycleThroughImports() {
         Map<SourceId, List<Diagnostic>> found =
@@ -93,9 +101,7 @@ class CyclicModulesTest {
 
     @Test
     void nothingIsCompiledOutOfACycle() {
-        Compilation compilation = Compilation.ofDocuments(documents(X, Y), Set.of(),
-                souther.compiler.meta.ModulePath.EMPTY);
-        compilation.diagnostics();
+        Compilation compilation = cyclic(X, Y);
 
         assertEquals(Map.of(), compilation.classes(),
                 "a module whose signatures cannot be worked out emits nothing");
@@ -106,9 +112,7 @@ class CyclicModulesTest {
 
     @Test
     void whatAModuleReachesIsWorkedOutWithoutAskingAboutEachModuleReached() {
-        Compilation compilation = Compilation.ofDocuments(documents(A, B), Set.of(),
-                souther.compiler.meta.ModulePath.EMPTY);
-        compilation.diagnostics();
+        Compilation compilation = cyclic(A, B);
 
         Output.Reaches reaches = new Output.Reaches("m.a");
         assertEquals(List.of("m.a", "m.b"), compilation.db().ask(reaches).value(),
@@ -130,9 +134,7 @@ class CyclicModulesTest {
      */
     @Test
     void nothingIsScopedOutOfACycle() {
-        Compilation compilation = Compilation.ofDocuments(documents(A, B), Set.of(),
-                souther.compiler.meta.ModulePath.EMPTY);
-        compilation.diagnostics();
+        Compilation compilation = cyclic(A, B);
 
         assertEquals(souther.compiler.check.ModuleUniverse.InSight.UNREADABLE,
                 CompilationUniverse.over(compilation.db()).module("m.a"),

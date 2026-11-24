@@ -8,6 +8,7 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.ReplacedRun;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.partition.Replacement;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -145,7 +146,9 @@ class ARowIsRunAgainWithAnArmReplacedTest {
     private static Map<Integer, ReplacedRun> replacedOf(RowOutcome row) {
         Map<Integer, ReplacedRun> byWith = new TreeMap<>();
         for (ReplacedRun run : row.replaced()) {
-            byWith.put(run.with(), run);
+            if (run.replaced() instanceof Replacement.OfAnArm arm) {
+                byWith.put(arm.with(), run);
+            }
         }
         return byWith;
     }
@@ -153,7 +156,7 @@ class ARowIsRunAgainWithAnArmReplacedTest {
     private static RowOutcome rowNamed(String name) {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {

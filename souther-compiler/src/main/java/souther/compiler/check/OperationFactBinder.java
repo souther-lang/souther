@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
@@ -34,12 +35,16 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.TextExtents;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.UnaryOperator;
@@ -153,9 +158,11 @@ final class OperationFactBinder {
         return bindAll(stdlib, declared, LibraryProofs.PROVING);
     }
 
-    /** The same, over what the language declares. */
+    /** The same, over what the language declares: what the operations the library writes state
+     *  proved here where their proofs read anything other than the shipped library's, and read
+     *  off what proving them came to when this compiler was built where they do not. */
     static BoundOperationFacts bindAll(Stdlib stdlib) {
-        return bindAll(stdlib, LibraryProofs.PROVING);
+        return bindAll(stdlib, LibraryProofsAsBuilt.provingWhatDiffers());
     }
 
     /** The same, over what the language declares, with what is proved of the operations the
@@ -297,7 +304,8 @@ final class OperationFactBinder {
             }
             case LawProposition.Always<ArgumentRef> _, LawProposition.Observed<ArgumentRef> _,
                  LawProposition.Compared<ArgumentRef> _, LawProposition.SomeElement<ArgumentRef> _,
-                 LawProposition.Same<ArgumentRef> _ -> where;
+                 LawProposition.Same<ArgumentRef> _, LawProposition.Inside<ArgumentRef> _ ->
+                    where;
         };
     }
 
@@ -347,13 +355,114 @@ final class OperationFactBinder {
                                     TypeRequirement.ANY,
                                     "the argument a positive answer names as lesser"));
             case OperationFact.ShiftsBy shifts -> holdShift(stdlib, declaration, shifts);
+            case OperationFact.MovesADateByMonths moves ->
+                    holdAMoveByMonths(stdlib, declaration, moves);
             case OperationFact.CountsWholeUnitsBetween counts ->
                     holdCountOfWholeUnits(declaration, counts);
-            case OperationFact.RoundsToAWholeNumber rounds ->
+            case OperationFact.CountsTheWholeUnitsOf counts ->
+                    holdCountOfTheWholeUnitsOf(declaration, counts);
+            case OperationFact.RoundsToAStep rounds ->
                     holdRounding(stdlib, declaration, rounds);
             case OperationFact.BoundsItsResult bounded ->
                     new BoundOperationFact.BoundsItsResult(operation,
                             holdBound(declaration, bounded.bound()));
+            case OperationFact.BoundsEachElementOfItsResult bounded -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
+                        "a list of whole numbers each of which a bound holds of");
+                ResultBound<ArgumentRef> bound = bounded.bound();
+                yield new BoundOperationFact.BoundsEachElementOfItsResult(operation,
+                        new ResultBound<>(holdToTheDeclaration(declaration, bound.against(), null,
+                                TypeRequirement.EXACT,
+                                "the argument a bound on each element is held against"),
+                                bound.offset(), bound.rel(), new ResultBound.Provided.Always<>(),
+                                bound.origin()));
+            }
+            // Every whole number between two, each once and in order: both ends are whole numbers
+            // and so is every element, or the element at a position is no end moved by it.
+            case OperationFact.HoldsEachWholeNumberInTurn each -> {
+                requireAKernel(stdlib, operation, "which numbers it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
+                        "a list of every whole number between two");
+                DeclaredArgument from = holdAWholeNumber(declaration, each.from(),
+                        "the number the list starts at");
+                DeclaredArgument to = holdAWholeNumber(declaration, each.to(),
+                        "the number the list ends at");
+                yield new BoundOperationFact.HoldsEachWholeNumberInTurn(operation, from, to);
+            }
+            // A value that is one of the elements of a container.
+            case OperationFact.AnswersAnElementOf of -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element of a container");
+                DeclaredArgument source = holdToTheDeclaration(declaration, of.source(), null,
+                        TypeRequirement.CONTAINER, "what the value answered is an element of");
+                holdTheAnswerToAnElementOf(declaration, source);
+                yield new BoundOperationFact.AnswersAnElementOf(operation, source);
+            }
+            // The greatest or the least of the elements of a container, which are ordered.
+            case OperationFact.AnswersAnExtremeElementOf extreme -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element of a container");
+                DeclaredArgument source = holdToTheDeclaration(declaration, extreme.source(), null,
+                        TypeRequirement.CONTAINER, "what the value answered is an end of");
+                holdTheAnswerToAnElementOf(declaration, source);
+                yield new BoundOperationFact.AnswersAnExtremeElementOf(operation, source,
+                        BoundOperationFacts.End.valueOf(extreme.end().name()));
+            }
+            // An element picked at a place of a list: the place is a whole number, and the answer
+            // an option of an element of the list.
+            case OperationFact.AnswersTheElementAt picked -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of the element of a list at a place");
+                DeclaredArgument list = holdToTheDeclaration(declaration, picked.list(), null,
+                        TypeRequirement.CONTAINER, "what the element is picked from");
+                DeclaredArgument index = holdToTheDeclaration(declaration, picked.index(), null,
+                        TypeRequirement.ANY, "the place the element is picked at");
+                holdTheAnswerToAnElementOf(declaration, list);
+                if (!(list.stands() instanceof Type.ListOf) || !Type.INT.equals(index.stands())) {
+                    throw new IllegalStateException(((ValueName.Stdlib)
+                            declaration.declaring().operation()).qualified() + " picks at "
+                            + Type.show(index.stands()) + " from " + Type.show(list.stands())
+                            + ", which is no whole number and no list");
+                }
+                yield new BoundOperationFact.AnswersTheElementAt(operation, index, list);
+            }
+            // A value a container files under a key: the key is one of the container's keys, and the
+            // answer an option of what it holds.
+            case OperationFact.AnswersTheValueFiledUnder filed -> {
+                requireAKernel(stdlib, operation, "which value it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of the value a container files under a key");
+                DeclaredArgument container = holdToTheDeclaration(declaration, filed.container(),
+                        null, TypeRequirement.CONTAINER, "what files the value");
+                DeclaredArgument key = holdToTheDeclaration(declaration, filed.key(), null,
+                        TypeRequirement.ANY, "the key the value is filed under");
+                holdTheAnswerToAnElementOf(declaration, container);
+                if (!key.stands().equals(Type.keyOf(container.stands()))) {
+                    throw new IllegalStateException(((ValueName.Stdlib)
+                            declaration.declaring().operation()).qualified() + " looks up under "
+                            + Type.show(key.stands()) + ", which is not a key of "
+                            + Type.show(container.stands()));
+                }
+                yield new BoundOperationFact.AnswersTheValueFiledUnder(operation, key, container);
+            }
+            // A value found among the elements of a container, and a truth the closure answers.
+            case OperationFact.AnswersAnElementWhereTheClosureHolds found -> {
+                requireAKernel(stdlib, operation, "what it finds");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element a closure holds of");
+                DeclaredArgument source = holdToTheDeclaration(declaration, found.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the value found is an element of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what holds of the value found");
+                holdTheClosureToTheElementFound(declaration, source, closure);
+                yield new BoundOperationFact.AnswersAnElementWhereTheClosureHolds(operation, source,
+                        closure);
+            }
             case OperationFact.BuildsItsResultFrom builds ->
                     new BoundOperationFact.BuildsItsResultFrom(operation,
                             holdBuilding(declaration, builds));
@@ -382,10 +491,7 @@ final class OperationFactBinder {
             }
             // An option of what the closure answers, made of an option of what it is handed.
             case OperationFact.AnswersTheClosureOnWhatItHolds answers -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it answers of an option is its body's to say");
-                }
+                requireAKernel(stdlib, operation, "what it answers of an option");
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
                         "an option of what a closure answers");
                 DeclaredArgument option = holdToTheDeclaration(declaration, answers.option(),
@@ -478,11 +584,8 @@ final class OperationFactBinder {
                                 slots(stdlib, declaration, clause, true)).toList());
             }
             case OperationFact.IsRelated related -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it answers is related to other kernels' answers"
-                            + " beside its body: what a body comes to is proved of it");
-                }
+                requireAKernel(stdlib, operation,
+                        "what it answers beside other kernels' answers");
                 yield new BoundOperationFact.IsRelated(operation,
                         slots(stdlib, declaration, related.holds(), false));
             }
@@ -524,6 +627,21 @@ final class OperationFactBinder {
                 yield new BoundOperationFact.AssemblesPieces(operation, source, closure,
                         assembles.piece());
             }
+            // What is kept of a container's elements is a container, and what keeps them a closure.
+            case OperationFact.KeepsTheElementsWhereItHolds keeps -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what holds the elements of a container where a closure holds of them");
+                DeclaredArgument source = holdToTheDeclaration(declaration, keeps.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the elements are kept of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what decides which are kept");
+                holdThePieceTo(declaration, source, closure,
+                        PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS);
+                yield new BoundOperationFact.KeepsTheElementsWhereItHolds(operation, source,
+                        closure);
+            }
             // The elements of a list kept by an index are a list's, and the index is a number.
             case OperationFact.HoldsTheElementsByIndex byIndex -> {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
@@ -539,11 +657,7 @@ final class OperationFactBinder {
             // What a value is put in answers a container like it, and what is put in is one of what
             // such a container holds.
             case OperationFact.PutsAValueIn puts -> {
-                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
-                    throw new IllegalStateException(operation.operation() + " is written in the"
-                            + " language, and what it puts in is declared beside its body: what a"
-                            + " body builds is proved of it");
-                }
+                requireAKernel(stdlib, operation, "what it puts in");
                 DeclaredArgument into = holdToTheDeclaration(declaration, puts.into(), null,
                         TypeRequirement.CONTAINER, "what a value is put in");
                 DeclaredArgument value = holdToTheDeclaration(declaration, puts.value(), null,
@@ -552,7 +666,30 @@ final class OperationFactBinder {
                         UnaryOperator.identity(), "the same kind of container");
                 holdTheAnswerTo(declaration, value, Type::elementOfAContainer,
                         UnaryOperator.identity(), "a container and one of what it holds");
-                yield new BoundOperationFact.PutsAValueIn(operation, value, into);
+                Optional<DeclaredArgument> under = Optional.empty();
+                if (puts.under().isPresent()) {
+                    DeclaredArgument key = holdToTheDeclaration(declaration, puts.under().get(),
+                            null, TypeRequirement.ANY, "the key the value is put under");
+                    holdTheAnswerTo(declaration, key, Type::keyOf, UnaryOperator.identity(),
+                            "a map and a key of it");
+                    under = Optional.of(key);
+                }
+                yield new BoundOperationFact.PutsAValueIn(operation, value, into, under);
+            }
+            // What is kept of a map's entries is a map, and what keeps them a closure handed the
+            // key and the value.
+            case OperationFact.KeepsTheEntriesWhereItHolds keeps -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what holds the entries of a map where a closure holds of them");
+                DeclaredArgument source = holdToTheDeclaration(declaration, keeps.source(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "what the entries are kept of");
+                DeclaredArgument closure = holdToTheDeclaration(declaration,
+                        new ArgumentRef.TheClosure(), new ArgumentRef.TheClosure(),
+                        TypeRequirement.CLOSURE, "what decides which are kept");
+                holdTheEntriesTo(declaration, source, closure);
+                yield new BoundOperationFact.KeepsTheEntriesWhereItHolds(operation, source,
+                        closure);
             }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,
@@ -570,6 +707,24 @@ final class OperationFactBinder {
             // declarations are held to each other.
             case OperationFact.MeansTheSameAsASizeOfNought means ->
                     holdSizeEquivalence(stdlib, declaration, means.size());
+            case OperationFact.AgreesWithAnotherWhereItIsGivenText agrees ->
+                    holdAgreement(stdlib, declaration, agrees);
+            // Two of one kind of value in and one of that kind out, which is what an operator
+            // over a kind of value is.
+            case OperationFact.IsTheOperator is -> {
+                String name = theLibraryOperation(operation.operation()).qualified();
+                List<Type> takes = declaration.params();
+                if (takes.size() != 2
+                        || !sameShape(takes.get(0), takes.get(1), new HashMap<>(), new HashMap<>())
+                        || !sameShape(takes.get(0), declaration.result(), new HashMap<>(),
+                                new HashMap<>())) {
+                    throw new IllegalStateException(name + " is said to be the operator "
+                            + is.operator() + ", and it does not take two values of one type and"
+                            + " answer one");
+                }
+                yield new BoundOperationFact.IsTheOperator(operation, is.operator(),
+                        new DeclaredArgument(operation, 0, takes.getFirst()));
+            }
             // Names nothing beyond the operation it is about, so there is nothing about it to hold
             // to a signature beyond the declaration every fact is held to above. What it comes to
             // bound is the fact about that declaration.
@@ -582,11 +737,6 @@ final class OperationFactBinder {
                 holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                         "what every answer of it has a value for");
                 yield new BoundOperationFact.EveryAnswerItCanGiveHasASourceValue(operation);
-            }
-            case OperationFact.EndsAreWhereTheRepresentationStops _ -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
-                        "what the ends of its answers are");
-                yield new BoundOperationFact.EndsAreWhereTheRepresentationStops(operation);
             }
             case OperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                     holdTakenOf(declaration, taken.how());
@@ -601,6 +751,19 @@ final class OperationFactBinder {
                     new BoundOperationFact.IsDefinedByCases(operation,
                             holdCase(declaration, defined.one()));
         };
+    }
+
+    /** {@code at} held to the declaration as an argument that is a whole number. */
+    private static DeclaredArgument holdAWholeNumber(CompleteSignature declaration, ArgumentRef at,
+                                                     String role) {
+        DeclaredArgument held = holdToTheDeclaration(declaration, at, null, TypeRequirement.EXACT,
+                role);
+        if (held.stands() != Type.Prim.INT) {
+            throw new IllegalStateException("argument " + (held.position() + 1) + " of "
+                    + declaration.declaring().operation() + " is " + Type.show(held.stands())
+                    + ", not a whole number; it is named as " + role);
+        }
+        return held;
     }
 
     /**
@@ -683,20 +846,21 @@ final class OperationFactBinder {
      * passed, that argument being an {@code Int}, while what it answers is a list and has no count
      * for the equation to be about.
      *
-     * <p>Counted rather than a number, because that is what the fact says. A date is no number and
-     * counts days. And counted is what the discharge check needs of every part to carry a form —
-     * a carrier that counts has the coordinate it reasons over — so a form held here is a form
-     * that check carries, and it does not ask again.
+     * <p>Counted or exactly readable, rather than a number, because that is what the fact says. A
+     * date is no number and counts days, and a {@code Rational} is a number on no carrier. The
+     * statement is about the arithmetic, so it is held here to what an equation can be written
+     * over ({@link TypeRequirement#ARITHMETIC}); what carries the form on a carrier is asked by the
+     * reader that gives the answer a meaning there.
      */
     private static LinearForm<DeclaredArgument> holdAFormOfItsArguments(
             CompleteSignature declaration, LinearForm<ArgumentRef> form) {
-        holdTheResultToTheDeclaration(declaration, TypeRequirement.COUNTED,
+        holdTheResultToTheDeclaration(declaration, TypeRequirement.ARITHMETIC,
                 "what a form of its arguments is about");
         LinearForm<DeclaredArgument> bound = LinearForm.constant(form.constant());
         for (Map.Entry<ArgumentRef, ExactRatio> each
                 : form.coefs().entrySet()) {
             DeclaredArgument argument = holdToTheDeclaration(declaration, each.getKey(), null,
-                    TypeRequirement.COUNTED, "an argument the result is a form of");
+                    TypeRequirement.ARITHMETIC, "an argument the result is a form of");
             // Numbers a library declares and no model writes, so a sum of them is held.
             bound = bound.plus(LinearForm.weighing(argument, each.getValue()))
                     .orFail("a form a library declares of its arguments has a number no ratio holds");
@@ -747,6 +911,48 @@ final class OperationFactBinder {
     }
 
     /**
+     * As {@link #holdToTheDeclaration}, for a move of a date by months: the operation answers a
+     * date, moves a date by a whole number of months, the year and the month a date is counted by
+     * each take a date and answer a whole number, and the remainder the month it lands in is
+     * stated through takes two whole numbers and answers one. A move stated through anything else
+     * would land in a month no number of months says.
+     */
+    private static BoundOperationFact.MovesADateByMonths holdAMoveByMonths(
+            Stdlib stdlib, CompleteSignature declaration, OperationFact.MovesADateByMonths moves) {
+        ValueName.Stdlib library = (ValueName.Stdlib) declaration.declaring().operation();
+        DeclaredArgument months = holdToTheDeclaration(declaration, moves.months(), null,
+                TypeRequirement.ANY, "the months a date is moved by");
+        DeclaredArgument date = holdToTheDeclaration(declaration, moves.date(), null,
+                TypeRequirement.ANY, "the date moved by months");
+        if (months.stands() != Type.Prim.INT || date.stands() != Type.Prim.DATE
+                || declaration.result() != Type.Prim.DATE) {
+            throw new IllegalStateException(library.qualified() + " moves "
+                    + Type.show(date.stands()) + " by " + Type.show(months.stands())
+                    + " and answers " + Type.show(declaration.result())
+                    + ", which is no date moved by a whole number of months");
+        }
+        CompleteSignature year = declaredSignature(stdlib, moves.year());
+        CompleteSignature month = declaredSignature(stdlib, moves.month());
+        CompleteSignature day = declaredSignature(stdlib, moves.day());
+        for (CompleteSignature part : List.of(year, month, day)) {
+            if (!part.params().equals(List.of(Type.Prim.DATE)) || part.result() != Type.Prim.INT) {
+                throw new IllegalStateException("a date " + library.qualified()
+                        + " moves is counted by " + part.declaring().operation()
+                        + ", which takes no number of a date");
+            }
+        }
+        CompleteSignature remainder = declaredSignature(stdlib, moves.remainder());
+        if (!remainder.params().equals(List.of(Type.Prim.INT, Type.Prim.INT))
+                || remainder.result() != Type.Prim.INT) {
+            throw new IllegalStateException("the month " + library.qualified()
+                    + " lands in is stated through " + moves.remainder().qualified()
+                    + ", which does not leave a whole number of a whole number");
+        }
+        return new BoundOperationFact.MovesADateByMonths(declaration.declaring(), months, date,
+                year.declaring(), month.declaring(), day.declaring(), remainder.declaring());
+    }
+
+    /**
      * As {@link #holdToTheDeclaration}, for a count of whole units between two values: the answer is
      * a number, and what is counted from and to is of one type, since a count of units between two
      * values of different kinds has no steps to count.
@@ -772,24 +978,45 @@ final class OperationFactBinder {
     }
 
     /**
-     * As {@link #holdToTheDeclaration}, for a rounding to a whole number: the answer is an
-     * {@code Int}, what is rounded is a number, and the policy is the one the library declares —
-     * each of whose cases is one way of rounding the compiler knows, and each way of rounding one of
-     * its cases.
+     * As {@link #holdToTheDeclaration}, for the whole units of a counted value: what is counted is
+     * of an order whose steps are numbers, and the answer is counted too, on the coarser order.
+     */
+    static BoundOperationFact.CountsTheWholeUnitsOf holdCountOfTheWholeUnitsOf(
+            CompleteSignature declaration, OperationFact.CountsTheWholeUnitsOf counts) {
+        DeclaredArgument of = holdToTheDeclaration(declaration, counts.of(), null,
+                TypeRequirement.COUNTED, "the value whose whole units are counted");
+        holdTheResultToTheDeclaration(declaration, TypeRequirement.COUNTED,
+                "the step of the coarser order the value falls in");
+        return new BoundOperationFact.CountsTheWholeUnitsOf(declaration.declaring(), of,
+                declaration.result(), counts.perUnit());
+    }
+
+    /**
+     * As {@link #holdToTheDeclaration}, for a rounding to a step: what is rounded is a number; the
+     * answer is an {@code Int} where the rounding is to a whole number, and a {@code Decimal}
+     * where it is at a scale, which is an {@code Int}; and the policy is the one the library
+     * declares — each of whose cases is one way of rounding the compiler knows, and each way of
+     * rounding one of its cases.
      *
      * <p>The cases are matched to the ways by name here and nowhere else, and both ways round: a
      * case the library adds is one whose lines nothing here knows, and a way no case is called is
      * one the library no longer has.
      */
-    static BoundOperationFact.RoundsToAWholeNumber holdRounding(
-            Stdlib stdlib, CompleteSignature declaration, OperationFact.RoundsToAWholeNumber rounds) {
-        if (declaration.result() != Type.Prim.INT) {
-            throw new IllegalStateException("what " + declaration.declaring().operation()
-                    + " rounds to is " + Type.show(declaration.result())
-                    + ", and a rounding to a whole number answers an Int");
-        }
+    static BoundOperationFact.RoundsToAStep holdRounding(
+            Stdlib stdlib, CompleteSignature declaration, OperationFact.RoundsToAStep rounds) {
         DeclaredArgument value = holdToTheDeclaration(declaration, rounds.value(), null,
                 TypeRequirement.EXACT, "the number that is rounded");
+        DeclaredArgument scale = rounds.scale() == null ? null
+                : holdToTheDeclaration(declaration, rounds.scale(), null, TypeRequirement.EXACT,
+                        "the scale it is rounded at");
+        Type answers = scale == null ? Type.Prim.INT : Type.Prim.DECIMAL;
+        if (!declaration.result().equals(answers)
+                || (scale != null && scale.stands() != Type.Prim.INT)) {
+            throw new IllegalStateException("what " + declaration.declaring().operation()
+                    + " rounds to is " + Type.show(declaration.result())
+                    + ", and a rounding to a whole number answers an Int, and one at an Int scale"
+                    + " a Decimal");
+        }
         DeclaredArgument mode = holdToTheDeclaration(declaration, rounds.mode(), null,
                 TypeRequirement.ANY, "the policy it is rounded by");
         Type policy = mode.stands();
@@ -817,7 +1044,7 @@ final class OperationFactBinder {
             throw new IllegalStateException("the rounding policy has the cases " + ways.keySet()
                     + ", and the compiler knows the ways " + List.of(WholeRounding.values()));
         }
-        return new BoundOperationFact.RoundsToAWholeNumber(declaration.declaring(), mode, value,
+        return new BoundOperationFact.RoundsToAStep(declaration.declaring(), scale, mode, value,
                 ways);
     }
 
@@ -874,14 +1101,32 @@ final class OperationFactBinder {
                         "the argument a bound on the result is held against");
         ResultBound.Provided<DeclaredArgument> provided = switch (bound.provided()) {
             case ResultBound.Provided.Always<ArgumentRef> _ -> new ResultBound.Provided.Always<>();
-            case ResultBound.Provided.ConstantAboveZero<ArgumentRef> constant ->
-                    new ResultBound.Provided.ConstantAboveZero<>(
-                            holdBoundArgument(declaration, constant.argument()));
-            case ResultBound.Provided.ConstantBelowZero<ArgumentRef> constant ->
-                    new ResultBound.Provided.ConstantBelowZero<>(
-                            holdBoundArgument(declaration, constant.argument()));
+            case ResultBound.Provided.ArgumentStands<ArgumentRef> stands ->
+                    new ResultBound.Provided.ArgumentStands<>(
+                            holdBoundArgument(declaration, stands.argument()), stands.rel());
         };
-        return new ResultBound<>(against, bound.offset(), bound.rel(), provided);
+        BigDecimal offset = switch (bound.origin()) {
+            case ResultBound.Origin.OfTheOperation _ -> bound.offset();
+            case ResultBound.Origin.OfTheRepresentation(var limit) -> {
+                if (bound.offset().signum() != 0) {
+                    throw new IllegalArgumentException("a limit the language keeps has its number"
+                            + " from the language, and a declaration of " + limit
+                            + " wrote " + bound.offset());
+                }
+                yield valueOf(limit);
+            }
+        };
+        return new ResultBound<>(against, offset, bound.rel(), provided, bound.origin());
+    }
+
+    /** The number the language keeps {@code limit} at, read from the one place it is kept. */
+    private static BigDecimal valueOf(ResultBound.Limit limit) {
+        return switch (limit) {
+            case LONGEST_STRING -> BigDecimal.valueOf(TextExtents.LONGEST_STRING);
+            case MOST_ELEMENTS -> new BigDecimal(GetsPast.MOST_ELEMENTS);
+            case EARLIEST_DATE_YEAR -> BigDecimal.valueOf(LocalDate.MIN.getYear());
+            case LATEST_DATE_YEAR -> BigDecimal.valueOf(LocalDate.MAX.getYear());
+        };
     }
 
     private static DeclaredArgument holdBoundArgument(CompleteSignature declaration,
@@ -1051,6 +1296,83 @@ final class OperationFactBinder {
         }
     }
 
+    /**
+     * Holds an operation said to find an element of {@code source} the closure holds of to its
+     * signature: the closure takes one element of the source and answers a truth, and the answer is
+     * an option of an element of the source.
+     */
+    private static void holdTheClosureToTheElementFound(CompleteSignature declaration,
+                                                        DeclaredArgument source,
+                                                        DeclaredArgument closure) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != source.position()) {
+            throw new IllegalStateException(name + " is said to find an element of argument "
+                    + (source.position() + 1) + ", and its signature hands no closure those");
+        }
+        holdTheAnswerToAnElementOf(declaration, source);
+        Type held = Type.elementOf(source.stands());
+        if (!(declaration.params().get(closure.position()) instanceof Type.FnOf fn)
+                || fn.params().size() != 1 || !fn.params().getFirst().equals(held)
+                || !Type.BOOL.equals(fn.result())) {
+            throw new IllegalStateException(name + " is handed " + Type.show(
+                    declaration.params().get(closure.position())) + " for the elements of "
+                    + Type.show(source.stands()) + ", which is not a closure from the elements to"
+                    + " a truth");
+        }
+    }
+
+    /**
+     * Holds an operation said to keep the entries of {@code source} where {@code closure} holds of
+     * them to its signature: the closure is handed a key and then the value filed under it, of the
+     * source, and answers a truth, and the answer is a map of the source's own type.
+     *
+     * <p>The key and the value, in that order, are what a reader of the entries applies the closure
+     * to, so a closure that takes them the other way round is not one it can read.
+     */
+    private static void holdTheEntriesTo(CompleteSignature declaration, DeclaredArgument source,
+                                         DeclaredArgument closure) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != source.position()
+                || handed.closureArg() != closure.position() || handed.keyParam() != 0
+                || handed.elementParam() != 1) {
+            throw new IllegalStateException(name + " is said to keep the entries of argument "
+                    + (source.position() + 1) + ", and its signature hands no closure the key and"
+                    + " then the value of those");
+        }
+        Type key = Type.keyOf(source.stands());
+        Type value = Type.elementOf(source.stands());
+        if (!declaration.result().equals(source.stands())
+                || !(declaration.params().get(closure.position()) instanceof Type.FnOf fn)
+                || !fn.params().equals(List.of(key, value)) || !Type.BOOL.equals(fn.result())) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " of " + Type.show(source.stands()) + " and is handed "
+                    + Type.show(declaration.params().get(closure.position())) + ", which is not a"
+                    + " map of the same entries and a closure from a key and its value to a truth");
+        }
+    }
+
+    /** That the operation answers an option of what the elements of {@code source} are. */
+    private static void holdTheAnswerToAnElementOf(CompleteSignature declaration,
+                                                   DeclaredArgument source) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        if (!(declaration.result() instanceof Type.OptionOf(Type found))
+                || !found.equals(Type.elementOf(source.stands()))) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " of " + Type.show(source.stands()) + ", which is not an option of one of"
+                    + " its elements");
+        }
+    }
+
+    /** That {@code operation} is a kernel: what a written operation answers is its body's to say. */
+    private static void requireAKernel(Stdlib stdlib, DeclaredOperation operation, String what) {
+        if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+            throw new IllegalStateException(operation.operation() + " is written in the language,"
+                    + " and " + what + " is its body's to say");
+        }
+    }
+
     private static void holdTheClosureAnswerTo(CompleteSignature declaration,
                                                DeclaredArgument container, boolean inside) {
         String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
@@ -1088,7 +1410,7 @@ final class OperationFactBinder {
     private static NumericResult<DeclaredArgument> holdNumericResult(
             Stdlib stdlib, CompleteSignature declaration, NumericResult<ArgumentRef> rule) {
         DeclaredOperation operation = declaration.declaring();
-        Type answers = NumericAnswers.in(declaration.result());
+        Type answers = ArithmeticAnswers.in(declaration.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (declaration.params().size() != reads.size()) {
             throw new IllegalStateException(operation + " takes " + declaration.params().size()
@@ -1103,7 +1425,7 @@ final class OperationFactBinder {
         }
         switch (rule.at()) {
             case NumericResult.Answered.Directly _ ->
-                    holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
+                    holdTheResultToTheDeclaration(declaration, TypeRequirement.EXACT,
                             "where the arithmetic it computes is answered");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(declaration.result()
@@ -1135,10 +1457,15 @@ final class OperationFactBinder {
                 }
             }
         }
+        // The other case is read as a comparison of this argument with a number, which states
+        // what the arm that took the case has established. It is a statement about exact values,
+        // so it holds of a Rational as it does of a number on a carrier. What a Rational has no
+        // way to be is the number a case carries: {@link Terms#computedBy} gives that case no
+        // meaning, and no atom is made for it.
         NumericResult.TheOtherCaseWhen<DeclaredArgument> unless = rule.unless() == null ? null
                 : new NumericResult.TheOtherCaseWhen<>(
                         holdToTheDeclaration(declaration, rule.unless().argument(), null,
-                                TypeRequirement.NUMBER, "the argument a failure is decided by"),
+                                TypeRequirement.ARITHMETIC, "the argument a failure is decided by"),
                         rule.unless().op(), rule.unless().than());
         return new NumericResult<>(rule.at(), rule.computes(), unless);
     }
@@ -1256,6 +1583,10 @@ final class OperationFactBinder {
                 answersNamedIn(stdlib, one);
                 answersNamedIn(stdlib, other);
             }
+            case LawProposition.Inside<ArgumentRef>(var inner, var outer, var _, var _) -> {
+                answersNamedIn(stdlib, inner);
+                answersNamedIn(stdlib, outer);
+            }
         }
     }
 
@@ -1306,6 +1637,44 @@ final class OperationFactBinder {
         Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
         return CompleteSignature.ofDeclaration(operation, entry.signature().params(),
                 entry.signature().result());
+    }
+
+    /**
+     * Holds an operation said to agree with another where it is given a string to their
+     * signatures: it takes a string at that place, and what remains of its arguments is what the
+     * other takes, answering what the other answers — so a call of the first is a call of the
+     * second.
+     */
+    private static BoundOperationFact.AgreesWithAnotherWhereItIsGivenText holdAgreement(
+            Stdlib stdlib, CompleteSignature declaration,
+            OperationFact.AgreesWithAnotherWhereItIsGivenText agrees) {
+        ValueName operation = declaration.declaring().operation();
+        CompleteSignature other = declaredSignature(stdlib, agrees.other());
+        String name = theLibraryOperation(operation).qualified();
+        if (agrees.position() >= declaration.params().size()
+                || declaration.params().get(agrees.position()) != Type.STRING) {
+            throw new IllegalStateException(name + " is said to agree with "
+                    + theLibraryOperation(agrees.other()).qualified() + " where it is given a"
+                    + " string at argument " + (agrees.position() + 1)
+                    + ", and it takes no string there");
+        }
+        List<Type> remaining = new ArrayList<>(declaration.params());
+        remaining.remove(agrees.position());
+        boolean alike = remaining.size() == other.params().size()
+                && sameShape(declaration.result(), other.result(), new HashMap<>(),
+                        new HashMap<>());
+        for (int at = 0; alike && at < remaining.size(); at++) {
+            alike = sameShape(remaining.get(at), other.params().get(at), new HashMap<>(),
+                    new HashMap<>());
+        }
+        if (!alike) {
+            throw new IllegalStateException(name + " is said to agree with "
+                    + theLibraryOperation(agrees.other()).qualified() + " where it is given a"
+                    + " string, and the arguments that remain and what it answers are not what the"
+                    + " other takes and answers");
+        }
+        return new BoundOperationFact.AgreesWithAnotherWhereItIsGivenText(declaration.declaring(),
+                other.declaring(), agrees.position(), agrees.text());
     }
 
     /**
@@ -1697,6 +2066,16 @@ final class OperationFactBinder {
                             + Type.show(typeOf(other)) + " are one value");
                 }
                 yield new LawProposition.Same<>(one, other, same.holds());
+            }
+            case LawProposition.Inside<ArgumentRef> inside -> {
+                LawSubject<DeclaredArgument> inner = lawSubject(declaration, inside.inner(), over);
+                LawSubject<DeclaredArgument> outer = lawSubject(declaration, inside.outer(), over);
+                if (!Type.STRING.equals(typeOf(inner)) || !Type.STRING.equals(typeOf(outer))) {
+                    throw new IllegalStateException("a law of " + library.qualified()
+                            + " asks whether " + Type.show(typeOf(inner)) + " stands inside "
+                            + Type.show(typeOf(outer)) + ", which are not both strings");
+                }
+                yield new LawProposition.Inside<>(inner, outer, inside.where(), inside.holds());
             }
         };
     }

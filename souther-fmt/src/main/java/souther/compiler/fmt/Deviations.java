@@ -3,6 +3,7 @@ package souther.compiler.fmt;
 import souther.compiler.cst.CstParser;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -67,6 +68,7 @@ public final class Deviations {
         List<Deviation> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         List<List<Repair.Edit>> repaired = new ArrayList<>();
+        Newlines lines = Newlines.of(source);
         String text = source;
         for (int round = 0; round < ROUNDS; round++) {
             Witnesses.Pairing pairing = new Witnesses.Pairing(text, form);
@@ -92,7 +94,7 @@ public final class Deviations {
                 for (int i = repaired.size() - 1; i >= 0; i--) {
                     was = Repair.before(repaired.get(i), was);
                 }
-                Deviation d = new Deviation(lineOf(source, was), columnOf(source, was),
+                Deviation d = new Deviation(lines.lineOf(was), columnOf(source, was),
                         rule(witnesses.get(w)), canonicalSide(witnesses.get(w)),
                         sourceSide(witnesses.get(w)));
                 if (seen.add(d.line() + ":" + d.column() + ": " + d.rule())) {
@@ -297,14 +299,45 @@ public final class Deviations {
                 : "`" + text.replace("\n", "\\n").replace("\t", "\\t") + "`";
     }
 
-    private static int lineOf(String source, int at) {
-        int line = 1;
-        for (int i = 0; i < at && i < source.length(); i++) {
-            if (source.charAt(i) == '\n') {
-                line++;
-            }
+    /** Where the lines of one source begin, read once so that a report naming many places in it
+     *  does not count the newlines before each of them again. */
+    private static final class Newlines {
+
+        private final int[] at;
+        private final int length;
+
+        private Newlines(int[] at, int length) {
+            this.at = at;
+            this.length = length;
         }
-        return line;
+
+        static Newlines of(String source) {
+            int[] found = new int[16];
+            int count = 0;
+            for (int i = source.indexOf('\n'); i >= 0; i = source.indexOf('\n', i + 1)) {
+                if (count == found.length) {
+                    found = Arrays.copyOf(found, count * 2);
+                }
+                found[count++] = i;
+            }
+            return new Newlines(Arrays.copyOf(found, count), source.length());
+        }
+
+        /** The line {@code position} is on, counted from one: one more than the newlines before it. */
+        int lineOf(int position) {
+            int limit = Math.min(position, length);
+            int low = 0;
+            int high = at.length;
+            while (low < high) {
+                int middle = (low + high) >>> 1;
+                if (at[middle] < limit) {
+                    low = middle + 1;
+                } else {
+                    high = middle;
+                }
+            }
+            return low + 1;
+        }
     }
 
     private static int columnOf(String source, int at) {

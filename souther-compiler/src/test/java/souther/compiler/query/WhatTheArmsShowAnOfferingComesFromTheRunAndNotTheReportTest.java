@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.partition.FixtureTemplate;
 
@@ -90,7 +91,7 @@ class WhatTheArmsShowAnOfferingComesFromTheRunAndNotTheReportTest {
         compilation.observe(arms == ArmObservation.RECORD
                 ? RowObservation.RECORD_ARMS : RowObservation.READ);
         compilation.measure(asked);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(MODULE));
         assertNotNull(offering, "the model under test compiles");

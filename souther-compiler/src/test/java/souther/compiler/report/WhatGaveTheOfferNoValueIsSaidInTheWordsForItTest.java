@@ -3,6 +3,7 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.StringOfferShortfall;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatGaveTheOfferNoValueIsSaidInTheWordsForItTest {
 
     private static String said(StringOfferShortfall.Why why) {
-        return GeneratedRows.becauseOf(why);
+        return InEnglish.said(GeneratedRows.becauseOf(why));
     }
 
     /** The two limits on composing a value are two sentences, because the same pattern asked for
@@ -51,9 +52,8 @@ class WhatGaveTheOfferNoValueIsSaidInTheWordsForItTest {
      */
     @Test
     void aReadingThatStoppedIsSaidInTheDocumentsOwnWords() {
-        assertEquals("gave none of them: " + AdequacyReport.whyUnread(
-                        souther.compiler.partition.ReportedReason.of(
-                                new BlockReason.UnreadValueRule())),
+        assertEquals("gave none of them: " + InEnglish.said(AdequacyReport.whyUnread(
+                        ReportedReason.of(new BlockReason.UnreadValueRule()))),
                 said(new StringOfferShortfall.Why.NotRead(new BlockReason.UnreadValueRule())));
     }
 }

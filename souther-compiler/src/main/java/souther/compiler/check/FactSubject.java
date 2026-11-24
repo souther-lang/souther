@@ -34,6 +34,17 @@ record FactSubject(Term identity) {
         java.util.Objects.requireNonNull(identity, "a subject is something to point at");
     }
 
+    @Override
+    public boolean equals(Object o) {
+        return this == o || (o instanceof FactSubject other
+                && (identity == other.identity || identity.equals(other.identity)));
+    }
+
+    @Override
+    public int hashCode() {
+        return identity.hashCode();
+    }
+
     /** The subject the value built like {@code identity} is. Null in, null out, so a caller with
      * nothing to name stays a caller with nothing to name. */
     static FactSubject of(Term identity) {

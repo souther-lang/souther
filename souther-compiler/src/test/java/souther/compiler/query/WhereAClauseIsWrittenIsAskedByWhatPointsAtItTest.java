@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -117,8 +118,6 @@ class WhereAClauseIsWrittenIsAskedByWhatPointsAtItTest {
         byId.put("prices.sou", RULED);
         byId.put("cart.sou", BUILDING);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(List.of(), c.errors(), "this workspace is supposed to compile");
-        return c;
+        return ACompiledModel.compiles(c);
     }
 }

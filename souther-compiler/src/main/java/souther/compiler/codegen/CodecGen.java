@@ -1379,29 +1379,14 @@ final class CodecGen {
     private void emitPrimDecode(CodeBuilder code, AstExpressions gen, Hir.PrimDecoder prim,
                                 SequencedMap<String, Type> fields, Src src,
                                 List<ValueShape.Invariant> invariants) {
-        Type inputType = TypeOps.primType(prim.from());
-        ClassDesc leaf = srcLeafOwner(src);
+        Type inputType = prim.from().type();
         Carrier carrier = switch (prim.from()) {
-            case TEXT -> Carrier.STRING;
+            case STRING -> Carrier.STRING;
             case INT -> Carrier.LONG;
             case DECIMAL -> Carrier.DECIMAL;
             case BOOL, DATE, TIME, DATETIME, INSTANT -> Carrier.PLAIN;
         };
-        switch (prim.from()) {
-            // Canonicalized before the constraints below read it, as a field's string is — a newtype
-            // over Text is the other place text enters, and the two must agree or the same value
-            // would be one length in a field and another on its own.
-            case TEXT -> {
-                emitStringLeaf(code, leaf);
-            }
-            case INT -> emitNumberLeaf(code, leaf, BareScalar.INT);
-            case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
-            case DECIMAL -> emitNumberLeaf(code, leaf, BareScalar.DECIMAL);
-            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
-            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
-            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
-            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
-        }
+        emitLeafDecoder(code, prim.from(), src);
         emitInvariantConstraints(code, inputType, carrier, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
@@ -1614,7 +1599,7 @@ final class CodecGen {
 
     private Type bindType(Hir.DecRef ref) {
         return switch (ref) {
-            case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
+            case Hir.PrimDecRef p -> p.kind().type();
             case Hir.DataDecRef d -> Type.ref(Backend.names(d.typeName()));
             case Hir.ListDecRef l -> Type.list(bindType(l.element()));
             case Hir.SetDecRef s -> Type.set(bindType(s.element()));
@@ -1747,6 +1732,9 @@ final class CodecGen {
                 } else {
                     code.aconst_null();
                 }
+                code.loadConstant(clause.declaredOn().module());
+                code.loadConstant(clause.declaredOn().name());
+                code.loadConstant(clause.ordinal());
                 code.invokedynamic(invariantFailureCallSite());
                 if (carrier.typed != null) {
                     code.invokevirtual(carrier.typed, "refine",
@@ -1867,14 +1855,15 @@ final class CodecGen {
      * {@code invokedynamic} producing the {@code BiFunction} that builds a refined clause's failure —
      * the issue this decoder reports when the value breaks a rule no constraint states. The clause's
      * name is captured, so one helper serves every refined clause; a clause declared without a name
-     * captures null, which is what says there is nothing to tell it apart by.
+     * captures null, which is what says there is nothing to tell it apart by. Which clause it is,
+     * named or not, is captured beside it: the declaration that wrote it and its place there.
      */
     private DynamicCallSiteDesc invariantFailureCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantFailure",
-                MTD_invariantFailureNamed);
+                MTD_invariantFailureOfAClause);
         return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_invariantFailure,
-                CD_String);                                                      // captures the clause
+                CD_String, CD_String, CD_String, ConstantDescs.CD_int);
     }
 
     /**
@@ -1914,8 +1903,9 @@ final class CodecGen {
     }
 
     /**
-     * {@code static Result __invariantFailure(String clause, Object value, Path path)}: the issue a
-     * refined clause reports. It is a {@code Result.fail}, so the message is a default one a
+     * {@code static Result __invariantFailure(String clause, String declaredModule,
+     * String declaredType, int ordinal, Object value, Path path)}: the issue a refined clause
+     * reports. It is a {@code Result.fail}, so the message is a default one a
      * {@code MessageResolver} may replace; the rejecting type and the clause travel in the metadata,
      * which is what a resolver switches on when the code is the shared one.
      *
@@ -1923,18 +1913,26 @@ final class CodecGen {
      * hands its caller — so the boundary and an abort say the same thing about the same failure.
      */
     private void emitInvariantFailureHelper(ClassBuilder cb, String typeName) {
-        cb.withMethodBody("__invariantFailure", MTD_invariantFailureNamed,
+        cb.withMethodBody("__invariantFailure", MTD_invariantFailureOfAClause,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             code.new_(CD_InvariantFailure);
             code.dup();
             code.loadConstant(ctx.module());
             code.loadConstant(typeName);
             code.aload(0);                                            // the clause, or null
-            code.invokespecial(CD_InvariantFailure, "<init>",
-                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String, CD_String));
-            int failure = 3;
+            code.new_(CD_InvariantFailureDeclared);
+            code.dup();
+            code.aload(1);                                            // the declaration's module
+            code.aload(2);                                            // the declaration
+            code.iload(3);                                            // the clause's place there
+            code.invokespecial(CD_InvariantFailureDeclared, "<init>", MethodTypeDesc.of(
+                    ConstantDescs.CD_void, CD_String, CD_String, ConstantDescs.CD_int));
+            code.invokespecial(CD_InvariantFailure, "<init>", MethodTypeDesc.of(
+                    ConstantDescs.CD_void, CD_String, CD_String, CD_String,
+                    CD_InvariantFailureDeclared));
+            int failure = 6;
             code.astore(failure);
-            code.aload(2);                                            // path
+            code.aload(5);                                            // path
             code.loadConstant("invariant_violation");
             code.aload(failure);
             code.invokevirtual(CD_InvariantFailure, "toString", MethodTypeDesc.of(CD_String));

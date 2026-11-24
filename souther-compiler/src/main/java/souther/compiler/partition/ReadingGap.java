@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -173,6 +174,54 @@ public sealed interface ReadingGap {
     }
 
     /**
+     * Every value the quantity reads came back, and whether two maps hold a value under one key is
+     * not something this reading can say of the keys it was given.
+     *
+     * <p>Not {@link NoValue}: the row wrote something at every position, and saying otherwise tells
+     * a reader the row is missing a value it has. And not a number the row lacks: the products the
+     * maps' values come to under their common keys are numbers, and which keys are common is what
+     * the observation of a key does not settle — a decimal is the amount it stands for however it
+     * is written, and an observation of it is written one way.
+     */
+    record KeysNotTold() implements ReadingGap {
+
+        /** The observation of a key is the same however much a run is allowed. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
+    }
+
+    /**
+     * Both values came back in full, and whether they are the same value is not something this
+     * reading can say of the observations it was given.
+     *
+     * <p>Not {@link NoValue}: the row wrote a value at each position, and saying otherwise tells a
+     * reader the row is missing one it has. What is missing is the declaration that says what being
+     * the same means for the type — a decimal at two scales, a sequence that is a list or a set — and
+     * a row does not carry it. A wider run reads the same observations and comes to the same
+     * answer.
+     */
+    record SamenessNotTold() implements ReadingGap {
+
+        /** The observation is the same however much a run is allowed. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
+    }
+
+    /**
      * Every value the quantity reads came back, and the number they come to is one this compiler
      * could not hold.
      *
@@ -212,7 +261,7 @@ public sealed interface ReadingGap {
      * <p>Not a reason about the value at the point, which was read: the row stands there, and what
      * is not known is whether the run compared anything through that reading of it.
      */
-    record ReachNotRead(Why why) implements ReadingGap {
+    record ReachNotRead(Why why, Optional<Figure> stoppedAt) implements ReadingGap {
 
         /**
          * What kept what the way turns on from being read off the row.
@@ -240,10 +289,20 @@ public sealed interface ReadingGap {
             /** A part of it is about a container holding more than a walk writes out. */
             MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
 
+            /** A part of it states something over more ways of keeping the elements of a
+             *  container than are written out. */
+            MORE_WAYS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_WAYS),
+
             /** It is no value the row writes: what a dependency answered, a case nothing here
              *  puts to a row, or an element of a container made of the input's in another order
              *  or of other elements. */
-            NO_VALUE_OF_THE_ROW(null);
+            NO_VALUE_OF_THE_ROW(null),
+
+            /** The run's record is of the place the comparison is made at and not of the element a
+             *  reading chose, and the comparison was made more than once there with answers that
+             *  do not agree, or its visits were not all kept: which application belongs to the
+             *  element is not told. */
+            APPLICATIONS_NOT_TOLD_APART(null);
 
             private final WhyUnread says;
 
@@ -251,13 +310,21 @@ public sealed interface ReadingGap {
                 this.says = says;
             }
 
-            /** The reason that stopped at a figure this word says, or null where it says none. */
+            /** The reason that stopped at a figure this word says, at the figure declared, or
+             *  null where it says none. Which reason a stop was is asked of this, and the figure
+             *  it stopped at of the stop. */
             public WhyUnread says() {
                 return says;
             }
 
-            /** The figure the part was declined at, or none. */
-            public Optional<Figure> figure() {
+            /** Whether this word says a stop for the reason {@code unread}, at whatever figure. */
+            public boolean saysTheKindOf(WhyUnread unread) {
+                return says != null && says.isTheKindOf(unread);
+            }
+
+            /** The figure a stop this word says would be at where the compilation held every
+             *  budget to the figure declared, or none. */
+            public Optional<Figure> declaredFigure() {
                 return says == null ? Optional.empty() : says.figure();
             }
         }
@@ -266,19 +333,28 @@ public sealed interface ReadingGap {
             if (why == null) {
                 throw new IllegalArgumentException("what was not read was not read for a reason");
             }
+            Objects.requireNonNull(stoppedAt, "a figure stopped at, or none");
+            if (stoppedAt.isPresent() != (why.says() != null)) {
+                throw new IllegalArgumentException(why + " says a stop at a figure exactly where"
+                        + " a figure is held: " + stoppedAt);
+            }
+        }
+
+        /** The word {@code why}, for a part that stopped at the figure declared, or at none. */
+        public ReachNotRead(Why why) {
+            this(why, why == null ? Optional.empty() : why.declaredFigure());
         }
 
         /** A part declined at a figure is one a run allowing more may read. */
         @Override
         public RunSensitivity runSensitivity() {
-            return why.figure().isPresent() ? RunSensitivity.MAY_CHANGE
-                    : RunSensitivity.UNAFFECTED;
+            return stoppedAt.isPresent() ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
         }
 
-        /** The figure a part a wider run may read past was declined at, which its reason says. */
+        /** The figure a part a wider run may read past was declined at, as it stopped. */
         @Override
         public List<Figure> figures() {
-            return why.figure().map(List::of).orElseGet(List::of);
+            return stoppedAt.map(List::of).orElseGet(List::of);
         }
 
         /**
@@ -293,14 +369,55 @@ public sealed interface ReadingGap {
                 return new ReachNotRead(Why.NO_VALUE_OF_THE_ROW);
             }
             for (Why each : Why.values()) {
-                if (unread.equals(each.says())) {
-                    return new ReachNotRead(each);
+                if (each.saysTheKindOf(unread)) {
+                    return new ReachNotRead(each, unread.figure());
                 }
             }
             if (unread.figure().isPresent()) {
                 throw new IllegalStateException("no word says a part stopped at " + unread);
             }
             return new ReachNotRead(Why.A_PART_NOT_READ);
+        }
+    }
+
+    /**
+     * The row stands at the point under the condition the line's cases were said as, and which of
+     * those cases the line decides in was not worked out, at the figures named
+     * ({@link CasesWorkedOut.Stopped}). So whether the row is in one the line turns the statement in
+     * is not told.
+     *
+     * <p>Not a reason about the value at the point, which was read, and not a row that is
+     * elsewhere: a row in a case the line turns nothing in stands at its point as well, on the one
+     * side the case's rows are on, and says nothing about the line.
+     *
+     * @param stoppedAt in {@link Figure#inOrder}; one or more
+     */
+    record CasesNotWorkedOut(List<Figure> stoppedAt) implements ReadingGap {
+
+        public CasesNotWorkedOut {
+            stoppedAt = Figure.inOrder(stoppedAt);
+            if (stoppedAt.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "cases nobody worked out were stopped at some figure");
+            }
+        }
+
+        /** A run that works more cases out may tell which case the row is in. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return stoppedAt;
+        }
+
+        /** This and {@code other} as one: cases not worked out at the figures of both. */
+        CasesNotWorkedOut with(CasesNotWorkedOut other) {
+            List<Figure> both = new ArrayList<>(stoppedAt);
+            both.addAll(other.stoppedAt);
+            return new CasesNotWorkedOut(both);
         }
     }
 
@@ -313,6 +430,10 @@ public sealed interface ReadingGap {
 
     ReadingGap COULD_NOT_READ_ROW = new CouldNotReadRow();
 
+    ReadingGap KEYS_NOT_TOLD = new KeysNotTold();
+
+    ReadingGap SAMENESS_NOT_TOLD = new SamenessNotTold();
+
     /** The gap what an observation met is, for a reader holding it: the code, at the figure it
      *  stopped at where one did. */
     static ReadingGap of(Incompleteness.Cause cause) {
@@ -320,23 +441,31 @@ public sealed interface ReadingGap {
     }
 
     /**
-     * {@code met}, with the observations that met one code made one.
+     * {@code met}, with the observations that met one code made one, and the cases nobody worked
+     * out made one.
      *
      * <p>What a reader is told once is what an observation met, and two readings of one point
-     * stopped by one code at two figures are that code met at both. Everything else is handed on as
-     * it came, in the order it came.
+     * stopped by one code at two figures are that code met at both. The same of cases nobody worked
+     * out, stopped at two sets of figures: one reason, met at all of them. Everything else is handed
+     * on as it came, in the order it came.
      */
     static List<ReadingGap> eachObservationOnce(Collection<? extends ReadingGap> met) {
         Map<Incompleteness.Code, Observation> byCode = new EnumMap<>(Incompleteness.Code.class);
+        CasesNotWorkedOut cases = null;
         List<ReadingGap> out = new ArrayList<>();
         for (ReadingGap each : met) {
             if (each instanceof Observation it) {
                 byCode.merge(it.code(), it, Observation::with);
+            } else if (each instanceof CasesNotWorkedOut it) {
+                cases = cases == null ? it : cases.with(it);
             } else {
                 out.add(each);
             }
         }
         out.addAll(byCode.values());
+        if (cases != null) {
+            out.add(cases);
+        }
         return List.copyOf(out);
     }
 
@@ -352,6 +481,48 @@ public sealed interface ReadingGap {
     static ReadingGap ofAComparisonOf(ObservedValue value) {
         Incompleteness.Cause stopped = Limits.UNBOUNDED.stoppedBy(value);
         return stopped == null ? null : of(stopped);
+    }
+
+    /**
+     * Why {@code value} cannot be told the same as or different from another observation by
+     * comparing the two as records, or null where it can.
+     *
+     * <p>For a reader that compares two observations with no declaration of their type. A value
+     * that was not read in full is said as what stopped it ({@link #ofAComparisonOf}), which a wider
+     * run may settle; one read in full whose form is not its sameness is said as that
+     * ({@link ObservedValue#isSameWhereEqual}), which no run settles. The second is asked of a value
+     * the first has passed, so the two answers are never one for the other.
+     *
+     * <p>A reader that holds an observation against a value the source wrote asks the value
+     * ({@link souther.compiler.values.WrittenValues}) and not this.
+     */
+    static ReadingGap ofComparingAsRecords(ObservedValue value) {
+        ReadingGap stopped = ofAComparisonOf(value);
+        return stopped != null ? stopped : ofItsForm(value);
+    }
+
+    /**
+     * Why {@code one} and {@code other} cannot be told the same or different by comparing them as
+     * records, or null where they can.
+     *
+     * <p>What stopped either of them is said before the form of either: it is what a wider run
+     * settles, and a reason that no run settles must not stand where it is hidden.
+     */
+    static ReadingGap ofComparingAsRecords(ObservedValue one, ObservedValue other) {
+        ReadingGap stopped = ofAComparisonOf(one);
+        if (stopped == null) {
+            stopped = ofAComparisonOf(other);
+        }
+        if (stopped != null) {
+            return stopped;
+        }
+        ReadingGap form = ofItsForm(one);
+        return form != null ? form : ofItsForm(other);
+    }
+
+    /** The reason a value read in full is not told by equality of its record, or null. */
+    private static ReadingGap ofItsForm(ObservedValue value) {
+        return value.isSameWhereEqual() ? null : SAMENESS_NOT_TOLD;
     }
 
     /** The gap a number this could not hold is, for a reader that met one. */

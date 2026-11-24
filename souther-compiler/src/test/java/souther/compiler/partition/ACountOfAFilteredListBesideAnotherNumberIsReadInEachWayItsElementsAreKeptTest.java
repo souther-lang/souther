@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -68,15 +70,10 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
      * @param after what the source writes after the behavior: its examples, or a helper it calls
      */
     private static Compilation compiled(String body, String after) {
-        return MEASURED.computeIfAbsent(source(body, after), source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors().stream()
-                    .map(each -> each.diagnostic().code()).toList(),
-                    "the model under test compiles");
-            return compilation;
+        Compilation shared = MEASURED.computeIfAbsent(source(body, after), source -> {
+            return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         });
+        return ACompiledModel.compiles(shared);
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
@@ -106,7 +103,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     private static String report(String body, String after) {
         Compilation compilation = compiled(body, after);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String guarded(String condition) {
@@ -193,7 +190,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void theCountIsReadAsTheSumOfOnesOverTheSameListIs() {
         Set<String> count = linesDrawn(report(guarded("k >= " + COUNT)));
-        assertTrue(count.contains("· read as f/k: = 1"), count::toString);
+        assertTrue(says(count, "· read as f/k: = 1"), count::toString);
         assertEquals(linesDrawn(report(guarded("k >= " + ONES))), count);
     }
 
@@ -227,7 +224,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     void aCountALawWeighsIsReadInEachWayAsACountTheSourceWrote() {
         String report = report(guarded(
                 "List.isEmpty(List.drop(k, List.filter(x -> x > 0, [a, b])))"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("read as f/k: = 2"), report);
     }
 
@@ -238,11 +235,11 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         Set<String> lines = linesDrawn(report("""
                     let xs = List.filter(x -> x > 0, [a, b])
                     guard k >= List.sum(xs) + List.length(xs) else No"""));
-        assertTrue(lines.contains("· read as f/k: = 0"), lines::toString);
-        assertTrue(lines.contains("· read as f/k: = a + 1"), lines::toString);
-        assertTrue(lines.contains("· read as f/k: = b + 1"), lines::toString);
-        assertFalse(lines.contains("· read as f/k: = a + 2"), lines::toString);
-        assertFalse(lines.contains("· read as f/k: = 1"), lines::toString);
+        assertTrue(says(lines, "· read as f/k: = 0"), lines::toString);
+        assertTrue(says(lines, "· read as f/k: = a + 1"), lines::toString);
+        assertTrue(says(lines, "· read as f/k: = b + 1"), lines::toString);
+        assertFalse(says(lines, "· read as f/k: = a + 2"), lines::toString);
+        assertFalse(says(lines, "· read as f/k: = 1"), lines::toString);
     }
 
     /**
@@ -332,8 +329,8 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     private static void assertOwesTheSame(String kept, String writtenOut, String after) {
         Compilation compilation = compiled(guarded(kept), after);
         String counted = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertFalse(counted.contains("not read"), counted);
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        assertFalse(NotRead.in(counted), counted);
         Set<String> owed = owedOfEveryRule(compilation, theGuard(kept, after));
         assertTrue(owed.stream().anyMatch(each -> each.startsWith("guard ")),
                 () -> kept + " owes points of the guard's own: " + owed);
@@ -404,7 +401,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aStatementNoReaderDecidesStopsForItsOwnReason() {
         String report = report(guarded("k >= List.length(List.filter(x -> x * x > 3, [a, b]))"));
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        List<String> unread = report.lines().filter(NotRead::isOne).toList();
         assertFalse(unread.isEmpty(), report);
         assertTrue(unread.stream().allMatch(line ->
                         line.contains("a product of two values that are not constants")),
@@ -412,12 +409,14 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     }
 
     /** A list the input holds is no list the body wrote out: its count is a number of its own,
-     *  and the comparison is a line on that count less {@code k}, as it was. Which values of
-     *  {@code k} settle it on their own is all it leaves unread, the count not being shown to
-     *  reach every value. */
+     *  and the comparison is a line on that count less {@code k}, as it was. A row holds one
+     *  element the statement holds of and one it fails of, so the count takes every value from
+     *  none and {@code k} is shown to be reached. The number the statement reads is the
+     *  statement's own comparison's to divide, so the count is filed at {@code k} alone and leaves
+     *  nothing unread. */
     @Test
     void aCountOfAListTheInputHoldsIsALineOnTheCount() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
                 data Ok
                 data No
@@ -426,27 +425,30 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                     guard k >= List.length(List.filter(x -> x > 0, xs)) else No
                     Ok
                 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
-        assertTrue(unread.stream()
-                .allMatch(line -> line.contains("not shown to reach every value here")), report);
-        assertEquals(Set.of("k", "xs[*]"), unread.stream()
-                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
-                .collect(Collectors.toSet()), report);
+        assertEquals(List.of(),
+                report.lines().filter(NotRead::isOne).toList(), report);
     }
 
     /** What the way to the comparison leaves of {@code k} is read before the ways: where it is at
      *  least one, a count of nought or one holds whatever {@code k} is, and only two is a line. */
     @Test
     void whatTheWayHereLeavesIsReadBeforeTheWays() {
-        Set<String> lines = linesOnK(report(guarded("k > 0 && k >= " + COUNT)));
+        Set<String> lines = linesOnK(report(guarded("k > 0 && k >= " + COUNT))).stream()
+                .map(line -> line.replaceFirst(" \\(line \\d+ of \\d+\\)$", ""))
+                .collect(Collectors.toSet());
         assertEquals(Set.of("· read as f/k: = 1", "· read as f/k: = 2", "· read as f/k: in 2 < k",
                 "· read as f/k: = 0", "· read as f/k: in k < 0"), lines);
+    }
+
+    /** Whether a line says {@code words}, with the place of its line among the lines that say the
+     *  same words where there are several. */
+    private static boolean says(Set<String> lines, String words) {
+        return lines.stream().anyMatch(line -> line.equals(words)
+                || line.startsWith(words + " (line "));
     }
 
     /** A count weighed alone is read as which of its statements hold, however many there are:
@@ -454,7 +456,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aCountAloneIsReadAsWhichOfItsStatementsHold() {
         String report = report(guarded("List.length(" + MANY + ") >= 1"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** And the same where a law weighs it: what {@code List.drop} is handed is a constant, so its
@@ -462,7 +464,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aCountALawWeighsAloneIsReadAsWhichOfItsStatementsHold() {
         String report = report(guarded("List.isEmpty(List.drop(1, " + MANY + "))"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** A count beside another number inside a factor is no count a way of keeping makes a form
@@ -471,7 +473,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aCountWhoseWaysLeaveTheProductNoFormIsNotReadInThem() {
         String report = report(guarded("k * (a + List.length(" + MANY + ")) >= 3"));
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        List<String> unread = report.lines().filter(NotRead::isOne).toList();
         assertFalse(unread.isEmpty(), report);
         assertTrue(unread.stream().allMatch(line ->
                 line.contains("a product of two values that are not constants")), report);
@@ -490,7 +492,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     void aCountThatCancelsIsNotReadInItsWays() {
         String cancelled = report(guarded("List.length(" + MANY + ") + " + COUNT
                 + " >= List.length(" + MANY + ") + k"));
-        assertFalse(cancelled.contains("not read"), cancelled);
+        assertFalse(NotRead.in(cancelled), cancelled);
         Set<String> uncancelled = linesOnK(report(guarded(COUNT + " >= k")));
         assertFalse(uncancelled.isEmpty());
         assertEquals(uncancelled, linesOnK(cancelled));

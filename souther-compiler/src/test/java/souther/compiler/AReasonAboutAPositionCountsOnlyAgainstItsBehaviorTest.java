@@ -112,7 +112,7 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
     private static Compilation compilationOf() {
         Compilation compilation = Compilation.ofSource(source(), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 

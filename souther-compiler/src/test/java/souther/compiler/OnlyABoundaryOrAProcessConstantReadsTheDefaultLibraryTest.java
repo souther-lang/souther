@@ -56,7 +56,10 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
             "check/Preserved.java",
             "check/Reductions.java",
             // The facts about the language's operations, held to the shipped library once.
-            "check/DefaultBoundOperationFacts.java");
+            "check/DefaultBoundOperationFacts.java",
+            // What a proof reads of each operation of the shipped library, which is the library
+            // the proofs shipped with this compiler were written of.
+            "check/WhatALibraryLeavesAsShipped.java");
 
     /** What building a library must not need, because it is what building one produces. */
     private static final List<String> WHAT_THE_LOADER_MAY_NOT_READ = List.of(

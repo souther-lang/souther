@@ -1,17 +1,15 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Which class each of a behavior's inputs fell in.
@@ -69,12 +67,23 @@ public final class InputClassifications {
      */
     public static List<Classification> placedAt(List<ObservedValue> inputs,
                                                 MeasuredInput.MeasuredAxes axes) {
+        return placedAt(inputs, axes, null);
+    }
+
+    /**
+     * The same, for the inputs a row built before it stopped.
+     *
+     * <p>A position the row never reached is not a value that could not be read: it is unknown
+     * for the reason the row stopped, and {@code unreached} is that reason. Null where the inputs
+     * are a whole tuple, and a position that cannot be walked is then the value's own fault.
+     */
+    public static List<Classification> placedAt(List<ObservedValue> inputs,
+                                                MeasuredInput.MeasuredAxes axes,
+                                                Incompleteness unreached) {
         BehaviorInputs where = axes.subject().inputs();
-        // One row walked to every position, through the same few types each time.
-        Map<Type, TypeView> views = new HashMap<>();
         List<Classification> out = new ArrayList<>(axes.size());
         for (Axis axis : axes.axes()) {
-            out.add(axis.derivable() ? classify(inputs, where, axis, views) : null);
+            out.add(axis.derivable() ? classify(inputs, where, axis, unreached) : null);
         }
         return java.util.Collections.unmodifiableList(out);
     }
@@ -92,14 +101,15 @@ public final class InputClassifications {
      * had to guess.
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
-                                           Axis axis, Map<Type, TypeView> views) {
+                                           Axis axis, Incompleteness unreached) {
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one folded into the word for a walk that could not be made.
-        return switch (where.occurrencesAt(inputs, axis.path(), views)) {
+        return switch (where.occurrencesAt(inputs, axis.path())) {
             case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                    Classification.unreadable(
-                            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE),
-                            axis.id().behavior(), axis.id().term());
+                    unreached != null ? new Classification.Unclassified(unreached)
+                            : Classification.unreadable(
+                                    Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE),
+                                    axis.id().behavior(), axis.id().term());
             case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
                     among(axis, values);
         };
@@ -140,7 +150,7 @@ public final class InputClassifications {
             ids.add(each.id());
             answers.add(Recognitions.membershipOf(each.recognises(), value));
         }
-        return decided(axis.id(), ids, answers, value);
+        return decided(axis.id(), ids, answers, () -> axis.outsideTheClasses(value), value);
     }
 
     /**
@@ -158,11 +168,13 @@ public final class InputClassifications {
      *
      * @param ids     what each class is called, in the order they were asked
      * @param answers what each of them made of the value, in the same order
+     * @param outside what is owed of a value no class holds, which the axis says
+     *                ({@link Axis#outsideTheClasses}) and which is asked only when no class does
      * @param about   the value they were asked about, for the sentence a broken contract prints, and
      *                for nothing else. Null where a caller has none to name
      */
     static Classification decided(AxisId at, List<String> ids, List<Membership> answers,
-                                  ObservedValue about) {
+                                  Supplier<Axis.Outside> outside, ObservedValue about) {
         if (ids.size() != answers.size()) {
             throw new IllegalArgumentException(
                     "one answer per class: " + ids.size() + " classes, " + answers.size());
@@ -210,11 +222,22 @@ public final class InputClassifications {
         if (incomplete != null) {
             return Classification.unreadable(incomplete, at.behavior(), at.term());
         }
-        // Every class read the value and none holds it, which `Axis` says cannot happen: its classes
-        // are exhaustive over the position's values. So this is that contract broken rather than
-        // anything about the value, and saying it could not be read would be reporting a
-        // measurement failure for a defect in the partition.
-        throw new IllegalStateException("no class of " + at + " holds a value it read: " + about);
+        // Every class read the value and none holds it. What the axis says of such a value is what
+        // follows: it is one a rule was shown on neither side of, whose class was not worked out and
+        // of which the measure is short as of any value whose class nobody could say; or it is one
+        // no run gets to a rule with, which is read and in no class, with nothing more to say of
+        // where it falls.
+        return switch (outside.get()) {
+            case OWED -> Classification.unreadable(
+                    Incompleteness.Cause.of(Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN),
+                    at.behavior(), at.term());
+            case NOTHING_OWED -> Classification.at(List.of(), null);
+            // `Axis` says it cannot happen: its classes hold what the rules leave. So this is that
+            // contract broken rather than anything about the value, and saying it could not be
+            // read would be reporting a measurement failure for a defect in the partition.
+            case NOT_AN_ANSWER -> throw new IllegalStateException(
+                    "no class of " + at + " holds a value it read: " + about);
+        };
     }
 
     private InputClassifications() {}

@@ -7,6 +7,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
@@ -47,7 +48,7 @@ class ADocumentSendsAReaderToAPredicateAsAPredicateTest {
             data No
 
             behavior f : (prefix: String, code: String) -> Yes | No
-            let f (prefix, code) = if String.startsWith(prefix, code) then Yes else No
+            let f (prefix, code) = if String.startsWith(String.append(prefix, "x"), code) then Yes else No
             """;
 
     @Test
@@ -111,9 +112,7 @@ class ADocumentSendsAReaderToAPredicateAsAPredicateTest {
     }
 
     private static String json(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

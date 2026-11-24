@@ -1,9 +1,16 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage.AModelTypeOwnsTheAbsence;
+import souther.compiler.diag.msg.TypeMessage.AParameterCarriesAnOptional;
+import souther.compiler.diag.msg.TypeMessage.AnOutputCarriesAnOptional;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +31,22 @@ class OptionAsAWrittenTypeTest {
 
     private static CompileException err(String model) {
         return assertThrows(CompileException.class, () -> Compiler.compile(model));
+    }
+
+    /** The compile was refused for an optional at a behavior's boundary, input or output. */
+    private static void assertRefusedForAnOptional(CompileException e) {
+        assertTrue(e.diagnostics().stream().map(Diagnostic::said)
+                        .anyMatch(said -> said instanceof AParameterCarriesAnOptional
+                                || said instanceof AnOutputCarriesAnOptional),
+                e.getMessage());
+    }
+
+    /** The parameters the compile was refused over for carrying an optional. */
+    private static List<String> parametersRefusedForAnOptional(CompileException e) {
+        return e.diagnostics().stream().map(Diagnostic::said)
+                .filter(said -> said instanceof AParameterCarriesAnOptional)
+                .map(said -> ((AParameterCarriesAnOptional) said).parameter())
+                .toList();
     }
 
     // --- reading an optional: the type may be written -------------------------------------------
@@ -199,8 +222,10 @@ class OptionAsAWrittenTypeTest {
                 behavior bill : (a: Amount) -> Option<Int>
                 let bill (a) = List.get(0, [ 1 ])
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
-        assertTrue(e.getMessage().contains("|"), "the message points at the domain sum: " + e.getMessage());
+        assertRefusedForAnOptional(e);
+        assertTrue(e.diagnostics().stream().flatMap(d -> d.notes().stream())
+                        .anyMatch(n -> n.said() instanceof AModelTypeOwnsTheAbsence),
+                "the message points at the domain sum: " + e.getMessage());
     }
 
     @Test
@@ -211,8 +236,7 @@ class OptionAsAWrittenTypeTest {
                     constructs Receipt, Amount
                 let bill (o) = Receipt { total = Amount(Option.withDefault(0, o)) }
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
-        assertTrue(e.getMessage().contains("`o`"), "the parameter is named: " + e.getMessage());
+        assertEquals(List.of("o"), parametersRefusedForAnOptional(e), e.getMessage());
     }
 
     @Test
@@ -223,7 +247,7 @@ class OptionAsAWrittenTypeTest {
                 behavior bill : (a: Amount) -> List<Option<Int>>
                 let bill (a) = [ List.get(0, [ 1 ]) ]
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertRefusedForAnOptional(e);
     }
 
     @Test
@@ -232,7 +256,7 @@ class OptionAsAWrittenTypeTest {
                 behavior bill : (a: Amount) -> Map<String, Option<Int>>
                 let bill (a) = Map.singleton("k", List.get(0, [ 1 ]))
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertRefusedForAnOptional(e);
     }
 
     @Test
@@ -241,7 +265,7 @@ class OptionAsAWrittenTypeTest {
                 behavior bill : (a: Amount) -> Set<Option<Int>>
                 let bill (a) = Set.singleton(List.get(0, [ 1 ]))
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertRefusedForAnOptional(e);
     }
 
     @Test
@@ -266,8 +290,7 @@ class OptionAsAWrittenTypeTest {
                     constructs Receipt, Amount
                 let bill (os) = Receipt { total = Amount(List.length(os)) }
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
-        assertTrue(e.getMessage().contains("`os`"), "the parameter is named: " + e.getMessage());
+        assertEquals(List.of("os"), parametersRefusedForAnOptional(e), e.getMessage());
     }
 
     @Test
@@ -282,7 +305,7 @@ class OptionAsAWrittenTypeTest {
                 let second (n) = Receipt { total = Amount(n) }
                 behavior both = first >-> second
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertRefusedForAnOptional(e);
     }
 
     @Test

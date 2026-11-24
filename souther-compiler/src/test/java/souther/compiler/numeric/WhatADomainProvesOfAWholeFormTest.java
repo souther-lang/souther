@@ -31,10 +31,10 @@ class WhatADomainProvesOfAWholeFormTest {
         return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
-    private static Map<String, Granularity> whole(String... atoms) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> whole(String... atoms) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : atoms) {
-            out.put(each, Granularity.DISCRETE);
+            out.put(each, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
         return out;
     }

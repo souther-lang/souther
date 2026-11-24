@@ -226,12 +226,9 @@ class CompileHelperReturnPushdownTest {
     /** The module's bodies as the checker left them, asked for without generating anything. */
     private static Bodies.Elaborated checked(String behaviors) {
         Compilation compilation = Compilation.ofSource(UNION_HEAD + behaviors, "Main");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test checks");
         assertNotNull(checked, "the model under test was checked");
         return checked;
     }

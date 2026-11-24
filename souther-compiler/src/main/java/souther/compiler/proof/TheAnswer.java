@@ -47,6 +47,8 @@ final class TheAnswer {
                                 some);
                 case LawProposition.Same<Slot>(var one, var other, boolean alike) ->
                         new LawProposition.Same<>(subject(one), subject(other), alike);
+                case LawProposition.Inside<Slot>(var inner, var outer, var where, boolean inside) ->
+                        new LawProposition.Inside<>(subject(inner), subject(outer), where, inside);
             };
         }
 

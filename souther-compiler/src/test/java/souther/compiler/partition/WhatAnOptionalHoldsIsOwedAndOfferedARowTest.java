@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
@@ -103,10 +104,7 @@ class WhatAnOptionalHoldsIsOwedAndOfferedARowTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /** Where each line the behaviors' positions met is, as each reading names it. */

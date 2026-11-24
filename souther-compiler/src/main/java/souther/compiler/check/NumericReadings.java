@@ -115,7 +115,7 @@ final class NumericReadings {
         // reader of declarations can ask. Asked as "is the declared result a number", an operation
         // whose answer is what its container holds was read as answering none — and a walk that
         // adds up whole numbers answers one at every call it is given whole numbers.
-        if (!NumericAnswers.mayAnswerANumber(facts, named, entry.signature())) {
+        if (!ArithmeticAnswers.mayAnswer(facts, named, entry.signature())) {
             return List.of();
         }
         List<NumericReading> terms = new ArrayList<>();
@@ -155,15 +155,18 @@ final class NumericReadings {
                 // today is written in the language as well, so nothing here has to tell the two
                 // apart. The rest say something else about the operation: where a number runs,
                 // what an operation keeps of a container, what a predicate travels through, what a
-                // shift is stated through, whether every answer has a value that gives it, where a
+                // shift is stated through, which month a move by months lands in, whether every
+                // answer has a value that gives it, where a
                 // comparison of a rounded number falls on what was rounded. None of them is a way
                 // of reading the number a call answered.
                 case BoundOperationFact.IsDefinedByCases _,
                      BoundOperationFact.BoundsItsResult _,
                      BoundOperationFact.StatesTheOrderOfItsArguments _,
                      BoundOperationFact.ShiftsBy _,
+                     BoundOperationFact.MovesADateByMonths _,
                      BoundOperationFact.CountsWholeUnitsBetween _,
-                     BoundOperationFact.RoundsToAWholeNumber _,
+                     BoundOperationFact.CountsTheWholeUnitsOf _,
+                     BoundOperationFact.RoundsToAStep _,
                      BoundOperationFact.BuildsItsResultFrom _,
                      BoundOperationFact.ElementsComeFrom _,
                      BoundOperationFact.HoldsTheImageOfEveryElement _,
@@ -171,6 +174,12 @@ final class NumericReadings {
                      BoundOperationFact.ListsTheCodePointsOf _,
                      BoundOperationFact.EveryElementOfItsAnswerIs _,
                      BoundOperationFact.AnswersTheClosureOnWhatItHolds _,
+                     BoundOperationFact.BoundsEachElementOfItsResult _,
+                     BoundOperationFact.AnswersAnElementOf _,
+                     BoundOperationFact.AnswersAnExtremeElementOf _,
+                     BoundOperationFact.AnswersTheValueFiledUnder _,
+                     BoundOperationFact.AnswersTheElementAt _,                     BoundOperationFact.HoldsEachWholeNumberInTurn _,
+                     BoundOperationFact.AnswersAnElementWhereTheClosureHolds _,
                      BoundOperationFact.KeepsWhetherItHoldsACodePointOf _,
                      BoundOperationFact.KeepsTheKeysOf _,
                      BoundOperationFact.HasALaw _,
@@ -182,13 +191,16 @@ final class NumericReadings {
                      BoundOperationFact.ResultIsNoSmallerThan _,
                      BoundOperationFact.PutsAValueIn _,
                      BoundOperationFact.AssemblesPieces _,
+                     BoundOperationFact.KeepsTheElementsWhereItHolds _,
+                     BoundOperationFact.KeepsTheEntriesWhereItHolds _,
                      BoundOperationFact.HoldsTheElementsByIndex _,
                      BoundOperationFact.ReadsItsContainer _,
                      BoundOperationFact.IsStatedOverAProjection _,
                      BoundOperationFact.StatesItsPredicateOfEveryElement _,
                      BoundOperationFact.MeansTheSameAsASizeOfNought _,
-                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _,
-                     BoundOperationFact.EndsAreWhereTheRepresentationStops _ -> { }
+                     BoundOperationFact.AgreesWithAnotherWhereItIsGivenText _,
+                     BoundOperationFact.IsTheOperator _,
+                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
             }
         }
         List<NumericReading> found = new ArrayList<>(terms);

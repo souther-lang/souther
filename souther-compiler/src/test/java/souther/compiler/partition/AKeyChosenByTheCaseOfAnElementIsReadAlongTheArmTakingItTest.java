@@ -19,6 +19,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -230,6 +231,11 @@ class AKeyChosenByTheCaseOfAnElementIsReadAlongTheArmTakingItTest {
     /** One list of activities, read with the one at {@code chosen} chosen. */
     private record Acts(List<ObservedValue> each, int chosen)
             implements BorderQuantity.Observation {
+
+        @Override
+        public Place fixedAt(NumericTerm term) {
+            return null;
+        }
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {

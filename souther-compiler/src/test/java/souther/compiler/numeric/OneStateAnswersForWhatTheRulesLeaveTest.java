@@ -9,45 +9,24 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static souther.compiler.numeric.RulesAsWritten.OVER_THREE;
-import static souther.compiler.numeric.RulesAsWritten.admits;
-import static souther.compiler.numeric.RulesAsWritten.boxed;
-import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
-import static souther.compiler.numeric.RulesAsWritten.relationsIn;
 import static souther.compiler.numeric.RulesAsWritten.rules;
-import static souther.compiler.numeric.RulesAsWritten.everyOrder;
-import static souther.compiler.numeric.RulesAsWritten.twice;
 
 /**
- * The rules are worked out once, and what comes out is a function of the rules.
+ * The rules are worked out once, and the state is the bounds they leave.
  *
- * <p>Not of the order they arrived in, not of how many times each was said, and not of whether a
- * rule happened to be written as a difference or as a sum. That last one is the reason the
- * differences are closed again after every round rather than once at the start.
- *
- * <p>Checked against the points over a bounded range, in the one direction that matters: no point
- * the rules admit is left outside what the state says, and where the state says nothing is left,
- * nothing is.
- *
- * <p>Over the systems of {@link RulesAsWritten#OVER_THREE}, each written for a step the closure
- * takes or hands to the reduction: a weighted difference that must not be read as a difference, a
- * cycle summing to nought, ends meeting at one value, a hole sided one way and not the other, a part
- * holding nothing beside one that holds something, and two premises bounding one sum, which a
- * reading letting the later one win answers differently in some order. Each is given in every order
- * its rules have.
+ * <p>These are the cases the closed state's own steps are written for: a rule over several
+ * positions narrowing each of them, a bound carried along a chain longer than the rounds, a round
+ * reading what the one before it left, and a system that leaves nothing. That what comes out is a
+ * function of the rules — not of their order, not of how often each was said — and that no point
+ * the rules admit is left outside it, are asked of every reader of rules, this one among them, in
+ * {@code EveryReaderOfRulesAnswersByTheRulesAloneTest}.
  */
 class OneStateAnswersForWhatTheRulesLeaveTest {
-
-    private static final List<String> POSITIONS = List.of("a", "b", "c");
-    private static final int LOW = -4;
-    private static final int HIGH = 4;
 
     private static ExactRatio num(long whole) {
         return ExactRatio.of(whole);
@@ -189,93 +168,6 @@ class OneStateAnswersForWhatTheRulesLeaveTest {
         assertThrows(IllegalArgumentException.class, () -> read(rules("2a = 1")));
         assertEquals(List.of(), read(rules("2a /= 1")),
                 "a rule every value satisfies states nothing, and is left out");
-    }
-
-    // --- the same rules, the same answer ------------------------------------------------------------
-
-    @Test
-    void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        for (List<Written> written : OVER_THREE) {
-            List<AffineConstraint<String>> stated = read(written);
-            ClosedState<String> asWritten = closing(stated);
-            for (List<AffineConstraint<String>> order : everyOrder(stated)) {
-                ClosedState<String> reordered = closing(order);
-                assertEquals(asWritten.holdsNothing(), reordered.holdsNothing(),
-                        () -> "emptiness moved when the rules were reordered: " + order);
-                if (!asWritten.holdsNothing()) {
-                    assertEquals(asWritten.box(), reordered.box(),
-                            () -> "the box moved when the rules were reordered: " + order);
-                }
-            }
-        }
-    }
-
-    @Test
-    void sayingARuleTwiceSaysWhatSayingItOnceSays() {
-        for (List<Written> written : OVER_THREE) {
-            List<AffineConstraint<String>> stated = read(written);
-            ClosedState<String> once = closing(stated);
-            ClosedState<String> twice = closing(twice(stated));
-            assertEquals(once.holdsNothing(), twice.holdsNothing(), stated::toString);
-            if (!once.holdsNothing()) {
-                assertEquals(once.box(), twice.box(), stated::toString);
-            }
-        }
-    }
-
-    // --- against the points -------------------------------------------------------------------------
-
-    @Test
-    void noPointTheRulesAdmitIsEverRefused() {
-        assertEquals(Set.of(Rel.values()), relationsIn(OVER_THREE),
-                "a relation no system is written with is one no reading of it is asked about");
-        int narrowed = 0;
-        int empties = 0;
-        for (List<Written> rules : OVER_THREE) {
-            // Every position bounded to the range, so the points enumerated are all the points.
-            List<Written> written = boxed(rules, POSITIONS, LOW, HIGH);
-            List<Map<String, Integer>> admitted = pointsSatisfying(written, POSITIONS, LOW, HIGH);
-            ClosedState<String> closed = closing(read(written));
-
-            if (admitted.isEmpty()) {
-                empties++;
-                continue;   // emptiness is proven one way only, so nothing is owed here
-            }
-            assertFalse(closed.holdsNothing(),
-                    () -> "said nothing is left, but " + written + " admits " + admitted.size());
-            // A box holds every admitted point exactly when, at each position, it holds the least
-            // and the greatest value an admitted point has there — so those two points are the
-            // ones asked about.
-            for (String position : POSITIONS) {
-                Map<String, Integer> lowest = admitted.getFirst();
-                Map<String, Integer> highest = admitted.getFirst();
-                for (Map<String, Integer> point : admitted) {
-                    if (point.get(position) < lowest.get(position)) {
-                        lowest = point;
-                    }
-                    if (point.get(position) > highest.get(position)) {
-                        highest = point;
-                    }
-                }
-                for (Map<String, Integer> point : List.of(lowest, highest)) {
-                    ExactRatio at = num(point.get(position));
-                    assertTrue(admits(closed.box().leastOf(position), at, false)
-                                    && admits(closed.box().mostOf(position), at, true),
-                            () -> "refused a point the rules admit: " + point + " under " + written
-                                    + " left " + position + " in ["
-                                    + closed.box().leastOf(position) + ", "
-                                    + closed.box().mostOf(position) + "]");
-                }
-            }
-            for (String position : POSITIONS) {
-                if (closed.box().mostOf(position) != null
-                        && closed.box().mostOf(position).at().compareTo(num(HIGH)) < 0) {
-                    narrowed++;
-                }
-            }
-        }
-        assertTrue(narrowed > 0 && empties > 0,
-                "narrowed " + narrowed + " and " + empties + " were empty, so this checked little");
     }
 
     private static List<AffineConstraint<String>> read(List<Written> written) {

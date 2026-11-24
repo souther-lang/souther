@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
@@ -85,8 +87,8 @@ class AMovedDeclarationIsPublishedAsTheSameDeclarationTest {
         assertNotEquals(PRICES, prices, "this edit matched nothing, so nothing was compared");
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
-        c.update(edited, Set.of());
-        c.answerEverything();
+        c.update(edited, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the workspace still compiles after the edit");
     }
 
@@ -94,8 +96,9 @@ class AMovedDeclarationIsPublishedAsTheSameDeclarationTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", PRICES);
         byId.put("cart.sou", CART);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         return c;
     }

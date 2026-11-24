@@ -1,0 +1,327 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.DatePartsLeft;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTranslation;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
+
+import java.time.LocalDate;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Dates are found for statements weighing several parts of them only where the calendar has a
+ * date that holds every statement, and each date found is one; and no date is said to hold them
+ * only where none does: worked out here part by part with {@link LocalDate}, and not by what the
+ * finder reads.
+ */
+class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
+
+    private static final DateTranslation EVERY_DATE = DateTranslation.none();
+
+    private static final DateTranslation A_DAY_BACK = EVERY_DATE.thenAddDays(-1);
+
+    private static DatesThatHoldEveryStatement.Part year(int date) {
+        return new DatesThatHoldEveryStatement.Part(date, TakenAs.DatePart.YEAR, EVERY_DATE);
+    }
+
+    private static DatesThatHoldEveryStatement.Part month(int date) {
+        return new DatesThatHoldEveryStatement.Part(date, TakenAs.DatePart.MONTH, EVERY_DATE);
+    }
+
+    private static DatesThatHoldEveryStatement.Part day(int date) {
+        return new DatesThatHoldEveryStatement.Part(date, TakenAs.DatePart.DAY, EVERY_DATE);
+    }
+
+    /** {@code weight * part + ... + constant}, held against nought as {@code relation}. */
+    private static DatesThatHoldEveryStatement.Statement statement(long constant, Rel relation,
+                                                                   Object... weighedParts) {
+        Map<DatesThatHoldEveryStatement.Part, Long> parts = new LinkedHashMap<>();
+        for (int at = 0; at < weighedParts.length; at += 2) {
+            parts.put((DatesThatHoldEveryStatement.Part) weighedParts[at + 1],
+                    ((Number) weighedParts[at]).longValue());
+        }
+        return new DatesThatHoldEveryStatement.Statement(parts, constant, relation);
+    }
+
+    /** Whether {@code statements} hold at {@code dates}, each part worked out of its date. */
+    private static boolean holdAt(List<DatesThatHoldEveryStatement.Statement> statements,
+                                  List<LocalDate> dates) {
+        for (DatesThatHoldEveryStatement.Statement each : statements) {
+            long sum = each.constant();
+            for (Map.Entry<DatesThatHoldEveryStatement.Part, Long> part : each.parts().entrySet()) {
+                LocalDate moved = dates.get(part.getKey().date())
+                        .plusDays(part.getKey().moved().offsetDays());
+                sum += part.getValue() * part.getKey().which().of(moved);
+            }
+            if (!each.relation().holds(Long.signum(sum))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** What the finder answers, the dates of a {@link DatesThatHoldEveryStatement.Found} checked
+     *  against the statements, the dates each may be and the class each is of. */
+    private static DatesThatHoldEveryStatement.Answer found(List<DateTranslation> days,
+            List<DatePartsLeft> classes, DatesThatHoldEveryStatement.Statement... statements) {
+        DatesThatHoldEveryStatement.Answer answer =
+                DatesThatHoldEveryStatement.some(List.of(statements), days, classes);
+        if (answer instanceof DatesThatHoldEveryStatement.Found(List<LocalDate> dates)) {
+            assertTrue(holdAt(List.of(statements), dates), dates.toString());
+            for (int date = 0; date < dates.size(); date++) {
+                assertTrue(days.get(date).definedAt(dates.get(date).toEpochDay()),
+                        dates.get(date).toString());
+                assertTrue(isOf(classes.get(date), dates.get(date)), dates.get(date).toString());
+            }
+        }
+        return answer;
+    }
+
+    private static DatesThatHoldEveryStatement.Answer found(List<DateTranslation> days,
+            DatesThatHoldEveryStatement.Statement... statements) {
+        return found(days, Collections.nCopies(days.size(), DatePartsLeft.EVERY_DATE),
+                statements);
+    }
+
+    /** Whether {@code date} is of {@code left}, each part and the year's remainders worked out of
+     *  the date. */
+    private static boolean isOf(DatePartsLeft left, LocalDate date) {
+        for (Map.Entry<TakenAs.DatePart, NumericDomain.Bounds> each : left.byPart().entrySet()) {
+            if (!each.getValue().admits(ExactRatio.of(each.getKey().of(date)))) {
+                return false;
+            }
+        }
+        for (Map.Entry<Integer, Set<Integer>> each : left.yearsLeave().entrySet()) {
+            if (!each.getValue().contains(Math.floorMod(date.getYear(), each.getKey()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static DatePartsLeft from(TakenAs.DatePart part, long least) {
+        return new DatePartsLeft(Map.of(part, new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(least)), null)));
+    }
+
+    private static DatesThatHoldEveryStatement.Answer found(
+            DatesThatHoldEveryStatement.Statement... statements) {
+        return found(List.of(EVERY_DATE), statements);
+    }
+
+    private static List<LocalDate> dates(DatesThatHoldEveryStatement.Answer answer) {
+        return assertInstanceOf(DatesThatHoldEveryStatement.Found.class, answer).dates();
+    }
+
+    private static DateTranslation between(LocalDate first, LocalDate last) {
+        return EVERY_DATE.definedOnlyWhere(new DateTranslation(0, first.toEpochDay(),
+                last.toEpochDay()));
+    }
+
+    @Test
+    void aYearAndAMonthWeighedTogetherAreFoundInTheMonthTheyComeTo() {
+        List<LocalDate> dates = dates(found(statement(-200_002, Rel.EQ, 100, year(0), 1,
+                month(0))));
+
+        assertEquals(2000, dates.getFirst().getYear());
+        assertEquals(2, dates.getFirst().getMonthValue());
+    }
+
+    @Test
+    void theThirtiethOfFebruaryIsNoDate() {
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD,
+                found(statement(-2, Rel.EQ, 1, month(0)), statement(-30, Rel.EQ, 1, day(0))));
+    }
+
+    @Test
+    void theTwentyNinthOfFebruaryIsADateInALeapYearOnly() {
+        assertEquals(List.of(LocalDate.of(2000, 2, 29)), dates(found(
+                statement(-2000, Rel.EQ, 1, year(0)), statement(-2, Rel.EQ, 1, month(0)),
+                statement(-29, Rel.EQ, 1, day(0)))));
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD, found(
+                statement(-1900, Rel.EQ, 1, year(0)), statement(-2, Rel.EQ, 1, month(0)),
+                statement(-29, Rel.EQ, 1, day(0))));
+    }
+
+    /** {@code month * 100 + day == 229} with the year held to a hundred years from 1900: the
+     *  years 1900 and 2100 have none, and the years between have it every four. */
+    @Test
+    void aMonthAndADayWeighedTogetherAreFoundInAYearThatHasThem() {
+        LocalDate date = dates(found(statement(-229, Rel.EQ, 100, month(0), 1, day(0)),
+                statement(-1900, Rel.GE, 1, year(0)), statement(-2100, Rel.LE, 1, year(0))))
+                .getFirst();
+
+        assertEquals(LocalDate.of(date.getYear(), 2, 29), date);
+    }
+
+    /** A date the declarations hold from 2000 on has no February of 1900, which a date anywhere
+     *  has. */
+    @Test
+    void aDateIsFoundOnlyAmongTheDatesItMayBe() {
+        DateTranslation from2000 = between(LocalDate.of(2000, 1, 1), LocalDate.MAX);
+        DatesThatHoldEveryStatement.Statement february1900 =
+                statement(-190_002, Rel.EQ, 100, year(0), 1, month(0));
+
+        dates(found(february1900));
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD,
+                found(List.of(from2000), february1900));
+    }
+
+    /** A date the declarations hold to February 2000 is in a year it holds only some days of,
+     *  and the date is found among those days. */
+    @Test
+    void aDateIsFoundInAYearItMayBeOnlySomeDaysOf() {
+        DateTranslation february2000 = between(LocalDate.of(2000, 2, 1),
+                LocalDate.of(2000, 2, 29));
+
+        List<LocalDate> dates = dates(found(List.of(february2000),
+                statement(-200_002, Rel.EQ, 100, year(0), 1, month(0))));
+
+        assertEquals(2, dates.getFirst().getMonthValue());
+    }
+
+    /** A date the declarations hold from March to December 2000 has no February in the one year
+     *  it may be, though the year has one: no date holds a statement of February. */
+    @Test
+    void aYearADateMayBeOnlySomeDaysOfHoldsNoneOfTheOthers() {
+        DateTranslation fromMarch2000 = between(LocalDate.of(2000, 3, 1),
+                LocalDate.of(2000, 12, 31));
+
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NONE_HOLD,
+                found(List.of(fromMarch2000), statement(-2, Rel.EQ, 1, month(0))));
+    }
+
+    /** A year weighed past what the type holds at the farthest year is not searched, and that
+     *  none hold is not said. */
+    @Test
+    void yearsWeighedPastTheTypeAreNotSaidToHoldNothing() {
+        long weight = 10_000_000_000L;
+
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN,
+                found(statement(-2000 * weight, Rel.EQ, weight, year(0))));
+    }
+
+    /** A date the declarations hold to the last day of 2000 and the first months of 2001 has a
+     *  March in the later year only, and is found there though the earlier comes first. */
+    @Test
+    void aDateIsFoundInWhicheverOfItsYearsHasIt() {
+        DateTranslation acrossTheNewYear = between(LocalDate.of(2000, 12, 31),
+                LocalDate.of(2001, 5, 1));
+
+        dates(found(List.of(acrossTheNewYear), statement(-3, Rel.EQ, 1, month(0))));
+    }
+
+    /** A month weighed by a billion billion is past what a whole number holds from October on,
+     *  and January, where it is not, is found all the same; where no month it holds at is one,
+     *  the months past it are not looked at, and that none holds is not said. */
+    @Test
+    void aDateIsFoundAmongTheDaysWhoseSumsAWholeNumberHolds() {
+        long weight = 1_000_000_000_000_000_000L;
+
+        dates(found(statement(-weight, Rel.EQ, weight, month(0))));
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN,
+                found(statement(-weight - 1, Rel.EQ, weight, month(0))));
+    }
+
+    /** The year of a date moved a day back is the year before on the first of January: the
+     *  move is read where the part is taken, and the date found is the one it moves from. */
+    @Test
+    void aPartOfAMovedDateIsTakenOfTheDateMoved() {
+        DatesThatHoldEveryStatement.Part yearADayBack = new DatesThatHoldEveryStatement.Part(0,
+                TakenAs.DatePart.YEAR, A_DAY_BACK);
+
+        assertEquals(List.of(LocalDate.of(2000, 1, 1)), dates(found(
+                statement(-1999, Rel.EQ, 1, yearADayBack), statement(-2000, Rel.EQ, 1, year(0)))));
+    }
+
+    /** Two dates sixty years apart, the later on the twenty-ninth of February: the earlier is
+     *  put sixty years before a leap year. */
+    @Test
+    void twoDatesAreFoundTogether() {
+        List<LocalDate> dates = dates(found(List.of(EVERY_DATE, EVERY_DATE),
+                statement(-60, Rel.EQ, 1, year(0), -1, year(1)),
+                statement(-229, Rel.EQ, 100, month(0), 1, day(0))));
+
+        assertTrue(dates.getFirst().isLeapYear());
+    }
+
+    /**
+     * The months of a date moved 334 and 335 days on, weighed by four hundred million billion
+     * against each other: equal in January of the year after, and in December, where the terms
+     * together are past what a whole number holds. The first day of each year with them equal is
+     * in January, and moves to December; a day in February holds the statement. A year whose
+     * first such day is past it is not one no day of holds it, though it is the only year the
+     * date may be.
+     */
+    @Test
+    void aYearWhoseFirstDayOfAKindIsPastAWholeNumberIsNotSaidToHoldNothing() {
+        long weight = 400_000_000_000_000_000L;
+        DatesThatHoldEveryStatement.Statement equal = statement(0, Rel.EQ,
+                weight, new DatesThatHoldEveryStatement.Part(0, TakenAs.DatePart.MONTH,
+                        EVERY_DATE.thenAddDays(334)),
+                -weight, new DatesThatHoldEveryStatement.Part(0, TakenAs.DatePart.MONTH,
+                        EVERY_DATE.thenAddDays(335)));
+        assertTrue(holdAt(List.of(equal), List.of(LocalDate.of(2001, 2, 15))));
+
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN, found(List.of(between(
+                LocalDate.of(2001, 1, 1), LocalDate.of(2001, 12, 31))), equal));
+    }
+
+    /** {@code month + day <= 20} beside a class from February: the eighteenth of February holds
+     *  both, and the nineteenth, which January has, is in no date of the class. */
+    @Test
+    void aDateIsFoundOnlyInItsClass() {
+        List<DateTranslation> any = List.of(EVERY_DATE);
+        List<DatePartsLeft> fromFebruary = List.of(from(TakenAs.DatePart.MONTH, 2));
+        DatesThatHoldEveryStatement.Statement upTo20 =
+                statement(-20, Rel.LE, 1, month(0), 1, day(0));
+
+        assertEquals(2, dates(found(any, fromFebruary, upTo20,
+                statement(-18, Rel.EQ, 1, day(0)))).getFirst().getMonthValue());
+        dates(found(any, upTo20, statement(-19, Rel.EQ, 1, day(0))));
+        assertFalse(found(any, fromFebruary, upTo20, statement(-19, Rel.EQ, 1, day(0)))
+                instanceof DatesThatHoldEveryStatement.Found);
+    }
+
+    /** A class of the years by their remainders, which no statement of a part says: the
+     *  twenty-ninth of February is found in a leap year of the class, and not in 2000 where the
+     *  class leaves only odd years. */
+    @Test
+    void aDateIsFoundInAYearItsClassLeaves() {
+        List<DateTranslation> any = List.of(EVERY_DATE);
+        LocalDate date = dates(found(any, List.of(DatePartsLeft.yearLeaving(401, Set.of(0))),
+                statement(-229, Rel.EQ, 100, month(0), 1, day(0)))).getFirst();
+
+        assertEquals(LocalDate.of(date.getYear(), 2, 29), date);
+        assertFalse(found(any, List.of(DatePartsLeft.yearLeaving(2, Set.of(1))),
+                statement(-2000, Rel.EQ, 1, year(0)), statement(-1, Rel.EQ, 1, month(0)))
+                instanceof DatesThatHoldEveryStatement.Found);
+    }
+
+    /** More dates than the years are chosen together for, or more choices of what their months
+     *  and days come to than are looked through: nothing is said. */
+    @Test
+    void whatTheSearchGivesUpOnIsNotSaid() {
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN,
+                found(List.of(EVERY_DATE, EVERY_DATE, EVERY_DATE),
+                        statement(-2, Rel.EQ, 1, month(0))));
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN,
+                found(List.of(EVERY_DATE, EVERY_DATE), statement(0, Rel.GE, 100, month(0), 1,
+                        day(0), 100, month(1), 1, day(1))));
+    }
+}

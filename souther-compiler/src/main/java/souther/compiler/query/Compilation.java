@@ -7,6 +7,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.partition.Allowances;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
@@ -23,7 +24,10 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WhereCodeIsWritten;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.numeric.Today;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -84,6 +88,11 @@ public final class Compilation {
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
         db.set(new Front.Policy(), souther.compiler.execute.EvaluationPolicy.fromSettings());
+        // The day rows are written on, read once as the compilation starts, so that every row of
+        // one compilation is written on the same day however long it runs. The day where this
+        // runs, which is the day the person reading the rows is on. A caller with a day of its own
+        // says so with writtenOn.
+        db.set(new Front.Day(), new Today(LocalDate.now(ZoneId.systemDefault())));
         // The one place a reading policy is made. Everything that reads a declaration is handed
         // this one, so a declaration read twice in one compilation is read the same way both times.
         db.set(new Front.Reading(), Front.Reading.STANDARD);
@@ -189,14 +198,20 @@ public final class Compilation {
     }
 
     /**
-     * The same workspace after an edit: every source as it now reads, and which modules the caller
-     * is still holding back.
+     * The same workspace as it now is: every source as it now reads, which modules the caller is
+     * still holding back, and the day rows are now written on.
      *
      * <p>Nothing is thrown away. A source whose text is unchanged is unchanged, and an answer that
      * comes out the same as before leaves everything that read it alone — so what this costs is what
      * the edit actually reached.
+     *
+     * <p>The day with the sources, because a compilation brought up to date is one somebody keeps
+     * across requests — an editor's, across midnight — and the day it was made on is not the day
+     * a row it writes for this request is written on. Said with every update, so that no keeper
+     * can bring the sources up to date and leave the day behind; the same day sets nothing.
      */
-    public void update(Map<String, String> byId, Set<String> broken) {
+    public void update(Map<String, String> byId, Set<String> broken, LocalDate writtenOn) {
+        db.set(new Front.Day(), new Today(writtenOn));
         // A source that is gone is forgotten, along with the module it declared. Which module that
         // was has to be read before the layout is told the source is gone.
         for (SourceId gone : List.copyOf(held)) {
@@ -325,6 +340,7 @@ public final class Compilation {
         db.ask(new Output.All());
         for (String module : modules()) {
             db.ask(new Output.ConstConstructions(module));
+            db.ask(new Output.BuiltValues(module));
             for (SourceId id : exampleSourcesOf(module)) {
                 db.ask(new Front.RowNames(id));
                 db.ask(new Names.StandInBlocks(id));
@@ -370,6 +386,15 @@ public final class Compilation {
                 ? java.util.Collections.unmodifiableSequencedSet(new LinkedHashSet<>()) : wrote;
     }
 
+    /**
+     * Holds this compilation's budgets to {@code allowances} ({@link Allowances}), before
+     * anything is asked of it.
+     */
+    public Compilation allowing(Allowances allowances) {
+        db.allowing(allowances);
+        return this;
+    }
+
     /** What this compilation was asked to measure. Set before anything is asked; the answers are
      * memoised, so a later change would leave one measured and the next not. */
     public void measure(Adequacy.Asked asked) {
@@ -379,6 +404,24 @@ public final class Compilation {
         // a level decides is what the report says, and what a run observes is decided before a row
         // is run and by everything that will read one.
         observe(observationFor(asked.level()));
+    }
+
+    /**
+     * That this build measures {@code choice} and not every behavior, before anything is asked of
+     * it: what a measure answers for a behavior outside it is nothing, and what the warnings that
+     * need every behavior to say anything say of it is left unsaid.
+     */
+    public void choose(Adequacy.Choice choice) {
+        db.set(new Adequacy.Chosen(), choice);
+    }
+
+    /**
+     * That this build leaves a behavior unmeasured where its author is told what to change and
+     * measuring it as written runs into a figure ({@link ToBeChangedFirst}), before anything is
+     * asked of it. Where it is not said, every behavior is measured to the end.
+     */
+    public void leaveWhatIsToBeChanged() {
+        db.set(new Adequacy.LeavingWhatIsToBeChanged(), true);
     }
 
     /** What a report at {@code level} needs of the rows, which is this level's whole part in it. */
@@ -482,6 +525,18 @@ public final class Compilation {
     }
 
     /**
+     * The day this compilation writes rows on. Returns this compilation.
+     *
+     * <p>For a caller whose rows have to come out the same whatever day it runs — a test holding a
+     * generated row to the text it expects. What a rule owes does not turn on the day, so nothing
+     * but the rows written changes with it.
+     */
+    public Compilation writtenOn(LocalDate day) {
+        db.set(new Front.Day(), new Today(day));
+        return this;
+    }
+
+    /**
      * The same for how much of a declaration's clauses a reading may hold apart.
      *
      * <p>Not a knob a build has. Nothing an author writes reaches the fallback at the default, so
@@ -537,6 +592,11 @@ public final class Compilation {
     /** What makes a walk of this compilation stop short of an answer — {@link Db#abandonWhen}. */
     public void abandonWhen(Abandonment abandonment) {
         db.abandonWhen(abandonment);
+    }
+
+    /** Who is told which question this compilation is working out — {@link Db#tell}. */
+    public void tell(Answering told) {
+        db.tell(told);
     }
 
     /** The names of the modules these sources declare, in the order the sources were given. */

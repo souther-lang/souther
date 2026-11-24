@@ -1,18 +1,26 @@
 package souther.compiler.numeric;
 
 import souther.compiler.collect.AppendOnly;
+import souther.compiler.collect.InTheOrderGiven;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What a path's rules leave the numbers in it, and what follows from them.
@@ -58,8 +66,20 @@ public final class NumericDomain<A> {
     private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 34;
 
     private final StatedRules<A> stated;
-    /** How the values at each position are spaced, told one rule at a time ({@link AppendOnly}). */
-    private final AppendOnly<A, Granularity> kinds;
+    /**
+     * What a type says of each atom the domain was told of — how its values are spaced and where
+     * the order they are counted on stops — told one atom at a time ({@link AppendOnly}).
+     *
+     * <p>One table for the two, because they are facts about one position: they go with the names
+     * and with every domain met with this one, and what a row holds is asked inside the ends, so an
+     * answer that needed each asker to say them again was one an asker without them gave of values
+     * no row holds. Held as one, an atom cannot be known by its spacing and have its ends left
+     * behind by whichever route told it.
+     *
+     * <p>The ends are not a rule. Said as one, an order's end would be a bound the rules place, and
+     * every reader of what the rules leave would read the type's end as a line the model draws.
+     */
+    private final AppendOnly<A, NumberSpace> spaces;
     private final boolean readARuleNothingSatisfies;
 
     /**
@@ -104,13 +124,27 @@ public final class NumericDomain<A> {
     private final RulesRead<A> readBefore;
     private RulesRead<A> read;
     private ClosedStates.Parted<A> closed;
+    private FormReach<A> reach;
+    private Systems<A> systems;
+    private ProjectionCertification certification;
+    /** What the equalities of some parts come to together, or empty where there are none to use,
+     *  by which parts those are; null until asked for. A table that more than one thread may fill:
+     *  what is filled in it is worked out the same by each, and the one that is lost is worked
+     *  out again. */
+    private Map<Set<Integer>, Optional<Span<A>>> spans;
+    /** The reductions of the rules of some parts, by which parts those are; null until asked for,
+     *  and filled as {@link #spans} is. */
+    private Map<Set<Integer>, List<Reduction<A>>> reductions;
+    /** The parts the rules fall into; null until asked for. */
+    private Split<A> split;
+    private Boolean noRow;
 
-    private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
+    private NumericDomain(StatedRules<A> stated, AppendOnly<A, NumberSpace> spaces,
                           boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
                           ClosedStates closedStates, ClosedStates.Parted<A> closedBefore,
                           RulesRead<A> readBefore) {
         this.stated = stated;
-        this.kinds = kinds;
+        this.spaces = spaces;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
         this.order = order;
         this.closedStates = closedStates;
@@ -155,8 +189,8 @@ public final class NumericDomain<A> {
      * from this one is lent the closure of any other made from it that held the same rules.
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
-        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order,
-                closedStates, null, null);
+        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(),
+                false, closedStates.kept(order), closedStates, null, null);
     }
 
     /**
@@ -172,10 +206,52 @@ public final class NumericDomain<A> {
     private List<AffineConstraint<A>> rules() {
         RulesRead<A> had = read;
         if (had == null) {
-            had = new RulesRead<>(stated, readFrom(stated, readBefore));
+            had = readFrom(stated, readBefore);
             read = had;
         }
         return had.rules();
+    }
+
+    /**
+     * How many rules relate {@code atom} to another position: a rule over it and at least one
+     * other. A rule over it alone, which is where it stops, is not among them.
+     *
+     * <p>What a caller asks to know that nothing ties a position to another. The ranges a domain
+     * answers are boxes, and a box says nothing of how two positions go together — {@code c == a + 1}
+     * puts no end on {@code c} and still holds {@code c} and {@code a} to one another — so a
+     * position that is related to none can be reasoned about by its range and one that is related
+     * to any cannot.
+     */
+    public int relationsOf(A atom) {
+        int related = 0;
+        for (AffineConstraint<A> each : rules()) {
+            Map<A, ExactRatio> weights = each.form().coefs();
+            if (weights.size() > 1 && weights.containsKey(atom)) {
+                related++;
+            }
+        }
+        return related;
+    }
+
+    /**
+     * Every rule weighing one of {@code atoms}, each once, in the order the rules are read.
+     *
+     * <p>For a caller asking what the rules hold some positions to together, which no box says: a
+     * rule over two of them holds the pair to less than each one's range does.
+     */
+    public List<AffineConstraint<A>> rulesWeighingAny(Set<A> atoms) {
+        List<AffineConstraint<A>> out = new ArrayList<>();
+        for (AffineConstraint<A> each : rules()) {
+            if (weighsAny(each, atoms)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    private static <A> boolean weighsAny(AffineConstraint<A> rule, Set<A> atoms) {
+        Map<A, ExactRatio> weights = rule.form().coefs();
+        return atoms.stream().anyMatch(weights::containsKey);
     }
 
     /**
@@ -193,14 +269,43 @@ public final class NumericDomain<A> {
      * saying more holds the other's composition at the left of its own, which is how the rules said
      * since are found without comparing anything.
      */
-    private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules) {}
+    private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules,
+                                AppendOnly<RuleKey<A>, Integer> places) {
+
+        /**
+         * The rule among these that {@code rule} is said again of, or null where there is none: the
+         * sum over the same form, or the very rule.
+         *
+         * <p>Found by {@link #places}, so that what a rule said after the others finds is a lookup
+         * and not a walk of every rule said before it.
+         */
+        AffineConstraint<A> among(AffineConstraint<A> rule) {
+            Integer at = places.get(RuleKey.of(rule));
+            return at == null ? null : rules.get(at);
+        }
+    }
+
+    /** What a rule is found by among the rules read. */
+    private sealed interface RuleKey<A> {
+
+        /** A sum held below a bound: its form, which has one place however much tighter its bound
+         *  comes to. */
+        record OfSum<A>(CanonicalForm<A> form) implements RuleKey<A> {}
+
+        /** Any other rule: the rule itself. */
+        record OfRule<A>(AffineConstraint<A> rule) implements RuleKey<A> {}
+
+        static <A> RuleKey<A> of(AffineConstraint<A> rule) {
+            return rule instanceof AffineConstraint.HalfSpace<A> half
+                    ? new OfSum<>(half.form()) : new OfRule<>(rule);
+        }
+    }
 
     /**
      * {@code stated} read, onto {@code before} where {@code stated} is {@code before}'s rules
      * followed by others, and from the start otherwise.
      */
-    private static <A> List<AffineConstraint<A>> readFrom(StatedRules<A> stated,
-                                                          RulesRead<A> before) {
+    private static <A> RulesRead<A> readFrom(StatedRules<A> stated, RulesRead<A> before) {
         if (before != null) {
             Deque<StatedRules<A>> since = new ArrayDeque<>();
             StatedRules<A> at = stated;
@@ -209,20 +314,25 @@ public final class NumericDomain<A> {
                 at = both.left();
             }
             if (at == before.of()) {
-                List<AffineConstraint<A>> out = before.rules();
+                RulesRead<A> out = before;
                 while (!since.isEmpty()) {
                     for (AffineConstraint<A> rule : since.pop().distinct()) {
                         out = readOnto(out, rule);
                     }
                 }
-                return out;
+                return new RulesRead<>(stated, out.rules(), out.places());
             }
         }
-        return tightest(stated.distinct());
+        List<AffineConstraint<A>> rules = tightest(stated.distinct());
+        AppendOnly<RuleKey<A>, Integer> places = AppendOnly.empty();
+        for (int at = 0; at < rules.size(); at++) {
+            places = places.with(RuleKey.of(rules.get(at)), at);
+        }
+        return new RulesRead<>(stated, rules, places);
     }
 
     /**
-     * {@code rules}, which are {@link #tightest} of the distinct rules said so far, with
+     * The rules of {@code read}, which are {@link #tightest} of the distinct rules said so far, with
      * {@code rule} said after them — what {@link #tightest} of the distinct rules with it comes to.
      *
      * <p>A rule other than a sum held below a bound is in the distinct rules exactly where it is in
@@ -230,28 +340,28 @@ public final class NumericDomain<A> {
      * sum held below a bound needs no asking: its form has one bound here, the tightest of those
      * said, and the tighter of that and one already among them is that one.
      */
-    private static <A> List<AffineConstraint<A>> readOnto(List<AffineConstraint<A>> rules,
-                                                          AffineConstraint<A> rule) {
-        if (rule instanceof AffineConstraint.HalfSpace<A> half) {
-            for (int at = 0; at < rules.size(); at++) {
-                if (rules.get(at) instanceof AffineConstraint.HalfSpace<A> held
-                        && held.form().equals(half.form())) {
-                    ExactCut kept = ExactCut.tighterUpper(held.bound(), half.bound());
-                    if (kept.equals(held.bound())) {
-                        return rules;
-                    }
-                    List<AffineConstraint<A>> out = new ArrayList<>(rules);
-                    out.set(at, new AffineConstraint.HalfSpace<>(half.form(), kept));
-                    return List.copyOf(out);
-                }
+    private static <A> RulesRead<A> readOnto(RulesRead<A> read, AffineConstraint<A> rule) {
+        List<AffineConstraint<A>> rules = read.rules();
+        AffineConstraint<A> held = read.among(rule);
+        if (held != null) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)
+                    || !(held instanceof AffineConstraint.HalfSpace<A> was)) {
+                return read;
             }
-        } else if (rules.contains(rule)) {
-            return rules;
+            ExactCut kept = ExactCut.tighterUpper(was.bound(), half.bound());
+            if (kept.equals(was.bound())) {
+                return read;
+            }
+            List<AffineConstraint<A>> out = new ArrayList<>(rules);
+            out.set(read.places().get(RuleKey.of(half)),
+                    new AffineConstraint.HalfSpace<>(half.form(), kept));
+            return new RulesRead<>(read.of(), List.copyOf(out), read.places());
         }
         List<AffineConstraint<A>> out = new ArrayList<>(rules.size() + 1);
         out.addAll(rules);
         out.add(rule);
-        return List.copyOf(out);
+        return new RulesRead<>(read.of(), List.copyOf(out),
+                read.places().with(RuleKey.of(rule), rules.size()));
     }
 
     /**
@@ -298,7 +408,17 @@ public final class NumericDomain<A> {
      * stop early, so a box that has not emptied is not a box with a value in it.
      */
     public boolean isBottom() {
-        return readARuleNothingSatisfies || closed().holdsNothing();
+        return readARuleNothingSatisfies || parted().holdsNothing();
+    }
+
+    /**
+     * Whether {@link #isBottom} is the answer of closures that settled and composed every bound
+     * ({@link ClosedState#isSettledAndComposed}). Where it is, this domain is shown empty wherever a
+     * domain with fewer of its rules was, so a reader that has been told a coarser domain is empty
+     * can rely on this one being asked.
+     */
+    public boolean isSettledAndComposed() {
+        return readARuleNothingSatisfies || parted().isSettledAndComposed();
     }
 
     // --- assume: take in one more rule ------------------------------------------------------------
@@ -310,34 +430,42 @@ public final class NumericDomain<A> {
      * sound answer with less, and the one {@link AffineConstraint.Read.NotWorkedOut} gives for a
      * rule whose lowest terms are not held.
      *
-     * @param atomKinds see {@link #assume(LinearForm, Rel, Map)}
+     * @param spaces see {@link #assume(LinearForm, Rel, Map)}
      */
     public NumericDomain<A> assume(ExactAnswer<LinearForm<A>> f, Rel rel,
-                                   Map<A, Granularity> atomKinds) {
+                                   Map<A, NumberSpace> spaces) {
         return f instanceof ExactAnswer.Held<LinearForm<A>> held
-                ? assume(held.value(), rel, atomKinds) : this;
+                ? assume(held.value(), rel, spaces) : this;
     }
 
     /**
      * The domain with {@code f rel 0} taken in.
      *
-     * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than
-     *                  defaulted: an atom whose spacing is guessed is one a strict bound is either
-     *                  wrongly sharpened on or silently left blunt, and neither shows up as a
-     *                  failure anywhere near where the guess was made.
+     * @param spaces what the type of each atom of {@code f} says of its values: how they are
+     *               spaced and where their order stops. Required rather than defaulted: an atom
+     *               whose spacing is guessed is one a strict bound is either wrongly sharpened on
+     *               or silently left blunt, and neither shows up as a failure anywhere near where
+     *               the guess was made. An atom no type could be found for is told as such
+     *               ({@link NumberSpace#spacedOnly}), which is a thing said and not a default.
      */
-    public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, Granularity> atomKinds) {
-        NumericDomain<A> knowing = knowing(f.coefs().keySet(), atomKinds);
+    public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
+        return assuming(f.coefs(), f.constant(), rel, spaces);
+    }
+
+    /** The domain with {@code Σ coefs·atom + constant rel 0} taken in. */
+    private NumericDomain<A> assuming(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
+                                      Map<A, NumberSpace> spaces) {
+        NumericDomain<A> knowing = knowing(coefs.keySet(), spaces);
         if (knowing.readARuleNothingSatisfies) {
             return knowing;
         }
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                f.coefs(), f.constant(), rel, knowing.kinds::get);
+                coefs, constant, rel, knowing::spacingOf);
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
-                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order,
-                            closedStates, null, null);
+                    new NumericDomain<>(StatedRules.none(), knowing.spaces, true,
+                            knowing.order, closedStates, null, null);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -356,8 +484,29 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
-        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order,
+        RulesRead<A> known = readLent();
+        if (known != null && alreadyAmong(known, rule)) {
+            return this;
+        }
+        return new NumericDomain<>(stated.and(StatedRules.of(rule)), spaces, false, order,
                 closedStates, lent(), readLent());
+    }
+
+    /**
+     * Whether {@code rule} says nothing the rules already read say: a sum held below a bound that
+     * one of them holds as low or lower, or any other rule that is one of them.
+     *
+     * <p>Asked of rules read from a prefix of the ones this domain states, so that a rule found here
+     * is one every reading of the whole holds as well, and a rule not found settles nothing.
+     */
+    private static <A> boolean alreadyAmong(RulesRead<A> read, AffineConstraint<A> rule) {
+        AffineConstraint<A> held = read.among(rule);
+        if (held == null) {
+            return false;
+        }
+        return !(rule instanceof AffineConstraint.HalfSpace<A> half
+                && held instanceof AffineConstraint.HalfSpace<A> was)
+                || ExactCut.tighterUpper(was.bound(), half.bound()).equals(was.bound());
     }
 
     /**
@@ -368,46 +517,82 @@ public final class NumericDomain<A> {
      * caller spelling that out is a second reader of an {@link Endpoint} that can spell it
      * differently. Two of them had.
      */
-    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
+    public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, NumberSpace> spaces) {
         NumericDomain<A> out = this;
         if (bounds.min() != null) {
             out = out.assume(
                     LinearForm.atomMinusConstant(atom, Count.number(bounds.min().at()).exactly()),
-                    bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
+                    bounds.min().inclusive() ? Rel.GE : Rel.GT, spaces);
         }
         if (bounds.max() != null) {
             out = out.assume(
                     LinearForm.atomMinusConstant(atom, Count.number(bounds.max().at()).exactly()),
-                    bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
+                    bounds.max().inclusive() ? Rel.LE : Rel.LT, spaces);
         }
         return out;
     }
 
     /**
-     * The domain with the spacing of each of {@code atoms} recorded.
+     * The domain told what the types of {@code told} say, for atoms no rule has named yet as well
+     * as for the ones it has: the way a reader whose atoms come with their types hands them over
+     * before it says any rule about them, or after.
      *
-     * <p>One atom is one kind of number for as long as the domain lives. The same key arriving as
-     * both is not a widening to absorb — the key is what says two readings are of one value, so two
-     * spacings under one key means the naming and the typing disagree, and the answer to that is to
-     * stop rather than to pick the safer of the two.
+     * <p>What the rules leave does not move: the rules are the same rules, and this says only
+     * which of their points a row can be.
      */
-    private NumericDomain<A> knowing(Set<A> atoms, Map<A, Granularity> atomKinds) {
-        AppendOnly<A, Granularity> next = kinds;
+    public NumericDomain<A> told(Map<A, NumberSpace> told) {
+        return knowing(told.keySet(), told);
+    }
+
+    /**
+     * The domain with {@code atoms}' spaces recorded, from what {@code told} gives each.
+     *
+     * <p>One atom is one kind of number for as long as the domain lives. The same atom arriving
+     * spaced two ways, or stopping at two ends, is not a widening to absorb — the key is what says
+     * two readings are of one value, so the naming and the typing disagree, and the answer to that
+     * is to stop rather than to pick the safer of the two. An atom told twice is told the same
+     * space, or told where its order stops the second time having been left untold the first
+     * ({@link NumberSpace#joinedWith}); the table keeps what it was told whole, so the second
+     * telling builds it again.
+     */
+    private NumericDomain<A> knowing(Set<A> atoms, Map<A, NumberSpace> told) {
+        AppendOnly<A, NumberSpace> next = spaces;
+        Map<A, NumberSpace> upgraded = null;
         for (A atom : atoms) {
-            Granularity given = atomKinds.get(atom);
+            NumberSpace given = told.get(atom);
             if (given == null) {
-                throw new IllegalStateException("no granularity given for atom `" + atom + "`");
+                throw new IllegalStateException("no space given for atom `" + atom + "`");
             }
-            Granularity had = next.get(atom);
-            if (had == given) {
+            NumberSpace had = next.get(atom);
+            if (had == null) {
+                next = next.with(atom, given);
                 continue;
             }
-            if (had != null) {
-                throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + given);
+            NumberSpace joined;
+            try {
+                joined = had.joinedWith(given);
+            } catch (IllegalStateException disagreed) {
+                throw new IllegalStateException("atom `" + atom + "` " + disagreed.getMessage(),
+                        disagreed);
             }
-            next = next.with(atom, given);
+            if (!joined.equals(had)) {
+                if (upgraded == null) {
+                    upgraded = new LinkedHashMap<>(next.asMap());
+                }
+                upgraded.put(atom, joined);
+            }
         }
-        return next == kinds ? this
+        if (upgraded != null) {
+            // An atom whose ends were untold and now are: the table cannot rewrite what it holds,
+            // so it is built again with what it now says.
+            next = AppendOnly.of(upgraded);
+            for (A atom : atoms) {
+                if (!next.contains(atom)) {
+                    next = next.with(atom, told.get(atom));
+                }
+            }
+        }
+        return next == spaces ? this
                 : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order,
                         closedStates, lent(), readLent());
     }
@@ -429,9 +614,9 @@ public final class NumericDomain<A> {
      * So the caller is the one that decides what such a position is called, and it may call it
      * something opaque; what it may not do is leave it unnamed and be given a wider answer.
      *
-     * <p>The spacing goes with the names, since it is a fact about the position rather than about
-     * the word for it. Every position a rule weighs is one this records a spacing for, so naming
-     * them all is naming everything the rules are about — a rule reaching one this has no spacing
+     * <p>The space goes with the names, since it is a fact about the position rather than about
+     * the word for it. Every position a rule weighs is one this records a space for, so naming
+     * them all is naming everything the rules are about — a rule reaching one this has no space
      * for is refused rather than carried across unnamed.
      */
     public <B> NumericDomain<B> over(java.util.function.Function<A, B> naming,
@@ -440,9 +625,9 @@ public final class NumericDomain<A> {
         // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
         // positions, so two independent rules would be carried across as two rules about one number
         // and a box holding something would come back holding nothing.
-        Renaming<A, B> called = Renaming.of(kinds.keys(), naming);
-        Map<B, Granularity> spacing = new LinkedHashMap<>();
-        kinds.asMap().forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
+        Renaming<A, B> called = Renaming.of(spaces.keys(), naming);
+        Map<B, NumberSpace> renamed = new LinkedHashMap<>();
+        spaces.asMap().forEach((atom, space) -> renamed.put(called.of(atom), space));
         StatedRules<B> out = StatedRules.none();
         for (AffineConstraint<A> rule : rules()) {
             out = out.and(StatedRules.of(rule.over(called)));
@@ -452,8 +637,8 @@ public final class NumericDomain<A> {
         // caller is the one that knows it — the same reason the order is asked for at the top.
         // Nothing is lent across either: rules under other names are another reader's rules, and
         // they join the closures of the reading they are met into.
-        return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order,
-                ClosedStates.NONE, null, null);
+        return new NumericDomain<>(out, AppendOnly.of(renamed),
+                readARuleNothingSatisfies, order, ClosedStates.NONE, null, null);
     }
 
     /**
@@ -467,30 +652,22 @@ public final class NumericDomain<A> {
      * same rule, and an answer that depended on how often each was said would depend on how the
      * caller came by them.
      *
-     * <p>Spacings are checked rather than merged. Two readings calling one position by one name and
-     * spacing it two ways is the naming and the typing disagreeing, and picking the safer of the two
-     * would answer about a position neither reading was about.
+     * <p>Spacings are checked rather than merged, and so is where each order stops. Two readings
+     * calling one position by one name and spacing it two ways is the naming and the typing
+     * disagreeing, and picking the safer of the two would answer about a position neither reading
+     * was about.
      *
      * <p>What the result leaves is worked out through this domain's {@link #closedStates} and not
      * through {@code other}'s. The receiver is the reading the result is part of, and that is
      * nothing about what the rules mean.
      */
     public NumericDomain<A> meet(NumericDomain<A> other) {
-        if (other == null || (other.stated.isNothing() && other.kinds.isEmpty()
+        if (other == null || (other.stated.isNothing() && other.spaces.isEmpty()
                 && !other.readARuleNothingSatisfies)) {
             return this;
         }
-        AppendOnly<A, Granularity> both = kinds;
-        for (Map.Entry<A, Granularity> each : other.kinds.asMap().entrySet()) {
-            Granularity had = both.get(each.getKey());
-            if (had == null) {
-                both = both.with(each.getKey(), each.getValue());
-            } else if (had != each.getValue()) {
-                throw new IllegalStateException("atom `" + each.getKey() + "` is " + had + " and "
-                        + each.getValue());
-            }
-        }
-        return new NumericDomain<>(stated.and(other.stated), both,
+        NumericDomain<A> both = knowing(other.spaces.keys(), other.spaces.asMap());
+        return new NumericDomain<>(stated.and(other.stated), both.spaces,
                 readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates,
                 // The rules said first are this one's, unless it has none and they are the other's.
                 stated.isNothing() ? other.lent() : lent(),
@@ -507,12 +684,21 @@ public final class NumericDomain<A> {
      * on the order, which is the thing this arrangement exists to be rid of.
      */
     private ClosedState<A> closed() {
+        return parted().state();
+    }
+
+    /**
+     * What the rules leave, a part at a time. A question about the positions of one part is answered
+     * by that part's closure ({@link ClosedStates.Parted#partWeighing}), and only a question about
+     * all of them asks for the parts put together.
+     */
+    private ClosedStates.Parted<A> parted() {
         ClosedStates.Parted<A> had = closed;
         if (had == null) {
-            had = closedStates.of(rules(), kinds::get, order, closedBefore);
+            had = closedStates.of(rules(), this::spacingOf, order, closedBefore);
             closed = had;
         }
-        return had.state();
+        return had;
     }
 
     // --- entails / refutes --------------------------------------------------------------------------
@@ -558,10 +744,19 @@ public final class NumericDomain<A> {
      * which is the only thing a caller may act on — see {@link ProjectionCertification}.
      */
     public ProjectionCertification projectionCertification() {
+        ProjectionCertification had = certification;
+        if (had == null) {
+            had = certificationWorkedOut();
+            certification = had;
+        }
+        return had;
+    }
+
+    private ProjectionCertification certificationWorkedOut() {
         if (isBottom()) {
             return new ProjectionCertification.NothingIsLeft();
         }
-        if (!closed().everyBoundWasComposed()) {
+        if (!parted().everyBoundWasComposed()) {
             return new ProjectionCertification.ArithmeticLeftTheClosureIncomplete();
         }
         if (!everyRelatedPositionIsSpacedAlike()) {
@@ -591,6 +786,13 @@ public final class NumericDomain<A> {
      * one composition further on.
      */
     private boolean everyRelatedPositionIsSpacedAlike() {
+        Map<A, A> reaches = related();
+        return spacedAlike(reaches, List.copyOf(reaches.keySet()));
+    }
+
+    /** The groups the rules relate the positions in, each position pointing along the chain to
+     *  its group ({@link #groupOf}). */
+    private Map<A, A> related() {
         Map<A, A> reaches = new LinkedHashMap<>();
         for (AffineConstraint<A> rule : rules()) {
             A first = null;
@@ -600,14 +802,20 @@ public final class NumericDomain<A> {
             for (A atom : rule.form().atomsIn(order)) {
                 if (first == null) {
                     first = atom;
+                    groupOf(reaches, atom);
                 } else {
                     relate(reaches, first, atom);
                 }
             }
         }
+        return reaches;
+    }
+
+    /** Whether each of {@code atoms} has its values spaced as every other of its group has. */
+    private boolean spacedAlike(Map<A, A> reaches, List<A> atoms) {
         Map<A, Granularity> ofGroup = new LinkedHashMap<>();
-        for (A atom : List.copyOf(reaches.keySet())) {
-            Granularity how = kinds.get(atom);
+        for (A atom : atoms) {
+            Granularity how = spacingOf(atom);
             if (how == null) {
                 // Every atom of every rule is spaced, since a rule arrives through `assume` and that
                 // refuses one whose spacing it was not given. Said rather than read as an absence:
@@ -661,12 +869,354 @@ public final class NumericDomain<A> {
             return true;   // an infeasible path discharges anything
         }
         Map<A, ExactRatio> coefs = weighed(f);
-        if (!coefs.keySet().stream().allMatch(kinds::contains)) {
+        if (!coefs.keySet().stream().allMatch(spaces::contains)) {
             // A position this has never been told about is one nothing here bounds, so nothing here
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
         }
-        return switch (AffineConstraint.of(coefs, f.constant(), rel, kinds::get)) {
+        if (entailsOver(coefs, f.constant(), rel, withRules)) {
+            return true;
+        }
+        if (!withRules) {
+            return false;   // asked of the box and its differences alone, which no equality adds to
+        }
+        return provenFromTheEqualities(coefs, f.constant(), rel);
+    }
+
+    /**
+     * What the equalities of the rules a goal reaches come to together, and the bounds beside them
+     * written as what is left of them.
+     */
+    private record Span<A>(EqualitySpan<A> equalities, List<Bound<A>> bounds) {
+
+        /**
+         * Whether {@code form + constant <= 0} (or {@code < 0}) is a combination of the
+         * equalities, or a bound scaled up beside them.
+         *
+         * <p>What the equalities come to is asked, and not what is left over the positions they
+         * were solved for: a sum that is a combination of the equalities is written as a constant,
+         * and one that is a bound scaled up is written as that bound's own rest, whichever positions
+         * were solved for. So this answers the same under any naming of the positions and under any
+         * rules the goal and the bound do not reach.
+         */
+        boolean proves(CanonicalForm<A> form, ExactRatio constant, boolean strict) {
+            EqualitySpan.Residue<A> rest = equalities.residue(form, constant);
+            if (rest == null) {
+                return false;
+            }
+            if (rest.coefs().isEmpty()) {
+                int sign = rest.constant().signum();
+                return sign < 0 || (sign == 0 && !strict);
+            }
+            for (Bound<A> bound : bounds) {
+                ExactRatio scale = scaleOf(rest.coefs(), bound.coefs());
+                ExactRatio carried = scale == null ? null
+                        : scale.times(bound.constant()).orNull();
+                ExactRatio over = carried == null ? null : rest.constant().minus(carried).orNull();
+                if (over == null) {
+                    continue;
+                }
+                int sign = over.signum();
+                if (sign < 0 || (sign == 0 && (!strict || bound.strict()))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /** {@code Σ coefs + constant <= 0}, or {@code < 0} where it is strict. */
+    private record Bound<A>(Map<A, ExactRatio> coefs, ExactRatio constant, boolean strict) {}
+
+    /**
+     * Whether the equalities prove the goal, either together with at most one bound beside them or
+     * through the reductions of the rules over the positions they leave free.
+     *
+     * <p>A further way to prove a goal and never a second account of what the rules leave. What the
+     * equalities come to follows from the rules, and so do the reduced rules, which say less
+     * ({@link ReducedRules}); so what either proves is proved, and what neither does says nothing.
+     * The ranges, the closed differences, the certificate and whether anything is left at all are
+     * the rules' own and are asked of them alone: this is asked after they have not proved the goal
+     * ({@link #entails}), and by nothing else.
+     */
+    private boolean provenFromTheEqualities(Map<A, ExactRatio> coefs, ExactRatio constant,
+                                            Rel rel) {
+        if (rules().stream().noneMatch(AffineConstraint.Equality.class::isInstance)
+                || !(AffineConstraint.of(coefs, constant, rel, this::spacingOf)
+                        instanceof AffineConstraint.Read.Stated<A> stated)) {
+            return false;
+        }
+        Split<A> split = split();
+        if (stated.constraint() instanceof AffineConstraint.Disequality<A> hole) {
+            return belowFromTheEqualities(split, hole.form(), hole.at().negated(), true)
+                    || belowFromTheEqualities(split, hole.form().negated(), hole.at(), true);
+        }
+        for (AffineConstraint.HalfSpace<A> half : stated.constraint().halfSpaces()) {
+            if (!belowFromTheEqualities(split, half.form(), half.bound().at().negated(),
+                    !half.bound().inclusive())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code form + constant <= 0} (or {@code < 0}) follows from the equalities. */
+    private boolean belowFromTheEqualities(Split<A> split, CanonicalForm<A> form,
+                                           ExactRatio constant, boolean strict) {
+        Map<A, ExactRatio> coefs = new LinkedHashMap<>();
+        for (Map.Entry<A, ExactRatio> each : form.entriesIn(order)) {
+            coefs.put(each.getKey(), each.getValue());
+        }
+        Span<A> span = spanOver(split, split.partsWeighingAny(coefs.keySet()));
+        return (span != null && span.proves(form, constant, strict))
+                || boundedByEachPart(split, coefs, constant, strict);
+    }
+
+    /**
+     * Whether {@code Σ coefs + constant <= 0} (or {@code < 0}) is shown by what each part of the
+     * rules bounds its own positions' share by, the shares added up.
+     *
+     * <p>The parts weigh no position in common, so the goal is the sum of one piece for each of
+     * them, and each piece is bounded on its own: by the rules as they stand and by every reduction
+     * of the rules of that part. The pieces' bounds add up to a bound of the goal whichever of them
+     * is the stronger for each part. A goal reaching several parts is so answered by the best of
+     * each and never by the best of every combination of them, which is as many as the ways of one
+     * part multiplied by those of the next.
+     */
+    private boolean boundedByEachPart(Split<A> split, Map<A, ExactRatio> coefs,
+                                      ExactRatio constant, boolean strict) {
+        Map<Integer, Map<A, ExactRatio>> pieces = new TreeMap<>();
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            Set<Integer> part = split.partsWeighingAny(List.of(each.getKey()));
+            int at = part.isEmpty() ? NO_PART : part.iterator().next();
+            pieces.computeIfAbsent(at, _ -> new LinkedHashMap<>())
+                    .put(each.getKey(), each.getValue());
+        }
+        List<ExactRatio> total = new ArrayList<>();
+        total.add(constant);
+        boolean reached = true;
+        for (Map.Entry<Integer, Map<A, ExactRatio>> piece : pieces.entrySet()) {
+            ExactCut bound = tightestBound(split, piece.getKey(), piece.getValue());
+            if (bound == null) {
+                return false;
+            }
+            total.add(bound.at());
+            reached &= bound.inclusive();
+        }
+        ExactRatio sum = ExactRatio.sum(total).orNull();
+        if (sum == null) {
+            return false;
+        }
+        int sign = sum.signum();
+        return sign < 0 || (sign == 0 && (!strict || !reached));
+    }
+
+    /** What stands for the part of a position that no rule weighs. */
+    private static final int NO_PART = -1;
+
+    /**
+     * The least the upper end of {@code piece} is shown to be, by the rules as they stand and by
+     * each reduction of the rules of the part it is of; null where none of them bounds it above.
+     */
+    private ExactCut tightestBound(Split<A> split, int part, Map<A, ExactRatio> piece) {
+        ExactCut best = highestProven(Goal.of(piece, ExactRatio.ZERO), true);
+        if (part == NO_PART) {
+            return best;
+        }
+        for (Reduction<A> reduced : reductionsOver(split, Set.of(part))) {
+            ReducedRules.Goal<A> freed =
+                    reduced.rules().put(new ReducedRules.Goal<>(piece, ExactRatio.ZERO));
+            if (freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)) {
+                ExactCut bound = reduced.over().highestProven(
+                        Goal.of(freed.coefs(), freed.constant()), true);
+                best = tighter(best, bound);
+            }
+        }
+        return best;
+    }
+
+    /** The lower of two upper ends, one that is not reached before one that is; null is none. */
+    private static ExactCut tighter(ExactCut one, ExactCut other) {
+        if (one == null || other == null) {
+            return one == null ? other : one;
+        }
+        int by = one.at().compareTo(other.at());
+        if (by != 0) {
+            return by < 0 ? one : other;
+        }
+        return one.inclusive() ? other : one;
+    }
+
+    /**
+     * What the equalities of the rules in the parts {@code reached} come to together, or null where
+     * there is nothing to read. Worked out when first asked for and kept.
+     */
+    private Span<A> spanOver(Split<A> split, Set<Integer> reached) {
+        if (spans == null) {
+            spans = new ConcurrentHashMap<>();
+        }
+        Optional<Span<A>> had = spans.get(reached);
+        if (had == null) {
+            had = Optional.ofNullable(spanOf(split.rulesOf(reached)));
+            spans.put(reached, had);
+        }
+        return had.orElse(null);
+    }
+
+    /**
+     * The rules in the parts that weigh no position in common
+     * ({@link ClosureQuestion#independentRules}), and which part weighs each position.
+     *
+     * <p>The parts the closure of the rules is made of where it was made of parts, which are worked
+     * out once for it; made here where it was worked out in one piece.
+     */
+    private static final class Split<A> {
+
+        private final List<List<AffineConstraint<A>>> parts;
+        private final Map<A, Integer> partOf = new HashMap<>();
+
+        private Split(List<List<AffineConstraint<A>>> parts, CanonicalOrder<A> order) {
+            this.parts = parts;
+            for (int at = 0; at < parts.size(); at++) {
+                for (AffineConstraint<A> rule : parts.get(at)) {
+                    for (A position : rule.form().atomsIn(order)) {
+                        partOf.put(position, at);
+                    }
+                }
+            }
+        }
+
+        /** Which parts weigh any of {@code positions}, in the order the parts are in. */
+        Set<Integer> partsWeighingAny(Collection<A> positions) {
+            Set<Integer> out = new TreeSet<>();
+            for (A position : positions) {
+                Integer at = partOf.get(position);
+                if (at != null) {
+                    out.add(at);
+                }
+            }
+            return out;
+        }
+
+        /** The rules of the parts at {@code at}. */
+        List<AffineConstraint<A>> rulesOf(Set<Integer> at) {
+            List<AffineConstraint<A>> out = new ArrayList<>();
+            at.forEach(part -> out.addAll(parts.get(part)));
+            return out;
+        }
+    }
+
+    /**
+     * Which connected part of the rules weighs {@code position}, or {@link #NO_PART} where none
+     * does. Two positions are in one part where the rules relate them, however indirectly, and
+     * what the rules leave one of them is what the part leaves it: a position of another part
+     * cannot narrow it nor refuse it. The numbers of a part are the one place these rules say two
+     * positions are related, so a reader asking which positions an answer can turn on asks here.
+     * The part is named by a number that means something only against this domain.
+     */
+    public int partOf(A position) {
+        Integer at = split().partOf.get(position);
+        return at == null ? NO_PART : at;
+    }
+
+    private Split<A> split() {
+        Split<A> had = split;
+        if (had == null) {
+            List<List<AffineConstraint<A>>> parts = parted().partsOfTheRules();
+            had = new Split<>(parts.isEmpty() ? ClosureQuestion.independentRules(rules()) : parts,
+                    order);
+            split = had;
+        }
+        return had;
+    }
+
+    private Span<A> spanOf(List<AffineConstraint<A>> reachedRules) {
+        EqualitySpan<A> equalities = EqualitySpan.of(reachedRules, order);
+        if (equalities == null) {
+            return null;
+        }
+        List<Bound<A>> bounds = new ArrayList<>();
+        for (AffineConstraint<A> each : reachedRules) {
+            if (each instanceof AffineConstraint.HalfSpace<A> half) {
+                EqualitySpan.Residue<A> left =
+                        equalities.residue(half.form(), half.bound().at().negated());
+                if (left != null && !left.coefs().isEmpty()) {
+                    bounds.add(new Bound<>(left.coefs(), left.constant(),
+                            !half.bound().inclusive()));
+                }
+            }
+        }
+        return new Span<>(equalities, List.copyOf(bounds));
+    }
+
+    /** What {@code of} is {@code than} times, where it is a positive multiple of it; null where it
+     *  is not. */
+    private static <A> ExactRatio scaleOf(Map<A, ExactRatio> of, Map<A, ExactRatio> than) {
+        if (!of.keySet().equals(than.keySet())) {
+            return null;
+        }
+        ExactRatio scale = null;
+        for (Map.Entry<A, ExactRatio> each : of.entrySet()) {
+            ExactRatio unit = each.getValue().dividedBy(than.get(each.getKey())).orNull();
+            if (unit == null || unit.signum() <= 0 || (scale != null && !scale.equals(unit))) {
+                return null;
+            }
+            scale = unit;
+        }
+        return scale;
+    }
+
+    /** The rules over the positions their equalities leave free, and what they leave. */
+    private record Reduction<A>(ReducedRules<A> rules, NumericDomain<A> over) {}
+
+    /**
+     * The reductions of the rules in the parts {@code reached}, one for each way of choosing among
+     * the positions those rules use alike, worked out when first asked for and kept; {@code reached}
+     * is null where the rules were closed in one piece and are one part. None where there is
+     * nothing to reduce. What any of them proves is proved, so the choice among positions nothing
+     * tells apart is not the names' to make.
+     *
+     * <p>Asked a part at a time, and never of the parts a goal reaches together: a part's ways of
+     * choosing are counted for it, and the parts' own bounds are added ({@link #boundedByEachPart}),
+     * so equalities in another part cannot make the ways too many, and a goal reaching several parts
+     * is not asked of every combination of their ways.
+     *
+     * <p>A reduction that leaves nothing is not one of them. That the rules leave nothing is what
+     * {@link #isBottom} says of them, and it is that answer's to give: a path is unreachable when
+     * the rules as they stand show it, and one whose reduction alone found the rules empty would
+     * prove everything and be reached all the same, so {@link #refutes} could say both of a goal
+     * and of its denial.
+     */
+    private List<Reduction<A>> reductionsOver(Split<A> split, Set<Integer> reached) {
+        if (reductions == null) {
+            reductions = new ConcurrentHashMap<>();
+        }
+        List<Reduction<A>> had = reductions.get(reached);
+        if (had == null) {
+            had = reductionsOf(split.rulesOf(reached));
+            reductions.put(reached, had);
+        }
+        return had;
+    }
+
+    private List<Reduction<A>> reductionsOf(List<AffineConstraint<A>> reachedRules) {
+        List<Reduction<A>> out = new ArrayList<>();
+        for (ReducedRules<A> rules : ReducedRules.of(reachedRules, order)) {
+            NumericDomain<A> over = new NumericDomain<>(StatedRules.none(), spaces, false, order,
+                    closedStates, null, null);
+            for (ReducedRules.Rule<A> each : rules.rules()) {
+                over = over.assuming(each.coefs(), each.constant(), each.rel(), spaces.asMap());
+            }
+            if (!over.isBottom()) {
+                out.add(new Reduction<>(rules, over));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private boolean entailsOver(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
+                                boolean withRules) {
+        return switch (AffineConstraint.of(coefs, constant, rel, this::spacingOf)) {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
@@ -698,7 +1248,7 @@ public final class NumericDomain<A> {
 
     /** {@code form - at}, which is what is bounded to decide whether {@code form <= at}. */
     private Goal<A> below(CanonicalForm<A> form, ExactRatio at) {
-        return new Goal<>(form.coefs(), at.negated());
+        return Goal.of(form.coefs(), at.negated());
     }
 
     /**
@@ -714,7 +1264,7 @@ public final class NumericDomain<A> {
 
     /** A form's weights with the positions it does not actually weigh left out. A form composed by
      *  the arithmetic drops those as it goes; one built by naming its coefficients need not have. */
-    private Map<A, ExactRatio> weighed(LinearForm<A> f) {
+    private static <A> Map<A, ExactRatio> weighed(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = new LinkedHashMap<>();
         f.coefs().forEach((atom, coef) -> {
             if (!coef.isZero()) {
@@ -725,12 +1275,20 @@ public final class NumericDomain<A> {
     }
 
     /** A goal as a weighted sum and a constant, which is what a comparison against nought is. */
-    private record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {
+    private record Goal<A>(Weighed<A> weighed, ExactRatio constant) {
+
+        static <A> Goal<A> of(Map<A, ExactRatio> coefs, ExactRatio constant) {
+            return new Goal<>(Weighed.of(coefs), constant);
+        }
+
+        Map<A, ExactRatio> coefs() {
+            return weighed.coefs();
+        }
 
         Goal<A> negated() {
             Map<A, ExactRatio> out = new LinkedHashMap<>();
-            coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
-            return new Goal<>(out, constant.negated());
+            coefs().forEach((atom, coef) -> out.put(atom, coef.negated()));
+            return of(out, constant.negated());
         }
     }
 
@@ -743,7 +1301,12 @@ public final class NumericDomain<A> {
      * far as {@code a - b}, and an answer about the second handed back for the first is out by a
      * factor with nothing to say it is.
      */
-    private record Asked<A>(Goal<A> goal, ExactRatio by) {}
+    private record Asked<A>(Goal<A> goal, Goal<A> negated, ExactRatio by) {
+
+        static <A> Asked<A> of(Goal<A> goal, ExactRatio by) {
+            return new Asked<>(goal, goal.negated(), by);
+        }
+    }
 
     /**
      * A question, in the one form every way of asking it comes to.
@@ -758,7 +1321,7 @@ public final class NumericDomain<A> {
      * <p>Divided through by what the weights share, which is a positive number and so leaves which
      * side of nought the question is about.
      */
-    private Asked<A> goalOf(LinearForm<A> f) {
+    private static <A> Asked<A> goalOf(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = weighed(f);
         ExactRatio constant = f.constant();
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
@@ -766,11 +1329,11 @@ public final class NumericDomain<A> {
         // would be a second account of what one rule is — which is the thing being removed.
         return switch (CanonicalForm.of(coefs)) {
             case CanonicalForm.NoTerms<A> _ ->
-                    new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
+                    Asked.of(Goal.of(Map.of(), constant), ExactRatio.ONE);
             case CanonicalForm.Unheld<A> _ -> null;
             case CanonicalForm.Scaled<A> scaled -> switch (constant.dividedBy(scaled.by())) {
                 case ExactAnswer.Held<ExactRatio> held ->
-                        new Asked<>(new Goal<>(scaled.form().coefs(), held.value()), scaled.by());
+                        Asked.of(Goal.of(scaled.form().coefs(), held.value()), scaled.by());
                 case ExactAnswer.Unheld<ExactRatio> _ -> null;
             };
         };
@@ -816,17 +1379,169 @@ public final class NumericDomain<A> {
      *                  ranges either, which holds less than this does
      */
     private ExactCut highestProven(Goal<A> goal, boolean withRules) {
-        FormReach<A> reading = reading();
+        if (withRules) {
+            PrefixBasis.Highest exact = highestInTheBasis(goal);
+            if (exact instanceof PrefixBasis.Highest.Within within) {
+                return within.at();
+            }
+            if (exact instanceof PrefixBasis.Highest.Unbounded) {
+                return null;
+            }
+            PrefixBasis.Highest byTheParts = highestAcrossTheParts(goal);
+            if (byTheParts instanceof PrefixBasis.Highest.Within within) {
+                return within.at();
+            }
+            if (byTheParts instanceof PrefixBasis.Highest.Unbounded) {
+                return null;
+            }
+        }
+        FormReach<A> reading = readingFor(goal.coefs());
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
     }
 
-    /** The one reading of what the rules leave a form, over the state they have been worked out to. */
-    private FormReach<A> reading() {
-        ClosedState<A> state = closed();
-        return FormReach.over(rules(), state.box(), state.differences(), order);
+    /**
+     * How high a goal over positions of several parts comes to, where every part says how high its
+     * own positions' share of it comes to, exactly; not answered otherwise.
+     *
+     * <p>The parts share no position and no rule names positions of two of them, so what the rules
+     * leave is the product of what each part leaves, and a sum over the product is as high as the
+     * parts' shares are, added. A part says its share exactly where it was closed in a basis that
+     * answers the share ({@link PrefixBasis#highest}), or where every one of its rules bounds one
+     * position and its positions are left their ends and nothing more. What the reading of all
+     * the rules ({@link FormReach}) comes to is never lower than this, so where a part says its
+     * share exactly the rules are not read for it at all. Asked in {@link #highestProven}, with the
+     * basis, so that {@link #boundsOf(LinearForm)}, {@link #entails} and {@link #refutes} read one
+     * statement of how high a form comes to.
+     */
+    private PrefixBasis.Highest highestAcrossTheParts(Goal<A> goal) {
+        if (isBottom()) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        List<ClosedStates.Parted.Share<A>> shares = parted().sharedOutByPart(goal.coefs());
+        if (shares == null || shares.size() < 2) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        ExactCut sum = ExactCut.inclusive(goal.constant());
+        for (ClosedStates.Parted.Share<A> share : shares) {
+            PrefixBasis.Highest part = shareOf(share);
+            if (part instanceof PrefixBasis.Highest.Within within) {
+                if (!(ExactCut.meetingBoth(sum, within.at()) instanceof ExactAnswer.Held<ExactCut> held)) {
+                    return PrefixBasis.Highest.NOT_ANSWERED;
+                }
+                sum = held.value();
+            } else if (part instanceof PrefixBasis.Highest.Unbounded) {
+                return PrefixBasis.Highest.UNBOUNDED;
+            } else {
+                return PrefixBasis.Highest.NOT_ANSWERED;
+            }
+        }
+        return new PrefixBasis.Highest.Within(sum);
     }
+
+    /** How high one part's share of a goal comes to, exactly where the part says so. */
+    private PrefixBasis.Highest shareOf(ClosedStates.Parted.Share<A> share) {
+        ClosedState<A> closure = share.closure();
+        if (closure.holdsNothing()) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        PrefixBasis.Highest answered =
+                closure.highestInBasis(Weighed.of(share.coefs()), ExactRatio.ZERO);
+        if (!(answered instanceof PrefixBasis.Highest.NotAnswered)) {
+            return answered;
+        }
+        for (AffineConstraint<A> rule : share.rules()) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half) || half.form().coefs().size() != 1) {
+                return PrefixBasis.Highest.NOT_ANSWERED;
+            }
+        }
+        ExactCut sum = ExactCut.inclusive(ExactRatio.ZERO);
+        for (Map.Entry<A, ExactRatio> each : share.coefs().entrySet()) {
+            boolean above = each.getValue().signum() > 0;
+            ExactCut end = above ? closure.box().mostOf(each.getKey())
+                    : closure.box().leastOf(each.getKey());
+            if (end == null) {
+                return PrefixBasis.Highest.UNBOUNDED;
+            }
+            ExactRatio weighed = each.getValue().times(end.at()).orNull();
+            if (weighed == null || !(ExactCut.meetingBoth(sum, new ExactCut(weighed, end.inclusive()))
+                    instanceof ExactAnswer.Held<ExactCut> held)) {
+                return PrefixBasis.Highest.NOT_ANSWERED;
+            }
+            sum = held.value();
+        }
+        return new PrefixBasis.Highest.Within(sum);
+    }
+
+    /**
+     * What the closure weighing every position of the goal leaves it, where that closure was made
+     * in a {@link PrefixBasis} and the goal is a form that basis answers; not answered where it was
+     * not, where the positions are of no part or of several, and where the basis does not answer
+     * the form — in each of which the rules as they are stated are asked.
+     *
+     * <p>A rule of another part names none of the goal's positions and bounds the goal no tighter
+     * than the part's own rules do, so the answer of the one part is the answer of all the rules.
+     * And it is the same answer however the closures are kept, a table that keeps nothing and one
+     * that keeps a part at a time giving a domain the same rules the same to say.
+     */
+    private PrefixBasis.Highest highestInTheBasis(Goal<A> goal) {
+        List<ClosedState<A>> based = parted().closuresInABasis();
+        if (based != null) {
+            for (ClosedState<A> each : based) {
+                PrefixBasis.Highest answer = each.highestInBasis(goal.weighed(), goal.constant());
+                if (!(answer instanceof PrefixBasis.Highest.NotAnswered)) {
+                    return answer;
+                }
+            }
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        ClosedState<A> closure = parted().closureWeighing(goal.coefs().keySet());
+        return closure == null ? PrefixBasis.Highest.NOT_ANSWERED
+                : closure.highestInBasis(goal.weighed(), goal.constant());
+    }
+
+    /**
+     * The reading a form is asked of: the part's, for a form of one position.
+     *
+     * <p>A form of one position is answered by that position's ends and by nothing else
+     * ({@link FormReach}'s highest), and the ends of a position are its part's. So the part's
+     * closure is read as it stands, without the parts put together or the rules of the others
+     * indexed. A form of more positions may take a rule as a premise from anywhere, and is read
+     * against all of them.
+     */
+    private FormReach<A> readingFor(Map<A, ExactRatio> coefs) {
+        if (coefs.size() == 1) {
+            A atom = coefs.keySet().iterator().next();
+            ClosedStates.Parted<A> parted = parted();
+            ClosedState<A> part = parted.partWeighing(atom);
+            if (part != null) {
+                return FormReach.over(parted.rulesOfThePartWeighing(atom), part.box(),
+                        part.differences(), order);
+            }
+        }
+        return reading();
+    }
+
+    /**
+     * The one reading of what the rules leave a form, over the state they have been worked out to.
+     *
+     * <p>Made once for the state and asked of for every form: what a reading comes to is a function
+     * of the state it was made over, and the index of the rules it keeps for the forms of several
+     * positions is the same for each of them, so a reading made for each question works it out as
+     * often as it is asked.
+     */
+    private FormReach<A> reading() {
+        FormReach<A> had = reach;
+        if (had == null) {
+            ClosedState<A> state = closed();
+            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(),
+                    parted().orderedBy(order));
+            reach = had;
+        }
+        return had;
+    }
+
 
 
     // --- reading the domain back --------------------------------------------------------------------
@@ -851,7 +1566,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Bounds(null, null);
         }
-        Box<A> box = closed().box();
+        Box<A> box = boxAround(atom);
         return new Bounds(written(box.leastOf(atom), false), written(box.mostOf(atom), true));
     }
 
@@ -875,7 +1590,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Projection.NothingIsLeft();
         }
-        return kinds.contains(atom)
+        return spaces.contains(atom)
                 ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
     }
 
@@ -929,16 +1644,45 @@ public final class NumericDomain<A> {
      * caller looking for somewhere to put a value asks.
      */
     public Bounds boundsOf(LinearForm<A> f) {
+        return boundsOf(prepare(f));
+    }
+
+    /**
+     * What a form asks, worked out: the form divided through by what its weights share, and the
+     * same negated, for whoever asks the one form of one domain after another and would otherwise
+     * have each of them work it out again. Of the form and of no domain, so it is made once and kept
+     * by whoever knows the form is asked again — and not by a table of every form asked, which a
+     * form asked once would fill.
+     *
+     * @param <A> what a position is
+     */
+    public static final class Prepared<A> {
+
+        /** Null where the form's lowest terms have no representation. */
+        private final Asked<A> asked;
+
+        private Prepared(Asked<A> asked) {
+            this.asked = asked;
+        }
+    }
+
+    /** {@code f} worked out for being asked of a domain ({@link #boundsOf(Prepared)}). */
+    public static <A> Prepared<A> prepare(LinearForm<A> f) {
+        return new Prepared<>(goalOf(f));
+    }
+
+    /** The same as {@link #boundsOf(LinearForm)}, of a form already prepared. */
+    public Bounds boundsOf(Prepared<A> form) {
         if (isBottom()) {
             return new Bounds(null, null);
         }
-        Asked<A> asked = goalOf(f);
+        Asked<A> asked = form.asked;
         if (asked == null) {
             // A form whose lowest terms have no representation is one nothing here can bound.
             return new Bounds(null, null);
         }
         ExactCut highest = highestProven(asked.goal(), true);
-        ExactCut lowest = highestProven(asked.goal().negated(), true);
+        ExactCut lowest = highestProven(asked.negated(), true);
         // Back into the units the caller asked in. The question was answered about the form divided
         // through by what its weights share, and the caller wants the form it wrote.
         return new Bounds(
@@ -1000,7 +1744,7 @@ public final class NumericDomain<A> {
      * because it is one a rule was written about.
      */
     public Set<A> atomsSpokenOf() {
-        return kinds.keys();
+        return spaces.keys();
     }
 
     /**
@@ -1012,7 +1756,22 @@ public final class NumericDomain<A> {
      * whole are what a dense value between two of them has as well.
      */
     public Granularity spacingOf(A atom) {
-        return kinds.get(atom);
+        NumberSpace space = spaces.get(atom);
+        return space == null ? null : space.spacing();
+    }
+
+    /**
+     * What the type of {@code atom} said of its values when this was told of it, or null where
+     * nothing was told of the atom.
+     */
+    public NumberSpace spaceOf(A atom) {
+        return spaces.get(atom);
+    }
+
+    /** Where the order {@code atom}'s values are counted on stops, or null where nothing said. */
+    private Bounds stopsOf(A atom) {
+        NumberSpace space = spaces.get(atom);
+        return space == null ? null : space.stops();
     }
 
     /**
@@ -1021,18 +1780,26 @@ public final class NumericDomain<A> {
      *
      * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider:
      * three things are shown of it together, and the run is answered with them rather than beside
-     * them so that a caller cannot take one answer for another. The rules are shown to leave each
-     * atom they relate the whole of its run ({@link #projectionCertification}). Its ends are the
+     * them so that a caller cannot take one answer for another. The rules are shown to leave the
+     * atom the whole of its run ({@link #leavesTheWholeOfItsRun}). Its ends are the
      * rules' own and not rounded past them: an end at a third is handed over as a decimal a hair
      * below, which no value of the atom is ({@link #endsAreWrittenExactly}). And each end is one
      * the atom takes: a whole number at or inside a strict end where the values step by one, and
      * an end that is not taken only where they are dense, so that some value lies as near it as any
      * other value asked of. An atom whose spacing nothing recorded is a value the arithmetic does
      * not count, and no run of it is shown.
+     *
+     * <p>A row is values the atoms' orders hold, and a point of the rules past where an order
+     * stops is no row: {@code a - b >= M} beside {@code b >= 1}, the greatest {@code Int} at
+     * {@code M}, holds only an {@code a} past it. So whether the rules leave any row is asked
+     * inside where each atom's order stops, as this domain was told it ({@link NumberSpace}), and a
+     * system with an atom whose ends it was not told is not shown to leave one: no point of it is
+     * known to be a row. The run answered is the rules' own and
+     * runs on past an order's end as before; a caller reads that end as the order it is counted
+     * on says.
      */
     public Bounds wholeRunOf(A atom) {
-        if (!(projectionCertification() instanceof ProjectionCertification.Certified)
-                || !endsAreWrittenExactly(atom)
+        if (!leavesTheWholeOfItsRun(atom) || !endsAreWrittenExactly(atom)
                 || !(projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
                         Bounds run))) {
             return null;
@@ -1041,6 +1808,641 @@ public final class NumericDomain<A> {
             case null -> null;
             case DENSE -> run;
             case DISCRETE -> onWholeNumbers(run);
+        };
+    }
+
+    /**
+     * The whole numbers {@code atom} is left where the rules hold it away from some value, such
+     * that each of them is one some row takes — or null where that is not shown, where the atom
+     * has no hole to read apart ({@link #wholeRunOf} is then the question), and where the numbers
+     * left are none.
+     *
+     * <p>What {@link #wholeRunOf} answers of the rules without the disequalities over the atom
+     * alone, which are the values taken out of the run: a hole is no bound, and it does not tie
+     * the atom to any other. So it is only an atom no rule relates to another that has holes read
+     * apart, since a row that holds the others at the value a disequality of one of them refuses
+     * is no row. A hole that is no whole number is none of the atom's values and is no hole here.
+     *
+     * <p>Of an atom whose values step by one: a dense atom taken out of a value still takes every
+     * value near it, and its run is the question {@link #wholeRunOf} answers.
+     */
+    public RunBesidesItsHoles wholeRunBesidesItsHolesOf(A atom) {
+        if (spacingOf(atom) != Granularity.DISCRETE) {
+            return null;
+        }
+        List<BigInteger> holes = new ArrayList<>();
+        boolean held = false;
+        StatedRules<A> without = StatedRules.none();
+        for (AffineConstraint<A> rule : stated.distinct()) {
+            List<A> over = rule.form().atomsIn(order);
+            if (over.contains(atom) && over.size() > 1) {
+                return null;
+            }
+            if (rule instanceof AffineConstraint.Disequality<A> hole && over.size() == 1
+                    && over.contains(atom)) {
+                ExactRatio weight = null;
+                for (Map.Entry<A, ExactRatio> entry : hole.form().entriesIn(order)) {
+                    if (entry.getKey().equals(atom)) {
+                        weight = entry.getValue();
+                    }
+                }
+                if (weight == null || !(hole.at().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                    return null;
+                }
+                held = true;
+                if (at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                        && ExactRatio.of(whole).compareTo(at) == 0) {
+                    holes.add(whole);
+                }
+            } else {
+                without = without.and(StatedRules.of(rule));
+            }
+        }
+        if (!held) {
+            return null;
+        }
+        Bounds run = new NumericDomain<>(without, spaces, readARuleNothingSatisfies, order,
+                closedStates, null, null).wholeRunOf(atom);
+        if (run == null) {
+            return null;
+        }
+        RunBesidesItsHoles out = new RunBesidesItsHoles(run, holes);
+        return out.takenWithin(Bounds.OPEN).isNone() ? null : out;
+    }
+
+    /**
+     * A run of a whole number and the numbers the rules leave it outside the holes they hold it
+     * away from ({@link #wholeRunBesidesItsHolesOf}): each number of the run that is none of the
+     * holes is one the rules leave the atom.
+     *
+     * @param run   the run, which the holes are in or outside of
+     * @param holes the whole numbers the rules hold the atom away from
+     */
+    public record RunBesidesItsHoles(Bounds run, List<BigInteger> holes) {
+
+        public RunBesidesItsHoles {
+            Objects.requireNonNull(run, "a run besides its holes is of a run");
+            holes = List.copyOf(holes);
+        }
+
+        /**
+         * The whole numbers taken that lie within {@code within}, a run the order the atom is
+         * counted on is let reach: the run's, and no hole.
+         */
+        public WholeNumberRuns takenWithin(Bounds within) {
+            Bounds ends = run.meet(within);
+            return WholeNumberRuns.between(ends.min(), ends.max())
+                    .and(WholeNumberRuns.of(holes).others());
+        }
+    }
+
+    /**
+     * Whether the rules are shown to leave {@code atom} the whole of its run: what
+     * {@link #projectionCertification} asks of every rule, asked of the rules a chain of them
+     * relates to the atom, and of the rest only that they leave some value.
+     *
+     * <p>Positions no chain of rules relates to the atom are another system written beside its
+     * own, which bounds nothing of it but whether any value is left at all. So such a system is
+     * shown to hold a value inside where its atoms' orders stop: by the box and its differences
+     * where they prove each of its rules, those ends taken in, and otherwise by a point of its
+     * box inside those ends each of its rules holds at ({@link #aPointOfTheBoxHolds}). The atom's
+     * own system is proven so too. {@code 4h - 3s < 0} over two decimals running nought to 168 is
+     * no difference and is not proven, and leaves a whole number apart from both the whole of its
+     * run, since {@code h} at nought and {@code s} at 168 hold it. A system of boxes and limits on
+     * sums ({@code a + b <= M}) leaves each atom the whole of its run too, with the others at the
+     * low corner of their boxes ({@link #limitsOnSumsHoldAtTheLowCorner}).
+     *
+     * <p>What each system is shown to be is the domain's alone, worked out where an atom first
+     * asks it and kept for every other atom, and asked no further than the first system that
+     * keeps the run from being shown.
+     */
+    private boolean leavesTheWholeOfItsRun(A atom) {
+        Systems<A> had = systems;
+        if (had == null) {
+            had = systemsOf();
+            systems = had;
+        }
+        if (!had.anyShown()) {
+            return false;
+        }
+        A its = had.groupOf().get(atom);
+        if (its != null && shownOf(had, its) != Shown.PROVEN
+                && shownOf(had, its) != Shown.AT_THE_LOW_CORNER) {
+            return false;
+        }
+        for (A group : had.rulesOf().keySet()) {
+            if (!group.equals(its) && shownOf(had, group) == Shown.NOTHING) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** What one system of the rules is shown to leave inside where its atoms' orders stop: its
+     *  runs whole, its runs whole as limits on sums hold at the low corner of the box
+     *  ({@link #limitsOnSumsHoldAtTheLowCorner}), some point, or neither shown. */
+    private enum Shown { PROVEN, AT_THE_LOW_CORNER, A_POINT, NOTHING }
+
+    /** What the system of {@code group} is shown to leave, worked out once. */
+    private Shown shownOf(Systems<A> systems, A group) {
+        return systems.shown().computeIfAbsent(group, key -> {
+            List<A> atoms = systems.atomsOf().getOrDefault(key, List.of());
+            List<AffineConstraint<A>> rules = systems.rulesOf().get(key);
+            if (!atoms.stream().allMatch(each -> stopsOf(each) != null)) {
+                return Shown.NOTHING;
+            }
+            if (systems.spacedAlike().contains(key)
+                    && rules.stream().allMatch(rule -> proven(rule, false))) {
+                return leavesAValueInside(atoms) ? Shown.PROVEN : Shown.NOTHING;
+            }
+            Map<A, Bounds> runs = runsInsideTheirOrders(atoms);
+            if (runs != null && limitsOnSumsHoldAtTheLowCorner(atoms, runs,
+                    rulesTheBoxesDoNotHold(rules, runs))) {
+                return Shown.AT_THE_LOW_CORNER;
+            }
+            if ((runs != null && aPointOfTheBoxHolds(atoms, runs, rules))
+                    || anOpenSetOfDecimalsIsLeft(atoms, rules)) {
+                return Shown.A_POINT;
+            }
+            return Shown.NOTHING;
+        });
+    }
+
+    /**
+     * What each of {@code atoms} runs over inside where its order stops, or null where one has no
+     * run that holds a value or no spacing recorded.
+     */
+    private Map<A, Bounds> runsInsideTheirOrders(List<A> atoms) {
+        Map<A, Bounds> runs = new LinkedHashMap<>();
+        for (A atom : atoms) {
+            Bounds box = boxOf(atom);
+            Bounds run = box == null ? null : box.meet(stopsOf(atom));
+            if (run == null || !run.holdsAValue() || spacingOf(atom) == null) {
+                return null;
+            }
+            runs.put(atom, run);
+        }
+        return runs;
+    }
+
+    /** The pairs of bounds put together in asking whether a system of decimals leaves a point. */
+    private static final long PAIRS_ASKED_OF_A_SYSTEM = 4096;
+
+    /**
+     * Whether the rules over decimals leave a point inside where the orders of {@code atoms} stop,
+     * because they leave an open set: each bound taken strictly still leaves rational values
+     * ({@link LaterNumbersEliminated}), and a set open in every direction holds a point whose
+     * every coordinate is a finite decimal. A value held off a number leaves such a set a point,
+     * and an equality leaves it none, so a system with one is not asked.
+     *
+     * <p>No value is picked inside a run: what is asked is whether the bounds meet, and the
+     * elimination answers that for every system its pairs allow.
+     */
+    private boolean anOpenSetOfDecimalsIsLeft(List<A> atoms, List<AffineConstraint<A>> rules) {
+        List<LaterNumbersEliminated.Bound<A>> bounds = new ArrayList<>();
+        for (AffineConstraint<A> rule : rules) {
+            switch (rule) {
+                case AffineConstraint.HalfSpace<A> half -> {
+                    Map<A, ExactRatio> weighed = new LinkedHashMap<>();
+                    for (Map.Entry<A, ExactRatio> each : half.form().entriesIn(order)) {
+                        weighed.put(each.getKey(), each.getValue());
+                    }
+                    bounds.add(new LaterNumbersEliminated.Bound<>(
+                            new LinearForm<>(half.bound().at().negated(), weighed), true));
+                }
+                case AffineConstraint.Disequality<A> _ -> { }
+                case AffineConstraint.Equality<A> _ -> {
+                    return false;
+                }
+            }
+        }
+        for (A atom : atoms) {
+            Bounds order = stopsOf(atom);
+            if (spacingOf(atom) != Granularity.DENSE || order == null) {
+                return false;
+            }
+            if (order.min() != null) {
+                if (!(order.min().at() instanceof Count least)) {
+                    return false;
+                }
+                bounds.add(new LaterNumbersEliminated.Bound<>(new LinearForm<>(least.exactly(),
+                        Map.of(atom, ExactRatio.ONE.negated())), true));
+            }
+            if (order.max() != null) {
+                if (!(order.max().at() instanceof Count most)) {
+                    return false;
+                }
+                bounds.add(new LaterNumbersEliminated.Bound<>(new LinearForm<>(
+                        most.exactly().negated(), Map.of(atom, ExactRatio.ONE)), true));
+            }
+        }
+        return LaterNumbersEliminated.of(bounds, atoms, PAIRS_ASKED_OF_A_SYSTEM)
+                instanceof LaterNumbersEliminated.Eliminated<A>;
+    }
+
+    /**
+     * Whether the rules over {@code atoms} are boxes and limits on sums that the least ends of
+     * the atoms' runs, inside where their orders stop, leave some point of.
+     *
+     * <p>A limit on a sum is a half-space every weight of which is positive: lowering an atom
+     * keeps it held. So with each atom but one at its least, the one is held at every value up to
+     * the greatest the limits leave it, and that greatest is the end the closure answers for it.
+     * What stands the others is their least end and nothing near it: a whole-numbered atom takes
+     * its least whole number, and a decimal's least end is a value it takes only where the run
+     * holds it. A limit the least ends meet exactly is held only where every atom it weighs takes
+     * its least end, and one they pass is held by values as near the ends as asked. No value is
+     * picked inside a run left open.
+     */
+    private boolean limitsOnSumsHoldAtTheLowCorner(List<A> atoms, Map<A, Bounds> runs,
+                                                   List<AffineConstraint<A>> rules) {
+        Map<A, ExactRatio> least = new LinkedHashMap<>();
+        Set<A> taken = new LinkedHashSet<>();
+        for (A atom : atoms) {
+            Bounds run = runs.get(atom);
+            Granularity spacing = spacingOf(atom);
+            ExactRatio end = spacing == Granularity.DISCRETE
+                    ? run.aValueNearestItsEnd(false, spacing)
+                    : run.min() != null && run.min().at() instanceof Count count ? count.exactly()
+                            : null;
+            if (end == null) {
+                return false;
+            }
+            least.put(atom, end);
+            if (spacing == Granularity.DISCRETE || run.min().inclusive()) {
+                taken.add(atom);
+            }
+        }
+        for (AffineConstraint<A> rule : rules) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
+                return false;
+            }
+            if (weighedAtoms(half) <= 1) {
+                continue;
+            }
+            ExactRatio sum = ExactRatio.ZERO;
+            boolean everyAtomTakesItsLeast = true;
+            for (Map.Entry<A, ExactRatio> each : half.form().coefs().entrySet()) {
+                if (each.getValue().signum() < 0) {
+                    return false;
+                }
+                if (!each.getValue().isZero()) {
+                    ExactRatio weighed = least.get(each.getKey()).times(each.getValue()).orNull();
+                    sum = weighed == null || sum == null ? null : sum.plus(weighed).orNull();
+                    everyAtomTakesItsLeast &= taken.contains(each.getKey());
+                }
+            }
+            if (sum == null) {
+                return false;
+            }
+            int order = sum.compareTo(half.bound().at());
+            if (order > 0 || (order == 0 && !(half.bound().inclusive() && everyAtomTakesItsLeast))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The {@code rules} some point of the boxes {@code runs} does not hold: the only ones a
+     * witness drawn from the boxes has to be checked against.
+     *
+     * <p>Written once here and not in the corner's proof, which reads a shape — a limit on a sum —
+     * and has no place for a rule that is another shape because of how it was written.
+     */
+    private static <A> List<AffineConstraint<A>> rulesTheBoxesDoNotHold(
+            List<AffineConstraint<A>> rules, Map<A, Bounds> runs) {
+        return rules.stream().filter(rule -> !holdsThroughoutTheBoxes(rule, runs)).toList();
+    }
+
+    /**
+     * Whether every point of the boxes {@code runs} holds {@code rule}: a sum the boxes keep
+     * under its bound, a sum they hold to one value, or a value the sum never takes.
+     *
+     * <p>Asked of the boxes alone and not of the closure of the rules: a difference such as
+     * {@code x > y} holds {@code x /= y} while the boxes of {@code x} and {@code y} still meet at
+     * a point where they are equal, and the corner's witnesses are drawn from the boxes.
+     */
+    private static <A> boolean holdsThroughoutTheBoxes(AffineConstraint<A> rule,
+                                                       Map<A, Bounds> runs) {
+        Reach reach = Reach.of(rule.form().coefs(), ExactRatio.ZERO, atom -> {
+            Bounds run = runs.get(atom);
+            return run == null ? Reach.ANYWHERE
+                    : Reach.between(cutOf(run.min()), cutOf(run.max()));
+        });
+        ExactCut least = reach.least();
+        ExactCut most = reach.most();
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<A> half -> liesAbove(most, half.bound().at())
+                    || (most != null && most.at().equals(half.bound().at())
+                            && half.bound().inclusive());
+            case AffineConstraint.Equality<A> at -> least != null && most != null
+                    && least.inclusive() && most.inclusive()
+                    && least.at().equals(at.at()) && most.at().equals(at.at());
+            case AffineConstraint.Disequality<A> hole ->
+                    liesBelow(least, hole.at()) || liesAbove(most, hole.at());
+        };
+    }
+
+    /** Whether {@code value} is below {@code least}, which it is at the end itself only where the
+     *  end is not taken. */
+    private static boolean liesBelow(ExactCut least, ExactRatio value) {
+        if (least == null) {
+            return false;
+        }
+        int order = value.compareTo(least.at());
+        return order < 0 || (order == 0 && !least.inclusive());
+    }
+
+    /** Whether {@code value} is above {@code most}, which it is at the end itself only where the
+     *  end is not taken. */
+    private static boolean liesAbove(ExactCut most, ExactRatio value) {
+        if (most == null) {
+            return false;
+        }
+        int order = value.compareTo(most.at());
+        return order > 0 || (order == 0 && !most.inclusive());
+    }
+
+    private static ExactCut cutOf(Endpoint end) {
+        return end != null && end.at() instanceof Count count
+                ? new ExactCut(count.exactly(), end.inclusive()) : null;
+    }
+
+    private static <A> long weighedAtoms(AffineConstraint.HalfSpace<A> half) {
+        return half.form().coefs().values().stream().filter(weight -> !weight.isZero()).count();
+    }
+
+    /**
+     * Whether the rules, proven by the box and its differences, leave a value inside where the
+     * orders of {@code atoms} stop: where every box lies inside its atom's order, the closure
+     * holding something already says so; otherwise the ends are taken in and asked again.
+     *
+     * <p>Only of a system every rule of which the box and its differences prove, over atoms spaced
+     * alike ({@link #shownOf}). A state not shown empty is not a state with a value in it
+     * ({@link #isBottom}), and it is one here because of those two. Proven, the rules say no more
+     * than the closure does, so what the closure holds the rules hold; spaced alike, the
+     * differences close exactly over the atoms. An end taken in bounds one atom, which keeps the
+     * rules of that shape, so the closure with the ends in is still all they say. Asked of rules
+     * the box and its differences do not prove, a closure wider than they are would be read as a
+     * value of them.
+     */
+    private boolean leavesAValueInside(List<A> atoms) {
+        NumericDomain<A> inside = insideTheOrdersOf(atoms);
+        return inside != null && !inside.isBottom();
+    }
+
+    /**
+     * Whether the rules leave no row: nothing at all, or nothing inside where the orders this
+     * domain was told of stop ({@link NumberSpace}).
+     *
+     * <p>True is a proof, as {@link #isBottom} is: a row holds each number inside its order, so
+     * rules that leave nothing there leave a row nothing. {@code b >= 1} beside
+     * {@code a - b >= M}, the greatest {@code Int} at {@code M}, leaves a point and no row. False
+     * is not a proof of a row. Asked apart from {@link #isBottom} and not put into the rules,
+     * since what the rules leave is read as the model's own lines, and an order's end is none of
+     * them.
+     */
+    public boolean leavesNoRow() {
+        if (isBottom()) {
+            return true;
+        }
+        Boolean had = noRow;
+        if (had == null) {
+            had = everyRuleBoundsOneAtom() ? someBoxLiesOutsideItsOrder()
+                    : leavesNoRowByClosure();
+            noRow = had;
+        }
+        return had;
+    }
+
+    /**
+     * Whether every rule is a bound on one position, which is all the rules say of it. Then the
+     * positions do not constrain each other, and what is left of one is its box.
+     */
+    private boolean everyRuleBoundsOneAtom() {
+        for (AffineConstraint<A> rule : rules()) {
+            if (rule instanceof AffineConstraint.Disequality<A> || rule.form().coefs().size() != 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the box of some position told its order shares no value with it. */
+    private boolean someBoxLiesOutsideItsOrder() {
+        for (A atom : spaces.keys()) {
+            Bounds stop = stopsOf(atom);
+            Bounds box = stop == null ? null : boxOf(atom);
+            if (box != null && !box.meet(stop).holdsAValue()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The same answer for any rules: the ends taken in as rules and the closure asked again. */
+    boolean leavesNoRowByClosure() {
+        NumericDomain<A> inside = insideTheOrdersOf(
+                spaces.keys().stream().filter(each -> stopsOf(each) != null).toList());
+        return inside != this && inside != null && inside.isBottom();
+    }
+
+    /**
+     * These rules with where the order of each of {@code atoms} stops taken in as its ends, or
+     * this domain where every box already lies inside them — or null where an atom to be held
+     * inside has no spacing to hold it by. An atom whose box lies inside its order is held there
+     * already, so its ends add nothing the closure does not hold.
+     */
+    private NumericDomain<A> insideTheOrdersOf(List<A> atoms) {
+        NumericDomain<A> inside = this;
+        for (A atom : atoms) {
+            Bounds stop = stopsOf(atom);
+            Bounds box = boxOf(atom);
+            if (box != null && box.liesWithin(stop)) {
+                continue;
+            }
+            if (spacingOf(atom) == null) {
+                return null;
+            }
+            Map<A, NumberSpace> spaced = Map.of(atom, spaceOf(atom));
+            if (stop.min() != null && stop.min().at() instanceof Count least) {
+                inside = inside.assume(LinearForm.atomMinusConstant(atom, least.exactly()),
+                        stop.min().inclusive() ? Rel.GE : Rel.GT, spaced);
+            }
+            if (stop.max() != null && stop.max().at() instanceof Count most) {
+                inside = inside.assume(LinearForm.atomMinusConstant(atom, most.exactly()),
+                        stop.max().inclusive() ? Rel.LE : Rel.LT, spaced);
+            }
+        }
+        return inside;
+    }
+
+    /** Where the rules leave {@code atom}, or null where they leave it no run of numbers. */
+    private Bounds boxOf(A atom) {
+        return projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
+                Bounds within) ? within : null;
+    }
+
+    /**
+     * The systems the rules are in, each by its group, and what each is shown to leave, as far as
+     * it has been asked.
+     *
+     * @param anyShown    whether a run is shown of any atom: not where nothing is left, the closure
+     *                    is incomplete or a rule over no atom is not proven
+     * @param groupOf     the group each atom a rule names is in
+     * @param atomsOf     the atoms of each group
+     * @param rulesOf     the rules of each group
+     * @param spacedAlike the groups whose atoms are spaced alike
+     * @param shown       what each system asked of is shown to leave
+     */
+    private record Systems<A>(boolean anyShown, Map<A, A> groupOf, Map<A, List<A>> atomsOf,
+                              Map<A, List<AffineConstraint<A>>> rulesOf, Set<A> spacedAlike,
+                              Map<A, Shown> shown) {
+
+        static <A> Systems<A> none() {
+            return new Systems<>(false, Map.of(), Map.of(), Map.of(), Set.of(),
+                    new ConcurrentHashMap<>());
+        }
+
+        Systems {
+            groupOf = Map.copyOf(groupOf);
+            atomsOf = Map.copyOf(atomsOf);
+            rulesOf = InTheOrderGiven.map(rulesOf);
+            spacedAlike = Set.copyOf(spacedAlike);
+        }
+    }
+
+    private Systems<A> systemsOf() {
+        if (isBottom() || !parted().everyBoundWasComposed()) {
+            return Systems.none();
+        }
+        Map<A, A> reaches = related();
+        Map<A, List<AffineConstraint<A>>> byGroup = new LinkedHashMap<>();
+        for (AffineConstraint<A> rule : rules()) {
+            List<A> atoms = rule.form().atomsIn(order);
+            if (atoms.isEmpty()) {
+                if (!proven(rule, false)) {
+                    return Systems.none();
+                }
+                continue;
+            }
+            byGroup.computeIfAbsent(groupOf(reaches, atoms.getFirst()), _ -> new ArrayList<>())
+                    .add(rule);
+        }
+        Map<A, A> groups = new LinkedHashMap<>();
+        Map<A, List<A>> atomsOf = new LinkedHashMap<>();
+        for (A each : List.copyOf(reaches.keySet())) {
+            A group = groupOf(reaches, each);
+            groups.put(each, group);
+            atomsOf.computeIfAbsent(group, _ -> new ArrayList<>()).add(each);
+        }
+        Set<A> alike = new LinkedHashSet<>();
+        for (Map.Entry<A, List<A>> group : atomsOf.entrySet()) {
+            if (spacedAlike(reaches, group.getValue())) {
+                alike.add(group.getKey());
+            }
+        }
+        Map<A, List<A>> atoms = new LinkedHashMap<>();
+        atomsOf.forEach((group, each) -> atoms.put(group, List.copyOf(each)));
+        Map<A, List<AffineConstraint<A>>> rules = new LinkedHashMap<>();
+        byGroup.forEach((group, each) -> rules.put(group, List.copyOf(each)));
+        return new Systems<>(true, groups, atoms, rules, alike, new ConcurrentHashMap<>());
+    }
+
+    /**
+     * Whether some point of the box over {@code atoms}, inside where each atom's order stops,
+     * holds each of {@code rules}: for one of their half-spaces, each atom it weighs at the value
+     * of its run nearest the end that takes the sum lowest, and each other at the value of its run
+     * nearest nought ({@link Bounds#aValueNearestItsEnd}, {@link Bounds#aValueNearestNought}). An
+     * atom whose run has no end that way is moved instead, once the rest stand, to a whole number
+     * past where the half-space holds. Tried for each half-space in turn. Every value the point
+     * stands at is one its atom takes inside its run.
+     */
+    private boolean aPointOfTheBoxHolds(List<A> atoms, Map<A, Bounds> runs,
+                                        List<AffineConstraint<A>> rules) {
+        for (AffineConstraint<A> rule : rules) {
+            for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
+                Map<A, ExactRatio> point = new LinkedHashMap<>();
+                A moved = null;
+                for (A atom : atoms) {
+                    Bounds run = runs.get(atom);
+                    ExactRatio weight = half.form().coefs().get(atom);
+                    boolean weighed = weight != null && !weight.isZero();
+                    boolean greatest = weighed && weight.signum() < 0;
+                    ExactRatio at = weighed ? run.aValueNearestItsEnd(greatest, spacingOf(atom))
+                            : null;
+                    if (at == null && weighed && moved == null
+                            && (greatest ? run.max() == null : run.min() == null)) {
+                        moved = atom;
+                    }
+                    at = at == null ? run.aValueNearestNought(spacingOf(atom)) : at;
+                    if (at == null) {
+                        break;
+                    }
+                    point.put(atom, at);
+                }
+                if (point.size() != atoms.size()) {
+                    continue;
+                }
+                if (moved != null && !holdsAt(half, point)) {
+                    ExactRatio to = pastWhereItHolds(half, point, moved);
+                    if (to == null || !runs.get(moved).admits(to)) {
+                        continue;
+                    }
+                    point.put(moved, to);
+                }
+                if (rules.stream().allMatch(each -> holdsAt(each, point))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The whole number one past where {@code half} holds with every atom but {@code atom} at its
+     * value in {@code point}: the rest's sum taken from the bound, over the atom's weight, and
+     * stepped one further — or null where that is no number.
+     */
+    private static <A> ExactRatio pastWhereItHolds(AffineConstraint.HalfSpace<A> half,
+                                                   Map<A, ExactRatio> point, A atom) {
+        ExactRatio rest = ExactRatio.ZERO;
+        for (Map.Entry<A, ExactRatio> each : half.form().coefs().entrySet()) {
+            if (!each.getKey().equals(atom)) {
+                ExactRatio weighed = point.get(each.getKey()).times(each.getValue()).orNull();
+                rest = weighed == null || rest == null ? null : rest.plus(weighed).orNull();
+            }
+        }
+        ExactRatio weight = half.form().coefs().get(atom);
+        ExactRatio at = rest == null ? null
+                : half.bound().at().minus(rest).flatMap(left -> left.dividedBy(weight)).orNull();
+        if (at == null) {
+            return null;
+        }
+        return weight.signum() > 0
+                ? at.floor().map(whole -> ExactRatio.of(whole.subtract(BigInteger.ONE))).orNull()
+                : at.ceiling().map(whole -> ExactRatio.of(whole.add(BigInteger.ONE))).orNull();
+    }
+
+    /** Whether {@code rule} holds with each of its atoms at its value in {@code point}. */
+    private static <A> boolean holdsAt(AffineConstraint<A> rule, Map<A, ExactRatio> point) {
+        ExactRatio sum = ExactRatio.ZERO;
+        for (Map.Entry<A, ExactRatio> each : rule.form().coefs().entrySet()) {
+            ExactRatio at = point.get(each.getKey());
+            ExactRatio weighed = at == null ? null : at.times(each.getValue()).orNull();
+            sum = weighed == null || sum == null ? null : sum.plus(weighed).orNull();
+        }
+        if (sum == null) {
+            return false;
+        }
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<A> half -> {
+                int order = sum.compareTo(half.bound().at());
+                yield order < 0 || (order == 0 && half.bound().inclusive());
+            }
+            case AffineConstraint.Equality<A> at -> sum.compareTo(at.at()) == 0;
+            case AffineConstraint.Disequality<A> hole -> sum.compareTo(hole.at()) != 0;
         };
     }
 
@@ -1177,6 +2579,101 @@ public final class NumericDomain<A> {
             return endAdmits(min, at, true) && endAdmits(max, at, false);
         }
 
+        /**
+         * What each value of this run comes to times {@code by}, between the ends it puts the
+         * ends of this at — or null where {@code by} is nought or an end cannot be written.
+         */
+        public Bounds timesEach(ExactRatio by) {
+            if (by.signum() == 0) {
+                return null;
+            }
+            Endpoint low = timesEnd(min, by);
+            Endpoint high = timesEnd(max, by);
+            if ((min != null && low == null) || (max != null && high == null)) {
+                return null;
+            }
+            return by.signum() > 0 ? new Bounds(low, high) : new Bounds(high, low);
+        }
+
+        /**
+         * Every sum of a value of this and a value of {@code other}, where each is a run as
+         * {@link #wholeRunOf} answers one: the ends added, an end reached where both are, and no
+         * end on a side where either has none. Null where the sum of two ends is no number
+         * written down.
+         *
+         * <p>That holds of runs whose every end is a value taken, or, where the values are dense,
+         * one approached as near as any. It does not of an end left out over whole numbers:
+         * {@code (0, 2]} of whole numbers starts at one, and two such add to {@code (0, 4]},
+         * where no pair of them comes to one. Close such an end to the whole number inside it
+         * first.
+         */
+        public Bounds plus(Bounds other) {
+            Endpoint low = plusEnd(min, other.min);
+            Endpoint high = plusEnd(max, other.max);
+            if ((min != null && other.min != null && low == null)
+                    || (max != null && other.max != null && high == null)) {
+                return null;
+            }
+            return new Bounds(low, high);
+        }
+
+        /**
+         * This run with {@code value} as well, where the two are one run: the value is in it, or
+         * nothing lies between it and an end on {@code spacing}, either side — an end left out at
+         * the value, or, where the values step by one, an end held one step from it. This run
+         * alone otherwise: a run holds every value between its ends, and a value apart from it
+         * with others between makes no run with it.
+         */
+        public Bounds joining(Count value, Granularity spacing) {
+            ExactRatio at = value.exactly();
+            if (admits(at)) {
+                return this;
+            }
+            if (nextTo(min, at, ExactRatio.ONE, spacing)) {
+                return new Bounds(Endpoint.inclusive(value), max);
+            }
+            if (nextTo(max, at, ExactRatio.ONE.negated(), spacing)) {
+                return new Bounds(min, Endpoint.inclusive(value));
+            }
+            return this;
+        }
+
+        /** Whether nothing lies between {@code end} and {@code value} on {@code spacing}, the end
+         *  being {@code step} from it where it is held. */
+        private static boolean nextTo(Endpoint end, ExactRatio value, ExactRatio step,
+                                      Granularity spacing) {
+            if (end == null || !(end.at() instanceof Count count)) {
+                return false;
+            }
+            ExactRatio at = count.exactly();
+            return (!end.inclusive() && at.equals(value))
+                    || (end.inclusive() && spacing == Granularity.DISCRETE
+                            && at.equals(value.plus(step).orNull()));
+        }
+
+        private static Endpoint plusEnd(Endpoint one, Endpoint two) {
+            if (one == null || two == null) {
+                return null;
+            }
+            ExactRatio at = Count.number(one.at()).exactly()
+                    .plus(Count.number(two.at()).exactly()).orNull();
+            return at != null && Count.written(at)
+                    instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()
+                    ? new Endpoint(written.get(), one.inclusive() && two.inclusive()) : null;
+        }
+
+        private static Endpoint timesEnd(Endpoint end, ExactRatio by) {
+            if (end == null) {
+                return null;
+            }
+            ExactRatio at = Count.number(end.at()).exactly().times(by).orNull();
+            return at != null && Count.written(at)
+                    instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent()
+                    ? new Endpoint(written.get(), end.inclusive()) : null;
+        }
+
         /** Whether one end lets {@code at} past it, which is the end's own strictness read against
          *  the lifted number. */
         private static boolean endAdmits(Endpoint end, ExactRatio at, boolean lower) {
@@ -1244,6 +2741,67 @@ public final class NumericDomain<A> {
             return everyValueStands(rel.denied(), against) ? false : null;
         }
 
+        /**
+         * A value of {@code spacing} this holds nearest nought — or null where none is shown:
+         * nought where this holds it, and otherwise the value nearest the end on nought's side
+         * ({@link #aValueNearestItsEnd}).
+         */
+        public ExactRatio aValueNearestNought(Granularity spacing) {
+            if (spacing == null) {
+                return null;
+            }
+            if (admits(ExactRatio.ZERO)) {
+                return ExactRatio.ZERO;
+            }
+            ExactRatio low = numberAt(min);
+            return aValueNearestItsEnd(low == null || low.signum() < 0, spacing);
+        }
+
+        /**
+         * The value of {@code spacing} this holds nearest its greatest end, for {@code greatest},
+         * or its least — or null where that end is absent or no value is shown near it.
+         *
+         * <p>An end it holds is that value, where the spacing takes it. An end it leaves out is
+         * passed by one step inward: the whole number past it, or a decimal one past it — or, where
+         * the other end is nearer than one, the decimal halfway to that end. A value no decimal
+         * writes is none a dense value takes, so an end at a third gives none here.
+         */
+        public ExactRatio aValueNearestItsEnd(boolean greatest, Granularity spacing) {
+            Endpoint end = greatest ? max : min;
+            ExactRatio at = numberAt(end);
+            if (spacing == null || at == null) {
+                return null;
+            }
+            int inward = greatest ? -1 : 1;
+            ExactRatio taken = switch (spacing) {
+                case DISCRETE -> (greatest ? at.floor() : at.ceiling())
+                        .map(whole -> ExactRatio.of(whole)).orNull();
+                case DENSE -> {
+                    if (end.inclusive()) {
+                        yield at;
+                    }
+                    ExactRatio other = numberAt(greatest ? min : max);
+                    ExactRatio width = other == null ? null : other.minus(at).orNull();
+                    ExactRatio step = width == null || width.abs().compareTo(ExactRatio.ONE) > 0
+                            ? ExactRatio.ONE
+                            : width.abs().dividedBy(ExactRatio.of(2)).orNull();
+                    ExactRatio move = step == null ? null
+                            : step.times(ExactRatio.of(inward)).orNull();
+                    yield move == null ? null : at.plus(move).orNull();
+                }
+            };
+            if (taken != null && spacing == Granularity.DISCRETE && !admits(taken)) {
+                taken = taken.plus(ExactRatio.of(inward)).orNull();
+            }
+            return taken != null && admits(taken)
+                    && (spacing != Granularity.DENSE || taken.fitsWrittenDecimal()) ? taken : null;
+        }
+
+        /** The number an end stands at, or null where there is no end or it is no number. */
+        private static ExactRatio numberAt(Endpoint end) {
+            return end != null && end.at() instanceof Count count ? count.exactly() : null;
+        }
+
         private boolean everyValueStands(Rel rel, Count against) {
             return switch (rel) {
                 case GE -> liesWithin(new Bounds(Endpoint.inclusive(against), null));
@@ -1269,8 +2827,15 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return true;   // no ends are handed over, so none of them is rounded
         }
-        Box<A> box = closed().box();
+        Box<A> box = boxAround(atom);
         return writtenExactly(box.leastOf(atom)) && writtenExactly(box.mostOf(atom));
+    }
+
+    /** The ends the rules leave {@code atom}, which are those of the part weighing it. Asked only
+     *  where the rules leave a value. */
+    private Box<A> boxAround(A atom) {
+        ClosedState<A> part = parted().partWeighing(atom);
+        return part != null ? part.box() : closed().box();
     }
 
     private static boolean writtenExactly(ExactCut cut) {

@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.check.DeclaredArgument;
-import souther.compiler.diag.CompileException;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -195,10 +194,7 @@ public final class WhatTheLibraryComputes {
     private static Map<String, ClassFileImage> classesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
         Map<String, ClassFileImage> classes = compilation.classes();
-        CompileException failure = compilation.failure();
-        if (failure != null) {
-            throw failure;
-        }
+        ACompiledModel.compiles(compilation);
         return classes;
     }
 
@@ -441,6 +437,10 @@ public final class WhatTheLibraryComputes {
                     alike(one, other);
                     alike(other, one);
                 }
+                case LawProposition.Inside<Slot>(var inner, var outer, var _, var _) -> {
+                    subject(inner);
+                    subject(outer);
+                }
             }
         }
 
@@ -638,6 +638,14 @@ public final class WhatTheLibraryComputes {
                 }
                 case LawProposition.Same<Slot> same -> "(" + subject(same.one())
                         + (same.holds() ? " == " : " /= ") + subject(same.other()) + ")";
+                case LawProposition.Inside<Slot> inside -> {
+                    String stands = "String." + switch (inside.where()) {
+                        case ANYWHERE -> "contains";
+                        case AT_THE_START -> "startsWith";
+                        case AT_THE_END -> "endsWith";
+                    } + "(" + subject(inside.inner()) + ", " + subject(inside.outer()) + ")";
+                    yield inside.holds() ? stands : "Bool.not(" + stands + ")";
+                }
             };
         }
 

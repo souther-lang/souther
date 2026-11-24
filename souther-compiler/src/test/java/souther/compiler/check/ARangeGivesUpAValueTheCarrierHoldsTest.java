@@ -6,6 +6,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -51,7 +52,8 @@ class ARangeGivesUpAValueTheCarrierHoldsTest {
     void aRangeReachingPastTheEndOfAnOrderGivesUpAValueInsideIt() {
         Place last = Carrier.TIME.extent().high().at();
         assertNotNull(Carrier.TIME.onTheGrid(
-                        Carrier.TIME.somethingInside(Endpoint.inclusive(last), null)),
+                        Carrier.TIME.aPlaceInside(Endpoint.inclusive(last), null,
+                                UsualPlace.NONE)),
                 "a range from the last second of the day upward holds that second");
     }
 
@@ -66,8 +68,9 @@ class ARangeGivesUpAValueTheCarrierHoldsTest {
 
         assertEquals(Count.of(0), inside(stage, -5, 1), "the first case is in the range");
         assertEquals(Count.of(2), inside(stage, 2, 9), "and so is the last");
-        assertNull(stage.somethingInside(
-                        Endpoint.inclusive(Count.of(5)), Endpoint.inclusive(Count.of(9))),
+        assertNull(stage.aPlaceInside(
+                        Endpoint.inclusive(Count.of(5)), Endpoint.inclusive(Count.of(9)),
+                        UsualPlace.NONE),
                 "while a range wholly past the last case holds no case at all");
     }
 
@@ -86,8 +89,9 @@ class ARangeGivesUpAValueTheCarrierHoldsTest {
             for (Endpoint end : List.of(reaches.low(), reaches.high())) {
                 Count at = (Count) end.at();
                 // A range with the end of the order inside it and reaching well past it either way.
-                Place offered = carrier.somethingInside(
-                        Endpoint.inclusive(at.plus(-1000)), Endpoint.inclusive(at.plus(1000)));
+                Place offered = carrier.aPlaceInside(
+                        Endpoint.inclusive(at.plus(-1000)), Endpoint.inclusive(at.plus(1000)),
+                        UsualPlace.NONE);
                 assertNotNull(offered, carrier + " at " + at);
                 assertNotNull(carrier.onTheGrid(offered),
                         () -> carrier + " offered " + offered + ", which it does not hold");
@@ -96,8 +100,9 @@ class ARangeGivesUpAValueTheCarrierHoldsTest {
     }
 
     private static Place inside(Carrier carrier, long low, long high) {
-        Place offered = carrier.somethingInside(
-                Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high)));
+        Place offered = carrier.aPlaceInside(
+                Endpoint.inclusive(Count.of(low)), Endpoint.inclusive(Count.of(high)),
+                UsualPlace.NONE);
         assertNotNull(offered, carrier + " [" + low + ", " + high + "]");
         assertNotNull(carrier.onTheGrid(offered),
                 carrier + " offered " + offered + ", which it does not hold");

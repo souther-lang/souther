@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.NumberAt;
@@ -9,8 +11,13 @@ import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.meaning.Spelling;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
@@ -26,12 +33,18 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The number a rule compares, and where that number is read from.
@@ -64,7 +77,26 @@ public sealed interface NumericTerm
         permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
                 NumericTerm.OfAnElementsNeighbours, NumericTerm.OccurrencesOfItsValue,
                 NumericTerm.OccurrencesOfAKey, NumericTerm.GatheredUnderItsKey,
-                NumericTerm.GatheredUnderAKey {
+                NumericTerm.GatheredUnderAKey, NumericTerm.ProductOf {
+
+    /**
+     * One order over these, for a walk that has to take them in one: by what each is written as,
+     * which is as much as a reader outside the region can say of one. Two written alike and not
+     * one number are refused where they are walked ({@link CanonicalOrder#walking}), as
+     * {@link InputAtom#inOneOrder} refuses them.
+     */
+    static CanonicalOrder<NumericTerm> inOneOrder() {
+        return Comparator.comparing(NumericTerm::spelling)::compare;
+    }
+
+    /**
+     * What this is written as, held as the pieces it is put together from: the text
+     * {@code toString} writes, with a statement a term keeps elements by held as the statement's
+     * own spelling ({@link KeptOccurrences#spelling}) and not written out.
+     */
+    default Spelling spelling() {
+        return Spelling.of(toString());
+    }
 
     /**
      * A number of an element read off the elements beside it in its container: how often its value
@@ -98,7 +130,8 @@ public sealed interface NumericTerm
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
     sealed interface FromOnePosition extends NumericTerm
-            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum {
+            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum, CodePointAt,
+                    WholeUnitsOf {
 
         /**
          * The single input position this term is read from.
@@ -127,6 +160,21 @@ public sealed interface NumericTerm
         @Override
         public ValueOf movedTo(PlacesMoved moved) {
             return new ValueOf(moved.put(position));
+        }
+
+        /** The position's hash, as a record of one component folds it. Written out because a
+         *  value at a place is hashed far more often than it is made, and a record's own hash goes
+         *  through a method handle. */
+        @Override
+        public int hashCode() {
+            return position.hashCode();
+        }
+
+        /** The same position, asked in the code for the reason the hash is. */
+        @Override
+        public boolean equals(Object other) {
+            return other == this
+                    || (other instanceof ValueOf value && position.equals(value.position));
         }
 
         @Override
@@ -187,6 +235,9 @@ public sealed interface NumericTerm
         private final ValueName.Stdlib operation;
         private final ObservationSource source;
         private final TakenArguments arguments;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         /**
          * Built only where the operation and what stands at the location have been put to the one
@@ -210,6 +261,7 @@ public sealed interface NumericTerm
             this.arguments = java.util.Objects.requireNonNull(arguments,
                     "and with whatever it was given beside that value, which is nothing where it"
                             + " was given nothing");
+            this.hash = Objects.hash(operation, source, arguments);
         }
 
         /**
@@ -350,18 +402,25 @@ public sealed interface NumericTerm
             return DefaultBoundOperationFacts.get().takenAs(operation, arguments);
         }
 
+        /** The container at {@link #position()}, where what is taken of it is what its elements
+         *  add up to. How many it holds is a number of its own and starts from no walk. */
+        @Override
+        public TermPath walkedOver() {
+            return takenAs() instanceof TakenAs.TheSumOfWhatItHolds ? position() : null;
+        }
+
         /** By the operation, the value it takes its number of and what it was given beside it,
          *  which is what makes two of these one term. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof TakenOf taken
+            return other instanceof TakenOf taken && hash == taken.hash
                     && operation.equals(taken.operation) && source.equals(taken.source)
                     && arguments.equals(taken.arguments);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, source, arguments);
+            return hash;
         }
 
         @Override
@@ -404,12 +463,16 @@ public sealed interface NumericTerm
         private final TermPath position;
         private final CodePointClass counted;
         private final CaseMapping through;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private CodePointClassCount(TermPath position, CodePointClass counted,
                                     CaseMapping through) {
             this.position = Objects.requireNonNull(position, "counted of somewhere");
             this.counted = Objects.requireNonNull(counted, "and of some code points");
             this.through = Objects.requireNonNull(through, "of the string or of what it maps to");
+            this.hash = Objects.hash(position, counted, through);
         }
 
         /**
@@ -446,14 +509,14 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof CodePointClassCount count
+            return other instanceof CodePointClassCount count && hash == count.hash
                     && position.equals(count.position) && counted.equals(count.counted)
                     && through.equals(count.through);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(position, counted, through);
+            return hash;
         }
 
         @Override
@@ -477,9 +540,13 @@ public sealed interface NumericTerm
     final class CodePointValueSum implements FromOnePosition {
 
         private final TermPath position;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private CodePointValueSum(TermPath position) {
             this.position = Objects.requireNonNull(position, "added up of somewhere");
+            this.hash = Objects.hash(CodePointValueSum.class, position);
         }
 
         /**
@@ -505,17 +572,298 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof CodePointValueSum sum && position.equals(sum.position);
+            return other instanceof CodePointValueSum sum && hash == sum.hash
+                    && position.equals(sum.position);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(CodePointValueSum.class, position);
+            return hash;
         }
 
         @Override
         public String toString() {
             return "List.sum(String.codePoints(" + position + "))";
+        }
+    }
+
+    /**
+     * The code point of the string at {@code position} standing at {@code index} of the list
+     * {@code String.codePoints} answers of it, counted from nought.
+     *
+     * <p>A number of one string, as what its code points come to is, and never a number of its own:
+     * two of these at one string are two places of one value, so a row holding both writes one
+     * string with each of them where it stands, and not a string for each. Read only where the
+     * string is proved to hold the index — how long it is is settled by its rules — so a string
+     * too short to hold it is one no row of the reading that made this has.
+     *
+     * <p>Counted by what the run time counts by: scalar values, of the string as it is held.
+     */
+    final class CodePointAt implements FromOnePosition {
+
+        private final TermPath position;
+        private final int index;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
+        private CodePointAt(TermPath position, int index) {
+            this.position = Objects.requireNonNull(position, "a code point of somewhere");
+            if (index < 0) {
+                throw new IllegalArgumentException("a code point stands at an index from nought on: "
+                        + index);
+            }
+            this.index = index;
+            this.hash = Objects.hash(CodePointAt.class, position, index);
+        }
+
+        /**
+         * The code point at {@code index} of the string at {@code position}, or null where what
+         * stands there is no string.
+         */
+        public static CodePointAt of(TermPath position, int index, Type at, NewtypeInners inners) {
+            return at != null && TypeOps.base(at, inners) == Type.STRING
+                    ? new CodePointAt(position, index) : null;
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        /** Where in the string's code points this stands, counted from nought. */
+        public int index() {
+            return index;
+        }
+
+        @Override
+        public CodePointAt movedTo(PlacesMoved moved) {
+            return new CodePointAt(moved.put(position), index);
+        }
+
+        /**
+         * Read off the string and, of it, the one index: a code point at another index of the
+         * string is read off another place of it, and one read off the whole string — its length,
+         * what its code points come to — is read off this one too. Which values the two places
+         * take together is still the string's format's to say, and a row holding both is the one
+         * string written with each where it stands.
+         */
+        @Override
+        public boolean sharesAPlaceWith(NumericTerm other) {
+            return (other instanceof CodePointAt at && position.equals(at.position))
+                    ? index == at.index : FromOnePosition.super.sharesAPlaceWith(other);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof CodePointAt at && hash == at.hash
+                    && position.equals(at.position) && index == at.index;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return "List.get(" + index + ", String.codePoints(" + position + "))";
+        }
+    }
+
+    /**
+     * How the steps an operation counts of the value at a position are made: against the type of
+     * what stands there, which only the reading of the input knows — or null where they are not of
+     * it.
+     */
+    @FunctionalInterface
+    interface StepsAt {
+
+        WholeUnitsOf of(ValueName.Stdlib operation, TermPath position);
+    }
+
+    /**
+     * The step of a coarser order that the value at {@code position} falls in, as the operation
+     * says: {@code DateTime.toDate} of a date-time is the day its second falls in.
+     *
+     * <p>A number of one value, counted on the order the operation answers: the step is
+     * {@code floor(count / perUnit)} of the count the value stands at, with {@code perUnit} the
+     * operation's own declaration ({@code CountsTheWholeUnitsOf}) and not a number kept here. What a
+     * comparison of it states of the value is stated through the steps the value falls in, which is
+     * the pullback the readers of a comparison take, and the term is no form of the value.
+     *
+     * <p>Keyed by the operation the call resolved to, so two operations declaring the same unit are
+     * two terms.
+     */
+    final class WholeUnitsOf implements FromOnePosition {
+
+        private final ValueName.Stdlib operation;
+        private final TermPath position;
+        /** The steps some value of the position's type falls in, or null where that is not worked
+         *  out. Not part of which number this is: it follows from the operation and the type of
+         *  what stands at the position, which a position has one of. */
+        private final NumericDomain.Bounds image;
+        /** Whether every step of the answer's order is one of them. */
+        private final boolean fills;
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
+        private WholeUnitsOf(ValueName.Stdlib operation, TermPath position,
+                             NumericDomain.Bounds image, boolean fills) {
+            this.operation = Objects.requireNonNull(operation, "taken by an operation");
+            this.position = Objects.requireNonNull(position, "of somewhere");
+            this.image = image;
+            this.fills = fills;
+            this.hash = Objects.hash(WholeUnitsOf.class, operation, position);
+        }
+
+        /**
+         * The steps of the order {@code operation} answers that the value at {@code position}
+         * falls in, or null where the operation declares no such count or what stands there is not
+         * what it counts.
+         *
+         * <p>The one way one is made: the operation and the type of the value go together here and
+         * nowhere else, and what the steps reach is worked out from the two orders at the same
+         * time ({@link #stepsFallenInto}), so a term that exists has an answer to whether its
+         * steps are all there are.
+         */
+        public static WholeUnitsOf of(ValueName.Stdlib operation, TermPath position, Type at,
+                                      NewtypeInners inners, DeclarationAccess declarations) {
+            BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+            Type counted = facts.wholeUnitsCountedOn(operation);
+            Type answers = facts.wholeUnitsAnswered(operation);
+            Type base = at == null ? null : TypeOps.base(at, inners);
+            Carrier observed = base == null || counted == null ? null
+                    : Carrier.ofValue(base, declarations);
+            Carrier answered = answers == null ? null : Carrier.ofValue(answers, declarations);
+            if (observed == null || answered == null || !observed.counts()
+                    || !counted.equals(base)) {
+                return null;
+            }
+            long perUnit = facts.wholeUnitsPerStep(operation).orElseThrow();
+            return new WholeUnitsOf(operation, position,
+                    stepsFallenInto(observed, answered, perUnit),
+                    stepsFill(observed, answered, perUnit));
+        }
+
+        /** The steps some value of the position's type falls in, or null where that is not worked
+         *  out. */
+        public NumericDomain.Bounds image() {
+            return image;
+        }
+
+        /** Whether every step of the answer's order is one some value of the position's type falls
+         *  in: whether a reader may take a row to stand at any of them. */
+        public boolean stepsFillTheAnswersOrder() {
+            return fills;
+        }
+
+        /**
+         * The steps of the order {@code answered} that some value of the order {@code observed}
+         * falls in, when {@code perUnit} steps of the second make one of the first — or null where
+         * an end of {@code observed} is not a value it holds, so that what it reaches is not
+         * worked out.
+         *
+         * <p>The one place that says which steps a value falls in, and so the one place a reader
+         * learns whether they are all of the steps there are. A declaration of the unit says what a
+         * step is and nothing of what the values reach: the seconds of a day fall in one step, and
+         * counted in hours they fill twenty-four of the integers and not the integers.
+         *
+         * <p>Worked out of the ends of the two orders. A step keeps the order of the count it is
+         * the step of, and consecutive counts fall in consecutive steps or the same one, so the
+         * steps are every whole number from the step of the first count to the step of the last.
+         */
+        public static NumericDomain.Bounds stepsFallenInto(Carrier observed, Carrier answered,
+                                                           long perUnit) {
+            Endpoint low = stepOfTheEnd(observed.extent().low(), perUnit);
+            Endpoint high = stepOfTheEnd(observed.extent().high(), perUnit);
+            boolean unknown = (observed.extent().low() != null && low == null)
+                    || (observed.extent().high() != null && high == null);
+            return unknown ? null : new NumericDomain.Bounds(low, high).meet(
+                    new NumericDomain.Bounds(answered.extent().low(), answered.extent().high()));
+        }
+
+        /**
+         * Whether every step of the order {@code answered} is one some value of {@code observed}
+         * falls in: what a reader may take for a run every value of which some row stands at.
+         */
+        public static boolean stepsFill(Carrier observed, Carrier answered, long perUnit) {
+            NumericDomain.Bounds fallenInto = stepsFallenInto(observed, answered, perUnit);
+            return fallenInto != null && new NumericDomain.Bounds(answered.extent().low(),
+                    answered.extent().high()).liesWithin(fallenInto);
+        }
+
+        /**
+         * The steps the values fall in where the rules hold them to {@code values}: each end taken
+         * to the step it falls in, which keeps the order, so every value of the run falls in a step
+         * of the one it is taken to. An end a run leaves out is taken as one it holds, so the steps
+         * are the ones the run could fall in and never fewer — or null where an end is not a count.
+         *
+         * <p>What the rules hold the end of some steps to is this and the steps' own image
+         * ({@link #image}) together: a lower bound on the seconds is a lower bound on the days.
+         */
+        public NumericDomain.Bounds stepsFallenIntoBy(NumericDomain.Bounds values) {
+            if (values == null) {
+                return null;
+            }
+            Endpoint low = stepOfAnEnd(values.min(), perUnit(), true);
+            Endpoint high = stepOfAnEnd(values.max(), perUnit(), true);
+            boolean unknown = (values.min() != null && low == null)
+                    || (values.max() != null && high == null);
+            return unknown ? null : new NumericDomain.Bounds(low, high);
+        }
+
+        private static Endpoint stepOfTheEnd(Endpoint end, long perUnit) {
+            return stepOfAnEnd(end, perUnit, false);
+        }
+
+        /** The step the count at {@code end} falls in, as an end; null where there is no end or it
+         *  is not a count the value holds, or — unless {@code widening} — it is left out. */
+        private static Endpoint stepOfAnEnd(Endpoint end, long perUnit, boolean widening) {
+            if (end == null || (!widening && !end.inclusive())
+                    || !(end.at() instanceof Count count)) {
+                return null;
+            }
+            return ExactRatio.of(count.at()).dividedBy(ExactRatio.of(perUnit))
+                    .flatMap(ExactRatio::floor) instanceof ExactAnswer.Held<BigInteger>(var step)
+                    ? Endpoint.inclusive(new Count(new BigDecimal(step))) : null;
+        }
+
+        /** The operation whose answer this term is. */
+        public ValueName.Stdlib operation() {
+            return operation;
+        }
+
+        /** How many steps of the value's order make one step of the answer's. */
+        public long perUnit() {
+            return DefaultBoundOperationFacts.get().wholeUnitsPerStep(operation).orElseThrow();
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        @Override
+        public WholeUnitsOf movedTo(PlacesMoved moved) {
+            return new WholeUnitsOf(operation, moved.put(position), image, fills);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof WholeUnitsOf units && hash == units.hash
+                    && operation.equals(units.operation) && position.equals(units.position);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return operation + "(" + position + ")";
         }
     }
 
@@ -540,9 +888,14 @@ public sealed interface NumericTerm
         private final TermPath container;
         private final TermPath place;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private Multiplicity(TermPath container, TermPath place) {
             this.container = Objects.requireNonNull(container, "counted among a container's elements");
             this.place = Objects.requireNonNull(place, "by the value standing at a place");
+            this.hash = Objects.hash(container, place);
         }
 
         /**
@@ -595,13 +948,13 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Multiplicity that
+            return other instanceof Multiplicity that && hash == that.hash
                     && container.equals(that.container) && place.equals(that.place);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(container, place);
+            return hash;
         }
 
         @Override
@@ -631,13 +984,40 @@ public sealed interface NumericTerm
         private final TermPath key;
         private final TermPath value;
         private final Extreme extreme;
+        private final WholeUnitsOf steps;
+
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
 
         private ExtremeOfItsKey(TermPath container, TermPath key, TermPath value,
-                                Extreme extreme) {
+                                Extreme extreme, WholeUnitsOf steps) {
             this.container = Objects.requireNonNull(container, "taken among a container's elements");
             this.key = Objects.requireNonNull(key, "of the elements alike at one place");
             this.value = Objects.requireNonNull(value, "of what they hold at another");
             this.extreme = Objects.requireNonNull(extreme, "and one end of it");
+            this.steps = steps;
+            this.hash = Objects.hash(container, key, value, extreme, steps);
+        }
+
+        /**
+         * The same, of the steps {@code steps} counts of the values — the day the latest second
+         * falls on — or null where {@code steps} is not of the value at {@code value}.
+         *
+         * <p>A step keeps the order of what it is the step of, so the end of the steps is the step
+         * of the end, and this is one number however many elements an end is taken among. The
+         * steps are a term that was made against the type of the value, so an operation and a value
+         * of another type are never met here.
+         */
+        public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
+                                         Extreme extreme, WholeUnitsOf steps) {
+            if (steps != null && !steps.position().equals(value)) {
+                return null;
+            }
+            return container != null && key != null && value != null && extreme != null
+                    && fieldsBelowAnElement(container, key)
+                    && fieldsBelowAnElement(container, value)
+                    ? new ExtremeOfItsKey(container, key, value, extreme, steps) : null;
         }
 
         /**
@@ -648,10 +1028,7 @@ public sealed interface NumericTerm
          */
         public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
                                          Extreme extreme) {
-            return container != null && key != null && value != null && extreme != null
-                    && fieldsBelowAnElement(container, key)
-                    && fieldsBelowAnElement(container, value)
-                    ? new ExtremeOfItsKey(container, key, value, extreme) : null;
+            return of(container, key, value, extreme, null);
         }
 
         /**
@@ -660,13 +1037,36 @@ public sealed interface NumericTerm
          */
         public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
                                                    Extreme extreme) {
+            return ofTheValueAt(value, key, extreme, null);
+        }
+
+        /** The same, of the steps {@code steps} counts of the values. */
+        public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
+                                                   Extreme extreme, WholeUnitsOf steps) {
             List<TermPath> holding = value.containersHoldingIt();
             if (holding.isEmpty()) {
                 return null;
             }
             TermPath container = holding.getLast();
             return of(container, ElementProjection.ofFields(key).from(container.element()), value,
-                    extreme);
+                    extreme, steps);
+        }
+
+        /** The steps of the values this is the end of, or null where it is the end of the values
+         *  themselves. */
+        public WholeUnitsOf steps() {
+            return steps;
+        }
+
+        /** The operation whose steps of the values this is the end of, or null where it is the end
+         *  of the values themselves. */
+        public ValueName.Stdlib through() {
+            return steps == null ? null : steps.operation();
+        }
+
+        /** How many steps of the values' order make one of the steps this is the end of. */
+        public long perUnit() {
+            return steps.perUnit();
         }
 
         /** The way from an element of the container to {@link #key()}. */
@@ -706,15 +1106,20 @@ public sealed interface NumericTerm
         }
 
         /**
-         * The number this one is always one of the values of: what stands at {@link #value()}.
+         * The number this one is always one of the values of: what stands at {@link #value()}, or
+         * the steps those values fall in where this is the end of the steps.
          *
          * <p>Which values this number can take — the run the rules leave it, the set a place
          * admits — is that number's question, since an end of some of the values is one of them.
          * Whether a row exists holding one at it is not: that takes a container holding the
          * elements, which no answer about the values says exists.
+         *
+         * <p>In the order this number is counted on, which is the answer's for the steps. Handed
+         * the value itself, a reader asking what the end can be would be answered in the units of
+         * the seconds for a number of days.
          */
-        public ValueOf valuesTakenFrom() {
-            return new ValueOf(value);
+        public FromOnePosition valuesTakenFrom() {
+            return steps != null ? steps : new ValueOf(value);
         }
 
         /** Where the values one end of which is taken stand, which is where a reader is sent and no
@@ -728,25 +1133,27 @@ public sealed interface NumericTerm
          *  are no longer one value of each element of the container moved. */
         @Override
         public ExtremeOfItsKey movedTo(PlacesMoved moved) {
-            return of(moved.put(container), moved.put(key), moved.put(value), extreme);
+            return of(moved.put(container), moved.put(key), moved.put(value), extreme,
+                    steps == null ? null : steps.movedTo(moved));
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof ExtremeOfItsKey that && container.equals(that.container)
+            return other instanceof ExtremeOfItsKey that && hash == that.hash
+                    && container.equals(that.container)
                     && key.equals(that.key) && value.equals(that.value)
-                    && extreme.equals(that.extreme);
+                    && extreme.equals(that.extreme) && Objects.equals(steps, that.steps);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(container, key, value, extreme);
+            return hash;
         }
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields())
-                    .spelledAt(value.toString());
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().fields(),
+                    through()).spelledAt(value.toString());
         }
     }
 
@@ -772,9 +1179,14 @@ public sealed interface NumericTerm
         private final RunSource run;
         private final KeptOccurrences selection;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private OccurrencesOfItsValue(RunSource run, KeptOccurrences selection) {
             this.run = Objects.requireNonNull(run, "counted among the values of a run");
             this.selection = selection;
+            this.hash = Objects.hash(OccurrencesOfItsValue.class, run, selection);
         }
 
         /** The number of times the value standing at a place of {@code run} occurs among all of
@@ -836,19 +1248,25 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof OccurrencesOfItsValue that && run.equals(that.run)
+            return other instanceof OccurrencesOfItsValue that && hash == that.hash
+                    && run.equals(that.run)
                     && Objects.equals(selection, that.selection);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(OccurrencesOfItsValue.class, run, selection);
+            return hash;
+        }
+
+        @Override
+        public Spelling spelling() {
+            return selection == null ? Spelling.of("occurrences(" + run + ")")
+                    : Spelling.of("occurrences(" + run + " kept by ", selection.spelling(), ")");
         }
 
         @Override
         public String toString() {
-            return selection == null ? "occurrences(" + run + ")"
-                    : "occurrences(" + run + " kept by " + selection.key() + ")";
+            return spelling().toString();
         }
     }
 
@@ -870,9 +1288,14 @@ public sealed interface NumericTerm
         private final RunSource.FlattenedOccurrences run;
         private final TermPath key;
 
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
         private OccurrencesOfAKey(RunSource.FlattenedOccurrences run, TermPath key) {
             this.run = Objects.requireNonNull(run, "counted among the values of a run");
             this.key = Objects.requireNonNull(key, "counted as often as a key occurs");
+            this.hash = Objects.hash(OccurrencesOfAKey.class, run, key);
         }
 
         /** The number of values of {@code run} equal to the one at {@code key}, which stands
@@ -899,6 +1322,13 @@ public sealed interface NumericTerm
             return run.subjectPath();
         }
 
+        /** The outermost container the run walks ({@link RunSource#standsAt}): a key is among none
+         *  of the values of a run of none, which is nought. */
+        @Override
+        public TermPath walkedOver() {
+            return run.standsAt();
+        }
+
         /** The same number read from where {@code moved} puts the run and the key — or null where
          *  that is no run of every occurrence, or the key stands inside a container. */
         @Override
@@ -914,13 +1344,14 @@ public sealed interface NumericTerm
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof OccurrencesOfAKey that && run.equals(that.run)
+            return other instanceof OccurrencesOfAKey that && hash == that.hash
+                    && run.equals(that.run)
                     && key.equals(that.key);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(OccurrencesOfAKey.class, run, key);
+            return hash;
         }
 
         @Override
@@ -970,6 +1401,35 @@ public sealed interface NumericTerm
 
                 public End {
                     Objects.requireNonNull(extreme, "an end is one end or the other");
+                }
+            }
+
+            /**
+             * The numbers of the key added up from the last element handed, in {@code order},
+             * whose case at {@code subject} is one of {@code puts}, that element's number
+             * included; every number of the key where none of them is.
+             *
+             * <p>Which element was handed last is the order and not the elements, so the order
+             * is part of what this is: the same elements handed from the other end come to
+             * another number. It holds what showed the order ({@link RunSource.TraversalOrder}),
+             * and is made only where something did.
+             *
+             * @param subject where in the element the case that says whether it puts stands
+             * @param puts    the cases of it whose elements put their number in place of the
+             *                ones before
+             * @param order   the direction the walk was handed the elements in
+             */
+            record SinceAPut(ElementProjection subject, List<CasesLeft> puts,
+                             RunSource.TraversalOrder order) implements Gathering {
+
+                public SinceAPut {
+                    Objects.requireNonNull(subject, "a case is of some place of the element");
+                    Objects.requireNonNull(order, "which element was handed last turns on the"
+                            + " order they were handed in");
+                    puts = List.copyOf(puts);
+                    if (puts.isEmpty()) {
+                        throw new IllegalArgumentException("some case puts, or it is a total");
+                    }
                 }
             }
 
@@ -1035,7 +1495,7 @@ public sealed interface NumericTerm
          */
         public static NumericTerm spelled(TermPath elements, ElementKey key,
                                           ElementValue value, Type each, Gathering gathering,
-                                          KeptOccurrences selection) {
+                                          KeptOccurrences selection, StepsAt stepsAt) {
             if (selection == null && gathering instanceof Gathering.End(Extreme extreme)
                     && value != null
                     && value.asAPlace() instanceof ElementProjection place && elements != null
@@ -1044,6 +1504,21 @@ public sealed interface NumericTerm
                     && one.fields() != null) {
                 TermPath at = place.from(elements);
                 return at == null ? null : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme);
+            }
+            // The end of the steps one place falls in is the step of the end of the place, so it
+            // is the end of the place through the operation that counts them.
+            ElementValue.StepsOfAPlace steps = value == null ? null
+                    : ElementValue.asTheStepsOfAPlace(value);
+            if (selection == null && gathering instanceof Gathering.End(Extreme extreme)
+                    && steps != null && steps.weight().equals(ExactRatio.ONE)
+                    && steps.constant().isZero() && elements != null
+                    && elements.containersHoldingIt().size() == 1
+                    && key instanceof ElementKey.At(ElementProjection one)
+                    && one.fields() != null) {
+                TermPath at = steps.place().from(elements);
+                WholeUnitsOf made = at == null ? null : stepsAt.of(steps.operation(), at);
+                return made == null ? null
+                        : ExtremeOfItsKey.ofTheValueAt(at, one.fields(), extreme, made);
             }
             return of(elements, key, value, each, gathering, selection);
         }
@@ -1061,6 +1536,12 @@ public sealed interface NumericTerm
             if (elements == null || key == null || value == null || each == null
                     || gathering == null || !elements.insideAContainer()
                     || !key.heldByEveryElementItTakes() || value.readsThePosition()) {
+                return null;
+            }
+            // An order is shown of the elements where they stood, and says nothing of elements
+            // standing anywhere else.
+            if (gathering instanceof Gathering.SinceAPut(var _, var _, var order)
+                    && !order.elements().equals(elements)) {
                 return null;
             }
             // What keeps some of them is a statement about these elements and no others: the
@@ -1126,6 +1607,9 @@ public sealed interface NumericTerm
         public List<ElementProjection> fieldsRead() {
             Set<ElementProjection> read = new LinkedHashSet<>(key.reads());
             read.addAll(value.reads());
+            if (gathering instanceof Gathering.SinceAPut(ElementProjection subject, var _, var _)) {
+                read.add(subject);
+            }
             return List.copyOf(read);
         }
 
@@ -1163,18 +1647,34 @@ public sealed interface NumericTerm
         }
 
         @Override
-        public String toString() {
+        public Spelling spelling() {
             ElementProjection place = value.asAPlace();
-            String of = (place == null ? "{" + value + " | " + elements + "}"
-                    : place.from(elements).toString())
-                    + (selection == null ? "" : " kept by " + selection.key());
+            String gatheredFrom = place == null ? "{" + value + " | " + elements + "}"
+                    : place.from(elements).toString();
+            Spelling of = selection == null ? Spelling.of(gatheredFrom)
+                    : Spelling.of(gatheredFrom + " kept by ", selection.spelling());
             return switch (gathering) {
-                case Gathering.Total _ -> "total(" + of + " by " + key.spelled() + ")";
-                case Gathering.End(Extreme extreme) -> switch (extreme) {
-                    case Extreme.Least _ -> "least";
-                    case Extreme.Greatest _ -> "greatest";
-                } + "(" + of + " by " + key.spelled() + ")";
+                case Gathering.Total _ -> Spelling.of("total(", of, " by " + key.spelled() + ")");
+                // Handed in the order written, as a run read by where its elements stand is
+                // spelled; the other way round says so.
+                case Gathering.SinceAPut(ElementProjection subject, List<CasesLeft> puts,
+                                         RunSource.TraversalOrder order) ->
+                        Spelling.of("total(", of, " from the last " + String.join(" or ", puts
+                                .stream().map(cases -> subject.narrowedTo(cases).spelled())
+                                .toList())
+                                + (order.direction() == TraversalDirection.REVERSE
+                                        ? " handed from the far end" : "")
+                                + " by " + key.spelled() + ")");
+                case Gathering.End(Extreme extreme) -> Spelling.of(switch (extreme) {
+                    case Extreme.Least _ -> "least(";
+                    case Extreme.Greatest _ -> "greatest(";
+                }, of, " by " + key.spelled() + ")");
             };
+        }
+
+        @Override
+        public String toString() {
+            return spelling().toString();
         }
     }
 
@@ -1243,6 +1743,10 @@ public sealed interface NumericTerm
          * Whether the key is a field the number is made of, or one around or inside it: every
          * element of the key holds the key there, so each contributes it and the number is the
          * elements' share of that one value.
+         *
+         * <p>Of the key and the number being one value, and not of their bearing on each other
+         * ({@link TermPath#bearsOn}): two cases of one value bear on each other and hold no value
+         * in common.
          */
         public boolean keyIsWhatIsAdded() {
             TermPath keyAt = key().from(gathered.elements());
@@ -1295,8 +1799,13 @@ public sealed interface NumericTerm
         }
 
         @Override
+        public Spelling spelling() {
+            return Spelling.of(gathered.spelling(), " equal to " + asked);
+        }
+
+        @Override
         public String toString() {
-            return gathered + " equal to " + asked;
+            return spelling().toString();
         }
     }
 
@@ -1368,6 +1877,11 @@ public sealed interface NumericTerm
                     || (how instanceof TakenAs.HowManyItHolds && source.isInOneContainer())) {
                 return null;
             }
+            // The values of a line are nodes, of which only how many there are is a number.
+            if (source instanceof RunSource.SearchedLine
+                    && !(how instanceof TakenAs.HowManyItHolds)) {
+                return null;
+            }
             return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
         }
 
@@ -1384,11 +1898,9 @@ public sealed interface NumericTerm
          */
         public static TakenOver howManyOf(RunSource source, Type each, NewtypeInners inners,
                                           Symbols symbols) {
-            return of(LENGTH, source, each, inners, symbols);
+            return of(NumericMeasures.takenOf(new Type.ListOf(each), inners), source, each, inners,
+                    symbols);
         }
-
-        private static final ValueName.Stdlib.Operation LENGTH =
-                ValueName.Stdlib.operation("List", "length");
 
         public ValueName.Stdlib operation() {
             return operation;
@@ -1407,6 +1919,15 @@ public sealed interface NumericTerm
             return at == null ? null : new TakenOver(operation, at);
         }
 
+        /**
+         * The same taking over the values at {@code other}, which are values of the type this one's
+         * run holds: the account the operation declares was put to that type when this one was
+         * made, so it is not asked again.
+         */
+        TakenOver over(RunSource other) {
+            return new TakenOver(operation, Objects.requireNonNull(other, "taken over a run"));
+        }
+
         /** What this operation takes of what it is given. Never null: one of these cannot be made
          *  for an operation that declares none. */
         public TakenAs takenAs() {
@@ -1417,7 +1938,7 @@ public sealed interface NumericTerm
          *  term. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof TakenOver over
+            return other instanceof TakenOver over && hash == over.hash
                     && operation.equals(over.operation) && source.equals(over.source);
         }
 
@@ -1431,9 +1952,381 @@ public sealed interface NumericTerm
             return source.subjectPath();
         }
 
+        /** The places the run's values are read off: what a computation of each element reads of
+         *  it ({@link RunSource.ComputedOccurrences#placesReadOff}), and otherwise every place a
+         *  move puts. */
+        @Override
+        public List<TermPath> placesReadOff() {
+            return source instanceof RunSource.ComputedOccurrences computed
+                    ? computed.placesReadOff() : NumericTerm.super.placesReadOff();
+        }
+
+        /** The container the run walks ({@link RunSource#standsAt}), where it walks one: the nodes
+         *  of a tree stand in none. */
+        @Override
+        public TermPath walkedOver() {
+            return source instanceof RunSource.ReachableNodes
+                    || source instanceof RunSource.SearchedLine ? null : source.standsAt();
+        }
+
         @Override
         public String toString() {
             return operation.qualified() + "(" + source + ")";
+        }
+    }
+
+    /**
+     * What two forms of the input's numbers come to multiplied: {@code a * b}, or
+     * {@code g * (1 - r)}, each factor a sum of numbers at their weights and a constant.
+     *
+     * <p>A number of its own and no form over its factors. Fixing every number of one factor
+     * leaves a form over the other, weighed by what the first comes to, so a rule about the
+     * product relates the numbers of the two factors and divides none of them by a line of its own.
+     * The numbers of the two factors are apart ({@link #sharesAPlaceWith}), which is what lets each
+     * factor be fixed while the other is chosen: a number read off a place both factors read is
+     * not one of these. {@code g - g * r} is {@code g * (1 - r)} here, and it is the reading that
+     * brings it to that form; what a run works out is worked out as it was written, and is told of
+     * by the operations of the comparison and not by this.
+     *
+     * <p>The factors in one order whichever was written first, so {@code r * g} is
+     * {@code g * r}.
+     *
+     * <p>Where the number beside the one alone stands to hold the product at a value is part of
+     * the term, and so of its identity. The reading that decides what a run gets past and the
+     * composer that writes the row are far apart, and only this term travels between them: both
+     * must hold the product by the same pair of numbers, or a row would be written that the
+     * reading did not check. The reading chooses it from the declarations alone
+     * ({@link #standingWhereTheDeclarationsAdmit}), so the same product read twice is one term.
+     * A term moved to other places is the product without it: the declarations of those places
+     * are not the ones it was chosen from.
+     */
+    final class ProductOf implements NumericTerm {
+
+        private final LinearForm<NumericTerm> one;
+        private final LinearForm<NumericTerm> other;
+        /** Where the number of the factor beside the one alone stands to hold the product at a
+         *  value, or null where it stands where that factor is one. */
+        private final ExactRatio fixedAt;
+
+        /** The hash, worked out once: a term is asked for its hash by every reading that files
+         *  it. */
+        private final int hash;
+
+        /**
+         * Each factor holds its numbers in the order {@link NumericTerms} walks a form in, whatever
+         * order the form it was made from held them. Two products that are equal are then the same
+         * to everyone who reads one: the text it is written as, the place a reader is sent to, the
+         * order its numbers are placed in.
+         */
+        private ProductOf(LinearForm<NumericTerm> one, LinearForm<NumericTerm> other,
+                          ExactRatio fixedAt) {
+            this.one = inTheOneOrder(one);
+            this.other = inTheOneOrder(other);
+            this.fixedAt = fixedAt;
+            this.hash = Objects.hash(ProductOf.class, this.one, this.other, fixedAt);
+        }
+
+        private static LinearForm<NumericTerm> inTheOneOrder(LinearForm<NumericTerm> form) {
+            if (form.coefs().size() < 2) {
+                return form;
+            }
+            Map<NumericTerm, ExactRatio> ordered = new LinkedHashMap<>();
+            for (Map.Entry<NumericTerm, ExactRatio> each : NumericTerms.entriesInOrder(form.coefs())) {
+                ordered.put(each.getKey(), each.getValue());
+            }
+            return new LinearForm<>(form.constant(), ordered);
+        }
+
+        /**
+         * The product of {@code left} and {@code right}, or null where either is a constant (that
+         * is a form, scaled), or where a number of one is read off a place a number of the other
+         * is read off, so that the two are not apart.
+         */
+        public static ProductOf of(LinearForm<NumericTerm> left, LinearForm<NumericTerm> right) {
+            Signed made = signed(left, right);
+            return made == null ? null : made.product();
+        }
+
+        /**
+         * A product and the sign the product of the two forms given is, as the product is
+         * written: {@code (1 - r) * g} and {@code (r - 1) * g} are one product, and one is the
+         * other negated.
+         *
+         * @param product the product, each factor turned until its first number is weighed above
+         *                nought
+         * @param sign    one, or minus one where the forms given were turned to bring it about —
+         *                what the product given comes to is {@code sign} times {@code product}
+         */
+        public record Signed(ProductOf product, ExactRatio sign) {
+
+            /** The product as a form, weighed by its sign. */
+            public LinearForm<NumericTerm> asAForm() {
+                return new LinearForm<>(ExactRatio.ZERO, Map.of(product, sign));
+            }
+        }
+
+        /**
+         * The product of {@code left} and {@code right} and its sign, or null where the product
+         * is none ({@link #of}).
+         */
+        public static Signed signed(LinearForm<NumericTerm> left, LinearForm<NumericTerm> right) {
+            if (left == null || right == null || left.coefs().isEmpty()
+                    || right.coefs().isEmpty()) {
+                return null;
+            }
+            for (NumericTerm in : left.coefs().keySet()) {
+                for (NumericTerm there : right.coefs().keySet()) {
+                    if (in.sharesAPlaceWith(there)) {
+                        return null;
+                    }
+                }
+            }
+            ExactRatio sign = ExactRatio.ONE;
+            LinearForm<NumericTerm> first = turnedUp(left);
+            LinearForm<NumericTerm> second = turnedUp(right);
+            if (first != left) {
+                sign = sign.negated();
+            }
+            if (second != right) {
+                sign = sign.negated();
+            }
+            boolean firstFirst = Spelling.of(first.writtenAs(NumericTerm::spelling).toArray())
+                    .compareTo(Spelling.of(second.writtenAs(NumericTerm::spelling).toArray())) <= 0;
+            return new Signed(firstFirst ? new ProductOf(first, second, null)
+                    : new ProductOf(second, first, null), sign);
+        }
+
+        /**
+         * {@code form}, or its negation where its constant is below nought — or, where it has
+         * none, where its first number, in the order numbers are kept in, is weighed below
+         * nought.
+         *
+         * <p>The constant first, so that {@code 1 - r} stays as it is written and {@code r - 1}
+         * is turned to it: the number that makes the form one is nought for the first and two for
+         * the second, and a row held at the value of a product by the first multiplies by nought
+         * where the second multiplies by two.
+         */
+        private static LinearForm<NumericTerm> turnedUp(LinearForm<NumericTerm> form) {
+            NumericTerm first = NumericTerms.inOrder(form.coefs().keySet()).getFirst();
+            if (form.constant().signum() > 0
+                    || (form.constant().signum() == 0 && form.coefs().get(first).signum() >= 0)) {
+                return form;
+            }
+            Map<NumericTerm, ExactRatio> negated = new LinkedHashMap<>();
+            form.coefs().forEach((term, weight) -> negated.put(term, weight.negated()));
+            return new LinearForm<>(form.constant().negated(), negated);
+        }
+
+        /** The factor first in the order of factors. */
+        public LinearForm<NumericTerm> one() {
+            return one;
+        }
+
+        /** The other factor. */
+        public LinearForm<NumericTerm> other() {
+            return other;
+        }
+
+        /** Both factors, in their order. */
+        public List<LinearForm<NumericTerm>> factors() {
+            return List.of(one, other);
+        }
+
+        /**
+         * How a row comes to hold a given value of the product: one factor is a number alone, and
+         * stands at the value; the other is a form of one number, which stands at the number that
+         * makes the form one. The product is then the value, and the two numbers are apart.
+         *
+         * @param carrier the number alone that stands at the value
+         * @param fixed   the number of the other factor
+         * @param at      where {@code fixed} stands, so that the other factor comes to
+         *                {@code scale}
+         * @param scale   what the other factor comes to there: one unless the declarations leave
+         *                the number no place it is one at, and then the carrier stands at the
+         *                value over this
+         */
+        public record AtAValue(NumericTerm carrier, NumericTerm fixed, ExactRatio at,
+                               ExactRatio scale) {}
+
+        /**
+         * What the declarations leave the numbers of a product, asked where the place a number
+         * stands at is chosen ({@link #standingWhereTheDeclarationsAdmit}).
+         */
+        public interface Declared {
+
+            /** The values the declarations leave {@code number}, or null where that is not
+             *  shown. */
+            NumericDomain.Bounds runOf(NumericTerm number);
+
+            /** Whether {@code number} is counted on decimals, whose every value between its
+             *  ends is one it can take. */
+            boolean isDense(NumericTerm number);
+        }
+
+        /**
+         * The same product, with the number beside the one alone standing inside the run the
+         * declarations leave it where it cannot stand at the value that makes its factor one —
+         * and this product where it can, or where no value inside is found.
+         *
+         * <p>Only where the number alone is counted on decimals: it then stands at the value
+         * over what the factor beside comes to, and takes every value that is held. The product
+         * is held at a value by one pair of numbers either way, so what reads it and what writes
+         * it agree.
+         */
+        public ProductOf standingWhereTheDeclarationsAdmit(Declared declared) {
+            AtAValue way = fixedAt == null ? atAValue() : null;
+            if (way == null || !declared.isDense(way.carrier())) {
+                return this;
+            }
+            NumericDomain.Bounds run = declared.runOf(way.fixed());
+            if (run == null || run.admits(way.at())) {
+                return this;
+            }
+            ExactRatio inside = insideOf(run);
+            // The number beside stands at the value on its own order: a whole number between two
+            // whole numbers is not in the middle of them where they are an odd distance apart.
+            if (inside != null && !declared.isDense(way.fixed()) && !inside.isWhole()) {
+                inside = null;
+            }
+            ProductOf there = inside == null ? null : new ProductOf(one, other, inside);
+            AtAValue made = there == null ? null : there.atAValue();
+            // The number alone stands at the value over the scale, and a row is built with its
+            // numbers at few places (DecimalPoints.PLACES_A_ROW_IS_BUILT_AT) whatever the
+            // operations of the comparison are asked at. Over a whole number of times the
+            // value is as many places as the value: a half leaves twice, a tenth ten times.
+            // Seven tenths leaves a hundredth no decimal to stand at, and four fifths leaves a
+            // number five places further out than the value was written at.
+            ExactRatio over = made == null ? null
+                    : ExactRatio.ONE.dividedBy(made.scale()).orNull();
+            return over == null || !over.isWhole() ? this : there;
+        }
+
+        /** A value inside {@code run}, written as a decimal, nearest its middle; null where none
+         *  is found. */
+        private static ExactRatio insideOf(NumericDomain.Bounds run) {
+            ExactRatio low = run.min() != null && run.min().at() instanceof Count from
+                    ? from.exactly() : null;
+            ExactRatio high = run.max() != null && run.max().at() instanceof Count to
+                    ? to.exactly() : null;
+            ExactRatio inside;
+            if (low != null && high != null) {
+                inside = low.plus(high).flatMap(sum -> sum.dividedBy(ExactRatio.of(2))).orNull();
+            } else if (low != null) {
+                inside = low.plus(ExactRatio.ONE).orNull();
+            } else if (high != null) {
+                inside = high.minus(ExactRatio.ONE).orNull();
+            } else {
+                inside = null;
+            }
+            return inside != null && run.admits(inside)
+                    && Count.written(inside) instanceof ExactAnswer.Held<Optional<Count>>(
+                            Optional<Count> written) && written.isPresent() ? inside : null;
+        }
+
+        /**
+         * The way a given value of this product is held, or null where neither factor is a number
+         * alone beside a form of one number that can be made one. The first factor that is a number
+         * alone is the one that carries the value.
+         */
+        public AtAValue atAValue() {
+            for (int at = 0; at < 2; at++) {
+                LinearForm<NumericTerm> alone = factors().get(at);
+                LinearForm<NumericTerm> beside = factors().get(1 - at);
+                if (alone.coefs().size() != 1 || !alone.constant().isZero()
+                        || !ExactRatio.ONE.equals(alone.coefs().values().iterator().next())
+                        || beside.coefs().size() != 1) {
+                    continue;
+                }
+                Map.Entry<NumericTerm, ExactRatio> number =
+                        beside.coefs().entrySet().iterator().next();
+                if (number.getValue().isZero()) {
+                    continue;
+                }
+                ExactRatio standsAt = fixedAt != null ? fixedAt
+                        : ExactRatio.ONE.minus(beside.constant())
+                                .flatMap(left -> left.dividedBy(number.getValue())).orNull();
+                ExactRatio scale = standsAt == null ? null
+                        : fixedAt == null ? ExactRatio.ONE
+                        : number.getValue().times(standsAt).flatMap(beside.constant()::plus)
+                                .orNull();
+                if (standsAt != null && scale != null && !scale.isZero()) {
+                    return new AtAValue(alone.coefs().keySet().iterator().next(), number.getKey(),
+                            standsAt, scale);
+                }
+            }
+            return null;
+        }
+
+        /** Where the first number of the first factor is read from, which is where a reader is
+         *  sent and no place the product stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return one.coefs().keySet().iterator().next().subjectPath();
+        }
+
+        /** The same product of the numbers read from where {@code moved} puts each — or null
+         *  where one of them is no number there, or the two are no longer apart. */
+        @Override
+        public ProductOf movedTo(PlacesMoved moved) {
+            LinearForm<NumericTerm> first = movedForm(one, moved);
+            LinearForm<NumericTerm> second = movedForm(other, moved);
+            return first == null || second == null ? null : of(first, second);
+        }
+
+        private static LinearForm<NumericTerm> movedForm(LinearForm<NumericTerm> form,
+                                                         PlacesMoved moved) {
+            Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                NumericTerm there = each.getKey().movedTo(moved);
+                if (there == null || out.put(there, each.getValue()) != null) {
+                    return null;
+                }
+            }
+            return new LinearForm<>(form.constant(), out);
+        }
+
+        @Override
+        public boolean equals(Object that) {
+            return that instanceof ProductOf product && hash == product.hash
+                    && one.equals(product.one)
+                    && other.equals(product.other) && Objects.equals(fixedAt, product.fixedAt);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of(written(one), " * ", written(other));
+        }
+
+        @Override
+        public String toString() {
+            return spelling().toString();
+        }
+
+        /** A factor as an author writes it: a number alone as it is, a sum of them in brackets. */
+        private static Spelling written(LinearForm<NumericTerm> factor) {
+            if (factor.constant().isZero() && factor.coefs().size() == 1
+                    && ExactRatio.ONE.equals(factor.coefs().values().iterator().next())) {
+                return factor.coefs().keySet().iterator().next().spelling();
+            }
+            List<Object> parts = new ArrayList<>();
+            parts.add("(");
+            if (!factor.constant().isZero()) {
+                parts.add(factor.constant().toString());
+            }
+            factor.coefs().forEach((number, weight) -> {
+                if (parts.size() > 1) {
+                    parts.add(" + ");
+                }
+                parts.add(ExactRatio.ONE.equals(weight) ? number.spelling()
+                        : Spelling.of(weight + " * ", number.spelling()));
+            });
+            parts.add(")");
+            return Spelling.of(parts.toArray());
         }
     }
 
@@ -1450,6 +2343,34 @@ public sealed interface NumericTerm
      * reading one as the other is what this type exists to stop.
      */
     TermPath subjectPath();
+
+    /**
+     * Where this number stands: the place whose containers hold an element wherever the number is
+     * a number, which is what a question about it assumes of the row.
+     *
+     * <p>Not {@link #subjectPath}, which is where a reader is sent. A number read off a position
+     * stands at the position, and the two are one place. A number a walk over the elements of a
+     * container comes to stands where the container does: it is a number of the container of none
+     * as well, the value the walk starts from, so asking about it assumes nothing of what the
+     * container holds. Asked at the place its values are read from, every question about a total
+     * would be one about a container holding something, and the container of none would be no row
+     * of it.
+     */
+    default TermPath standsAt() {
+        TermPath walked = walkedOver();
+        return walked != null ? walked : subjectPath();
+    }
+
+    /**
+     * The container this number is what a walk over the elements of comes to — what they add up
+     * to, how many of them are one value — or null where it is no such number.
+     *
+     * <p>Such a number is the value the walk starts from where the container holds none, and a
+     * question about it is asked of the container holding something and of it holding none.
+     */
+    default TermPath walkedOver() {
+        return null;
+    }
 
     /**
      * The same number, of the value standing where {@code moved} puts each place it is read from —
@@ -1498,8 +2419,9 @@ public sealed interface NumericTerm
     }
 
     /**
-     * Whether this number and {@code other} are read off a place in common, or one is read off a
-     * place inside a place the other is.
+     * Whether this number and {@code other} are read off places that bear on each other
+     * ({@link TermPath#bearsOn}): a place in common, one inside the other, or cases of one value
+     * that leave it none in common.
      *
      * <p>What two numbers being apart comes to, asked of every place each is read off and not of
      * the place a report files it under ({@link #subjectPath}): a count of the times a value
@@ -1508,11 +2430,23 @@ public sealed interface NumericTerm
      * apart only when this is false.
      */
     default boolean sharesAPlaceWith(NumericTerm other) {
+        for (TermPath there : other.placesReadOff()) {
+            if (isReadOffAPlaceBearingOn(there)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether some place this number is read off bears on {@code place} ({@link TermPath#bearsOn}):
+     * what is asked of the place can say something of the number. Asked of every place it is read
+     * off and not of the place a report files it under, as {@link #sharesAPlaceWith} is.
+     */
+    default boolean isReadOffAPlaceBearingOn(TermPath place) {
         for (TermPath here : placesReadOff()) {
-            for (TermPath there : other.placesReadOff()) {
-                if (here.isAtOrUnder(there) || there.isAtOrUnder(here)) {
-                    return true;
-                }
+            if (here.bearsOn(place)) {
+                return true;
             }
         }
         return false;
@@ -1536,6 +2470,8 @@ public sealed interface NumericTerm
             // A run of values is answered by no single place, which is the whole of what this term
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
+            // And a product is made of the numbers of two forms, so no one place answers it.
+            case ProductOf _ -> null;
             // And a number of an element read off its neighbours is read off all of them, so no
             // value standing at one place is it.
             case OfAnElementsNeighbours _ -> null;
@@ -1545,6 +2481,307 @@ public sealed interface NumericTerm
             // Gathered from every element of one key, so from no one place.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
         };
+    }
+
+    /**
+     * Whether a line on this number parts the values of no place it is read from.
+     *
+     * <p>A total of a run is one number that many splits among the elements come to: sixty and
+     * forty are on the boundary of a hundred as surely as one hundred is, so a line on the total
+     * is a class of no element. A count of how often a value occurs, or the extreme of a key's
+     * values, is read off the elements beside one and picks out elements by what they hold, so a
+     * line on it is a class of elements though no single place can be asked for it.
+     *
+     * <p>Exhaustive over the terms there are, with no {@code default}, as {@link #atOnePosition}
+     * is: a kind added is one this is answered for.
+     */
+    default boolean partsNoPlaceByALine() {
+        return switch (this) {
+            case TakenOver _, ProductOf _ -> true;
+            case FromOnePosition _, OfAnElementsNeighbours _, OccurrencesOfItsValue _,
+                 OccurrencesOfAKey _, GatheredUnderItsKey _, GatheredUnderAKey _ -> false;
+        };
+    }
+
+    /**
+     * What this number is read off, as an element of {@code container} sees it: that element
+     * alone, none of the container's elements, all of them as one number, those holding what the
+     * element holds under a key, or none of those.
+     *
+     * <p>Not where the number is filed ({@link #subjectPath}), nor every place it is read off
+     * ({@link #placesReadOff}) taken one by one. How often an element's value occurs is filed at a
+     * place inside the element and read off the elements beside it; a total over the container is
+     * read off places inside every element and is one number for all of them. Each kind says
+     * what it is to a container it is read across ({@link #runsReadAcross}), since only the kind
+     * knows whether it is read off one element or across them; every place it is read off as one
+     * value ({@link #placesReadBeside}) — what keeps the elements it is of, a key an input holds —
+     * is asked as the one value there.
+     *
+     * <p>Exhaustive over the terms there are, with no {@code default}, as {@link #atOnePosition}
+     * is: a kind added is one this is answered for.
+     */
+    default AmongTheElements amongTheElementsOf(TermPath container) {
+        return switch (this) {
+            case FromOnePosition one -> AmongTheElements.ofOnePlace(one.position(), container);
+            // One number of all of them.
+            case TakenOver _, OccurrencesOfAKey _, GatheredUnderAKey _ ->
+                    AmongTheElements.readAcross(this, container, AmongTheElements.AllOfThem::new);
+            case Multiplicity often -> AmongTheElements.readAcross(this, container,
+                    run -> new AmongTheElements.ThoseUnderItsKey(run,
+                            new ElementKey.At(often.placeField()), null));
+            case ExtremeOfItsKey end -> AmongTheElements.readAcross(this, container,
+                    run -> new AmongTheElements.ThoseUnderItsKey(run,
+                            new ElementKey.At(end.keyField()), null));
+            case OccurrencesOfItsValue often -> AmongTheElements.readAcross(this, container,
+                    run -> {
+                        ElementProjection key = ElementProjection.below(run.getLast().element(),
+                                often.run().subjectPath());
+                        return key == null ? AmongTheElements.OTHERWISE
+                                : new AmongTheElements.ThoseUnderItsKey(run,
+                                        new ElementKey.At(key), often.selection());
+                    });
+            case GatheredUnderItsKey gathered -> AmongTheElements.readAcross(this, container,
+                    run -> new AmongTheElements.ThoseUnderItsKey(run, gathered.key(),
+                            gathered.selection()));
+            // Read off what every number of its two forms is read off.
+            case ProductOf product -> {
+                AmongTheElements read = null;
+                for (LinearForm<NumericTerm> form : product.factors()) {
+                    for (NumericTerm each : form.coefs().keySet()) {
+                        AmongTheElements that = each.amongTheElementsOf(container);
+                        read = read == null ? that : read.and(that);
+                    }
+                }
+                yield read;
+            }
+        };
+    }
+
+    /**
+     * Each run of elements this number is read across, as the containers it stands in, outermost
+     * first: the one occurrence of the container a number of an element's neighbours is read
+     * among, the containers each run of a run source stands in ({@link RunSource#readAcross}) —
+     * both maps of a join — and for a product those of its numbers. None for a number of one
+     * position, and none for the nodes of a tree, which stand in no container.
+     *
+     * <p>The one answer to which values a number is read across rather than off one at a time.
+     * Exhaustive over the terms there are, with no {@code default}.
+     */
+    default List<List<TermPath>> runsReadAcross() {
+        return switch (this) {
+            case FromOnePosition _ -> List.of();
+            case TakenOver over -> runsOf(over.source());
+            case OfAnElementsNeighbours neighbours -> List.of(List.of(neighbours.container()));
+            case OccurrencesOfItsValue often -> runsOf(often.run());
+            case OccurrencesOfAKey often -> runsOf(often.run());
+            case GatheredUnderItsKey gathered ->
+                    List.of(gathered.elements().containersHoldingIt());
+            case GatheredUnderAKey gathered ->
+                    List.of(gathered.gathered().elements().containersHoldingIt());
+            case ProductOf product -> {
+                Set<List<TermPath>> out = new LinkedHashSet<>();
+                for (LinearForm<NumericTerm> form : product.factors()) {
+                    for (NumericTerm each : form.coefs().keySet()) {
+                        out.addAll(each.runsReadAcross());
+                    }
+                }
+                yield List.copyOf(out);
+            }
+        };
+    }
+
+    /** The containers each run {@code source} is read across stands in. */
+    private static List<List<TermPath>> runsOf(RunSource source) {
+        List<List<TermPath>> out = new ArrayList<>();
+        for (TermPath each : source.readAcross()) {
+            out.add(each.containersHoldingIt());
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Every place this number is read off ({@link #placesReadOff}) as the one value there, and not
+     * as a value of a run it is read across ({@link #runsReadAcross}): neither a container a run
+     * stands in nor inside the element of the innermost on every row. What keeps the elements a
+     * number is of, the key an input holds, the root of a tree.
+     */
+    default List<TermPath> placesReadBeside() {
+        List<List<TermPath>> runs = runsReadAcross();
+        List<TermPath> out = new ArrayList<>();
+        for (TermPath place : placesReadOff()) {
+            if (runs.stream().noneMatch(run -> run.contains(place)
+                    || place.toTheElementsOf(run.getLast()) == TermPath.ToTheElements.INSIDE_ONE)) {
+                out.add(place);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Whether this number is read off nothing but the elements of the one occurrence of
+     * {@code container} an element stands in ({@link AmongTheElements#readsOnlyTheElementsOf}),
+     * so that composing the container is what chooses it.
+     */
+    default boolean isReadOffOnlyTheElementsOf(TermPath container) {
+        return amongTheElementsOf(container).readsOnlyTheElementsOf(container);
+    }
+
+    /**
+     * What a number is read off, as an element of one container sees it
+     * ({@link #amongTheElementsOf}).
+     *
+     * <p>Five answers and not a yes or no, because the readers want different ones. Composing a
+     * container chooses a number read off its own elements — the element, how often its value
+     * occurs among them, what they come to — and no other ({@link #readsOnlyTheElementsOf}).
+     * Whether a statement answers alike for every element holding one value takes that value, a
+     * number none of the elements is read for, one number of all of them, and one the elements of
+     * the value's key share. A container a count composes writes the element's own value, and
+     * nothing read off its neighbours.
+     */
+    sealed interface AmongTheElements {
+
+        /** Read off the element and what is inside it, and off nothing beside it. */
+        record ItAlone() implements AmongTheElements {}
+
+        /** Read off nothing at or under any element of the container: the same number whichever
+         *  element asks, and whatever the container holds. */
+        record NoneOfThem() implements AmongTheElements {}
+
+        /**
+         * Read off every element of the container as one number, or off what holds them all: the
+         * same number whichever element asks, and moved by what the container holds.
+         *
+         * @param across the containers a run is read across, outermost first, or none where the
+         *               number is read off one place that holds the container
+         */
+        record AllOfThem(List<TermPath> across) implements AmongTheElements {
+
+            public AllOfThem {
+                across = List.copyOf(across);
+            }
+        }
+
+        /**
+         * Read off the elements standing at the last of {@code across}'s elements that hold under
+         * {@code key} what the element holds there, kept by {@code selection} where it is not
+         * null: the same number for every element of one key, among the elements of every
+         * occurrence of the containers {@code across} names.
+         *
+         * @param across the containers the elements are read across, outermost first: one, where
+         *               the number is read among the elements of the one occurrence of it an
+         *               element stands in
+         */
+        record ThoseUnderItsKey(List<TermPath> across, ElementKey key,
+                                KeptOccurrences selection) implements AmongTheElements {
+
+            public ThoseUnderItsKey {
+                across = List.copyOf(across);
+                Objects.requireNonNull(key, "the elements of one key");
+            }
+
+            /** Where each element whose key is read stands. */
+            public TermPath elements() {
+                return across.getLast().element();
+            }
+        }
+
+        /** Read off the element and off something beside it, off its neighbours by no one key
+         *  it holds, or off two things none of the others names alone. */
+        record Otherwise() implements AmongTheElements {}
+
+        AmongTheElements IT_ALONE = new ItAlone();
+        AmongTheElements NONE_OF_THEM = new NoneOfThem();
+        AmongTheElements OTHERWISE = new Otherwise();
+
+        /**
+         * Whether a number read off this is read off nothing but the elements of the one
+         * occurrence of {@code container} an element stands in — the element alone, or the
+         * elements beside it there — so that composing the container is what chooses it.
+         *
+         * @param container the container this was answered for
+         */
+        default boolean readsOnlyTheElementsOf(TermPath container) {
+            return switch (this) {
+                case ItAlone _ -> true;
+                case ThoseUnderItsKey key -> acrossItAlone(key.across(), container);
+                case AllOfThem all -> acrossItAlone(all.across(), container);
+                case NoneOfThem _, Otherwise _ -> false;
+            };
+        }
+
+        /** Whether {@code across} is the one container {@code container}. */
+        private static boolean acrossItAlone(List<TermPath> across, TermPath container) {
+            return across.size() == 1
+                    && across.getFirst().standsAtTheSamePlaceOnEveryRow(container);
+        }
+
+        /**
+         * What a number read off both what this is read off and what {@code other} is is read
+         * off: the same where the two are, and otherwise none of the others. A number of the
+         * elements of a key times a number none of them is read for is read off something beside
+         * those elements, which an answer naming the key alone would leave out.
+         */
+        default AmongTheElements and(AmongTheElements other) {
+            return this.equals(other) ? this : OTHERWISE;
+        }
+
+        /**
+         * What a number read off the one value at {@code place} is read off: what the place is to
+         * the elements ({@link TermPath#toTheElementsOf}). A place nothing shows inside one,
+         * around them all or apart is none of the others: a number nothing shows apart from the
+         * elements is not one the elements leave alike.
+         */
+        static AmongTheElements ofOnePlace(TermPath place, TermPath container) {
+            return switch (place.toTheElementsOf(container)) {
+                case INSIDE_ONE -> IT_ALONE;
+                case HOLDING_THEM -> new AllOfThem(List.of());
+                case APART -> NONE_OF_THEM;
+                case NOT_SHOWN -> OTHERWISE;
+            };
+        }
+
+        /**
+         * What {@code term} is read off as an element of {@code container} sees it: what each run
+         * it is read across is to the container ({@link #ofARun}), with {@code acrossIt} what the
+         * kind is where the container is one the run is read across, and what the one value at
+         * each place it is read beside them is ({@link #ofOnePlace}).
+         */
+        private static AmongTheElements readAcross(
+                NumericTerm term, TermPath container,
+                Function<List<TermPath>, AmongTheElements> acrossIt) {
+            AmongTheElements read = null;
+            for (List<TermPath> run : term.runsReadAcross()) {
+                AmongTheElements that = ofARun(run, container, acrossIt.apply(run));
+                read = read == null ? that : read.and(that);
+            }
+            for (TermPath place : term.placesReadBeside()) {
+                AmongTheElements that = ofOnePlace(place, container);
+                read = read == null ? that : read.and(that);
+            }
+            return read == null ? OTHERWISE : read;
+        }
+
+        /**
+         * What a number read across the elements of the containers {@code run}, outermost first,
+         * is read off as an element of {@code container} sees it: the element alone where those
+         * containers are inside it, {@code acrossIt} where the container is one of them, and
+         * otherwise what the elements the run is read across are to the container — apart from
+         * it, holding it, or neither shown.
+         */
+        private static AmongTheElements ofARun(List<TermPath> run, TermPath container,
+                                               AmongTheElements acrossIt) {
+            if (run.getFirst().toTheElementsOf(container) == TermPath.ToTheElements.INSIDE_ONE) {
+                return IT_ALONE;
+            }
+            if (run.stream().anyMatch(each -> each.standsAtTheSamePlaceOnEveryRow(container))) {
+                return acrossIt;
+            }
+            return switch (run.getLast().element().toTheElementsOf(container)) {
+                case APART -> NONE_OF_THEM;
+                case HOLDING_THEM -> new AllOfThem(List.of());
+                case INSIDE_ONE, NOT_SHOWN -> OTHERWISE;
+            };
+        }
     }
 
     /**
@@ -1568,24 +2805,27 @@ public sealed interface NumericTerm
      */
     default NumberAt.OfWhatNumber atItsPlace() {
         return switch (this) {
-            case ValueOf _ -> new NumberAt.OfWhatNumber.OfItsOwnValue();
+            case ValueOf _ -> NumberAt.OfWhatNumber.OWN_VALUE;
             case TakenOf taken -> new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
                     taken.operation(), taken.arguments(), taken.transformation());
             case CodePointClassCount count ->
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted(),
                             count.through());
-            case CodePointValueSum _ -> new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
-            case Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
-            case OccurrencesOfItsValue occurrences ->
-                    new NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer(
-                            occurrences.selection() == null ? null
-                                    : occurrences.selection().key());
+            case CodePointValueSum _ -> NumberAt.OfWhatNumber.WHAT_ITS_CODE_POINTS_COME_TO;
+            case CodePointAt at -> new NumberAt.OfWhatNumber.OfTheCodePointAt(at.index());
+            case WholeUnitsOf units ->
+                    new NumberAt.OfWhatNumber.OfTheWholeUnitsOf(units.operation());
+            case Multiplicity _ -> NumberAt.OfWhatNumber.MULTIPLICITY;
+            // Which values are counted, where a statement keeps some of them, is the statement's
+            // and not the place's: it is named by the term itself.
+            case OccurrencesOfItsValue occurrences -> occurrences.selection() == null
+                    ? NumberAt.OfWhatNumber.OCCURRENCES_IN_EVERY_CONTAINER : null;
             // The key by the whole place it stands at: what a rule calls a place is relative to the
             // value it is a position of, and two parameters are both called the value.
             case OccurrencesOfAKey asked ->
                     new NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey(asked.key().discriminated());
             case ExtremeOfItsKey extreme -> new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(
-                    extreme.extreme(), extreme.keyField().fields());
+                    extreme.extreme(), extreme.keyField().fields(), extreme.through());
             // The operation and the values at the place, where the values are what stands there.
             // What a walk computed of each element, and which nodes of a tree a container is read
             // in, are not said by the place the run is read from.
@@ -1593,12 +2833,16 @@ public sealed interface NumericTerm
                 case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _ ->
                         new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(over.operation(),
                                 TakenArguments.NONE, ValueTransformation.NONE);
-                case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _ -> null;
+                case RunSource.ComputedOccurrences _, RunSource.ReachableNodes _,
+                     RunSource.JoinedOccurrences _, RunSource.SearchedLine _ -> null;
             };
             // What each element contributes is a number made of it, which the place does not say
             // even where it reads one field: the field read as another kind of number is another
             // number at the same place.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
+            // Made of the numbers of two forms, which no place and kind of number say apart from
+            // another product: it is named by the term itself.
+            case ProductOf _ -> null;
         };
     }
 
@@ -1629,6 +2873,12 @@ public sealed interface NumericTerm
             case CodePointClassCount count ->
                     CodePointClassCount.of(other, count.counted(), count.through(), at, inners);
             case CodePointValueSum _ -> CodePointValueSum.of(other, at, inners);
+            case CodePointAt point -> CodePointAt.of(other, point.index(), at, inners);
+            // The value it counts is of the type the operation counts, which is all that moving
+            // asks: the order it is counted on was settled when the term was made.
+            case WholeUnitsOf units -> at != null && DefaultBoundOperationFacts.get()
+                    .wholeUnitsCountedOn(units.operation()).equals(TypeOps.base(at, inners))
+                    ? new WholeUnitsOf(units.operation(), other, units.image, units.fills) : null;
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
@@ -1643,6 +2893,8 @@ public sealed interface NumericTerm
             case OccurrencesOfAKey _ -> null;
             // Gathered over a run, which a place moved alone is another one of.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> null;
+            // Made of places, and a place moved alone is one factor's of the two.
+            case ProductOf _ -> null;
         };
     }
 
@@ -1673,7 +2925,8 @@ public sealed interface NumericTerm
             // the last date, so its year is never the last year, whatever the operation answers of
             // any date.
             case TakenOf taken -> taken.whatTheOperationStates()
-                    .meet(taken.takenAs().reachedFrom(taken.transformation()));
+                    .meet(taken.takenAs().reachedFrom(taken.transformation(),
+                            NumericDomain.Bounds.OPEN));
             // A count of some of a string's code points is never negative, as how many it holds is
             // not. What it is at most is the string's own length, which is another number of the
             // same place and is held where the two are realized together.
@@ -1683,6 +2936,13 @@ public sealed interface NumericTerm
             // none comes to nought.
             case CodePointValueSum _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+            // A scalar value, which is from nought to the last there is.
+            case CodePointAt _ -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    Endpoint.inclusive(Count.of(Character.MAX_CODE_POINT)));
+            // The steps some value of the position's type falls in, which is all of the answer's
+            // order or a part of it, and open where that was not worked out.
+            case WholeUnitsOf steps -> steps.image == null ? NumericDomain.Bounds.OPEN
+                    : steps.image;
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
@@ -1698,6 +2958,8 @@ public sealed interface NumericTerm
             // they are bounded by is what the elements' rules guarantee, which is a reading of
             // the run and not of the term.
             case GatheredUnderItsKey _, GatheredUnderAKey _ -> NumericDomain.Bounds.OPEN;
+            // What two forms come to multiplied is not bounded by the form of either alone.
+            case ProductOf _ -> NumericDomain.Bounds.OPEN;
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it
@@ -1708,6 +2970,18 @@ public sealed interface NumericTerm
                     DefaultBoundOperationFacts.get().boundsOnTheResult(over.operation()),
                     ConstantArguments.none());
         };
+    }
+
+    /**
+     * What this term's values can be: {@link #intrinsicBounds} and what the language can hold
+     * ({@link RepresentationBounds}).
+     *
+     * <p>For asking whether a value can stand, and by {@link RepresentationBounds#ofAForm} to weigh
+     * several terms. Not for what a position is divided into: its classes and the ends of its runs
+     * are {@link #intrinsicBounds}, since the longest string is no distinction a model made.
+     */
+    default NumericDomain.Bounds reachBounds() {
+        return intrinsicBounds().meet(RepresentationBounds.of(this));
     }
 
     /** Whether {@code place} is reached from an element of {@code container} by fields alone, and

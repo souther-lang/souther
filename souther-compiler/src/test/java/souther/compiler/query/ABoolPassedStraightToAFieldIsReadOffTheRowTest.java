@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
@@ -176,9 +177,7 @@ class ABoolPassedStraightToAFieldIsReadOffTheRowTest {
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return compilation;
     }
 }

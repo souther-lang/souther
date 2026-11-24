@@ -8,7 +8,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.partition.CompositionBudget;
+import souther.compiler.observe.Figure;
+import souther.compiler.values.Operand;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,8 +71,8 @@ public final class AnswerAsAnInput {
         // a count made of the same statements. So every count is written out first, all of them
         // held to one figure.
         return switch (CountsWrittenOut.of(stated)) {
-            case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
-                    new Remade.PastAFigure(figure);
+            case CountsWrittenOut.PastAFigure(var stoppedAt) ->
+                    new Remade.PastAFigure(stoppedAt);
             case CountsWrittenOut.Written(Proposition written) -> {
                 Proposition remade = reading.proposition(written);
                 yield remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
@@ -155,6 +156,7 @@ public final class AnswerAsAnInput {
                     positive, Proposition::onAnApplication);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches what a row is held to written out as its choices: " + stated);
+            case Proposition.OfTheWays ways -> ofTheRow(ways.written(), pinned, positive);
             // An element of a container of the input. Where no element may meet it, every element
             // still asked the rest is held at the value, which the answer was composed to fail at.
             case Proposition.Some some when !(some.container()
@@ -169,9 +171,12 @@ public final class AnswerAsAnInput {
             // of it is the answer's to meet.
             case Proposition.Compared _, Proposition.Some _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.SomeReachable _ -> heldAt(inputNumbersIn(stated), pinned, positive);
+                 Proposition.StringInside _,
+                 Proposition.SomeReachable _ ->
+                    heldAt(inputNumbersIn(stated), pinned, positive);
+            // A statement of the input alone is about no answer, and was returned above.
             case Proposition.Always _, Proposition.Unread _, Proposition.LastToHold _,
-                 Proposition.Carried _ -> stated;
+                 Proposition.Carried _, Proposition.InTheStrings _ -> stated;
         };
     }
 
@@ -247,7 +252,7 @@ public final class AnswerAsAnInput {
          * are past {@code figure} ({@link CountsWrittenOut}); what the rest of it is about was not
          * looked at past it.
          */
-        record PastAFigure(CompositionBudget figure) implements Remade {
+        record PastAFigure(Figure.Budget figure) implements Remade {
 
             public PastAFigure {
                 Objects.requireNonNull(figure, "a statement not remade stopped at some figure");
@@ -330,7 +335,7 @@ public final class AnswerAsAnInput {
         return switch (stated) {
             case Proposition.Always always -> always;
             case Proposition.Unread unread -> unread;
-            case Proposition.Compared(Relation relation, boolean holds, var _) -> {
+            case Proposition.Compared(Relation relation, boolean holds, var _, var _) -> {
                 if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form,
                         var rel))) {
                     yield null;
@@ -365,6 +370,11 @@ public final class AnswerAsAnInput {
                 DecisionSubject at = subject(of);
                 yield at == null ? null : new Proposition.Present(at, holds);
             }
+            // About a position of the input and of no answer, so it is the row's and was set aside
+            // above.
+            case Proposition.InTheStrings _ -> throw new IllegalStateException(
+                    "a statement of the input alone is the row's, and is not read as the answer's: "
+                            + stated);
             // Which element of a list the input holds is the last of its key is the row's ({@link
             // #isTheRows}); which element of a list the answer holds is, is the answer's to meet.
             case Proposition.LastToHold(DecisionSubject container, DecisionSubject position,
@@ -374,13 +384,14 @@ public final class AnswerAsAnInput {
                 yield in == null || by == null ? null
                         : new Proposition.LastToHold(in, by, holds);
             }
-            // A search is read from a node of the input, and of no answer.
-            case Proposition.SomeReachable _ -> null;
+            // A search is read from a node of the input, and of no answer; neither is a string
+            // inside another, whose strings are values of the input.
+            case Proposition.SomeReachable _, Proposition.StringInside _ -> null;
             case Proposition.Carried carried -> throw carried.handedToAReader();
-            case Proposition.SameValue(DecisionSubject one, DecisionSubject other,
+            case Proposition.SameValue(DecisionSubject one, Operand<DecisionSubject> other,
                                        boolean holds, var _) -> {
                 DecisionSubject left = subject(one);
-                DecisionSubject right = subject(other);
+                Operand<DecisionSubject> right = other.placedAs(this::subject);
                 yield left == null || right == null ? null
                         : new Proposition.SameValue(left, right, holds);
             }
@@ -406,6 +417,7 @@ public final class AnswerAsAnInput {
                 List<Proposition> each = propositions(applications.each());
                 yield each == null ? null : Proposition.onAnApplication(each);
             }
+            case Proposition.OfTheWays ways -> proposition(ways.written());
             // What a count is about is what its statements are, which its choices name and no
             // more: asked only that, nothing writes them out. Remade, it reaches here written out
             // ({@link #of}).
@@ -456,10 +468,12 @@ public final class AnswerAsAnInput {
         return switch (stated) {
             case Proposition.Always _, Proposition.Unread _, Proposition.Carried _ -> false;
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _,
+                 Proposition.LastToHold _,
                  Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
-                 Proposition.WhereItAnswers _ ->
+                 Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
                     !Proposition.aboutAnAnswer(stated)
                             && !Proposition.leavesSomethingUnread(stated);
         };
@@ -493,7 +507,19 @@ public final class AnswerAsAnInput {
             return null;
         }
         answers.add(answer.answered());
-        return new DecisionSubject.AnInput(new TermPath(head, answer.steps()));
+        return new DecisionSubject.AnInput(TermPath.of(head, answer.steps()));
+    }
+
+    /** {@code of} at the input standing for the answer, or null where it is no place of an
+     *  answer: a value a case chooses the place of is read off the input's own elements. */
+    private Quantity.TheValue value(Quantity.TheValue of) {
+        return switch (of) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject at) -> {
+                DecisionSubject standing = subject(at);
+                yield standing == null ? null : new Quantity.TheValue.AtAPlace(standing);
+            }
+            case Quantity.TheValue.ChosenByCase _ -> null;
+        };
     }
 
     /**
@@ -508,7 +534,7 @@ public final class AnswerAsAnInput {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         ExactRatio constant = form.constant();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 ExactRatio value = pinned.get(term);
                 if (value != null) {
                     ExactRatio before = constant;
@@ -572,11 +598,11 @@ public final class AnswerAsAnInput {
             case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer at) -> {
                 answers.add(at.answered());
                 yield new DecisionAtom.OfTheInput(
-                        new NumericTerm.ValueOf(new TermPath(head, at.steps())));
+                        new NumericTerm.ValueOf(TermPath.of(head, at.steps())));
             }
             case DecisionAtom.TakenOfAnAnswer taken -> {
                 answers.add(taken.of().answered());
-                TermPath place = new TermPath(head, taken.of().steps());
+                TermPath place = TermPath.of(head, taken.of().steps());
                 NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
                         : NumericTerm.TakenOf.asItStands(taken.operation(), place,
                                 taken.arguments(), taken.at(), inners, symbols);
@@ -584,9 +610,9 @@ public final class AnswerAsAnInput {
             }
             case DecisionAtom.ComputedOverAnAnswer computed -> {
                 answers.add(computed.list().answered());
-                TermPath place = new TermPath(head, computed.list().steps());
+                TermPath place = TermPath.of(head, computed.list().steps());
                 NumericTerm term = hasNoReadingToTakeTheNumberBy() ? new NumericTerm.ValueOf(place)
-                        : InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
+                        : InputNumber.overWhatWasComputed(computed.operation(), place,
                                 computed.computation(), computed.each(), computed.direction(),
                                 inners, symbols);
                 yield term == null ? null : new DecisionAtom.OfTheInput(term);
@@ -597,16 +623,32 @@ public final class AnswerAsAnInput {
                 yield container == null || each == null ? null
                         : new Quantity.HowManyMeet(container, each);
             }
+            case Quantity.HowManyMeetAcross count -> {
+                DecisionSubject container = subject(count.container());
+                DecisionSubject inner = subject(count.inner());
+                Proposition each = proposition(count.ofTheElement());
+                yield container == null || inner == null || each == null
+                        || !Quantity.HowManyMeetAcross.insideEach(container, inner) ? null
+                        : new Quantity.HowManyMeetAcross(container, inner, each);
+            }
             case Quantity.HowManyHold held -> {
                 List<Proposition> each = propositions(held.each());
                 yield each == null ? null : new Quantity.HowManyHold(each);
             }
             case Quantity.HowManyDifferent different -> {
                 DecisionSubject container = subject(different.container());
-                DecisionSubject each = subject(different.ofTheElement());
+                Quantity.TheValue each = value(different.ofTheElement());
                 yield container == null || each == null
                         || !Quantity.HowManyDifferent.oneOfEach(container, each) ? null
                         : new Quantity.HowManyDifferent(container, each);
+            }
+            case Quantity.HowManyDifferentMeet different -> {
+                DecisionSubject container = subject(different.container());
+                Quantity.TheValue each = value(different.ofTheElement());
+                Proposition stated = proposition(different.meeting().statement());
+                yield container == null || each == null || stated == null
+                        ? null : Quantity.HowManyDifferentMeet.of(container, each,
+                                different.meeting().askedAgainOf(stated));
             }
             case Quantity.HowManyDifferentAcross across -> {
                 DecisionSubject container = subject(across.container());
@@ -629,8 +671,9 @@ public final class AnswerAsAnInput {
                         : new Quantity.SumOver(container, each.coefs().keySet().iterator().next());
             }
             case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
-            case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.APieceOf _,
+            case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _, Quantity.OfACall _,
+                 Quantity.CodePointsOfAPiece _, Quantity.APieceOf _, Quantity.ThePieceAt _,
                  Quantity.IsAmongThePieces _, Quantity.RemainderOfADividend _,
                  Quantity.RemainderByAnInput _, Quantity.ProductOfTwo _,
                  Quantity.WhatAnOperationAnswers _, Quantity.HowManyDifferentBelow _ -> null;

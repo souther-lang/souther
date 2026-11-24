@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
@@ -11,7 +12,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.types.TypeSymbols;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import org.junit.jupiter.api.Test;
 
@@ -47,9 +48,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * module in each of the ways a class can: calling a behavior by name, building a stage, holding a
  * dependency, reading a field, reading a published value, taking an answer apart through a bridge
  * case.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
 
     private static final List<String> REACHING_EVERY_WAY = List.of("""
@@ -87,49 +92,60 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
     void everyClassOfAnotherModuleNamedIsOfADeclarationRecordedAsRead() {
         List<String> unrecorded = new ArrayList<>();
         int checked = 0;
-        Compilation fixture = Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of()));
-        List<Compilation> compilations = new ArrayList<>(List.of(fixture));
-        compilations.addAll(RepositoryModels.all());
-        for (Compilation compilation : compilations) {
-            Map<String, Map<String, ClassFileImage>> byModule = new LinkedHashMap<>();
-            Map<String, ClassFileImage> all = new LinkedHashMap<>();
-            for (String module : compilation.modules()) {
-                Map<String, ClassFileImage> classes =
-                        compilation.db().ask(new Output.Classes(module)).value();
-                if (classes != null) {
-                    byModule.put(module, classes);
-                    all.putAll(classes);
-                }
-            }
-            if (compilation == fixture) {
-                assertEquals(Set.of("lib.b", "lib.c"), byModule.keySet(),
-                        () -> "the fixture compiles, or it reaches nothing: "
-                                + compilation.db().allReports().stream()
-                                        .map(f -> f.report().diagnostic().code() + " "
-                                                + f.report().diagnostic().said())
-                                        .toList());
-            }
-            PublishedClasses published = ModulePath.of(all).declarations();
-            for (Map.Entry<String, Map<String, ClassFileImage>> module : byModule.entrySet()) {
-                Set<String> covered = covered(module.getKey(), published);
-                for (Map.Entry<String, ClassFileImage> clazz : module.getValue().entrySet()) {
-                    for (String named : classesNamed(clazz.getValue())) {
-                        String owner = moduleOf(named, byModule.keySet());
-                        if (owner == null || owner.equals(module.getKey())) {
-                            continue;
-                        }
-                        checked++;
-                        if (!covered.contains(named)) {
-                            unrecorded.add(clazz.getKey() + " names " + named);
-                        }
-                    }
-                }
-            }
+        Compilation fixture = ACompiledModel.compiles(
+                Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
+        checked += unrecordedIn(fixture, true, unrecorded);
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            checked += unrecordedIn(model.answered(), false, unrecorded);
         }
 
         assertTrue(checked > 0, "no class named a class of another module, so nothing was held");
         assertEquals(List.of(), unrecorded,
                 "a class names a class of another module no recorded declaration accounts for");
+    }
+
+    /**
+     * What {@code compilation} names of another module that no recorded declaration accounts for,
+     * added to {@code unrecorded}, and how many classes it named of another module.
+     */
+    private static int unrecordedIn(Compilation compilation, boolean fixture,
+                                    List<String> unrecorded) {
+        int checked = 0;
+        Map<String, Map<String, ClassFileImage>> byModule = new LinkedHashMap<>();
+        Map<String, ClassFileImage> all = new LinkedHashMap<>();
+        for (String module : compilation.modules()) {
+            Map<String, ClassFileImage> classes =
+                    compilation.db().ask(new Output.Classes(module)).value();
+            if (classes != null) {
+                byModule.put(module, classes);
+                all.putAll(classes);
+            }
+        }
+        if (fixture) {
+            assertEquals(Set.of("lib.b", "lib.c"), byModule.keySet(),
+                    () -> "the fixture compiles, or it reaches nothing: "
+                            + compilation.db().allReports().stream()
+                                    .map(f -> f.report().diagnostic().code() + " "
+                                            + f.report().diagnostic().said())
+                                    .toList());
+        }
+        PublishedClasses published = ModulePath.of(all).declarations();
+        for (Map.Entry<String, Map<String, ClassFileImage>> module : byModule.entrySet()) {
+            Set<String> covered = covered(module.getKey(), published);
+            for (Map.Entry<String, ClassFileImage> clazz : module.getValue().entrySet()) {
+                for (String named : classesNamed(clazz.getValue())) {
+                    String owner = moduleOf(named, byModule.keySet());
+                    if (owner == null || owner.equals(module.getKey())) {
+                        continue;
+                    }
+                    checked++;
+                    if (!covered.contains(named)) {
+                        unrecorded.add(clazz.getKey() + " names " + named);
+                    }
+                }
+            }
+        }
+        return checked;
     }
 
     /**

@@ -73,7 +73,11 @@ public record ObligationAssessment(Optional<Criterion> criterion, ObligationCove
             // there — which is what "no row names this behavior" means and what a reason added
             // beside it would have to say for itself.
             case ObligationCoverage.NotMeasured it -> !it.why().mayHideARow();
-            case ObligationCoverage.Witnessed _, ObligationCoverage.Undecided _ -> false;
+            // Undecided because a reading no row can settle it through held it open, and nothing
+            // else: no row that is written hides there, so a row composed at a reading that is
+            // tied to the point is work for an author and not a duplicate of any.
+            case ObligationCoverage.Undecided it -> it.heldOpenOnlyByUntiedReadings();
+            case ObligationCoverage.Witnessed _ -> false;
         };
     }
 

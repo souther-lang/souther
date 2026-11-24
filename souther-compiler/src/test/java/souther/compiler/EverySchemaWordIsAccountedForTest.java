@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.Placement;
+import souther.compiler.execute.RunStop;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.WrittenOwner;
 
@@ -9,6 +10,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.meaning.CaseExpansion;
+import souther.compiler.meaning.NumericallyConsistentWays;
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RunSensitivity;
@@ -31,6 +38,9 @@ import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
+import souther.compiler.query.Weakening;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -42,8 +52,20 @@ import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
+import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TraversalDirection;
+import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
+import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.WhyNotJoined;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -65,6 +87,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -311,6 +335,75 @@ class EverySchemaWordIsAccountedForTest {
         return words;
     }
 
+    private static Set<String> meaningUnreadWords() {
+        Set<String> out = new LinkedHashSet<>();
+        for (Class<?> each : WhyUnread.class.getPermittedSubclasses()) {
+            for (Object reason : everyOf(each)) {
+                out.add(AdequacyReport.meaningUnreadWord((WhyUnread) reason));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A value of the record {@code type} for each constant of each enum it carries, in every
+     * combination, and one value of whatever else it carries: the enums are where a reason's word
+     * may turn on what it carries.
+     */
+    private static List<Object> everyOf(Class<?> type) {
+        RecordComponent[] parts = type.getRecordComponents();
+        List<List<Object>> made = new ArrayList<>(List.of(List.of()));
+        for (RecordComponent part : parts) {
+            List<List<Object>> longer = new ArrayList<>();
+            for (List<Object> before : made) {
+                for (Object one : choicesFor(part.getType())) {
+                    List<Object> with = new ArrayList<>(before);
+                    with.add(one);
+                    longer.add(with);
+                }
+            }
+            made = longer;
+        }
+        List<Object> out = new ArrayList<>();
+        try {
+            Constructor<?> canonical = type.getDeclaredConstructor(Arrays.stream(parts)
+                    .map(RecordComponent::getType).toArray(Class<?>[]::new));
+            canonical.setAccessible(true);
+            for (List<Object> args : made) {
+                out.add(canonical.newInstance(args.toArray()));
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(type.getName() + " is not made of what it carries", e);
+        }
+        return out;
+    }
+
+    /** What a record component of {@code type} is given, refusing a type nothing here makes
+     *  rather than leaving the reason carrying it out of the words. */
+    private static List<Object> choicesFor(Class<?> type) {
+        if (type.isEnum()) {
+            return List.of(type.getEnumConstants());
+        }
+        if (type == ValueName.Stdlib.class) {
+            return List.of(ValueName.Stdlib.operation("Date", "addMonths"));
+        }
+        if (type == Clause.Ref.class) {
+            return List.of(new Clause.Ref(new Clause.Id(TypeSymbols.declared(
+                    new TypeKey("m", "T")), 0), Optional.empty()));
+        }
+        if (type == Figure.Budget.class) {
+            return List.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.reached());
+        }
+        throw new IllegalStateException("nothing here makes a " + type.getName()
+                + ", so the word of a reason carrying one is held to nothing");
+    }
+
+    private static Set<String> outsideDomainWords() {
+        return Arrays.stream(WhyNotTaken.DomainLimit.values())
+                .map(AdequacyReport::outsideDomainWord)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     private static Set<String> requirementBecauseWords() {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
@@ -413,13 +506,35 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // Why whether a run stops in an operation of a rule is not resolved.
+            new Vocabulary("findings[].unresolved[].reason",
+                    List.of("$defs", "findings", "items", "properties", "unresolved", "items",
+                            "properties", "reason"),
+                    WhyAStopIsNotShown.class),
+            // Why whether a run on the way to a rule stops at a construction is not resolved.
+            new Vocabulary("findings[].asks[].reason",
+                    List.of("$defs", "findings", "items", "properties", "asks", "items",
+                            "properties", "reason"),
+                    WhyAConstructionStopIsNotShown.class),
             // What a construct's copy was made by, and how a build's region is named: which of the
             // two a step is, which way its region is told, and which of a construct's regions it is.
             new Vocabulary("through[].kind",
-                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
-                            "properties", "construct", "properties", "through", "items",
+                    List.of("$defs", "constructOccurrence", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
+            // Which kind of choice made parts a line's case was taken apart on, why what made them
+            // was not read, and why a count of the ways no number refutes was given up.
+            new Vocabulary("caseExpansion.factors[].choice",
+                    List.of("$defs", "caseExpansion", "properties", "factors", "items", "oneOf",
+                            "0", "properties", "choice"),
+                    CaseExpansion.ChoiceKind.class),
+            new Vocabulary("caseExpansion.notAttributed",
+                    List.of("$defs", "caseExpansion", "properties", "notAttributed"),
+                    CaseExpansion.WhyNotAttributed.class),
+            new Vocabulary("caseExpansion.numericallyConsistentWays.notCounted",
+                    List.of("$defs", "caseExpansion", "properties", "numericallyConsistentWays",
+                            "properties", "notCounted"),
+                    NumericallyConsistentWays.WhyNotCounted.class),
             // Which kind of place a proof that nothing arrives was about, where a row went there.
             new Vocabulary("reachProof.kind",
                     List.of("$defs", "reachProof", "properties", "kind"),
@@ -447,7 +562,8 @@ class EverySchemaWordIsAccountedForTest {
             // the writer spelled its words as literals and nothing could be pointed at them.
             new Vocabulary("keptOpenBy[].kind",
                     List.of("$defs", "adequacyOpening", "properties", "kind"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated",
+                            "lines_beside_a_border_not_tried"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class,
                     souther.compiler.publish.AdequacyOpeningWord.class),
@@ -467,6 +583,26 @@ class EverySchemaWordIsAccountedForTest {
             // inside the compiler is not a change to the contract, and would be one if this read
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
+            // Why the meaning of a condition nothing read was not read, as the writer spells every
+            // reason there is, made of each case of what it carries. Two words say what a body
+            // read at a call turned on, which nothing reads: a call of a behavior is a value a
+            // run works out, and `called_body_not_read` is the one word for what it answers.
+            // They are retired rather than gone, since reports of this version carry them.
+            new Vocabulary("notRead[].reason, meaning_unread",
+                    List.of("$defs", "conditionNotReadReason", "allOf", "0", "then",
+                            "properties", "reason"),
+                    List.of(WhyUnread.class), meaningUnreadWords(),
+                    Set.of("called_body_asks_a_dependency", "called_body_reaches_itself")),
+            // Which domain a condition nothing read was outside of, as the writer spells each
+            // limit there is, so a limit added to the reading is one the schema is given a word
+            // for. Two words name limits nothing meets any more, and a third is the one a limit
+            // was written as in a released document before its word was changed.
+            new Vocabulary("notRead[].reason, outside_domain",
+                    List.of("$defs", "conditionNotReadReason", "allOf", "1", "then",
+                            "properties", "reason"),
+                    List.of(WhyNotTaken.DomainLimit.class), outsideDomainWords(),
+                    Set.of("size_nothing_measures", "position_the_reading_holds_no_place_for",
+                            "path_knows_no_cases")),
             // Which kind of decision a combination is of. Written as the words rather than as the
             // reading's arms, for the reason `status` is: the document promises what the writer
             // writes, and a reading renaming one of its own cases is not a change to the contract.
@@ -518,10 +654,35 @@ class EverySchemaWordIsAccountedForTest {
                             .collect(Collectors.toSet()),
                     Set.of()),
             // And why one rewrite was left open, which is the entry's own word.
+            // `step_not_expanded` is a fold whose step was handed over as a value, which the
+            // compiler now runs rewritten like any other. Retired rather than gone: reports of
+            // this version were written carrying it.
             new Vocabulary("replacement.obligations[].undecidedBecause",
                     List.of("$defs", "replacement", "properties", "obligations", "items",
                             "properties", "undecidedBecause", "items"),
+                    Set.of("step_not_expanded"),
                     ReplacementEvidence.Undecided.Why.class),
+            // Which kind of case a statement draws, and which side of it: the steps of a search and
+            // the ways round the order of a key, which one field says together.
+            new Vocabulary("decision.statementsNoRowIsIn[].kind",
+                    List.of("$defs", "decision", "properties", "statementsNoRowIsIn", "items",
+                            "properties", "kind"),
+                    CasesTheRowsTook.Kind.class),
+            new Vocabulary("decision.statementsNoRowIsIn[].cases[]",
+                    List.of("$defs", "decision", "properties", "statementsNoRowIsIn", "items",
+                            "properties", "cases", "items"),
+                    CaseOfAStatement.Step.class, CaseOfAStatement.Way.class),
+            // Why a meeting of the body's decisions could not be joined to what a run records.
+            new Vocabulary("interaction.meetingsNotJoined[].why",
+                    List.of("$defs", "interaction", "properties", "meetingsNotJoined", "items",
+                            "properties", "why"),
+                    WhyNotJoined.class),
+            // Why a weight of a derived value is undecided, as far as the weights' own reading
+            // says.
+            new Vocabulary("partition.weights[].undecidedBecause",
+                    List.of("$defs", "partition", "properties", "weights", "items",
+                            "properties", "undecidedBecause", "items"),
+                    Weakening.AWeightNotDecided.Why.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an
             // answer added to that vocabulary is one somebody gives a word rather than one a
@@ -599,6 +760,11 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "synthesisShortfalls", "items", "properties", "causes",
                             "items", "properties", "limit"),
                     ReportedShortfall.Limit.class),
+            // Which of the language's ends a run of a row stopped at, in the one definition every
+            // entry saying where runs stopped publishes.
+            new Vocabulary("runsStopped[].at",
+                    List.of("$defs", "runsStopped", "items", "properties", "at"),
+                    RunStop.Kind.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
@@ -662,6 +828,10 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "behavior", "properties", "rowObligations", "items",
                             "properties", "disposition"),
                     List.of(RowDisposition.class), rowDispositionWords(), Set.of()),
+            // Which end a walk whose number turns on the order was handed the elements from,
+            // spelled by the writer of every number that says it.
+            new Vocabulary("handed", List.of("$defs", "handed"),
+                    List.of(TraversalDirection.class), handedWords(), Set.of()),
             new Vocabulary("branch.obligations[].notCountedBecause",
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "notCountedBecause"),
@@ -796,8 +966,11 @@ class EverySchemaWordIsAccountedForTest {
             // `row_did_not_finish` said in this vocabulary what `row_undecided` says in the
             // observation codes, and named the row without its source, so two rows of one behavior
             // were one word. Retired rather than gone, for the reason `probe_mapping_lost` is.
+            // `lines_beside_a_border_not_tried` said a rule naming a value was held against no line
+            // beside it; every rule that reads as a line now is, so nothing writes it.
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated",
+                            "lines_beside_a_border_not_tried"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
@@ -953,6 +1126,13 @@ class EverySchemaWordIsAccountedForTest {
     /** The dispositions a document may name, spelled by the one writer of the field. */
     private static Set<String> dispositionWords() {
         return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Which end a walk was handed its elements from, spelled by the one writer of the field. */
+    private static Set<String> handedWords() {
+        return Arrays.stream(TraversalDirection.values())
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
@@ -1127,23 +1307,32 @@ class EverySchemaWordIsAccountedForTest {
                 allowedAt(schema(), List.of("$defs", "behavior", "properties", "implementation")));
     }
 
-    /** Where a choice by position is said in a document, the way it compares the position. */
-    private static final List<String> A_POSITION_RELATION = List.of("$defs", "elementComputation",
+    /** Where a choice by a comparison of the element's numbers is said in a document, the way it
+     *  compares them. */
+    private static final List<String> A_COMPARED_RELATION = List.of("$defs", "elementComputation",
             "oneOf", "2", "properties", "relation");
 
+    /** Where a choice by position is said in a document, the way it compares the position. */
+    private static final List<String> A_POSITION_RELATION = List.of("$defs", "elementComputation",
+            "oneOf", "3", "properties", "relation");
+
     /**
-     * How a choice by an element's position compares it, which the schema and the relations spell
-     * alike: the operator the language writes each with.
+     * How a choice by a comparison of the element compares, by its numbers or by its position,
+     * which the schema and the relations spell alike: the operator the language writes each with.
      *
      * <p>Read off {@link Rel#values()} for the reason the states of a body are read off theirs.
      */
     @Test
     void theWordsAPositionIsComparedByAreTheRelationsThereAre() {
-        assertEquals(Arrays.stream(Rel.values()).map(Rel::written).collect(Collectors.toSet()),
-                allowedAt(schema(), A_POSITION_RELATION));
-        assertEquals("position", schema().at("/" + String.join("/", A_POSITION_RELATION)
-                .replace("/relation", "/kind")).get("const").asString(),
-                "the branch read is the one a choice by position is written in");
+        Map<List<String>, String> written = Map.of(A_COMPARED_RELATION, "compared",
+                A_POSITION_RELATION, "position");
+        written.forEach((at, kind) -> {
+            assertEquals(Arrays.stream(Rel.values()).map(Rel::written).collect(Collectors.toSet()),
+                    allowedAt(schema(), at));
+            assertEquals(kind, schema().at("/" + String.join("/", at)
+                    .replace("/relation", "/kind")).get("const").asString(),
+                    "the branch read is the one a choice " + kind + " is written in");
+        });
     }
 
     /**
@@ -1241,7 +1430,22 @@ class EverySchemaWordIsAccountedForTest {
                         souther.compiler.inputs.TermPath.of("x"))))));
         out.add(AdequacyReport.questionWord(boundaryUndetermined()));
         out.add(AdequacyReport.questionWord(unclassified()));
+        out.add(AdequacyReport.questionWord(regionUndetermined()));
         return out;
+    }
+
+    /** A rule whose classes of a position stand over some of its values, and the rest open. */
+    private static StandingQuestion regionUndetermined() {
+        return StandingQuestion.RegionUndetermined.of(
+                new RuleCitation.Written(
+                        new RuleRef.Comparison("f",
+                                new SourceConstructOrigin(
+                                        new WrittenOwner.Body("m", "b"), 0, 0,
+                                        SourceConstruct.IF)),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt()),
+                ModelOccurrences.NONE, FilingCoordinate.at(TermPath.of("x")),
+                BlockReason.RelationShownOverARegion.of(
+                        List.of(ValuesWithin.longerThan(ValueSet.ANY, 1L)), List.of()));
     }
 
     /** A rule read far enough to say it restricts the values, and no further. */
@@ -1564,16 +1768,24 @@ class EverySchemaWordIsAccountedForTest {
         // about it for the same reason.
         held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
                 + "/properties/standing");
+        // And where a position's weight in a derived value stands, written by a switch over the
+        // sealed standings.
+        held.add("/$defs/partition/properties/weights/items/properties/standing");
         // Which code points a count of a string is of, which end of a key's values a number
         // takes, and how the numbers of a key are gathered: each written by a switch over a
         // sealed type's arms for the same reason.
         held.add("/$defs/termId/oneOf/3/properties/class");
+        // The same classes, named where a relation leaves strings open for how many code points of
+        // one they hold: written by the one switch over the sealed classes.
+        held.add("/$defs/partition/properties/unanswered/items/properties/stopped/items"
+                + "/properties/leftOpen/properties/codePoints/items/properties/class");
         held.add("/$defs/termId/oneOf/5/properties/extreme");
         held.add("/$defs/termId/oneOf/6/properties/gathering");
         held.add("/$defs/termId/oneOf/7/properties/gathering");
         // How a choice by position compares it, held to the relations by
         // `theWordsAPositionIsComparedByAreTheRelationsThereAre`.
         held.add("/" + String.join("/", A_POSITION_RELATION));
+        held.add("/" + String.join("/", A_COMPARED_RELATION));
         // Why a condition nothing read was not, by kind and by the word within it. Written by a
         // switch over the sealed reasons and the enums under them, for the reason the two above
         // are, and held to the schema by the same validation of the corpus documents.
@@ -1584,10 +1796,28 @@ class EverySchemaWordIsAccountedForTest {
         // What kept a combination, by kind. Written by a switch over the sealed reasons, so an arm
         // added there does not compile without its word, and held to the schema by the same
         // validation of the corpus documents.
-        held.add("/$defs/whyKept/properties/reason");
-        // And which use of a function fell short, by kind. Written by a switch over the sealed
+        held.add("/$defs/whyKept/properties/reason");        // And which use of a function fell short, by kind. Written by a switch over the sealed
         // shortfalls, for the reason the one above is.
         held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
+        // Which threshold a point of a computation cut at several places is owed at, by kind.
+        // Written by a switch over the sealed thresholds, for the reason the ones above are.
+        held.add("/$defs/thresholdOfADerivedValue/properties/kind");
+        // How a form a construction asks of a run stands to a number, by relation. Written by a
+        // switch over the relations, so one added there does not compile without its word, and
+        // held to the schema by the same validation of the corpus documents.
+        held.add("/$defs/constructionAsked/oneOf/0/properties/is");
+        // What a behavior called is told of its body, by kind. Written by a switch over the
+        // sealed passages and the reasons a passage is left open, for the reason the ones above
+        // are.
+        held.add("/$defs/passageOfACall/properties/reason");
+        // What a place a run may stop at is, by kind: written by a switch over the sealed places,
+        // for the reason the one above is.
+        held.add("/$defs/stopPlace/properties/kind");
+        // Which reasons a stop not resolved names an operation under, and which rest on stops left
+        // untold: words of the reason's own enum, each held to what that enum says of itself by
+        // `theSchemaTakesAStopNotResolvedExactlyWhereItsTypeDoes`.
+        held.add("/$defs/findings/items/properties/unresolved/items/allOf/0/if/properties/reason");
+        held.add("/$defs/findings/items/properties/unresolved/items/allOf/1/if/properties/reason");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,
@@ -1623,7 +1853,7 @@ class EverySchemaWordIsAccountedForTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.withJvmExampleDeadlines(
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
 
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
                 .json(souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())));

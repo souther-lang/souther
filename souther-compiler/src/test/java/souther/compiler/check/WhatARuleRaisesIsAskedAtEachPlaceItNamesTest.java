@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -127,7 +129,7 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
 
     /** What the one clause of {@code Span} raises there. */
     private static Required raised() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
@@ -135,7 +137,7 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
         assertNotNull(symbols.declaredNode(named.key()), "no `Span` declared");
         Collection<Required> every = FieldDomains
                 .of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES)).required().values();
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).required().values();
         assertEquals(1, every.size(), "one clause, so one answer about what it raises");
         return every.iterator().next();
     }

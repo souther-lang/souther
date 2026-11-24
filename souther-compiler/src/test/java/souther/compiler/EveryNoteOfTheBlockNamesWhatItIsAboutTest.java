@@ -58,15 +58,13 @@ class EveryNoteOfTheBlockNamesWhatItIsAboutTest {
     }
 
     private static String block() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule(module)),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
     }
 }

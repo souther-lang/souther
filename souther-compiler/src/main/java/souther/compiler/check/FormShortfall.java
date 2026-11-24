@@ -21,14 +21,18 @@ import souther.compiler.inputs.RuleSite;
  * ({@link ReadingEvidence#decidedWhereTheArithmeticStopped}), since that is what says which
  * comparison it was; what is here is what a reader is told.
  *
- * @param site     where a reader goes about it, which is what the author wrote
+ * @param site     the comparison somebody wrote that the arithmetic stopped on, which is what an
+ *                 author's order of the parts is asked of
+ * @param sentTo   where a reader goes about it: the call the arithmetic stopped at, or the rule
+ *                 itself where that is no call its author wrote
  * @param why      what the arithmetic stopped on
  * @param position what was left with no reading of the part
  */
-record FormShortfall(RuleSite site, BlockReason.RuleReadingStopped why, FactSubject position) {
+record FormShortfall(RuleSite site, RuleSite sentTo, BlockReason.RuleReadingStopped why,
+                     FactSubject position) {
 
     FormShortfall {
-        if (site == null || why == null || position == null) {
+        if (site == null || sentTo == null || why == null || position == null) {
             throw new IllegalArgumentException(
                     "where the arithmetic stopped is about a comparison somebody wrote, and says"
                             + " what it stopped on and at which position");

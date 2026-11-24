@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -71,7 +72,7 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
         String guard = "List.all(x -> x > 5, [a, b])";
         assertTrue(metAt(guard, "> 5", "(9, 6)", "pick/b", "6"),
                 "a above five answers true, so the closure is applied to b");
-        assertFalse(metAt(guard, "> 5", "(0, 6)", "pick/b", "6"),
+        assertFalse(metAt(guard, "> 5", "(0, 6)", "Low", "pick/b", "6"),
                 "a at nought answers false, and nothing is applied to b");
     }
 
@@ -129,7 +130,8 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     void whatHoldsOnTheWayInsideTheClosureIsSaidOfEachApplication() {
         String guard = "List.any(x -> if x > b then x < 5 else false, [a])";
         assertTrue(metAt(guard, "< 5", "(4, 0)", "pick/a", "4"), "four is above nought");
-        assertFalse(metAt(guard, "< 5", "(4, 9)", "pick/a", "4"), "four is not above nine");
+        assertFalse(metAt(guard, "< 5", "(4, 9)", "Low", "pick/a", "4"),
+                "four is not above nine");
     }
 
     /**
@@ -214,10 +216,16 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
      */
     private static boolean metAt(String guard, String operator, String row, String axis,
                                  String against) {
+        return metAt(guard, operator, row, "High", axis, against);
+    }
+
+    /** As above, for a row whose answer is {@code answer}: the case the guard sends it to. */
+    private static boolean metAt(String guard, String operator, String row, String answer,
+                                 String axis, String against) {
         JsonNode report = reportOf(guard, """
                 example pick
-                    | "the row" : %s -> High
-                """.formatted(row));
+                    | "the row" : %s -> %s
+                """.formatted(row, answer));
         String rule = writtenAt(guard, operator);
         List<Boolean> met = new ArrayList<>();
         for (JsonNode obligation : obligationsOf(report, "comparison")) {
@@ -252,9 +260,7 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     }
 
     private static JsonNode reportOfSource(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         // An example whose answer is not the model's is still a row the model is run on, which is
         // all that is asked of it here. Named where they are written, so a comparison's
         // obligations are told from another's at the same point.

@@ -73,6 +73,111 @@ public sealed interface PredicateStatement {
     }
 
     /**
+     * A line the model draws across a number's values: the numbers at or below a written one, and
+     * those above it.
+     *
+     * <p>Its own arm because it is its own sentence, said as the comparison an author writes and
+     * not as an operation of the library, and because the number is the position's own and not a
+     * text: {@link Equalling} quotes what it holds.
+     *
+     * @param written the number the line is drawn at, as a source carries it
+     */
+    record AtMost(String written) implements PredicateStatement {
+
+        public AtMost {
+            if (written == null) {
+                throw new IllegalArgumentException("a line is drawn at some number");
+            }
+        }
+
+        @Override
+        public String saidOf(String subject) {
+            return subject + " <= " + written;
+        }
+
+        @Override
+        public String deniedOf(String subject) {
+            return subject + " > " + written;
+        }
+    }
+
+    /**
+     * That some value of another position is the value here: the strings an equality between two
+     * positions can hold at one of them, given what the other position may hold.
+     *
+     * <p>Its own arm because the rule is a relation and the class it makes is called by the
+     * partner it is relative to. A class of {@code code} that no value of {@code prefix} equals is
+     * not a class of strings that fail a predicate; which strings those are depends on the other
+     * position's declarations and on nothing the author wrote about this one.
+     *
+     * @param other what the model calls the other position
+     */
+    record CanBeTheValueOf(String other) implements PredicateStatement {
+
+        public CanBeTheValueOf {
+            if (other == null) {
+                throw new IllegalArgumentException("a relation is to some other position");
+            }
+        }
+
+        @Override
+        public String saidOf(String subject) {
+            return subject + " can be " + other;
+        }
+
+        @Override
+        public String deniedOf(String subject) {
+            return subject + " is never " + other;
+        }
+    }
+
+    /**
+     * What is asked of the pieces of the string at the position: that some of them, or every one,
+     * or none, is held to a predicate or is not.
+     *
+     * <p>Its own arm because the rule is about the pieces and the position holds the string they
+     * are of. Said as an operation applied to the position, a document would call the strings
+     * with such a piece by a predicate none of them was held to.
+     *
+     * @param inIt      whether a piece is asked to meet the predicate, and not to fail it
+     * @param someHolds whether it is some piece that is asked, and not none
+     * @param separator the code point the string is parted at
+     * @param operation what the model calls the predicate, as an author writes it
+     * @param written   the text the author wrote in it
+     * @param from      how many of the first pieces are not asked about
+     * @param until     the index the pieces asked about stop before, or negative where they run
+     *                  to the last
+     */
+    record OfThePieces(boolean inIt, boolean someHolds, int separator, String operation,
+                       String written, int from, int until) implements PredicateStatement {
+
+        public OfThePieces {
+            if (operation == null || written == null) {
+                throw new IllegalArgumentException("the pieces are held to some predicate");
+            }
+        }
+
+        @Override
+        public String saidOf(String subject) {
+            String pieces = "String.split(" + CstLexer.literalOf(new String(
+                    Character.toChars(separator))) + ", " + subject + ")";
+            if (from > 0) {
+                pieces = "List.drop(" + from + ", " + pieces + ")";
+            }
+            if (until >= 0) {
+                pieces = "List.take(" + (until - from) + ", " + pieces + ")";
+            }
+            String held = new Applying(operation, written).saidOf("piece");
+            if (inIt) {
+                return (someHolds ? "some piece of " : "no piece of ") + pieces + " satisfies "
+                        + held;
+            }
+            return (someHolds ? "some piece of " : "every piece of ") + pieces
+                    + (someHolds ? " fails " : " satisfies ") + held;
+        }
+    }
+
+    /**
      * The rule as it would be written about {@code subject}.
      *
      * <p>The subject is handed in because a class is about a position and the name a reader knows

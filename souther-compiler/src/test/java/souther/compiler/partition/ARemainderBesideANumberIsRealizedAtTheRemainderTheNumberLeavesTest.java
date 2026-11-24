@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
@@ -66,8 +68,8 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
                 NothingTheDeclarationsRefuse.at(path("x"), path("y"), path("z")));
 
         Realization.Found found = assertInstanceOf(Realization.Found.class, made);
-        Place x = found.fixing().get(RealizationTarget.of(term("x")));
-        Place y = found.fixing().get(RealizationTarget.of(term("y")));
+        Place x = found.fixing().get(RealizationTarget.ofATakenIn(term("x")));
+        Place y = found.fixing().get(RealizationTarget.ofATakenIn(term("y")));
         assertEquals(ExactRatio.of(100), Count.number(y).exactly());
         assertEquals(ExactAnswer.held(BigInteger.valueOf(100)),
                 Count.number(x).exactly().floor().map(whole -> whole.mod(DIVISOR)));
@@ -117,7 +119,8 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
         on.put(term("x"), Carrier.WHOLE);
         on.put(term("y"), Carrier.WHOLE);
         return new Standing.OfARemainderAndAForm(new LinearForm<>(ExactRatio.ZERO, dividend), on,
-                DIVISOR, new LinearForm<>(ExactRatio.ZERO,
+                DIVISOR, Standing.OfARemainderAndAForm.every(DIVISOR),
+                new LinearForm<>(ExactRatio.ZERO,
                         Map.of(term("z"), ExactRatio.ONE.negated())),
                 Map.of(term("z"), Carrier.WHOLE), LevelSpace.steppingBy(ExactRatio.ONE),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
@@ -130,6 +133,7 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
         return new Standing.OfARemainderAndAForm(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(term("x"), ExactRatio.ONE)),
                 Map.of(term("x"), Carrier.WHOLE), DIVISOR,
+                Standing.OfARemainderAndAForm.every(DIVISOR),
                 new LinearForm<>(ExactRatio.ZERO, negated), Map.of(term("y"), Carrier.WHOLE),
                 LevelSpace.steppingBy(ExactRatio.ONE),
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
@@ -153,14 +157,14 @@ class ARemainderBesideANumberIsRealizedAtTheRemainderTheNumberLeavesTest {
     }
 
     private static Read read() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get("read"), reading,
                 TypeCardinality.Counts.workedOutIn(reading), Membership.none()), rules);
     }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.PositionMeasurements;
@@ -81,8 +82,7 @@ class APositionIsMeasuredAtEveryNumberItsRulesNameTest {
     private static List<Axis> axesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         List<Axis> out = new java.util.ArrayList<>();
         for (PositionMeasurements at : compilation.db()
                 .ask(new Adequacy.Divided("example.prefix", "seat")).value().measurements()) {
@@ -106,7 +106,7 @@ class APositionIsMeasuredAtEveryNumberItsRulesNameTest {
         List<Axis> axes = axesOf(THE_LENGTH_AND_THE_VALUE);
 
         assertEquals(List.of("t", "String.length(t)"), namesOf(axes));
-        assertEquals(List.of("t/String.startsWith(\"w-\", x)", "t/not String.startsWith(\"w-\", x)"),
+        assertEquals(List.of("t: String.startsWith(\"w-\", x)", "t: not String.startsWith(\"w-\", x)"),
                 classesAt(axes, "t"));
     }
 
@@ -124,10 +124,10 @@ class APositionIsMeasuredAtEveryNumberItsRulesNameTest {
 
         assertEquals(List.of("t", "String.length(t)"), namesOf(axes));
         assertEquals(List.of(
-                        "t/String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
-                        "t/String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)",
-                        "t/not String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
-                        "t/not String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)"),
+                        "t: String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
+                        "t: String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)",
+                        "t: not String.startsWith(\"w-\", x) and String.endsWith(\"-1\", x)",
+                        "t: not String.startsWith(\"w-\", x) and not String.endsWith(\"-1\", x)"),
                 classesAt(axes, "t"));
     }
 }

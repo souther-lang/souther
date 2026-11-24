@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.numeric.LinearForm;
@@ -99,8 +99,8 @@ final class InductiveBounds {
         public Induction.Prepared assuming(Bounds candidate) {
             // The accumulator's own spacing, since a range asserted about an atom whose spacing was
             // never recorded is one the domain refuses.
-            Map<FactSubject, Granularity> spacing =
-                    terms.kindsOf(LinearForm.atom(walk.accumulator()));
+            Map<FactSubject, NumberSpace> spacing =
+                    terms.spacesOf(LinearForm.atom(walk.accumulator()));
             return new Read(walk, domain.assuming(walk.accumulator(), candidate, spacing),
                     terms, read);
         }

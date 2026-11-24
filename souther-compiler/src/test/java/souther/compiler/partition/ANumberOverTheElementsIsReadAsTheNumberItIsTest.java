@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -225,7 +226,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     void howManyADistinctListHoldsIsHowManyDifferentValuesTheListHolds() {
         Quantity read = theOnlyNumber("varied");
         assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(CODES),
-                new DecisionSubject.AnInput(CODES.element())), read);
+                new Quantity.TheValue.AtAPlace(new DecisionSubject.AnInput(CODES.element()))),
+                read);
     }
 
     /**
@@ -309,7 +311,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     @Test
     void howManyDifferentValuesAMappedListHoldsIsHowManyDifferentValuesOfWhatIsTakenOfEach() {
         assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(ITEMS),
-                new DecisionSubject.AnInput(ITEMS.element().then("code"))),
+                new Quantity.TheValue.AtAPlace(
+                        new DecisionSubject.AnInput(ITEMS.element().then("code")))),
                 theOnlyNumber("variedItems"));
     }
 
@@ -346,7 +349,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
         assertFalse(Quantity.HowManyDifferent.oneOfEach(items,
                 new DecisionSubject.AnInput(ITEMS.element().then("bins").element())));
         assertThrows(IllegalArgumentException.class, () -> new Quantity.HowManyDifferent(tags,
-                new DecisionSubject.AnInput(TAGS.element().element())));
+                new Quantity.TheValue.AtAPlace(
+                        new DecisionSubject.AnInput(TAGS.element().element()))));
     }
 
     /**
@@ -391,26 +395,54 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     }
 
     /**
-     * Which of the elements a filter kept is a number of those, which no quantity of the
-     * container says; and what a closure worked out of an element is no place of the input.
+     * What a closure worked out of an element is no place of the input, so how many different
+     * values it comes to is no number of the container. Of the elements a filter kept, how many
+     * different values they hold is the container's number of those meeting what kept them, and a
+     * row is composed for it as for a count of the elements.
      */
     @Test
-    void aNumberOfSomeOfTheElementsOrOfAValueWorkedOutOfThemIsNoNumberOfTheContainer() {
-        assertEquals(List.of(), numbersAsked("variedOfSome"));
+    void aNumberOfAValueWorkedOutOfTheElementsIsNoNumberOfTheContainer() {
         assertEquals(List.of(), numbersAsked("variedWorkedOut"));
+        List<OnTheWay> stated = statedAll("variedOfSome");
+        assertEquals(1, stated.size(), () -> "one statement: " + stated);
+        RowDemand.SoMany count = assertInstanceOf(RowDemand.SoMany.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand());
+        assertEquals("#different items [items[*].code] where [Affine[form=LinearForm["
+                + "constant=0, coefs={items[*].code=1}], proposition=GT]]",
+                count.count().spelled());
     }
 
     /**
      * A walk's step that keeps some of each element's values is read with what it carried standing
      * for any number, and adds how many it kept of each. One keeping them by how many it carried
      * adds a number of no one size — one at every step, as many as were carried then — so it is
-     * no number of each element, wherever in what it adds that number is read.
+     * no number of each element, wherever in what it adds that number is read: how many it holds
+     * in the end is a number the walk answers on a run.
      */
     @Test
     void aStepAddingANumberOfWhatItCarriedIsNoNumberOfEachElement() {
-        assertFalse(numbersAsked("keptOfEach").isEmpty(), "the control is read");
-        assertEquals(List.of(), numbersAsked("keptPastWhatWasCarried"));
-        assertEquals(List.of(), numbersAsked("keptPastWhatWasCarriedWrittenOut"));
+        // The control keeps by what each element holds, so how many it keeps is how many elements
+        // of the lists inside the elements meet it: a count across them, which a row is composed
+        // for.
+        List<OnTheWay> control = statedAll("keptOfEach");
+        assertEquals(1, control.size(), () -> "one statement: " + control);
+        assertInstanceOf(Quantity.HowManyMeetAcross.class, assertInstanceOf(RowDemand.SoMany.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, control.getFirst()).demand()).count());
+        // What is compared of these is the number the walk answers on a run, which the run is
+        // asked and no row is composed for: no count across the elements stands in it.
+        for (String carried : List.of("keptPastWhatWasCarried",
+                "keptPastWhatWasCarriedWrittenOut")) {
+            List<OnTheWay> stated = statedAll(carried);
+            assertEquals(1, stated.size(), () -> "one statement: " + stated);
+            RowDemand.ForTheRun run = assertInstanceOf(RowDemand.ForTheRun.class,
+                    assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand(),
+                    () -> "the run decides it: " + stated);
+            assertEquals(RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, run.why());
+            List<Quantity> asked = numbersAsked(carried);
+            assertEquals(1, asked.size(), () -> "one number: " + asked);
+            assertInstanceOf(Quantity.OfACall.class, asked.getFirst(),
+                    () -> "what the walk answers: " + asked);
+        }
     }
 
     /**
@@ -512,12 +544,11 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
                 reading, true, WhatConditionsState.of(reading)).entries();
     }
 
-    private static final Compilation COMPILATION = compiled();
+    private static final Compilation COMPILATION = ACompiledModel.compiles(measured());
 
-    private static Compilation compiled() {
+    private static Compilation measured() {
         Compilation made = Compilation.ofSource(MODEL, "Main");
         made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
         return made;
     }
 

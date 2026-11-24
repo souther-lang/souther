@@ -1,8 +1,9 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
@@ -46,9 +47,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and a finding that names none under one word, and a consumer acting on the second has nothing to
  * look up. That is what the second test below refuses. It was false when it was written: the two
  * kinds it would have caught are the ones this class now reaches on purpose.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -356,7 +361,11 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
                         } else {
                             reported++;
                         }
-                        if (actedOn != finding.has("obligationId")) {
+                        // By the obligation, or by the set of choices of a group where the finding
+                        // is about several combinations at once: a set is owed a row by each of its
+                        // members and is no obligation of its own, so it is named by its group and
+                        // what it takes.
+                        if (actedOn != (finding.has("obligationId") || finding.has("pattern"))) {
                             wrong.add(finding.get("kind").asString() + ": a build "
                                     + (actedOn ? "acts on this and it names nothing"
                                             : "acts on nothing here and it names an obligation"));
@@ -753,9 +762,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     }
 
     private static JsonNode written(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
@@ -772,9 +779,11 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static List<JsonNode> documents() {
         List<JsonNode> out = new ArrayList<>();
-        RepositoryModels.conformance().forEach((corpus, compilation) -> out.add(JSON.readTree(
-                AdequacyReport.of(compilation).json(
-                        new SourceRendering(corpus.names(), compilation.texts())))));
+        RepositoryModels.conformance().forEach((corpus, held) -> {
+            Compilation compilation = held.answered();
+            out.add(JSON.readTree(AdequacyReport.of(compilation).json(
+                    new SourceRendering(corpus.names(), compilation.texts()))));
+        });
         out.add(reportOf(TWO_RULES_AT_ONE_FORK));
         out.add(reportOf(TWO_POSITIONS_ONE_CLASS_NAME));
         out.add(reportOf(TWO_RULES_ONE_ARM));

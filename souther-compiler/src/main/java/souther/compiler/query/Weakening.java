@@ -1,18 +1,28 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.BodyReading;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.DerivedValue;
 import souther.compiler.partition.Replacement;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * One thing that leaves a measurement weaker than it looks.
@@ -83,25 +93,27 @@ public sealed interface Weakening {
      * <p>Not every {@link RunSensitivity#MAY_CHANGE} has one. A border left out because nothing
      * watched the runs ({@link ABorderNotHeldAgainstTheLinesBesideIt.Why#NOTHING_WATCHED_THE_RUNS})
      * was stopped by what this build was asked to record, which is a way of running and not a
-     * figure. It is the one: every other stop a wider run may get past was compared against a
-     * figure, and carries it.
+     * figure, and so is a weight left undecided by the same
+     * ({@link AWeightNotDecided.Why#A_RUN_WAS_NOT_WATCHED}). They are the two: every other stop a
+     * wider run may get past was compared against a figure, and carries it.
      */
     default List<Figure> figures() {
         return switch (this) {
             case ObservationIncomplete it -> it.met().figures();
             case OutputCasesUnreadable _, InputCasesUnreadable _,
-                 ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _,
+                 ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _, AWeightNotDecided _,
                  ABorderNotHeldAgainstTheLinesBesideIt _,
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
                  DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
                  KeyedOverwriteCasesUnmeasured _, ReachableNodeCasesUnmeasured _,
-                 MeetingsNotPlaced _, MeetingsNotJoined _ -> List.of();
+                 MeetingsNotJoined _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
             case PairSpaceTruncated it -> it.limits();
             case MeetingsNotWalked it -> it.limits();
+            case BehaviorToBeChangedFirst it -> List.of(it.figure());
             case DecisionReadingIncomplete it -> switch (it.why()) {
                 case DecisionReading.Enumeration.Complete _ -> List.of();
                 case DecisionReading.Enumeration.StoppedAtAFigure(CompositionBudget figure) ->
@@ -109,6 +121,18 @@ public sealed interface Weakening {
             };
             case RewriteUndecided it -> it.why().figures();
         };
+    }
+
+    /**
+     * Where the runs of rows tried for what stopped it stopped without answering, carried as
+     * {@link #figures} is and from the same place; none where no row was tried.
+     *
+     * <p>Only the model's reading holds the reasons a row is tried for — a relation whose other
+     * value a searched row was to show — so it asks its gap and every other arm has none.
+     */
+    default List<WhereARunStopped> runsStopped() {
+        return this instanceof ModelReadingIncomplete(ClosureGap gap) ? gap.runsStopped()
+                : List.of();
     }
 
     /**
@@ -146,24 +170,59 @@ public sealed interface Weakening {
     }
 
     /**
-     * Rows were observed and what a behavior answered with could not be read back as a case.
+     * Rows that state an expectation whose case was not read ({@link
+     * RowOutcome.ExpectedCase.Unread}) while a case of the output is expected by no row, so that
+     * case is undecided rather than missing. A row whose answer is owed is not one of them: it
+     * expects nothing, and no case waits on it.
      *
-     * <p>Not an observation that went missing: the row ran and came back. How many there were is the
-     * measurement's own count, and is not repeated here — this says which position could not be
-     * read, which is what nothing else says.
+     * <p>Rows whose text names no case, and only those ({@link UnreadCase.NoCaseRead}). A row that
+     * stopped before its expectation was read is stopped by something a wider run may get past, and
+     * says what: it arrives as that reason, which is how it is met everywhere else, and is not
+     * restated here as a fact about the text.
+     *
+     * <p>Where every case is expected by some row there is nothing for these rows to decide, and
+     * this is not met.
+     *
+     * @param unread which rows, so that a reader is sent to the ones to write the case out in. A
+     *               set, in the order the rows were read: which rows they are is the fact, and two
+     *               of these holding the same rows are one fact however they were gathered
      */
-    record OutputCasesUnreadable(String behavior) implements Weakening {
+    record OutputCasesUnreadable(String behavior, Set<RowRef> unread) implements Weakening {
 
-        /** The row ran and came back, and what it answered with could not be read as a case. A run
-         *  that allows more reads it exactly as well. */
+        public OutputCasesUnreadable {
+            unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("no row of `" + behavior
+                        + "` went unread, so no case of it waits on one");
+            }
+        }
+
+        /** Whether a row's text names a case is the same however much a run allows. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
     }
 
-    /** The same at one of a behavior's inputs, counted from zero. */
-    record InputCasesUnreadable(String behavior, int at) implements Weakening {
+    /**
+     * The same at one of a behavior's inputs, counted from zero: rows whose input case was not
+     * read ({@link UnreadCase.NoCaseRead}), where a set they would be in lacks a case a row can be
+     * written at. A row that stopped arrives as what stopped it.
+     *
+     * @param unread which rows, those whose case could change one of those sets, as a set in the
+     *               order they were read. A row whose sets are already full is not among them:
+     *               reading it would change nothing
+     */
+    record InputCasesUnreadable(String behavior, int at, Set<RowRef> unread)
+            implements Weakening {
+
+        public InputCasesUnreadable {
+            unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("no row of `" + behavior
+                        + "` went unread at input #" + (at + 1) + ", so no case there waits on one");
+            }
+        }
 
         /** The same, for the same reason. */
         @Override
@@ -192,6 +251,65 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return why.runSensitivity();
+        }
+    }
+
+    /**
+     * The rows neither fix nor leave unfixed how one position weighs into a value derived from
+     * several positions, for a reason that exists first in the weights.
+     *
+     * <p>None of the reasons is a claim about the rows, so the weight is no finding, and none of
+     * them is a weight fixed either: a verdict that rested on it would rest on nothing.
+     *
+     * <p>Only what is first a fact of the weights is said here. A border whose rows were read in
+     * part, or stopped at a figure, already says so in its own words, with its own answer about a
+     * wider run, and the undecided weight carries those as they are rather than answering for them
+     * a second time. What is left for this is the weights' own: nothing of the computation was read,
+     * a border was left short with no word of its own, a run nothing watched, and the exact
+     * arithmetic giving out on a changed weight.
+     *
+     * <p>Owned by the weights and not by a border. The computation is one however many borders cut
+     * it, and the borders of a computation cut at several places are not asked for the lines beside
+     * them.
+     */
+    record AWeightNotDecided(String behavior, DerivedValue value, NumericTerm position, Why why)
+            implements Weakening {
+
+        /** Why the weight is neither fixed nor shown unfixed. */
+        public enum Why {
+            /** No border of the computation was read against the rows. */
+            NO_BORDER_OF_IT_WAS_READ(RunSensitivity.UNAFFECTED),
+            /** A border was read short and nothing else says how: its rows are not all read. */
+            A_BORDER_WAS_NOT_READ_IN_FULL(RunSensitivity.UNAFFECTED),
+            /** A row was left out because nothing watched its run. What watched it is what this
+             *  build asked to record, so a build that records more reads the row. */
+            A_RUN_WAS_NOT_WATCHED(RunSensitivity.MAY_CHANGE),
+            /** A model's own decimals put a changed weight, or a row under it, out of the exact
+             *  arithmetic's reach. No allowance stopped the working out. */
+            THE_ARITHMETIC_GAVE_OUT(RunSensitivity.UNAFFECTED);
+
+            private final RunSensitivity sensitivity;
+
+            Why(RunSensitivity sensitivity) {
+                this.sensitivity = sensitivity;
+            }
+
+            RunSensitivity sensitivity() {
+                return sensitivity;
+            }
+        }
+
+        public AWeightNotDecided {
+            Objects.requireNonNull(behavior, "a weight not decided is a behavior's");
+            Objects.requireNonNull(value, "a weight is a weight in some computation");
+            Objects.requireNonNull(position, "a weight is the weight of some position");
+            Objects.requireNonNull(why, "a weight not decided says why");
+        }
+
+        /** Asked of the reason: the ways to be undecided do not answer alike. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return why.sensitivity();
         }
     }
 
@@ -298,14 +416,13 @@ public sealed interface Weakening {
      *
      * <p>Beside the two above rather than among them. Those are readings of the rows that came to
      * nothing or were never made, and what they weaken is every question over those rows. This is
-     * the one question over them that was not put — either because nothing here holds a border of
-     * that shape against anything, or because the rows fall all on one side of the line and pin no
-     * threshold on any line beside it.
+     * the one question over them that was not put — because the rows fall all on one side of the
+     * line, because nothing watched a run, because no input that tells the lines apart could be
+     * shown to arrive, or because the family could not be worked out whole.
      *
      * <p><b>So it is not a fact about the model.</b> A line one step from this one exists whichever
-     * of the two it is, and a reader told the question does not arise would be told the opposite of
-     * what happened. Which of the two it was is the word a document writes, because what to do
-     * about them differs: one wants a row, and the other wants this compiler to grow a strategy.
+     * it is, and a reader told the question does not arise would be told the opposite of what
+     * happened. Which it was is the word a document writes, because what to do about them differs.
      *
      * <p>The border and not the line beside it. Which lines are beside it is the family's answer and
      * is the same at every run; that this one was not held against them is the fact, and it is one
@@ -317,8 +434,6 @@ public sealed interface Weakening {
 
         /** What stood in the way of holding it against them. */
         public enum Why {
-            /** Nothing here holds a border of this shape against a line beside it. */
-            NO_STRATEGY_FOR_THE_RULE,
             /** Every row the quantity has a value at falls on one side of the line, so the rows pin
              *  no threshold on any line beside it. */
             THE_ROWS_ARE_ALL_ON_ONE_SIDE,
@@ -341,15 +456,15 @@ public sealed interface Weakening {
         /**
          * Asked of what stood in the way, because they do not answer alike.
          *
-         * <p>A strategy nobody has written and rows that fall all on one side are not allowances:
-         * one wants code and the other wants a row, and every run of this compiler over this model
+         * <p>Rows that fall all on one side, a line no arriving input tells apart and a family the
+         * arithmetic could not hold are not allowances: every run of this compiler over this model
          * says the same. What a run watched is an allowance — the arms are instrumented because a
          * build asked for them — so a run allowing more need not leave the same rows out.
          */
         @Override
         public RunSensitivity runSensitivity() {
             return switch (why) {
-                case NO_STRATEGY_FOR_THE_RULE, THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+                case THE_ROWS_ARE_ALL_ON_ONE_SIDE,
                      NO_REACHABLE_DISTINGUISHER, ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER ->
                         RunSensitivity.UNAFFECTED;
                 case NOTHING_WATCHED_THE_RUNS -> RunSensitivity.MAY_CHANGE;
@@ -391,6 +506,33 @@ public sealed interface Weakening {
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
+    }
+
+    /**
+     * The body of one behavior was left unread for its author to change, told what to declare so
+     * that measuring it costs less ({@link ToBeChangedFirst}).
+     *
+     * <p>Not {@link BodyNotInEvaluation}: the image carries the body, and a run asked to measure
+     * it all the same reads it.
+     *
+     * @param figure the figure measuring it as written runs into
+     */
+    record BehaviorToBeChangedFirst(String behavior, Figure figure) implements Weakening {
+
+        /** Left for the figure measuring it runs into, and a run that allows more measures it. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
+    /** What a measure of {@code behavior} went without where nothing read its body. */
+    static Weakening ofABodyNotRead(String behavior, BodyReading.Unread why) {
+        return switch (why) {
+            case BodyReading.NotInElaboration _ -> new BodyNotInEvaluation(behavior);
+            case BodyReading.ToBeChangedFirst(var figure) ->
+                    new BehaviorToBeChangedFirst(behavior, figure);
+        };
     }
 
     /**
@@ -590,36 +732,6 @@ public sealed interface Weakening {
     }
 
     /**
-     * A meeting of the body's decisions whose combinations the classes of the input do not place.
-     *
-     * <p>A way of settling one of its factors, or the way to it, narrows no position — the arm
-     * itself, where what a run is seen doing does not tell the ways into it apart — or two ways of
-     * settling one factor leave the same classes. No row can be steered into one of its
-     * combinations rather than another, so none is asked for, and which of them the rows make is
-     * not measured. Nothing is owed at any of them, because nothing established that a row is
-     * missing.
-     *
-     * <p>Beside {@link MeetingsNotWalked}, which a wider run walks. This is how the body is read,
-     * and allowing more reads it the same way.
-     */
-    record MeetingsNotPlaced(String behavior, int groups) implements Weakening {
-
-        public MeetingsNotPlaced {
-            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
-            if (groups < 1) {
-                throw new IllegalArgumentException(
-                        "a measure that placed every group went without nothing here: " + groups);
-            }
-        }
-
-        /** The classes place what they place however much a run allows. */
-        @Override
-        public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
-        }
-    }
-
-    /**
      * A sum of the elements a comparison keeps whose decisions this reading met and could not join
      * to the evaluations a run records.
      *
@@ -631,9 +743,9 @@ public sealed interface Weakening {
      * nothing established that a row is missing; and a behavior is not said to have had every
      * combination of its decisions made when some of them were never asked about.
      *
-     * <p>Beside {@link MeetingsNotPlaced}, which is the classes of the input not placing a group
-     * this reading did form. Here there is no group: the decisions were not joined into one. The
-     * reasons are {@code WhyNotJoined}'s, kept by the reading and not published.
+     * <p>There is no group here: the decisions were not joined into one, or an operand has a way
+     * that cannot be held to a row. The reasons are {@code WhyNotJoined}'s, kept by the reading and
+     * not published.
      */
     record MeetingsNotJoined(String behavior, int groups) implements Weakening {
 
@@ -754,12 +866,11 @@ public sealed interface Weakening {
      * holds — the last — and what that decides was not measured.
      *
      * <p>The last value for a key is read as it is: what a statement says of an entry is said of
-     * the last element of its key. What is not established is which distinctions the body draws
-     * are told apart by that order — a row where an earlier element of a key meets a condition and
-     * the last does not, and the other way round. The rows this compiler writes hold one element
-     * of each key, so a distinction that only a repeated key makes is one nothing here has a row
-     * for, and a measurement that said it was whole would be saying the rows it has are every row
-     * the model distinguishes.
+     * the last element of its key. What is not established is that the rows tell apart what that
+     * order decides — a row the statement holds of with the last element of a key the entry and
+     * fails of with the first, and a row the other way round. Said where no row was seen in one of
+     * the two ({@link CasesTheRowsTook}), and never where the rules of
+     * the list keep its keys apart, since then no key is held twice.
      *
      * <p>About the behavior and not about a rule: the order is a property of the map the body
      * looks values up in, and each decision downstream of the lookup rests on it.
@@ -770,10 +881,7 @@ public sealed interface Weakening {
             Objects.requireNonNull(behavior, "an overwrite order is that of some body's map");
         }
 
-        /**
-         * What is missing is a capacity: this compiler writes no row holding a key twice, and a
-         * run allowed more of everything writes none either.
-         */
+        /** What is missing is a row of the model's own, which a run allowed more of does not add. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
@@ -785,10 +893,13 @@ public sealed interface Weakening {
      * decides was not measured.
      *
      * <p>The search is read as it is: what it asks of the node it starts at, and of that node having
-     * nothing below. What is not established is what a node further down meeting what it asks does
-     * to the answer, because a value holding values of its own kind is written so deep and no
-     * deeper, so no row is written toward such a node. About the behavior and not about a rule:
-     * every decision downstream of the search rests on it.
+     * nothing below. Its cases are the steps of the recursion: the node it starts at meeting what
+     * it asks; that node not meeting it and one below doing so; that node not meeting it with
+     * nothing below; and that node not meeting it with every child searched coming back empty.
+     * This says some case the decision can come out in was not seen in any row
+     * ({@link CasesTheRowsTook}).
+     * About the behavior and not about a rule: every decision downstream of the search rests on
+     * it.
      */
     record ReachableNodeCasesUnmeasured(String behavior) implements Weakening {
 
@@ -796,7 +907,7 @@ public sealed interface Weakening {
             Objects.requireNonNull(behavior, "a search is that of some body");
         }
 
-        /** What is missing is a capacity to write rows, which a run allowed more of does not add. */
+        /** What is missing is a row of the model's own, which a run allowed more of does not add. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
@@ -808,13 +919,16 @@ public sealed interface Weakening {
      * the body is not known, and not that none does.
      *
      * <p>Named by the rewrite, because each is an obligation of its own and what left one open says
-     * nothing about the next.
+     * nothing about the next. And by the module, because two modules may each declare a behavior of
+     * the one name and each call the one library definition: their rewrites are the same
+     * {@code Replacement} of the same behavior name, and put together would be one fact.
      */
-    record RewriteUndecided(String behavior, Replacement replacement,
+    record RewriteUndecided(String module, String behavior, Replacement replacement,
                             ReplacementEvidence.Undecided.LeftOpen why)
             implements Weakening {
 
         public RewriteUndecided {
+            Objects.requireNonNull(module, "a rewrite is of a body some module declares");
             Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
             Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
             Objects.requireNonNull(why, "a rewrite left open was left open for a reason");

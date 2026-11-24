@@ -1,31 +1,48 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
 import souther.compiler.core.EnteredArm;
+import souther.compiler.hash.ValueHash;
+import souther.compiler.identity.DecidedByTheRest;
+import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -39,11 +56,30 @@ import java.util.function.Predicate;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent,
-        Quantity.HowManyDifferentBelow, Quantity.HowManyDifferentAcross, Quantity.SumOver,
+        Quantity.HowManyMeet, Quantity.HowManyMeetAcross, Quantity.HowManyHold,
+        Quantity.HowManyDifferent,
+        Quantity.HowManyDifferentMeet, Quantity.HowManyDifferentBelow,
+        Quantity.HowManyDifferentAcross, Quantity.SumOver, Quantity.TheKeptTotal,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
         Quantity.RemainderByAnInput, Quantity.ProductOfTwo, Quantity.WhatAnOperationAnswers,
-        Quantity.HowManyCarried, Quantity.APieceOf, Quantity.IsAmongThePieces {
+        Quantity.HowManyCarried, Quantity.APieceOf, Quantity.ThePieceAt,
+        Quantity.IsAmongThePieces, Quantity.OfACall {
+
+    /** Where the pieces a window holds begin, as a key spells it: nothing for the first. */
+    private static String fromSpelled(int from) {
+        return from > 0 ? " from piece " + from : "";
+    }
+
+    /**
+     * Whether this is a whole number on every row: by what it is, as a count or a remainder is,
+     * or, as a number of the input is, by whether the order the input measures it on is one of
+     * whole numbers, which {@code measuredWhole} says and nothing here does.
+     *
+     * <p>Asked of each kind, so a kind added says it, and a reader asking it of a form knows none
+     * of what the kinds are. Not where it is not shown: a number nothing says is whole may stand
+     * between two that are.
+     */
+    boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole);
 
     /**
      * What a recursion carries, whatever that is: how many what a walk carried into the step
@@ -56,6 +92,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * concludes has none of these in it, so no reader of what a condition states is handed one.
      */
     record HowManyCarried(ACarriedValue value) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyCarried {
             Objects.requireNonNull(value, "what is carried is some walk's");
@@ -72,33 +114,45 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 case HowManyCarried other -> equals(other);
                 case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
                      DecisionAtom.ComputedOverAnAnswer _,
-                     DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
+                     DecisionAtom.OfAnAnswer _, OfABinding _, OfACall _, CodePointsOfAPiece _,
                      RemainderOfADividend _, RemainderByAnInput _, ProductOfTwo _,
-                     HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _ -> false;
-                case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
+                     HowManyDifferent _, HowManyDifferentBelow _, HowManyDifferentAcross _,
+                     TheKeptTotal _ -> false;
+                // Made of numbers of the input and of other answers, as its constructor holds.
+                case WhatAnOperationAnswers _ -> false;
                 case APieceOf piece -> isIn(piece.string());
+                case ThePieceAt piece -> isIn(piece.string());
                 case IsAmongThePieces among -> isIn(among.value()) || isIn(among.string());
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
                 case HowManyMeet count -> isIn(count.ofTheElement());
+                case HowManyMeetAcross count -> isIn(count.ofTheElement());
+                case HowManyDifferentMeet different -> isIn(different.meeting().statement());
             };
         }
 
         /** Whether {@code stated} compares a number that reads this, or holds a statement that
          *  does. */
         public boolean isIn(Proposition stated) {
+            return StatementReading.<Boolean>over(this::isInAt).read(stated);
+        }
+
+        private boolean isInAt(Proposition stated, StatementReading<Boolean> again) {
             return switch (stated) {
                 case Proposition.Compared compared -> switch (compared.relation()) {
                     case Relation.Affine affine -> isIn(affine.form());
                     case Relation.Ordered ordered -> isIn(ordered.term());
                 };
+                case Proposition.StringInside inside ->
+                        isIn(inside.inner()) || isIn(inside.outer());
                 case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.Unread _ -> false;
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
-                     Proposition.WhereItAnswers _ ->
-                        stated.partsHeld().stream().anyMatch(this::isIn);
+                     Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
+                        stated.anyPart(again);
             };
         }
 
@@ -140,48 +194,373 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * the input — what a dependency answered, a value the body bound — is no argument of one, and
      * a call handed it is not read as one.
      *
-     * @param operation the operation applied
-     * @param of        what it was handed, in the order it was handed them
+     * <p>An argument may be handed to an operation more than once, and an answer may be an
+     * argument of several others, so what these hold is a graph and not a tree: in {@code a1 =
+     * floorMod(a0, a0)}, {@code a2 = floorMod(a1, a1)}, ... the answer of the n-th call is
+     * reached by 2^n paths and is n values. What is asked of one is therefore asked of each
+     * distinct answer once: the hash, the positions and the spelling are kept in the cell
+     * ({@link Derivation}) and worked out from the arguments' own, and two of these are compared
+     * a pair at a time.
+     *
+     * @param operation  the operation applied
+     * @param of         what it was handed, in the order it was handed them
+     * @param derivation what is worked out from the two above, made when this is made whatever is
+     *                   handed in
      */
-    record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of)
-            implements Quantity {
+    record WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of,
+                                  @DecidedByTheRest Derivation derivation) implements Quantity {
+
+        /**
+         * How many calls and numbers an answer may come to, counted down every path, before it is
+         * written as the list of the distinct ones and not as the calls written one inside another.
+         *
+         * <p>Both forms are of the structure alone, so which one an answer is written in is a
+         * matter of how it reads and not of what it says: up to the figure the nested form, which
+         * is what a model writes and what a person reads, is at most this many names long; past it
+         * the text of the nested form is the paths and not the answers, and the list is the
+         * answers. Any figure says the same of every answer; this one keeps what a model reads in a
+         * statement of a few calls as it is written and lists what is past a screenful.
+         */
+        static final int WRITTEN_NESTED_UP_TO = 64;
+
+        /** What the distinct answers are numbered by in a spelling that lists them: no spelling of
+         *  a number of the input starts with it. */
+        private static final String NUMBERED = "%";
+
+        /** Not shown: what an operation answers is its own. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
+
+        public WhatAnOperationAnswers(ValueName.Stdlib operation, List<Quantity> of) {
+            this(operation, of, null);
+        }
 
         public WhatAnOperationAnswers {
             if (operation == null || of == null || of.isEmpty()) {
                 throw new IllegalArgumentException("an answer is some operation's, of something");
             }
             of = List.copyOf(of);
-            for (Quantity each : of) {
-                if (!(each instanceof DecisionAtom.OfTheInput)
-                        && !(each instanceof WhatAnOperationAnswers)) {
-                    throw new IllegalArgumentException("an operation's answer read here is of"
-                            + " values of the input: " + each);
+            long[] parts = new long[1 + of.size()];
+            parts[0] = operation.hashCode();
+            long calls = 1;
+            for (int i = 0; i < of.size(); i++) {
+                switch (of.get(i)) {
+                    case DecisionAtom.OfTheInput input -> {
+                        calls++;
+                        parts[1 + i] = input.hashCode();
+                    }
+                    case WhatAnOperationAnswers inner -> {
+                        calls += inner.derivation.calls;
+                        parts[1 + i] = inner.derivation.state;
+                    }
+                    default -> throw new IllegalArgumentException("an operation's answer read here"
+                            + " is of values of the input: " + of.get(i));
                 }
+            }
+            derivation = new Derivation(
+                    ValueHash.ofItsPartsWide(WhatAnOperationAnswers.class, parts),
+                    (int) Math.min(calls, Integer.MAX_VALUE));
+        }
+
+        /**
+         * What is worked out from the operation and its arguments, and kept while this is held.
+         *
+         * <p>Nothing this is: every cell is equal to every other and hashes alike. The state its
+         * hash is taken from and the number of calls are settled when this is made, from the
+         * arguments' own; the positions and the spelling the first time they are asked.
+         */
+        static final class Derivation {
+
+            /** What the operation and the arguments come to, of sixty four bits so that a chain of
+             *  answers each made of the one before it does not come round to a state it had
+             *  ({@link ValueHash#ofItsPartsWide}). */
+            private final long state;
+            /** How many calls and numbers the answer is when written as the tree of its calls,
+             *  held at what an {@code int} holds. */
+            private final int calls;
+            private volatile List<NumericTerm> positions;
+            private volatile Spelling spelling;
+
+            Derivation(long state, int calls) {
+                this.state = state;
+                this.calls = calls;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Derivation;
+            }
+
+            @Override
+            public int hashCode() {
+                return 0;
+            }
+
+            @Override
+            public String toString() {
+                return "Derivation";
             }
         }
 
-        /** The numbers of the input this answer is made of, each once, in the order they are
-         *  handed in. */
-        public List<NumericTerm> positionsItIsMadeOf() {
-            List<NumericTerm> out = new ArrayList<>();
-            for (Quantity each : of) {
-                List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
-                    case WhatAnOperationAnswers inner -> inner.positionsItIsMadeOf();
-                    default -> throw new IllegalStateException("held out by the constructor");
-                };
-                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+        @Override
+        public int hashCode() {
+            return ValueHash.narrowed(derivation.state);
+        }
+
+        /**
+         * The same operation of arguments that are the same, each pair of answers compared once
+         * however many paths reach it, and none where the hashes already differ.
+         */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
             }
-            return List.copyOf(out);
+            if (!(other instanceof WhatAnOperationAnswers that)
+                    || derivation.state != that.derivation.state) {
+                return false;
+            }
+            Map<WhatAnOperationAnswers, Set<WhatAnOperationAnswers>> compared =
+                    new IdentityHashMap<>();
+            Deque<WhatAnOperationAnswers[]> pending = new ArrayDeque<>();
+            pending.push(new WhatAnOperationAnswers[] {this, that});
+            while (!pending.isEmpty()) {
+                WhatAnOperationAnswers[] pair = pending.pop();
+                WhatAnOperationAnswers left = pair[0];
+                WhatAnOperationAnswers right = pair[1];
+                if (left == right
+                        || !compared.computeIfAbsent(left,
+                                _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                                .add(right)) {
+                    continue;
+                }
+                if (!left.operation.equals(right.operation) || left.of.size() != right.of.size()
+                        || left.derivation.state != right.derivation.state) {
+                    return false;
+                }
+                for (int i = 0; i < left.of.size(); i++) {
+                    Quantity one = left.of.get(i);
+                    Quantity another = right.of.get(i);
+                    if (one instanceof WhatAnOperationAnswers inner
+                            && another instanceof WhatAnOperationAnswers otherInner) {
+                        pending.push(new WhatAnOperationAnswers[] {inner, otherInner});
+                    } else if (!one.equals(another)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /**
+         * The numbers of the input this answer is made of, each once, in the order they are handed
+         * in.
+         *
+         * <p>What a reader asks of an answer that is a fact of the input it is made of is asked
+         * here and not by going down {@link #of}: the answers it holds are shared, and a walk down
+         * them is as long as the paths to a number and not as the answers there are.
+         *
+         * <p>Kept for the answer asked and for no answer it is made of: each of those holds as
+         * many numbers as the answers below it, so a chain that takes one more number at each
+         * call would hold the square of its length. An answer below that was itself asked is
+         * taken as it was kept.
+         */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            List<NumericTerm> held = derivation.positions;
+            if (held != null) {
+                return held;
+            }
+            Set<NumericTerm> out = new LinkedHashSet<>();
+            Set<WhatAnOperationAnswers> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            Deque<WhatAnOperationAnswers> nodes = new ArrayDeque<>();
+            Deque<Integer> next = new ArrayDeque<>();
+            seen.add(this);
+            nodes.push(this);
+            next.push(0);
+            while (!nodes.isEmpty()) {
+                WhatAnOperationAnswers node = nodes.peek();
+                int at = next.pop();
+                WhatAnOperationAnswers below = null;
+                while (at < node.of.size() && below == null) {
+                    switch (node.of.get(at++)) {
+                        case DecisionAtom.OfTheInput(NumericTerm term, var _) -> out.add(term);
+                        case WhatAnOperationAnswers inner -> {
+                            if (inner.derivation.positions != null) {
+                                out.addAll(inner.derivation.positions);
+                            } else if (seen.add(inner)) {
+                                below = inner;
+                            }
+                        }
+                        default -> throw new IllegalStateException("held out by the constructor");
+                    }
+                }
+                next.push(at);
+                if (below != null) {
+                    nodes.push(below);
+                    next.push(0);
+                } else {
+                    nodes.pop();
+                    next.pop();
+                }
+            }
+            derivation.positions = List.copyOf(out);
+            return derivation.positions;
+        }
+
+        /**
+         * This with each number of the input in it replaced by {@code told} of it, or null where
+         * {@code told} says of one that it is no one.
+         *
+         * <p>Each answer that is a different value is rebuilt once, and an answer equal to one
+         * rebuilt is that one, held wherever it is held. So how many times {@code told} is asked
+         * is how many distinct answers there are to ask it of, whether an answer held in two
+         * places is one object or two that are equal: a reader that counts what it was asked
+         * says the same of both.
+         */
+        public Quantity rebuilt(Function<DecisionAtom.OfTheInput, Quantity> told) {
+            Map<WhatAnOperationAnswers, Quantity> rebuilt = new HashMap<>();
+            for (WhatAnOperationAnswers each : argumentsFirst()) {
+                List<Quantity> arguments = new ArrayList<>(each.of.size());
+                boolean changed = false;
+                for (Quantity argument : each.of) {
+                    Quantity now = argument instanceof WhatAnOperationAnswers inner
+                            ? rebuilt.get(inner)
+                            : told.apply((DecisionAtom.OfTheInput) argument);
+                    if (now == null) {
+                        return null;
+                    }
+                    changed |= now != argument;
+                    arguments.add(now);
+                }
+                rebuilt.put(each, changed
+                        ? new WhatAnOperationAnswers(each.operation, arguments) : each);
+            }
+            return rebuilt.get(this);
+        }
+
+        /**
+         * What a chain of calls each handed one thing is made of: the operations, the one applied
+         * first first, and what the first was handed.
+         *
+         * @param from       what the innermost call was handed, which is no answer of a call of
+         *                   one argument
+         * @param operations the calls, from the innermost out
+         */
+        public record OfOneArgument(Quantity from, List<ValueName.Stdlib> operations) {
+        }
+
+        /**
+         * This as the calls of one argument each that it is made of, down to what is not one: the
+         * answer of a call of one argument holds one answer or number and no other, so these are a
+         * line and not a graph, and are asked of the answer in a loop and not by going down
+         * {@link #of} where a chain of them is as long as the model writes it.
+         */
+        public OfOneArgument chainOfOneArgument() {
+            List<ValueName.Stdlib> operations = new ArrayList<>();
+            Quantity at = this;
+            while (at instanceof WhatAnOperationAnswers answers && answers.of.size() == 1) {
+                operations.add(answers.operation);
+                at = answers.of.getFirst();
+            }
+            Collections.reverse(operations);
+            return new OfOneArgument(at, List.copyOf(operations));
+        }
+
+        /**
+         * The answers this is made of and this, each after every answer it holds, and each once
+         * however many times it is held: an answer equal to one met is that one. Worked through a
+         * stack of its own: how deep a chain of calls goes is the model's and no limit of the
+         * thread reading it.
+         */
+        private List<WhatAnOperationAnswers> argumentsFirst() {
+            Set<WhatAnOperationAnswers> seen = new HashSet<>();
+            List<WhatAnOperationAnswers> out = new ArrayList<>();
+            Deque<WhatAnOperationAnswers> nodes = new ArrayDeque<>();
+            Deque<Integer> next = new ArrayDeque<>();
+            seen.add(this);
+            nodes.push(this);
+            next.push(0);
+            while (!nodes.isEmpty()) {
+                WhatAnOperationAnswers node = nodes.peek();
+                int at = next.pop();
+                WhatAnOperationAnswers below = null;
+                while (at < node.of.size() && below == null) {
+                    if (node.of.get(at++) instanceof WhatAnOperationAnswers inner
+                            && seen.add(inner)) {
+                        below = inner;
+                    }
+                }
+                next.push(at);
+                if (below != null) {
+                    nodes.push(below);
+                    next.push(0);
+                } else {
+                    out.add(nodes.pop());
+                    next.pop();
+                }
+            }
+            return out;
         }
 
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder(operation.qualified()).append('(');
-            for (int i = 0; i < of.size(); i++) {
-                out.append(i == 0 ? "" : ", ").append(of.get(i).spelled());
+            return spelling().toString();
+        }
+
+        /**
+         * The calls written one inside another, {@code f(g(x), g(x))}, while the answer is small.
+         * Past that the distinct answers are listed, each once and numbered in the order they are
+         * first reached, and the last is the answer: {@code %0 = g(x); %1 = f(%0, %0); in %1}. Both
+         * are of the structure and of nothing else, so two answers spell alike exactly where they
+         * are equal, and what is written grows with the distinct answers and not with the paths
+         * through them.
+         */
+        @Override
+        public Spelling spelling() {
+            Spelling held = derivation.spelling;
+            if (held == null) {
+                held = derivation.calls <= WRITTEN_NESTED_UP_TO ? nested() : listed();
+                derivation.spelling = held;
             }
-            return out.append(')').toString();
+            return held;
+        }
+
+        private Spelling nested() {
+            List<Spelling> pieces = new ArrayList<>(2 * of.size() + 1);
+            pieces.add(Spelling.of(operation.qualified() + "("));
+            for (int i = 0; i < of.size(); i++) {
+                if (i > 0) {
+                    pieces.add(Spelling.SEPARATOR);
+                }
+                pieces.add(of.get(i).spelling());
+            }
+            pieces.add(Spelling.of(")"));
+            return Spelling.joined(pieces);
+        }
+
+        private Spelling listed() {
+            Map<WhatAnOperationAnswers, Integer> numbered = new HashMap<>();
+            List<Spelling> lines = new ArrayList<>();
+            for (WhatAnOperationAnswers each : argumentsFirst()) {
+                List<Spelling> line = new ArrayList<>();
+                line.add(Spelling.of(each.operation.qualified() + "("));
+                for (int i = 0; i < each.of.size(); i++) {
+                    if (i > 0) {
+                        line.add(Spelling.SEPARATOR);
+                    }
+                    line.add(each.of.get(i) instanceof WhatAnOperationAnswers inner
+                            ? Spelling.of(NUMBERED + numbered.get(inner))
+                            : each.of.get(i).spelling());
+                }
+                line.add(Spelling.of(")"));
+                numbered.put(each, numbered.size());
+                lines.add(Spelling.of(NUMBERED + (numbered.size() - 1) + " = ",
+                        Spelling.joined(line), "; "));
+            }
+            lines.add(Spelling.of("in " + NUMBERED + (numbered.size() - 1)));
+            return Spelling.joined(lines);
         }
 
         @Override
@@ -200,43 +579,49 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * with a value is a statement about that piece alone, and "some piece is the value" is not
      * "the piece is the value" held once — nor is its denial "the piece is another value" — so
      * what leaves the statement is {@link IsAmongThePieces}, which says it of all the pieces.
-     * Told apart by the string, the separator and {@code within}, which is how many statements
-     * about some piece it is read inside of: two pieces of one string read in two statements are
-     * two values, and one read in a single statement is one.
+     * Told apart by the string, the separator and {@code within}, which is the statement about
+     * some piece it is read in: two pieces of one string read in two statements are two values,
+     * and one read in a single statement is one.
      *
      * @param operation the library's operation that parts the string
      * @param separator the code point it is parted at, or none where it parts into characters
      * @param string    the string, a number of the input or what an operation answers of one
-     * @param within    how many statements about some piece this one is read inside of
-     * @param among     how many of the first pieces it is one of, or nought where it is one of
-     *                  all of them: the piece of the first one and the piece of the first two
-     *                  are two values, as a string can hold the value in its second piece alone
+     * @param within    the statement about some piece this one is read in
+     * @param from      the index of the first piece it may be, nought where it may be the first
+     * @param among     the index the pieces it may be stop before, or nought where they run to
+     *                  the last: the piece of the first one and the piece of the first two are
+     *                  two values, as a string can hold the value in its second piece alone,
+     *                  and so are those of the pieces from the second on and from the third
      */
     record APieceOf(ValueName.Stdlib operation, OptionalInt separator, Quantity string,
-                    int within, int among) implements Quantity {
+                    PieceWitness within, int from, int among) implements Quantity {
+
+        /** No number: a piece of a string. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
 
         public APieceOf {
             Objects.requireNonNull(operation, "a piece is of what some operation parts");
             Objects.requireNonNull(separator, "parted at a code point, or into characters");
+            Objects.requireNonNull(within, "a piece is read in some statement about a piece");
             if (!(string instanceof DecisionAtom.OfTheInput)
                     && !(string instanceof WhatAnOperationAnswers)) {
                 throw new IllegalArgumentException(
                         "a piece read here is of a string of the input: " + string);
             }
-            if (within < 0) {
+            if (from < 0 || among < 0 || (among > 0 && among <= from)) {
                 throw new IllegalArgumentException(
-                        "a piece is of a statement some number of statements in: " + within);
-            }
-            if (among < 0) {
-                throw new IllegalArgumentException(
-                        "a piece is one of some number of the first pieces: " + among);
+                        "a piece is one of the pieces from one index to a later one: " + from
+                                + " " + among);
             }
         }
 
         /** The numbers of the input the string is made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
             return switch (string) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
                 case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
                 default -> throw new IllegalStateException("held out by the constructor");
             };
@@ -244,11 +629,78 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "a piece " + within + " in"
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("a piece " + within.spelled() + " in" + fromSpelled(from)
                     + (among > 0 ? " among the first " + among : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
-                            + ", " : "") + string.spelled() + ")";
+                            + ", " : ""), string.spelling(), ")");
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * The piece at an index of a string that an operation parts: one value, told apart by the
+     * string, the separator and the index.
+     *
+     * <p>The piece a list lookup at an index written down picks of the pieces, which the arm that
+     * opens the lookup binds. Beside {@link APieceOf}, which is whichever piece the statement it
+     * is read inside is about: this is one piece, the one at the index, and it is there only where
+     * the string has that many.
+     *
+     * @param operation the library's operation that parts the string
+     * @param separator the code point it is parted at
+     * @param string    the string, a number of the input or what an operation answers of one
+     * @param index     which of the pieces it is, counting from nought
+     */
+    record ThePieceAt(ValueName.Stdlib operation, int separator, Quantity string, int index)
+            implements Quantity {
+
+        /** No number: a piece of a string. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
+
+        public ThePieceAt {
+            Objects.requireNonNull(operation, "a piece is of what some operation parts");
+            if (!(string instanceof DecisionAtom.OfTheInput)
+                    && !(string instanceof WhatAnOperationAnswers)) {
+                throw new IllegalArgumentException(
+                        "a piece read here is of a string of the input: " + string);
+            }
+            if (index < 0) {
+                throw new IllegalArgumentException("a piece is at an index of nought or more: "
+                        + index);
+            }
+        }
+
+        /** The numbers of the input the string is made of, each once. */
+        public List<NumericTerm> positionsItIsMadeOf() {
+            return switch (string) {
+                case DecisionAtom.OfTheInput(NumericTerm term, var _) -> List.of(term);
+                case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                default -> throw new IllegalStateException("held out by the constructor");
+            };
+        }
+
+        @Override
+        public String spelled() {
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("piece " + index + " of " + operation.qualified() + "(U+"
+                    + Integer.toHexString(separator) + ", ", string.spelling(), ")");
         }
 
         @Override
@@ -273,11 +725,18 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param operation the library's operation that parts the string
      * @param separator the code point it is parted at, or none where it parts into characters
      * @param string    the string, a number of the input or what an operation answers of one
-     * @param among     how many of the first pieces it is one of, or nought where it is one of
-     *                  all of them
+     * @param from      the index of the first piece it may be one of, nought for the first
+     * @param among     the index the pieces it may be one of stop before, or nought where they
+     *                  run to the last
      */
     record IsAmongThePieces(Quantity value, ValueName.Stdlib operation, OptionalInt separator,
-                            Quantity string, int among) implements Quantity {
+                            Quantity string, int from, int among) implements Quantity {
+
+        /** No number: a value being a piece of a string. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return false;
+        }
 
         public IsAmongThePieces {
             Objects.requireNonNull(operation, "the pieces are what some operation parts");
@@ -289,33 +748,38 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                             "a piece is compared here with a value of the input: " + each);
                 }
             }
-            if (among < 0) {
+            if (from < 0 || among < 0 || (among > 0 && among <= from)) {
                 throw new IllegalArgumentException(
-                        "the value is one of some number of the first pieces: " + among);
+                        "the value is one of the pieces from one index to a later one: " + from
+                                + " " + among);
             }
         }
 
         /** The numbers of the input the value and the string are made of, each once. */
         public List<NumericTerm> positionsItIsMadeOf() {
-            List<NumericTerm> out = new ArrayList<>();
+            Set<NumericTerm> out = new LinkedHashSet<>();
             for (Quantity each : List.of(value, string)) {
-                List<NumericTerm> these = switch (each) {
-                    case DecisionAtom.OfTheInput(NumericTerm term) -> List.of(term);
-                    case WhatAnOperationAnswers answers -> answers.positionsItIsMadeOf();
+                switch (each) {
+                    case DecisionAtom.OfTheInput(NumericTerm term, var _) -> out.add(term);
+                    case WhatAnOperationAnswers answers -> out.addAll(answers.positionsItIsMadeOf());
                     default -> throw new IllegalStateException("held out by the constructor");
-                };
-                these.stream().filter(term -> !out.contains(term)).forEach(out::add);
+                }
             }
             return List.copyOf(out);
         }
 
         @Override
         public String spelled() {
-            return "[" + value.spelled() + " is among the pieces"
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("[", value.spelling(), " is among the pieces" + fromSpelled(from)
                     + (among > 0 ? " (the first " + among + ")" : "") + " of "
                     + operation.qualified() + "("
                     + (separator.isPresent() ? "U+" + Integer.toHexString(separator.getAsInt())
-                            + ", " : "") + string.spelled() + ")]";
+                            + ", " : ""), string.spelling(), ")]");
         }
 
         @Override
@@ -336,12 +800,26 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Whole numbers throughout. A form that weighs a number by a fraction, or is moved by one, is
      * no dividend of a remainder, and nothing here reads it as one.
      *
+     * <p>The dividend may be over a value read off a binding — the element of a list of every
+     * whole number between two — as well as over the input's numbers. Which values a row puts at
+     * such a value is not one of the row's numbers, so the remainder is one meaning however its
+     * dividend is made, and a reader that works the remainder out of the row's numbers asks for
+     * them ({@link #overTheInput}) and has none of them where the dividend is over such a value.
+     *
      * @param operation the library's floor remainder that answers it
-     * @param dividend the form the division is of, constant included
+     * @param dividend the form the division is of, constant included: the input's numbers as
+     *                 {@link DecisionAtom.OfTheInput}, and a value read off a binding as
+     *                 {@link OfABinding}
      * @param divisor the number it is divided by, above nought
      */
-    record RemainderOfADividend(ValueName operation, LinearForm<NumericTerm> dividend,
+    record RemainderOfADividend(ValueName operation, LinearForm<Quantity> dividend,
                                 BigInteger divisor) implements Quantity {
+
+        /** A remainder of whole numbers by a whole number. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public RemainderOfADividend {
             if (operation == null || dividend == null || dividend.coefs().isEmpty()
@@ -352,6 +830,50 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         + " some numbers by a divisor above nought: " + operation + " of "
                         + dividend + " by " + divisor);
             }
+            for (Quantity each : dividend.coefs().keySet()) {
+                if (!(each instanceof DecisionAtom.OfTheInput || each instanceof OfABinding)) {
+                    throw new IllegalArgumentException("a dividend is a form of the input's"
+                            + " numbers and of values read off bindings: " + dividend);
+                }
+            }
+        }
+
+        /** A remainder of a form of the input's numbers alone. */
+        public static RemainderOfADividend ofTheInput(ValueName operation,
+                                                      LinearForm<NumericTerm> dividend,
+                                                      BigInteger divisor) {
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            dividend.coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term), by));
+            return new RemainderOfADividend(operation, new LinearForm<>(dividend.constant(), coefs),
+                    divisor);
+        }
+
+        /**
+         * The dividend as a form of the input's numbers — or null where some value of it is read
+         * off a binding, and so is no number a row holds, or where it weighs two values at one
+         * position, two elements of one container, which a form over positions holds as one.
+         */
+        public LinearForm<NumericTerm> overTheInput() {
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : dividend.coefs().entrySet()) {
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
+                        || coefs.put(term, each.getValue()) != null) {
+                    return null;
+                }
+            }
+            return new LinearForm<>(dividend.constant(), coefs);
+        }
+
+        /** The numbers of the input the dividend weighs, each with its weight: all of it but the
+         *  values read off bindings, and its constant. */
+        public Map<NumericTerm, ExactRatio> numbersOfTheInput() {
+            Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
+            dividend.coefs().forEach((each, by) -> {
+                if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
+                    out.put(term, by);
+                }
+            });
+            return out;
         }
 
         /** What the operation was handed beside the dividend: the divisor, where it takes it. */
@@ -372,16 +894,51 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                     argument -> Optional.ofNullable(given.at(argument.position())));
         }
 
+        /** The text {@link #spelled} writes, with each term of the dividend held as its own
+         *  spelling ({@link NumericTerm#spelling}), and a value read off a binding as its own,
+         *  after them in the order of their texts. */
+        @Override
+        public Spelling spelling() {
+            List<Object> out = new ArrayList<>();
+            out.add("floorMod(");
+            LinearForm<NumericTerm> ofTheInput = overTheInput();
+            List<Map.Entry<Object, ExactRatio>> terms = new ArrayList<>();
+            // Each number spelled with which value at its position it is: two elements' numbers
+            // are two numbers, and spelled alike they would be one wherever a spelling is a key.
+            Map<NumericTerm, ValueIdentity> which = new LinkedHashMap<>();
+            dividend.coefs().keySet().forEach(each -> {
+                if (each instanceof DecisionAtom.OfTheInput(var term, var identity)) {
+                    which.put(term, identity);
+                }
+            });
+            if (ofTheInput != null) {
+                NumericTerms.entriesInOrder(ofTheInput.coefs()).forEach(each ->
+                        terms.add(Map.entry(Spelling.of(each.getKey().spelling(),
+                                which.get(each.getKey()).spelled()), each.getValue())));
+            } else {
+                dividend.coefs().entrySet().stream()
+                        .sorted(Comparator.comparing(each -> each.getKey().spelled()))
+                        .forEach(each -> terms.add(Map.entry(
+                                each.getKey() instanceof DecisionAtom.OfTheInput(var term,
+                                        var identity)
+                                        ? Spelling.of(term.spelling(), identity.spelled())
+                                        : each.getKey().spelling(),
+                                each.getValue())));
+            }
+            terms.forEach(each -> {
+                out.add((out.size() == 1 ? "" : " + ") + each.getValue().spelled() + "·");
+                out.add(each.getKey());
+            });
+            if (dividend.constant().signum() != 0) {
+                out.add(" + " + dividend.constant().spelled());
+            }
+            out.add(", " + divisor + ")");
+            return Spelling.of(out.toArray());
+        }
+
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder("floorMod(");
-            NumericTerms.entriesInOrder(dividend.coefs()).forEach(each -> out
-                    .append(out.charAt(out.length() - 1) == '(' ? "" : " + ")
-                    .append(each.getValue().spelled()).append('·').append(each.getKey()));
-            if (dividend.constant().signum() != 0) {
-                out.append(" + ").append(dividend.constant().spelled());
-            }
-            return out.append(", ").append(divisor).append(')').toString();
+            return spelling().toString();
         }
 
         @Override
@@ -409,17 +966,32 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param divisor   the number it is divided by
      */
     record RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
-                              NumericTerm.FromOnePosition divisor) implements Quantity {
+                              ValueIdentity dividendIs, NumericTerm.FromOnePosition divisor,
+                              ValueIdentity divisorIs) implements Quantity {
+
+        /** A remainder of a whole number by another, which is made only of whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public RemainderByAnInput {
-            if (operation == null || dividend == null || divisor == null
-                    || dividend.position().equals(divisor.position())
+            if (operation == null || dividend == null || divisor == null || dividendIs == null
+                    || divisorIs == null || dividend.position().equals(divisor.position())
                     || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
                             .isEmpty()) {
                 throw new IllegalArgumentException("a remainder by an input is a floor remainder"
                         + " of one number of the input by another of a different position: "
                         + operation + " of " + dividend + " by " + divisor);
             }
+        }
+
+        /** The remainder of the numbers at the two positions, read through no name for an
+         *  element. */
+        public RemainderByAnInput(ValueName operation, NumericTerm.FromOnePosition dividend,
+                                  NumericTerm.FromOnePosition divisor) {
+            this(operation, dividend, ValueIdentity.AT_THE_POSITION, divisor,
+                    ValueIdentity.AT_THE_POSITION);
         }
 
         /** Both numbers, the dividend first. */
@@ -429,7 +1001,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "floorMod(" + dividend + ", " + divisor + ")";
+            return "floorMod(" + dividend + dividendIs.spelled() + ", " + divisor
+                    + divisorIs.spelled() + ")";
         }
 
         @Override
@@ -458,11 +1031,18 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param one   the factor first in the order of terms
      * @param other the other factor
      */
-    record ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other)
+    record ProductOfTwo(NumericTerm.FromOnePosition one, ValueIdentity oneIs,
+                        NumericTerm.FromOnePosition other, ValueIdentity otherIs)
             implements Quantity {
 
+        /** A product of two whole numbers, which is made only of whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public ProductOfTwo {
-            if (one == null || other == null) {
+            if (one == null || other == null || oneIs == null || otherIs == null) {
                 throw new IllegalArgumentException("a product is of two numbers");
             }
             if (one.position().equals(other.position())) {
@@ -470,9 +1050,20 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         + " relation between two: " + one + " and " + other);
             }
             List<NumericTerm> ordered = NumericTerms.inOrder(List.of(one, other));
-            NumericTerm.FromOnePosition first = (NumericTerm.FromOnePosition) ordered.get(0);
-            other = first == one ? other : one;
-            one = first;
+            if (ordered.get(0) != one) {
+                NumericTerm.FromOnePosition first = other;
+                ValueIdentity firstIs = otherIs;
+                other = one;
+                otherIs = oneIs;
+                one = first;
+                oneIs = firstIs;
+            }
+        }
+
+        /** The product of the numbers at the two positions, read through no name for an
+         *  element. */
+        public ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other) {
+            this(one, ValueIdentity.AT_THE_POSITION, other, ValueIdentity.AT_THE_POSITION);
         }
 
         /** Both factors, in their order. */
@@ -482,7 +1073,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return one + " * " + other;
+            return one + oneIs.spelled() + " * " + other + otherIs.spelled();
         }
 
         @Override
@@ -504,8 +1095,20 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Which statement that is, is {@code within}: how many statements about some piece of a
      * string it is read inside of, the outermost being nought. A statement about some piece read
      * inside another one names two pieces, and a count of the outer piece is no count of the inner.
+     *
+     * <p>That is all {@code within} tells apart, and it is enough only because this never leaves
+     * the statement it is read in: it is taken up into what the string holds
+     * ({@link Derivation.SomePieceMeeting}) or the statement is not read. Two statements that
+     * follow each other are told apart by {@link PieceWitness}, which is what any value that is
+     * held beside a statement other than its own carries instead.
      */
     record CodePointsOfAPiece(CodePointClass counted, int within) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public CodePointsOfAPiece {
             if (counted == null) {
@@ -545,16 +1148,29 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record HowManyDifferentAcross(DecisionSubject container, DecisionSubject ofTheOccurrence)
             implements Quantity {
 
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public HowManyDifferentAcross {
             if (container == null || ofTheOccurrence == null) {
                 throw new IllegalArgumentException("the values are of containers inside elements");
             }
-            if (!ofTheOccurrence.isAtOrUnder(container.element())
-                    || ofTheOccurrence.howManyContainersHoldIt()
-                            != container.howManyContainersHoldIt() + 2) {
+            if (!ofAContainerInside(container, ofTheOccurrence)) {
                 throw new IllegalArgumentException(ofTheOccurrence + " is no value of a container"
                         + " inside the elements of " + container);
             }
+        }
+
+        /** Whether {@code ofTheOccurrence} is a value of a container inside each element of the
+         *  container at {@code container}, one container further in than the elements. */
+        public static boolean ofAContainerInside(DecisionSubject container,
+                                                 DecisionSubject ofTheOccurrence) {
+            return ofTheOccurrence.isAtOrUnder(container.element())
+                    && ofTheOccurrence.howManyContainersHoldIt()
+                            == container.howManyContainersHoldIt() + 2;
         }
 
         @Override
@@ -588,6 +1204,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     record HowManyDifferentBelow(TermPath root, List<String> through, TermPath map,
                                  List<String> keyAt, List<String> valueAt) implements Quantity {
 
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public HowManyDifferentBelow {
             Objects.requireNonNull(root, "a search starts from some node");
             Objects.requireNonNull(map, "entries are looked up in some map");
@@ -601,7 +1223,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException(
                         "a search goes down each field once: " + through);
             }
-            if (map.isAtOrUnder(root) || root.isAtOrUnder(map)) {
+            if (map.standsAtUnderOrAround(root)) {
                 throw new IllegalArgumentException(
                         "the map is apart from the tree it is looked up for: " + map + ", " + root);
             }
@@ -638,16 +1260,153 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     }
 
     /**
+     * Where the value of an element a count of different values counts once stands: at one place
+     * of every element, or at the place the element's case chooses.
+     *
+     * <p>Two elements are one value where the values they hold there are equal, whichever place
+     * each was read at: a fold filing each case under a field of its own files a receipt and a
+     * stocktake of one {@code sku} under one key.
+     */
+    sealed interface TheValue {
+
+        /**
+         * Where the value stands as far as which containers hold it goes: the place itself, or the
+         * element whose case chooses the place, which stands inside the same containers.
+         */
+        DecisionSubject where();
+
+        /** Every place of the input it reads to tell the value: the place, or the place the case
+         *  is told at and the place each case reads. */
+        List<TermPath> places();
+
+        /** Every place the value itself is held at: the place, or the place each case reads. */
+        List<TermPath> heldAt();
+
+        /** Whether this is the value at {@code place} of every element. */
+        default boolean isAt(TermPath place) {
+            return this instanceof AtAPlace(DecisionSubject.AnInput(TermPath at, var _))
+                    && at.equals(place);
+        }
+
+        /**
+         * Whether what reads {@code path} reads the value: some place it is held at is the path,
+         * inside it or holds it as the value is reached ({@link TermPath#standsAtUnderOrAround}).
+         * A place each case reads is read under that case, and which case an element is is not
+         * the value, so a path under another case reads none of it.
+         */
+        default boolean isReadAlong(TermPath path) {
+            return heldAt().stream().anyMatch(at -> at.standsAtUnderOrAround(path));
+        }
+
+        /** Whether {@code key}, read from the elements at {@code elements}, is where this
+         *  stands. */
+        default boolean isWhereFiled(ElementKey key, TermPath elements) {
+            return switch (key) {
+                case ElementKey.At(ElementProjection way) -> isAt(way.from(elements));
+                case ElementKey.ByCase chosen -> this instanceof ChosenByCase(
+                        TermPath of, ElementKey.ByCase same)
+                        && of.equals(elements) && same.equals(chosen);
+            };
+        }
+
+        /** How it is written. */
+        String spelled();
+
+        /** The value at {@code at}. */
+        record AtAPlace(DecisionSubject at) implements TheValue {
+
+            public AtAPlace {
+                Objects.requireNonNull(at, "a value stands somewhere");
+            }
+
+            @Override
+            public DecisionSubject where() {
+                return at;
+            }
+
+            @Override
+            public List<TermPath> places() {
+                return at instanceof DecisionSubject.AnInput(TermPath path, var _) ? List.of(path)
+                        : List.of();
+            }
+
+            @Override
+            public List<TermPath> heldAt() {
+                return places();
+            }
+
+            @Override
+            public String spelled() {
+                return at.spelled();
+            }
+
+            @Override
+            public String toString() {
+                return spelled();
+            }
+        }
+
+        /**
+         * The value at the place of the element at {@code element} that its case chooses, as
+         * {@code key} reads it ({@link ElementKey.ByCase}).
+         *
+         * @param element where the element stands, a position of the input
+         * @param key     the ways from the element, one for each case of it
+         */
+        record ChosenByCase(TermPath element, ElementKey.ByCase key) implements TheValue {
+
+            public ChosenByCase {
+                Objects.requireNonNull(element, "the element whose case chooses stands somewhere");
+                Objects.requireNonNull(key, "a case chooses among ways");
+            }
+
+            @Override
+            public DecisionSubject where() {
+                return new DecisionSubject.AnInput(element);
+            }
+
+            @Override
+            public List<TermPath> places() {
+                List<TermPath> out = new ArrayList<>();
+                key.reads().forEach(way -> out.add(way.from(element)));
+                return out.stream().distinct().sorted(Comparator.comparing(TermPath::toString))
+                        .toList();
+            }
+
+            @Override
+            public List<TermPath> heldAt() {
+                return key.ways().stream().map(way -> way.from(element)).toList();
+            }
+
+            @Override
+            public String spelled() {
+                return key.spelledFrom(element);
+            }
+
+            @Override
+            public String toString() {
+                return spelled();
+            }
+        }
+    }
+
+    /**
      * How many different values stand at {@code ofTheElement} over the elements of the container
-     * at {@code container}: the element itself, a position inside it, or the key it is filed under
-     * — two of them one value where they are equal. Never more than the container holds, and
-     * nought exactly where it holds nothing.
+     * at {@code container}: the element itself, a position inside it, the key it is filed under, or
+     * the place its case chooses — two of them one value where they are equal. Never more than the
+     * container holds, and nought exactly where it holds nothing.
      *
      * <p>A number about every pair of elements and not about each: whether one adds to it turns on
      * the ones beside it, so it is no count of elements meeting something.
      */
-    record HowManyDifferent(DecisionSubject container, DecisionSubject ofTheElement)
-            implements Quantity {
+    record HowManyDifferent(DecisionSubject container, TheValue ofTheElement)
+            implements Quantity, CountedOverAContainer {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyDifferent {
             if (container == null || ofTheElement == null) {
@@ -657,6 +1416,17 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException(ofTheElement + " is no one value of each"
                         + " element of " + container);
             }
+        }
+
+        /** Whether {@code ofTheElement} is one value of each element of the container at
+         *  {@code container}, as {@link #oneOfEach(DecisionSubject, DecisionSubject)} has the place
+         *  it stands at; one its case chooses is the element's own. */
+        public static boolean oneOfEach(DecisionSubject container, TheValue ofTheElement) {
+            return switch (ofTheElement) {
+                case TheValue.AtAPlace(DecisionSubject at) -> oneOfEach(container, at);
+                case TheValue.ChosenByCase chosen ->
+                        container.element().equals(chosen.where());
+            };
         }
 
         /**
@@ -685,6 +1455,349 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     }
 
     /**
+     * How many different values stand at {@code ofTheElement} over the elements of the container
+     * at {@code container} that {@code meeting} keeps: the values of {@link HowManyDifferent}, of
+     * the elements meeting a statement alone.
+     *
+     * <p>A number of the classes of elements one value at {@code ofTheElement} makes, and not of
+     * the elements: two elements meeting the statement with one value there add one. So it is no
+     * {@link HowManyMeet}, which counts each element that meets it.
+     *
+     * <p>What the statement is asked of is part of which number this is. Asked of each element, a
+     * value is counted where some element holding it meets the statement. Asked of each value, it
+     * is a statement about what the elements holding that value come to, which every one of them
+     * answers alike, so a value is counted where its elements do; {@code amount > 0} asked of each
+     * element and the total of the amounts under a value above nought are two numbers, and
+     * {@code 10} and {@code -10} under one value tell them apart.
+     *
+     * <p>The elements counted are the container's own, or every element of the containers inside
+     * its elements put end to end ({@link #across}), as a flattening has them: two of those holding
+     * one value are one value whichever containers hold them, so the number is no sum of a number
+     * of each inner container. Which of the two it is, is where {@code ofTheElement} stands.
+     *
+     * @param container    where the elements stand, or the elements holding the containers they
+     *                     stand in
+     * @param ofTheElement one value of each element, as {@link HowManyDifferent#oneOfEach} has it,
+     *                     of the container's elements or of the elements of a container inside
+     *                     each of them
+     * @param meeting      what keeps an element or a value, and which of the two it is asked of
+     */
+    record HowManyDifferentMeet(DecisionSubject container, TheValue ofTheElement,
+                                Selection meeting) implements Quantity, CountedOverAContainer {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
+        public HowManyDifferentMeet {
+            if (container == null || ofTheElement == null || meeting == null) {
+                throw new IllegalArgumentException("the values are of the elements of a container"
+                        + " meeting something");
+            }
+            String not = whyNot(container, ofTheElement, meeting);
+            if (not != null) {
+                throw new IllegalArgumentException(not);
+            }
+        }
+
+        /**
+         * How many different values stand at {@code ofTheElement} over the elements of the
+         * container at {@code container} that {@code meeting} keeps — or null where that is no
+         * such number, as the constructor would refuse it.
+         */
+        public static HowManyDifferentMeet of(DecisionSubject container, TheValue ofTheElement,
+                                              Selection meeting) {
+            return whyNot(container, ofTheElement, meeting) == null
+                    ? new HowManyDifferentMeet(container, ofTheElement, meeting) : null;
+        }
+
+        /**
+         * Why these are no such number, or null where they are one: the value is one of each
+         * element, the statement keeps some elements and not others, quantifies none of them
+         * again, is read through and answers on each, and asked of each value it answers alike for
+         * the elements holding one.
+         */
+        private static String whyNot(DecisionSubject container, TheValue ofTheElement,
+                                     Selection meeting) {
+            Proposition stated = meeting.statement();
+            DecisionSubject counted = HowManyDifferent.oneOfEach(container, ofTheElement)
+                    ? container : inside(container, ofTheElement);
+            if (counted == null) {
+                return ofTheElement + " is no one value of each element of " + container
+                        + ", or of a container inside each";
+            }
+            if (!stated.mayTurnOnAnElementOf(counted)) {
+                return "what keeps the elements of " + counted + " is the same for each of"
+                        + " them: " + stated;
+            }
+            if (Proposition.Some.quantifiesOver(counted, stated)
+                    || Proposition.Some.quantifiesOver(container, stated)) {
+                return "what keeps an element of " + counted + " quantifies them again, which"
+                        + " would read two elements as one: " + stated;
+            }
+            if (Proposition.mayAnswerNothing(stated)) {
+                return "the elements are kept by a statement answering on every one of them: "
+                        + stated;
+            }
+            if (Proposition.leavesSomethingUnread(stated)) {
+                return "the elements are kept by a statement read through, and " + stated
+                        + " was not";
+            }
+            if (meeting instanceof Selection.OfEachValue
+                    && !Selection.OfEachValue.answersAlike(container, ofTheElement, stated)) {
+                return stated + " is asked of each value at " + ofTheElement + ", and reads"
+                        + " something of an element that the other elements holding its value"
+                        + " need not hold";
+            }
+            return null;
+        }
+
+        /**
+         * The container inside each element of the input's container at {@code container} that
+         * {@code ofTheElement} is one value of each element of, or null where it is none such.
+         */
+        private static DecisionSubject inside(DecisionSubject container, TheValue ofTheElement) {
+            DecisionSubject where = ofTheElement.where();
+            if (!(container instanceof DecisionSubject.AnInput)
+                    || !(where instanceof DecisionSubject.AnInput(TermPath at, var _))
+                    || !HowManyDifferentAcross.ofAContainerInside(container, where)) {
+                return null;
+            }
+            DecisionSubject inner = new DecisionSubject.AnInput(
+                    at.containersHoldingIt().getLast());
+            return HowManyDifferent.oneOfEach(inner, ofTheElement) ? inner : null;
+        }
+
+        /**
+         * Whether the elements counted are those of the containers inside the elements of
+         * {@link #container}, all of them put end to end, rather than its own.
+         */
+        public boolean across() {
+            return !HowManyDifferent.oneOfEach(container, ofTheElement);
+        }
+
+        /**
+         * Where the elements the statement is asked of stand: the container's own, or, where the
+         * count is {@link #across} them, the container inside each of its elements.
+         */
+        public DecisionSubject occurrences() {
+            return across() ? inside(container, ofTheElement) : container;
+        }
+
+        /**
+         * How many of the elements meet what keeps them, each counted however many hold its
+         * value: the count whose elements this counts the values of, and what one element meeting
+         * the statement is asked whatever is counted of them. Across the containers inside the
+         * elements, of the elements of one of them.
+         */
+        public HowManyMeet elementsMeetingIt() {
+            return new HowManyMeet(occurrences(), meeting.statement());
+        }
+
+        /**
+         * What keeps an element or a value of {@link HowManyDifferentMeet}, and which of the two
+         * it is asked of.
+         */
+        public sealed interface Selection {
+
+            /** The statement, over the element's own numbers, the input's, and, asked of a value,
+             *  what the elements holding it come to. */
+            Proposition statement();
+
+            /** {@code stated} asked of what this one is asked of. */
+            default Selection askedAgainOf(Proposition stated) {
+                return switch (this) {
+                    case OfEachElement _ -> new OfEachElement(stated);
+                    case OfEachValue _ -> new OfEachValue(stated);
+                };
+            }
+
+            /**
+             * Asked of each element: a value is counted where some element holding it meets the
+             * statement, whatever the others holding it do.
+             */
+            record OfEachElement(Proposition statement) implements Selection {
+
+                public OfEachElement {
+                    Objects.requireNonNull(statement, "an element is kept by some statement");
+                }
+            }
+
+            /**
+             * Asked of each value: of what the elements holding it come to, which is one answer for
+             * all of them, so the value is counted where its elements meet it.
+             */
+            record OfEachValue(Proposition statement) implements Selection {
+
+                public OfEachValue {
+                    Objects.requireNonNull(statement, "a value is kept by some statement");
+                }
+
+                /**
+                 * Whether {@code stated} reads nothing of an element of the container at
+                 * {@code container} but its value at {@code ofTheElement} and what the elements
+                 * holding that value come to: every number it reads is the value itself, read off
+                 * none of the elements or all of them as one, or read off the elements holding the
+                 * value under its key ({@link NumericTerm#amongTheElementsOf}) — how often it
+                 * occurs, the end of what they hold, what they are gathered into — and every place
+                 * inside an element it reads is the value's or one such a number is read from.
+                 *
+                 * <p>Where the value is of the elements of a container inside each element of
+                 * {@code container}, a number gathered under it is of every element of all of those
+                 * ({@link NumericTerm.GatheredUnderItsKey} is a number of the run), and a place of
+                 * the element of {@code container} holding one is no place the others holding the
+                 * value share: it is outside the elements only where it is outside that one too.
+                 */
+                public static boolean answersAlike(DecisionSubject container,
+                                                   TheValue ofTheElement, Proposition stated) {
+                    if (!(container instanceof DecisionSubject.AnInput(TermPath held, var _))
+                            || !(ofTheElement.where() instanceof DecisionSubject.AnInput(
+                                    TermPath where, var _))) {
+                        return false;
+                    }
+                    TermPath element = switch (ofTheElement) {
+                        case TheValue.AtAPlace _ -> where.containersHoldingIt().getLast()
+                                .element();
+                        case TheValue.ChosenByCase chosen -> chosen.element();
+                    };
+                    return alike(stated, new Apart(element, held, ofTheElement));
+                }
+
+                /**
+                 * The element a value is of, the container counted over whose element holds it —
+                 * the container of that element where the value is of the container's own — and
+                 * the value.
+                 */
+                private record Apart(TermPath element, TermPath counted, TheValue value) {
+
+                    /** Whether {@code at} is the value itself, which one place is only where the
+                     *  value stands at one place of every element. */
+                    boolean isTheValue(TermPath at) {
+                        return value.isAt(at);
+                    }
+
+                    /** Whether {@code key}, read from the elements, is where the value stands. */
+                    boolean filesUnderIt(ElementKey key) {
+                        return value.isWhereFiled(key, element);
+                    }
+                }
+
+                /**
+                 * Whether {@code stated} answers alike for every element holding one value, by
+                 * what each kind of statement is: proved of each kind that is, and refused of
+                 * every other. Which places a statement reads is not enough — which element
+                 * holding a value is the last to, as {@link Proposition.LastToHold} states, reads
+                 * no place but the value's and turns on which element it is.
+                 */
+                private static boolean alike(Proposition stated, Apart apart) {
+                    return StatementReading.<Boolean>over((each, again) ->
+                            alikeAt(each, apart, again)).read(stated);
+                }
+
+                private static boolean alikeAt(Proposition stated, Apart apart,
+                                               StatementReading<Boolean> again) {
+                    return switch (stated) {
+                        case Proposition.Always _ -> true;
+                        case Proposition.Compared compared -> switch (compared.relation()) {
+                            case Relation.Affine affine -> affine.form().coefs().keySet()
+                                    .stream().allMatch(each -> alike(each, apart));
+                            case Relation.Ordered ordered -> alike(ordered.term(), apart);
+                        };
+                        case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                             Proposition.SoManyHold _, Proposition.OfTheWays _ ->
+                                stated.everyPart(again);
+                        case Proposition.Truth truth -> alike(truth.of(), apart);
+                        case Proposition.Present present -> alike(present.of(), apart);
+                        case Proposition.InCases cases -> alike(cases.of(), apart);
+                        case Proposition.SameValue same -> alike(same.one(), apart)
+                                && (same.otherSubject() == null
+                                        || alike(same.otherSubject(), apart));
+                        case Proposition.StringInside inside ->
+                                alike(inside.inner(), apart) && alike(inside.outer(), apart);
+                        // Which element holding the value is the last to, what some element of a
+                        // container meets, what an operation answered of something: each turns on
+                        // which element it is asked of, or on what nothing here reads. And which
+                        // strings a string is one of, which no model has been shown to ask of the
+                        // element a value is held by.
+                        case Proposition.LastToHold _, Proposition.Some _,
+                             Proposition.OnAnApplication _, Proposition.SomeReachable _,
+                             Proposition.Unread _, Proposition.Carried _,
+                             Proposition.InTheStrings _ -> false;
+                    };
+                }
+
+                /** Whether {@code subject} is the value itself or a place of the input outside
+                 *  the elements. */
+                private static boolean alike(DecisionSubject subject, Apart apart) {
+                    return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
+                            && (apart.isTheValue(at) || outsideTheElements(at, apart));
+                }
+
+                /**
+                 * Whether the value at {@code at} is shown to be no value of one element of the
+                 * container counted over: read off none of them, or off what holds them all
+                 * ({@link NumericTerm.AmongTheElements#ofOnePlace}). A place nothing shows apart
+                 * from the elements is not.
+                 */
+                private static boolean outsideTheElements(TermPath at, Apart apart) {
+                    return switch (NumericTerm.AmongTheElements.ofOnePlace(at, apart.counted())) {
+                        case NumericTerm.AmongTheElements.NoneOfThem _,
+                             NumericTerm.AmongTheElements.AllOfThem _ -> true;
+                        case NumericTerm.AmongTheElements.ItAlone _,
+                             NumericTerm.AmongTheElements.ThoseUnderItsKey _,
+                             NumericTerm.AmongTheElements.Otherwise _ -> false;
+                    };
+                }
+
+                /**
+                 * Whether {@code number}, read as an element of the container counted over sees
+                 * it ({@link NumericTerm#amongTheElementsOf}), is the value itself, a number none
+                 * of the elements or all of them as one are read for, or one read off every
+                 * element holding the value at the place its key is read, across every occurrence
+                 * of the containers those stand in.
+                 */
+                private static boolean alike(Quantity number, Apart apart) {
+                    if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))) {
+                        return false;
+                    }
+                    return switch (term.amongTheElementsOf(apart.counted())) {
+                        case NumericTerm.AmongTheElements.ItAlone _ ->
+                                term instanceof NumericTerm.ValueOf(TermPath at)
+                                        && apart.isTheValue(at);
+                        case NumericTerm.AmongTheElements.NoneOfThem _,
+                             NumericTerm.AmongTheElements.AllOfThem _ -> true;
+                        case NumericTerm.AmongTheElements.ThoseUnderItsKey key ->
+                                key.selection() == null
+                                        && key.elements().standsAtTheSamePlaceOnEveryRow(
+                                                apart.element())
+                                        && apart.filesUnderIt(key.key());
+                        case NumericTerm.AmongTheElements.Otherwise _ -> false;
+                    };
+                }
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#different " + container + " [" + ofTheElement + "] where "
+                    + (meeting instanceof Selection.OfEachValue ? "each value " : "") + "[",
+                    meeting.statement().spelling(), Spelling.CLOSE);
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
      * What {@code ofTheElement}, a number of each element of the container at {@code container},
      * adds up to over all of them: how many the lists inside a list hold between them, say. The
      * input's own totals are of a value standing at one position inside each element
@@ -696,10 +1809,29 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record SumOver(DecisionSubject container, Quantity ofTheElement) implements Quantity {
 
+        /** Whole where what it adds up of each element is. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return ofTheElement.wholeOnEveryRow(measuredWhole);
+        }
+
         public SumOver {
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("a sum is of a number of each element");
             }
+        }
+
+        /**
+         * What {@code number}, a number of each element of the container at {@code container},
+         * adds up to over all of them: where it is how many elements of a container inside each
+         * element meet a statement, the elements of every one of those containers that meet it
+         * ({@link HowManyMeetAcross}); the sum of it otherwise.
+         */
+        private static Quantity summed(DecisionSubject container, Quantity number) {
+            return number instanceof HowManyMeet(DecisionSubject inner, Proposition meeting)
+                    && HowManyMeetAcross.insideEach(container, inner)
+                    ? new HowManyMeetAcross(container, inner, meeting)
+                    : new SumOver(container, number);
         }
 
         /**
@@ -711,7 +1843,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public static LinearForm<Quantity> over(DecisionSubject container,
                                                 LinearForm<Quantity> each, Quantity size) {
             Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-            each.coefs().forEach((number, by) -> coefs.put(new SumOver(container, number), by));
+            each.coefs().forEach((number, by) -> coefs.put(summed(container, number), by));
             if (each.constant().signum() != 0) {
                 if (size == null) {
                     return null;
@@ -750,7 +1882,50 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "#sum " + container + " [" + ofTheElement.spelled() + "]";
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#sum " + container + " [", ofTheElement.spelling(), Spelling.CLOSE);
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What a total over a container the body wrote out adds up to, or how many that container
+     * holds, in the ways its elements are kept, read once for all of them: a stand-in that
+     * {@link GivenTotals} replaces by the total of each way.
+     *
+     * <p>It never reaches a reader. A comparison read over it states the same thing in every way
+     * but for what the total is, and the derivation that gives each way its total concludes the
+     * statement with the stand-in taken out.
+     *
+     * @param reading which reading of a comparison it stands in, so that two totals of two
+     *                readings are two quantities
+     * @param counted whether it is how many the container holds, and not what it adds up to
+     */
+    record TheKeptTotal(int reading, boolean counted) implements Quantity {
+
+        /** Never asked: the stand-in reaches no reader. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            throw reachedAReader();
+        }
+
+        /** What a reader that is handed the stand-in has been given wrongly. */
+        public IllegalStateException reachedAReader() {
+            return new IllegalStateException("a total of the elements a way keeps is given its"
+                    + " ways before a reader is handed it: " + this);
+        }
+
+        @Override
+        public String spelled() {
+            return (counted ? "#kept-count " : "#kept-sum ") + reading;
         }
 
         @Override
@@ -774,6 +1949,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      */
     record HowManyHold(List<Proposition> each) implements Quantity {
 
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
         public HowManyHold {
             each = List.copyOf(each);
             if (each.isEmpty()) {
@@ -791,11 +1972,21 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            StringBuilder out = new StringBuilder("#[");
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            List<Spelling> pieces = new ArrayList<>(2 * each.size() + 1);
+            pieces.add(Spelling.of("#["));
             for (int i = 0; i < each.size(); i++) {
-                out.append(i == 0 ? "" : ", ").append(each.get(i).key());
+                if (i > 0) {
+                    pieces.add(Spelling.SEPARATOR);
+                }
+                pieces.add(each.get(i).spelling());
             }
-            return out.append("]").toString();
+            pieces.add(Spelling.CLOSE);
+            return Spelling.joined(pieces);
         }
 
         @Override
@@ -820,7 +2011,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * is the container's size or none, and a count of what nobody read is no number anything can be
      * said of.
      */
-    record HowManyMeet(DecisionSubject container, Proposition ofTheElement) implements Quantity {
+    record HowManyMeet(DecisionSubject container, Proposition ofTheElement)
+            implements Quantity, CountedOverAContainer {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
 
         public HowManyMeet {
             if (container == null || ofTheElement == null) {
@@ -829,6 +2027,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (!ofTheElement.mayTurnOnAnElementOf(container)) {
                 throw new IllegalArgumentException("a count of " + ofTheElement
                         + " is the same for every element of " + container);
+            }
+            // Said of each element, as some element meeting it is ({@link #someMeets}).
+            if (Proposition.Some.quantifiesOver(container, ofTheElement)) {
+                throw new IllegalArgumentException("a count of the elements of " + container
+                        + " is of a statement quantifying them again, which would read two"
+                        + " elements as one: " + ofTheElement);
             }
             if (Proposition.mayAnswerNothing(ofTheElement)) {
                 throw new IllegalArgumentException("a count is of a statement answering on every"
@@ -850,7 +2054,79 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
 
         @Override
         public String spelled() {
-            return "#" + container + " [" + ofTheElement.key() + "]";
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#" + container + " [", ofTheElement.spelling(), Spelling.CLOSE);
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * How many elements meet {@code ofTheElement} over the containers at {@code inner}, one inside
+     * each element of the container at {@code container}, every element of all of them put end to
+     * end: what the lists of a list hold between them that meet it.
+     *
+     * <p>Beside {@link HowManyMeet} of {@code inner} and not the same number: that one is of the
+     * elements of the one container a row chose among the occurrences, and this is of every
+     * occurrence's. The sum of the first over the elements of {@code container}
+     * ({@link SumOver}) is this, which is why a sum so written is read as this.
+     *
+     * @param container where the elements holding the containers stand
+     * @param inner     the container inside each of those, one container further in
+     */
+    record HowManyMeetAcross(DecisionSubject container, DecisionSubject inner,
+                             Proposition ofTheElement) implements Quantity {
+
+        /** A count. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return true;
+        }
+
+        public HowManyMeetAcross {
+            if (container == null || inner == null || ofTheElement == null) {
+                throw new IllegalArgumentException("a count is of the elements of the containers"
+                        + " inside the elements of a container");
+            }
+            if (!insideEach(container, inner)) {
+                throw new IllegalArgumentException(inner + " is no container inside each element"
+                        + " of " + container);
+            }
+        }
+
+        /** Whether {@code inner} is a container inside each element of {@code container}, one
+         *  container further in. */
+        public static boolean insideEach(DecisionSubject container, DecisionSubject inner) {
+            return container instanceof DecisionSubject.AnInput
+                    && inner instanceof DecisionSubject.AnInput
+                    && inner.isAtOrUnder(container.element())
+                    && inner.howManyContainersHoldIt() == container.howManyContainersHoldIt() + 1;
+        }
+
+        /**
+         * The count of the elements of the one container a row chose, which is what is counted of
+         * each occurrence and what one element meeting the statement is asked.
+         */
+        public HowManyMeet elementsMeetingIt() {
+            return new HowManyMeet(inner, ofTheElement);
+        }
+
+        @Override
+        public String spelled() {
+            return spelling().toString();
+        }
+
+        @Override
+        public Spelling spelling() {
+            return Spelling.of("#across " + container + " " + inner + " [",
+                    ofTheElement.spelling(), Spelling.CLOSE);
         }
 
         @Override
@@ -871,6 +2147,176 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     String spelled();
 
     /**
+     * {@link #spelled}, held as the pieces it is put together from ({@link Spelling}).
+     *
+     * <p>A count of a statement is spelled with the statement's spelling in it, and a comparison
+     * over the count is told apart and ordered by its own spelling — so a quantity that wrote the
+     * statement out would hold its text again in every comparison it stands in, and again in every
+     * count of a statement such a comparison is part of. A quantity made of statements or of other
+     * quantities holds their spellings themselves; one made of neither is its text.
+     */
+    default Spelling spelling() {
+        return Spelling.of(spelled());
+    }
+
+    /**
+     * What a walk over the elements of a container hands its step beside the element, where that
+     * says where a value bound in the step lies and which of those values it takes: the end kept
+     * so far of what it carried, or where the element stands.
+     *
+     * <p>One type for every such thing, so a reader that carries one carries all of them, and one
+     * that asks which it is answers each.
+     */
+    public sealed interface HandedToTheStep extends ReadOffABinding
+            permits KeptSoFar, PositionInTheWalk {}
+
+    /**
+     * What a binding's value is read off a container's elements as: what a walk hands its step, the
+     * element an index written down picks, or the element of a list of every whole number between
+     * two.
+     */
+    public sealed interface ReadOffABinding extends ReadAlongAContainer
+            permits HandedToTheStep, PickedAtAnIndex, AWholeNumberInTurn {}
+
+    /**
+     * The element a walk hands its step over a list an operation made of every whole number from
+     * {@code from} up to {@code to}, each once ({@code OperationFact.HoldsEachWholeNumberInTurn}).
+     *
+     * <p>The element and not where it stands. At position {@code i} the element is
+     * {@code from + i}, for {@code i} from nought to {@code to - from}, so the element takes every
+     * whole number from {@code from} to {@code to}, each once, and none where {@code to} is below
+     * {@code from}. Where it stands is {@link PositionInTheWalk}'s, and the two are one number only
+     * where {@code from} is nought.
+     *
+     * <p>No container of the input holds these elements. A row puts no list anywhere for them: it
+     * puts the numbers {@code from} and {@code to} are made of, and the list follows. So the places
+     * a relation on the element reads are those of the two ends, and a reader asking how many the
+     * list holds asks the two ends.
+     *
+     * <p>That a run gets to the element is not said here. The list is made only where the run gets
+     * past making it, and a walk that stops on an answer hands its step the elements before that
+     * answer and no other; both are what the reading of the walk says.
+     *
+     * @param from the number the list starts at, as a form of the input's numbers
+     * @param to   the number it ends at, likewise
+     */
+    record AWholeNumberInTurn(LinearForm<NumericTerm> from, LinearForm<NumericTerm> to)
+            implements ReadOffABinding {
+
+        public AWholeNumberInTurn {
+            Objects.requireNonNull(from, "the numbers start somewhere");
+            Objects.requireNonNull(to, "and end somewhere");
+        }
+    }
+
+    /**
+     * A number read off a container's elements one by one and at no one position of the input,
+     * where what it is says where it lies beside how many the container holds: what a walk hands
+     * its step, the element an index picks, or how many of the elements meet a statement.
+     *
+     * <p>One type for every such thing, for the reason {@link HandedToTheStep} is one: a reader of
+     * a relation carrying one carries all of them.
+     */
+    public sealed interface ReadAlongAContainer permits ReadOffABinding, CountedOverAContainer {}
+
+    /**
+     * A number of the elements of one container: how many meet a statement, how many different
+     * values they hold at a place, or how many different values the ones a statement keeps hold.
+     * What a row shows of one is how many elements it holds and what they differ at, so the three
+     * are looked for a witness together ({@code CountWitnesses}).
+     */
+    public sealed interface CountedOverAContainer extends ReadAlongAContainer
+            permits HowManyMeet, HowManyDifferent, HowManyDifferentMeet {
+
+        /** Where the elements counted stand: the container, or the one inside each of its
+         *  elements where the count is across them. */
+        DecisionSubject container();
+
+        /** What an element is asked: the statement a count of elements is of, what keeps an element
+         *  of a count of the values of those a statement keeps, and nothing of a count of every
+         *  element's value. */
+        default Proposition statement() {
+            return switch (this) {
+                case HowManyMeet meet -> meet.ofTheElement();
+                case HowManyDifferent _ -> new Proposition.Always(true);
+                case HowManyDifferentMeet different -> different.meeting().statement();
+            };
+        }
+    }
+
+    /**
+     * The element at {@code index} of {@code container}, which a name an arm opening a lookup at
+     * that index binds.
+     *
+     * <p>The element and not the elements. Where the elements of the container stand is one place
+     * ({@link TermPath.Step.Element}) and a row puts a value at all of them or at some, so a number
+     * read at that place says nothing of which element a comparison is about: the index is what
+     * does, and it is held here beside the place whose declarations and rules the element is read
+     * under, which is a different thing and is not to be taken for it. A reader that wants the
+     * values the element may take asks the place; one that wants a value at the element asks for a
+     * container of more than {@code index} elements.
+     *
+     * @param container the list the lookup is made in, which no other container holds
+     * @param index     the index written down
+     * @param element   where the elements of the container stand, or a field under them where the
+     *                  name is read through one: the place the element's declarations are read at
+     * @param howMany   how many the container holds
+     */
+    record PickedAtAnIndex(TermPath container, long index, TermPath element,
+                           NumericTerm.FromOnePosition howMany) implements ReadOffABinding {
+
+        public PickedAtAnIndex {
+            Objects.requireNonNull(container, "an element of some container");
+            Objects.requireNonNull(element, "and the place the elements stand at");
+            if (index < 0 || container.insideAContainer()
+                    || !element.isAtOrUnder(container.element())
+                    || !PositionInTheWalk.counts(howMany, container)) {
+                throw new IllegalArgumentException("an element is picked at an index of a"
+                        + " container that no other holds, and read where its elements stand: "
+                        + container + "[" + index + "] at " + element);
+            }
+        }
+    }
+
+    /**
+     * Where the element a walk over every element of {@code container} hands its step stands in
+     * it, counted from nought in the order the container holds its elements: how many elements
+     * come before it.
+     *
+     * <p>So beside how many the container holds it lies from nought to one below that, and a run
+     * of a container of so many hands its step each of those values once — every one of them, in
+     * every row, since the walk is over every element. A container holding nothing hands the step
+     * nothing, and no value bound in it is read there.
+     *
+     * @param container the container the walk walks, which no other container holds
+     * @param howMany   how many the container holds
+     */
+    record PositionInTheWalk(TermPath container, NumericTerm.FromOnePosition howMany)
+            implements HandedToTheStep {
+
+        public PositionInTheWalk {
+            Objects.requireNonNull(container, "a walk walks some container");
+            if (container.insideAContainer()) {
+                throw new IllegalArgumentException("a position is counted in one container, and `"
+                        + container + "` is one of many");
+            }
+            if (!counts(howMany, container)) {
+                throw new IllegalArgumentException("a position is counted against how many the"
+                        + " container holds: " + howMany + " of " + container);
+            }
+        }
+
+        /** Whether {@code howMany} is how many the value at {@code container} holds, as it
+         *  stands. */
+        public static boolean counts(NumericTerm howMany, TermPath container) {
+            return howMany instanceof NumericTerm.TakenOf count
+                    && count.takenAs() instanceof TakenAs.HowManyItHolds
+                    && count.position().equals(container)
+                    && count.transformation() instanceof ValueTransformation.Identity;
+        }
+    }
+
+    /**
      * What a walk whose step keeps one end of what it carried and a value of the element
      * ({@code SeededWalk.endKept}) carries into the step on an element: that end of its seed and
      * of the value on every element before it.
@@ -887,7 +2333,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * @param howMany   how many the container holds, or null where that is no number read
      */
     record KeptSoFar(Extreme extreme, Seed seed, TermPath container,
-                     NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany) {
+                     NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany)
+            implements HandedToTheStep {
 
         public KeptSoFar {
             Objects.requireNonNull(extreme, "a walk keeps one end");
@@ -980,30 +2427,39 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * could not read. Empty where nothing of the value was read to stop — an answer a dependency
      * gave, what an attempt built — since there is nothing it is made of to read.
      *
-     * <p>Where the value is what a walk keeping an end carried into its step, which end it is of
-     * what is carried beside it ({@link KeptSoFar}). That says where the value may lie and which of
-     * those values it is shown to take, and still nothing of which value it is on a run.
+     * <p>Where the value is what a walk hands its step beside the element, what the walk hands is
+     * carried beside it ({@link HandedToTheStep}): which end the walk kept of what it carried, or
+     * where the element stands. That says where the value may lie and which of those values it is shown to
+     * take, and still nothing of which value it is on a run.
      *
      * @param binding which binding names the value
      * @param steps   the steps read off it that go somewhere, outermost first
      * @param type    what stands there, which is how its numbers are spaced
      * @param madeOf  why what the value was made from is no number of the input, where the
      *                reading met it and stopped
-     * @param kept    the end a walk has kept by the element its step is applied to, where the
-     *                value is what the walk carried into the step
+     * @param handed  what a walk hands its step, where the value is that
      */
     record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
-                      Optional<WhyUnread> madeOf, Optional<KeptSoFar> kept)
+                      Optional<WhyUnread> madeOf, Optional<ReadOffABinding> handed)
             implements Quantity {
 
+        /** Whole where what stands there is counted in whole numbers, which is how its numbers
+         *  are spaced. A name is the declarations' to open, and is not shown here. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return Carrier.ofPrimitive(type) instanceof Carrier carrier
+                    && carrier.countsInWholeNumbers();
+        }
+
         public OfABinding {
-            if (binding == null || type == null || madeOf == null || kept == null) {
+            if (binding == null || type == null || madeOf == null || handed == null) {
                 throw new IllegalArgumentException("a bound number is some binding's, of some type");
             }
             steps = List.copyOf(steps);
-            if (kept.isPresent() && (madeOf.isPresent() || !steps.isEmpty())) {
-                throw new IllegalArgumentException("what a walk carried is the value itself, and"
-                        + " nothing of it was read to stop: " + binding);
+            if (handed.isPresent() && (madeOf.isPresent()
+                    || (!steps.isEmpty() && !(handed.get() instanceof PickedAtAnIndex)))) {
+                throw new IllegalArgumentException("what a walk hands its step is the value itself,"
+                        + " and nothing of it was read to stop: " + binding);
             }
         }
 
@@ -1012,6 +2468,52 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             StringBuilder out = new StringBuilder(binding.toString());
             steps.forEach(each -> out.append('.').append(each));
             return out.toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * A number a call of the model answers on a run, where nothing here says what that number is
+     * in terms of the input: a behavior called, a walk from a seed, a recursion — or an operation
+     * over what one of them answered.
+     *
+     * <p>The same value as a name bound to that call would stand for ({@link OfABinding}), and
+     * read as that is: a value is one value whether or not the body gave it a name, so a
+     * comparison over one is the same statement written either way.
+     *
+     * <p>By the call and not by what it was handed. Which call of the model it is says which copy
+     * of the body wrote it, so two calls a helper's two copies make are two values, and one call
+     * read twice is one.
+     *
+     * @param call   which call of the model answers it
+     * @param type   what the call answers, which is how its numbers are spaced
+     * @param madeOf why what it answers is no number of the input, where the reading met it and
+     *               stopped
+     */
+    record OfACall(ConstructOccurrence call, Type type, Optional<WhyUnread> madeOf)
+            implements Quantity {
+
+        public OfACall {
+            if (call == null || type == null || madeOf == null) {
+                throw new IllegalArgumentException("a number a call answers is some call's, of"
+                        + " some type");
+            }
+        }
+
+        /** Whole where what the call answers is counted in whole numbers. */
+        @Override
+        public boolean wholeOnEveryRow(Predicate<NumericTerm> measuredWhole) {
+            return Carrier.ofPrimitive(type) instanceof Carrier carrier
+                    && carrier.countsInWholeNumbers();
+        }
+
+        @Override
+        public String spelled() {
+            return "call " + call;
         }
 
         @Override

@@ -495,6 +495,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/Clauses$ReadsOfAClause", "walk", "(" + core + ")V", 2,
                 "a read and a count taken of a container, each asked of a node: a Widen is neither,"
                         + " and the walk goes on into it and meets the one under it");
+        row(out, c + "check/RecordRules", "readFrom",
+                "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", 1,
+                "a read, asked of each node Core.forEachDistinctNode hands over: a Widen is not one,"
+                        + " and the walk hands over what it holds as well");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                         + "types/ValueName$Helper;Ljava/util/List;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "inputs/InputUses$Walk", "fieldOf", "(" + core + ")" + core, 1,
@@ -502,11 +506,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " none and is walked on into, where the access it holds is met");
         row(out, c + "inputs/InputUses$Walk", "heldWithoutReading",
                 "(" + core + "L" + c + "inputs/InputReads;)" + core, 2, GOES_ON_INTO_IT);
-        row(out, c + "inputs/InputReads", "walkNames",
+        row(out, c + "core/WhatABodyReads", "namesIn",
+                "(" + core + "Ljava/util/Set;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
+        row(out, c + "inputs/InputReads", "applicationsRead",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", 1, COUNTS_THROUGH_IT);
-        row(out, c + "inputs/InputReads", "readsAnApplied", "(" + core + "L" + c
-                + "check/Symbols;L" + c + "check/DeclarationNewtypes;Ljava/util/Set;)Z", 1,
-                COUNTS_THROUGH_IT);
         row(out, c + "check/Clauses", "substituted",
                 "(" + core + "Ljava/util/Map;)" + core, 1, REWRITES_UNDER_IT);
         row(out, c + "check/Elaborator", "attempted",
@@ -516,7 +519,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " a value is not widened where it is made");
         row(out, c + "check/ElementBindings", "walk",
                 "(" + core + "Ljava/util/Map;Ljava/util/Map;L" + c + "check/ElementProvenance;"
-                        + "Ljava/util/Map;Ljava/util/Map;)V", 3,
+                        + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;)V", 3,
+                GOES_ON_INTO_IT);
+        row(out, c + "check/ElementsWrittenOut", "bound",
+                "(" + core + "L" + c + "types/BindingId;)L" + CORE + "$LetIn;", 1,
                 GOES_ON_INTO_IT);
         row(out, c + "check/InvariantChecker", "bindingIn",
                 "(" + core + ")L" + CORE + "$LetIn;", 1, GOES_ON_INTO_IT);
@@ -562,7 +568,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
                         + "check/PathReachability$Walked;", 1, GOES_ON_INTO_IT);
         row(out, c + "check/PathReachability", "pastOperands",
-                "(" + core + "L" + c + "check/PathReachability$Walked;L" + c
+                "(" + core + "L" + c + "check/Known;L" + c + "check/PathReachability$Walked;L" + c
                         + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
                         + "check/PathReachability$Walked;", 1,
                 "asked of the node PathReachability.walk stands at once its operands are walked,"
@@ -608,6 +614,19 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/WhatABodyReads", "anyBinding", "(" + core + ")Z", 1,
                 "asks whether a node reads any binding, and walks on through a Widen into what it"
                         + " holds");
+        row(out, c + "core/WhatABodyReads", "anyOf", "(" + core + "Ljava/util/Set;)Z", 1,
+                "asks whether a node reads one of some bindings, and walks on through a Widen into"
+                        + " what it holds");
+        row(out, c + "core/WhatABodyReads", "madeOf", "(" + core + "Ljava/util/Set;)V", 2,
+                "asks whether a node binds a name, by a let or by an arm of a match, and walks on"
+                        + " through a Widen into what it holds");
+        row(out, c + "core/WhatABodyReads", "boundIn", "(" + core + "Ljava/util/Map;)V", 1,
+                "asks whether a node binds a name, and walks on through a Widen into what it"
+                        + " holds");
+        row(out, c + "core/WhatABodyReads", "readsIn",
+                "(" + core + "Ljava/util/function/Consumer;)V", 1,
+                "asks whether a node reads a name, and walks on through a Widen into what it"
+                        + " holds");
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I", 2, COUNTS_THROUGH_IT);
         row(out, c + "core/GrowingFold", "aliased", "(" + core + "Ljava/util/Set;)I", 1,
                 COUNTS_THROUGH_IT);
@@ -630,7 +649,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/GrowingFold", "reads", "(" + core + "Ljava/util/Set;)I", 1,
                 COUNTS_THROUGH_IT);
         row(out, c + "core/GrowingFold", "rewrite",
-                "(" + core + "L" + c + "core/TheWalk;)" + core, 3,
+                "(" + core + "L" + c + "core/TheWalk;ZZ)" + core, 3,
                 REWRITES_UNDER_IT);
         row(out, c + "core/GrowingFold", "uses", "(" + core + "L" + c + "types/BindingId;)I", 1,
                 COUNTS_THROUGH_IT);
@@ -641,6 +660,15 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "types/BindingId;)Z", 1,
                 "whether the node a walk stands at reads one binding: a Widen does not, and the"
                         + " read under it is met one step down");
+        row(out, c + "coverage/CoverageSites$Walk", "closedUnder",
+                "(" + core + "Ljava/util/Set;)Z", 3,
+                "whether the node a walk stands at reads a name, calls a behavior or applies a"
+                        + " value: a Widen does none of them, and what it holds is met one step"
+                        + " down");
+        row(out, c + "core/Core", "bindersIn",
+                "(" + core + "Ljava/util/Set;)V", 1,
+                "whether the node a walk stands at binds a name: a Widen binds none, and what it"
+                        + " holds is met one step down");
         row(out, c + "coverage/ComparisonCatalog", "occurrenceAt",
                 "(" + core + ")Ljava/util/Optional;", 1,
                 "whether the node a walk stands at is a comparison: a Widen is not, and the"
@@ -663,10 +691,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 GOES_ON_INTO_IT);
         row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
-        row(out, c + "partition/Pullback", "whereEachOperatorAnswers",
-                "(L" + c + "partition/Pullback$Operators;)Ljava/util/List;", 1,
-                "asked of the operators AffineForms told of, each of which it took past a Widen"
-                        + " before it composed it");
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + "L" + c
                 + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
                 + "partition/ComparisonReadings$Way;", 2, GOES_ON_INTO_IT);
@@ -683,21 +707,22 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "coverage/NormalReturn;Ljava/util/List;)V", 1,
                 "follows what a node evaluates first to where a run stops, and what a Widen"
                         + " evaluates is what it holds (Evaluated)");
-        row(out, c + "partition/ComparisonAssessment", "readsAnswer",
-                "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
-        row(out, c + "partition/ComparisonReadings", "statedAt",
-                "(" + core + "Ljava/util/function/Supplier;L" + c
-                        + "partition/ComparisonReadings$StatedHere;)L" + c
-                        + "partition/ComparisonReadings$StatedAt;", 2,
-                "whether the node the walk stands at is a construct a source wrote that states a"
-                        + " comparison, or an application of one answering a truth: a Widen is"
-                        + " neither, and the construct under it is met one step down");
+        row(out, c + "partition/ComparisonReadings", "mayState",
+                "(" + core + ")L" + c + "types/ConstructOccurrence;", 2,
+                "whether the node the walk stands at is a construct a source wrote that may state"
+                        + " a comparison, or an application of one answering a truth, asked for"
+                        + " both readings of the walk: a Widen is neither, and the construct under"
+                        + " it is met one step down");
         row(out, c + "partition/ComparisonReadings", "walk",
                 "(" + core + "L" + c + "partition/ComparisonReadings$Body;L" + c
                         + "inputs/InputReads;L" + c + "partition/ClosureApplications;L" + c
                         + "partition/LiveFlow;Ljava/util/List;Z"
                         + "Ljava/util/List;Ljava/util/List;L" + c
                         + "partition/ConditionNumbering;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "partition/WhereARunMayStop", "aStepARunMayStopAt", "(" + core + ")Z", 1,
+                "whether the node the walk stands at is a step a run may stop at: a node standing"
+                        + " as a wider type is refused first, and the step under it is met one"
+                        + " step down");
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V", 1,
                 COUNTS_THROUGH_IT);
         row(out, c + "partition/PredicateReadings", "found",
@@ -728,6 +753,16 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "Ljava/util/Set;)Ljava/util/List;", 1,
                 "whether values meet at the node the walk stands at: a Widen is one value standing"
                         + " as another, so none meet there");
+        String ways = "(" + core + "L" + c + "flow/Naming;L" + c
+                + "flow/ComparisonWays;Ljava/util/Map;)L" + c + "flow/Paths;";
+        row(out, c + "flow/ValueArrivals", "meant", ways, 1,
+                "whether the node the walk stands at is an operator that stops early: a Widen has"
+                        + " its own reading, as the value it holds, and never arrives here");
+        row(out, c + "flow/ValueArrivals", "built", ways, 1,
+                "whether the node the walk stands at is a construction a run has to get past: a"
+                        + " Widen is built of the value it holds, and the construction under it is"
+                        + " got past where that value is settled, so asked through the Widen it"
+                        + " would be got past twice");
         return out;
     }
 

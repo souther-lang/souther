@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.FieldDomains;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -132,7 +133,7 @@ final class PartitionClasses {
                                                    RuleReadingContext reading,
                                                    List<TypeSymbol> worn, WornNames.Unwritable unnamed,
                                                    java.util.Set<TypeSymbol> expanding) {
-        String why = unnamed.why();
+        SearchMessage why = unnamed.why();
         List<PartitionClass> out = new ArrayList<>();
         // The classes of the same position with no names to write them under. What each is and what
         // reads a value into it are the position's either way; only the recipes are dropped, and
@@ -222,7 +223,7 @@ final class PartitionClasses {
         Recognition is = Recognition.Under.of(worn, new Recognition.Held(true));
         return some.isEmpty()
                 ? nothingFor("Some", "Some", is, some.met(),
-                        "nothing here composed a value of " + Type.show(element))
+                        new SearchMessage.NothingComposedAValueOfTheType(Type.show(element)))
                 : PartitionClass.of("Some", "Some", is,
                         RepresentativeSource.under(writes, RepresentativeSource.of(some)));
     }
@@ -236,7 +237,7 @@ final class PartitionClasses {
      * empty where it is one this compiler would not build.
      */
     private static PartitionClass nothingFor(String id, String label, Recognition is,
-                                             CompositionShortfall met, String why) {
+                                             CompositionShortfall met, SearchMessage why) {
         return met.nothing() ? PartitionClass.ungeneratable(id, label, is, why)
                 : PartitionClass.of(id, label, is, new RepresentativeSource.NotArrivedAt(met, why));
     }
@@ -301,7 +302,7 @@ final class PartitionClasses {
                     Type.ref(declared), reading, null, expanding);
             return values.isEmpty()
                     ? nothingFor(idOfCase(leaf), leaf.name(), is, values.met(),
-                            "nothing here composed a value of `" + leaf.name() + "`")
+                            new SearchMessage.NothingComposedAValueOfTheCase(leaf.name()))
                     : PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                             RepresentativeSource.under(writes,
                                     RepresentativeSource.of(values)));

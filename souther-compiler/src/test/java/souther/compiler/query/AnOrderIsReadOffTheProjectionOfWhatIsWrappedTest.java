@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -60,8 +61,8 @@ class AnOrderIsReadOffTheProjectionOfWhatIsWrappedTest {
      */
     @Test
     void eachDeclarationSaysWhatItIsComparedBy() {
-        Compilation compilation = Compilation.ofSources(List.of(ONE_MODULE),
-                ModulePath.of(Map.of()));
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(
+                List.of(ONE_MODULE), ModulePath.of(Map.of())));
         Linkages.Of provided = compilation.db().ask(new Linkages.Provided("m")).value();
 
         Map<String, String> orderedAs = new LinkedHashMap<>();
@@ -158,7 +159,7 @@ class AnOrderIsReadOffTheProjectionOfWhatIsWrappedTest {
                 behavior twice : (n: Int) -> Int
                 let twice (n) = inc(inc(n))
                 """), ModulePath.of(path));
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1510", "E1510"), compilation);
         Set<ModuleMessage.ItWasBuiltAgainstAnotherLinkage> moved = new HashSet<>();
         for (Db.Found found : compilation.db().allReports()) {
             if (found.report().diagnostic().said()

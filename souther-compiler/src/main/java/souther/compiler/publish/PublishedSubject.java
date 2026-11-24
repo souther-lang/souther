@@ -302,4 +302,26 @@ public sealed interface PublishedSubject {
             return module + "/" + behavior + "/" + axis;
         }
     }
+
+    /**
+     * One rewrite of a behavior's body, named as the replacement entry under that behavior is.
+     *
+     * <p>The obligation's id and nothing beside it, so an entry that holds the verdict open joins
+     * the rewrite it is about by the same value the measure's entry is told apart by. Under a key
+     * of its own, as an arm's is: a point's {@code obligationId} is another shape.
+     *
+     * <p>With the module, because that id is told apart within a module's behaviors only.
+     */
+    record OfAReplacement(String module, ObjectNode replacementId) implements PublishedSubject {
+
+        @Override
+        public SubjectWord kind() {
+            return SubjectWord.REPLACEMENT;
+        }
+
+        @Override
+        public String identity() {
+            return module + "/" + replacementId;
+        }
+    }
 }

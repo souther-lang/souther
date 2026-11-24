@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Region;
@@ -62,7 +63,7 @@ class AClauseIsAddressedWhereItWasWrittenTest {
     }
 
     private static Compilation compiled() {
-        return Compilation.ofSource(SOURCE, "Main");
+        return ACompiledModel.answered(SOURCE);
     }
 
     private static TypeSymbol even(Compilation compilation) {

@@ -17,6 +17,7 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,7 +49,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
      * spends the observation budget, one is past what the backend can emit — so nothing about them
      * overruns.
      */
-    private record Unreadable(String source, JvmExampleDeadlines overrun) {}
+    private record Unreadable(String source, JvmExampleDeadlines overrun, List<String> refusedFor) {}
 
     /** Models where something a measure would want to read was not read, each in a different way. */
     private static List<Unreadable> unreadableInSomeWay() {
@@ -80,12 +81,13 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 example take
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
-                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take"))),
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take")),
+                        List.of("E1923")),
                 // a value past the observation's limits: the position is there and unreadable
-                new Unreadable(budgetSpent(), null),
+                new Unreadable(budgetSpent(), null, List.of()),
                 // a module whose classes could not be made: nothing was read, and nothing says
                 // which row would have covered what
-                new Unreadable(classesNotMade(), null));
+                new Unreadable(classesNotMade(), null, List.of("E2102")));
     }
 
     /**
@@ -170,22 +172,25 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
     private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
 
     private static Compilation measured(Unreadable model) {
-        return COMPILED.computeIfAbsent(model.source(),
-                _ -> measured(model.source(), model.overrun()));
+        Compilation shared = COMPILED.computeIfAbsent(model.source(),
+                _ -> measured(model.source(), model.overrun(), model.refusedFor()));
+        return ACompiledModel.refusedWith(model.refusedFor(), shared);
     }
 
     private static Compilation measured(String source) {
-        return measured(source, null);
+        return measured(source, null, List.of());
     }
 
-    private static Compilation measured(String source, JvmExampleDeadlines overrun) {
+    /** The model measured, and refused for exactly {@code refusedFor}: what could not be read is
+     * said as an error of the model, and the measures are read all the same. */
+    private static Compilation measured(String source, JvmExampleDeadlines overrun,
+                                        List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         if (overrun != null) {
             compilation.withJvmExampleDeadlines(overrun);
         }
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(refusedFor, compilation);
     }
 
     /**
@@ -229,7 +234,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                                             compilation.db(), cited)),
                                     new souther.compiler.diag.SourceRendering(
                                             souther.compiler.source.SourceId::value,
-                                            compilation.texts()), null));
+                                            compilation.texts()), Locale.ENGLISH, null));
                 }
             }
             if (partition.pairs().counted() instanceof Measurement.Complete<?>
@@ -282,7 +287,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
             String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                             souther.compiler.query.OfferingRequest.overTheModule(module)),
-                    Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                    Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
             // Either word, because the two models get here differently: one has rows nothing read
@@ -344,7 +349,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 .get("take").arms().unmet().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(module)),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text().isEmpty(),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish().isEmpty(),
                 "and rows offered for them");
     }
 }

@@ -1,6 +1,7 @@
 package souther.compiler.diag.msg;
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Localizable;
 
 /**
  * What an author is told about a branch the model's own rules make dead.
@@ -41,9 +42,16 @@ public sealed interface DeadBranchMessage extends Message {
      *  one whose value an {@code Int} holds. */
     record ThisHasToAnswerOnTheWayHere() implements DeadBranchMessage, Supporting {}
 
-    /** The values it is written for are not values the position can hold. */
-    record ThePositionStopsShortOfIt(String position, String admits) implements DeadBranchMessage,
+    /** The call that made the copy of {@code called} a mark of this proof stands in: the same place
+     *  stands in the copy every other call of it makes, and this is the one the proof is about. */
+    record ThisCallMadeTheCopyTheProofIsAbout(String called) implements DeadBranchMessage,
             Supporting {}
+
+    /** The values it is written for are not values the position can hold. {@code admits} is a
+     *  phrase of the catalog's, since how a set of values is said is a sentence's and not a
+     *  number's. */
+    record ThePositionStopsShortOfIt(String position, Localizable admits)
+            implements DeadBranchMessage, Supporting {}
 
     /** Every case the arm names is one the rules refuse where it is matched on. */
     record EveryCaseItIsWrittenForIsRefused(String position, String cases)
@@ -72,6 +80,31 @@ public sealed interface DeadBranchMessage extends Message {
     record ItsClosureIsAppliedToNothing(String containers) implements DeadBranchMessage,
             Supporting {}
 
+    /**
+     * A call on the way here applies a function to every element it is handed, and no run gets
+     * past the application to the element at {@code index}, as the notes after this one say.
+     *
+     * <p>The notes are about that application and not about the function's body: what they mark
+     * inside the function holds there on the application to that element.
+     */
+    record NoRunGetsPastOneOfItsApplications(int index) implements DeadBranchMessage,
+            Supporting {}
+
+    /** The call applying the function, on the way here. */
+    record ThisAppliesAFunctionToEveryElement() implements DeadBranchMessage, Supporting {}
+
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
+
+    /** What to do about the departures of an attempted construction, none of which is taken:
+     *  build the value outright. */
+    record BuildTheValueRatherThanAttemptIt() implements DeadBranchMessage, Supporting {}
+
+    /** What to do about one departure of an attempted construction where another is taken: it is
+     *  written for its clause and stays, so it answers with {@code unreachable}. */
+    record AnswerTheDepartureWithUnreachable() implements DeadBranchMessage, Supporting {}
+
+    /** What to do about the success branch of an attempted construction that is never built:
+     *  answer what it departs with rather than attempting it. */
+    record AnswerTheDepartureRatherThanAttemptIt() implements DeadBranchMessage, Supporting {}
 }

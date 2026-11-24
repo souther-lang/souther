@@ -62,7 +62,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
     void aRowComposedByABehaviorNothingElseWasAskedOfIsStillRead() {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         assertFalse(declared.rowsByCarrier().isEmpty(),
@@ -104,7 +104,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
     void andNothingOfItsOwnIsAskedForWhereNothingWasAskedOfIt() {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(
@@ -133,7 +133,7 @@ class ARowIsReadUnderWhateverBehaviorComposedItTest {
     void andWhatItSettlesCanMakeAnotherRowRedundant() {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         BorderAccount declared = Adequacy.accountFor(compilation.db(),
                 "example.carried", new GenerationScope.Module());
         Composition composed = Composition.composed(

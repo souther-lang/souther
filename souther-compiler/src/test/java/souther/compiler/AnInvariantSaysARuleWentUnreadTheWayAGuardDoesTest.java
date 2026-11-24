@@ -98,10 +98,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
 
     private static synchronized Compilation measured() {
         if (measured == null) {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            measured = compilation;
+            measured = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         }
         return measured;
     }
@@ -109,7 +106,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
     private static synchronized String human() {
         if (rendered == null) {
             rendered = AdequacyReport.of(measured())
-                    .human(SourceRendering.namedByIdentity(measured().texts()));
+                    .humanInEnglish(SourceRendering.namedByIdentity(measured().texts()));
         }
         return rendered;
     }
@@ -245,7 +242,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
      *  the declarations drew that it reads. */
     private static String declarationsShownWith(String behavior) {
         String human = AdequacyReport.of(measured()).only(null, behavior)
-                .human(SourceRendering.namedByIdentity(measured().texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(measured().texts()));
         return human.substring(human.indexOf("  declarations "));
     }
 
@@ -268,7 +265,7 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
      */
     @Test
     void andOnceWhereTwoReadingsBothGaveUpOnTheSameClause() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.stages
 
                 data Prospecting
@@ -281,12 +278,10 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
 
                 data Ok
 
-                behavior stage : (q: AtLeastQualified) -> Ok
-                let stage (q) = Ok
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+                behavior staging : (q: AtLeastQualified) -> Ok
+                let staging (q) = Ok
+                """, Adequacy.Asked.fullReport());
+        String human = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertEquals(1, human.lines().filter(line -> notReadAbout(line, "q")).count(), human);
         assertTrue(human.contains("no line can be drawn on"), human);

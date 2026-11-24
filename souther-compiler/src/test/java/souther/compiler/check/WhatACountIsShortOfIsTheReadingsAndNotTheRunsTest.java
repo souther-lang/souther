@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -56,7 +58,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
      */
     @Test
     void aReadingThatStoppedShortHasStillReadEveryRuleItWasGiven() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = stoppingShort();
         String module = compilation.modules().get(0);
         RuleReadingSource whole = RuleReadings.of(compilation, module);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
@@ -67,7 +69,8 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
                         + " and a count over it is a count of what the model states");
 
         InvariantChecker.Seeded email = InvariantChecker.seedFields(
-                named(compilation, module, "Email"), RuleReadingContext.unshared(whole, policy));
+                named(compilation, module, "Email"), RuleReadingContext.unshared(whole, policy,
+                        TestDay.TODAY));
         assertFalse(email.notGathered().isEmpty(),
                 "the model says nothing here unless a reading of it does stop somewhere");
         assertFalse(email.clausesNotExpanded(),
@@ -91,7 +94,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
      */
     @Test
     void aCountAnsweredOutOfLentReadingsIsShortOfWhatTheyWereShortOf() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = stoppingShort();
         String module = compilation.modules().get(0);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
         List<Hir.Def> declarations = declarationsOf(compilation, module);
@@ -111,6 +114,12 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
                 "and so is the count that was lent those readings");
         assertEquals(read, asked.get(),
                 "which is lent them, rather than reading the clauses a second time");
+    }
+
+    /** The model, answered in full, and refused for the one call the reading stops at. */
+    private static Compilation stoppingShort() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        return ACompiledModel.refusedWith(List.of("E1025"), compilation);
     }
 
     /** {@code source}, with {@code declaration} one nobody could work out. */

@@ -1,6 +1,7 @@
 package souther.compiler.proof;
 
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.LawNumber;
@@ -12,6 +13,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What a proof about one of the library's operations may take of the others, handed over by
@@ -63,8 +65,26 @@ public interface Library {
     Put puts(ValueName.Stdlib.Operation operation);
 
     /** An answer that is what the argument at {@code into} holds with the one at {@code value} put
-     *  in: at most one element more, and each element one of the two's. */
-    record Put(int value, int into) {}
+     *  in: at most one element more, and each element one of the two's. Where {@code under} is
+     *  present, the value is filed under the key the argument at that position is. */
+    record Put(int value, int into, Optional<Integer> under) {}
+
+    /** Which arguments {@code operation} answers the value a container files under a key of, where
+     *  it does — an axiom of a kernel — or null where it does not. */
+    Lookup looksUp(ValueName.Stdlib.Operation operation);
+
+    /** An answer that is the value the argument at {@code container} files under the argument at
+     *  {@code key}, where it files one. */
+    record Lookup(int key, int container) {}
+
+    /** Whether what {@code operation} answers holds nothing, whatever it is handed: settled by a
+     *  law of its emptiness that says so. */
+    default boolean answersNothing(ValueName.Stdlib.Operation operation) {
+        return settled(operation, OperationLaw.Observed.EMPTINESS)
+                instanceof Settled.ByALaw(OperationLaw.Observation<Integer>(
+                        AnswerAspect aspect, LawProposition.Always<Integer>(boolean holds)))
+                && aspect == AnswerAspect.EMPTINESS && !holds;
+    }
 
     /** The types of {@code operation}'s arguments, in order. */
     default List<Type> takes(ValueName.Stdlib.Operation operation) {

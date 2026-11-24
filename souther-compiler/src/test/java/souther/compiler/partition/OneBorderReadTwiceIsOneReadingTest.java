@@ -16,7 +16,7 @@ import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ComparisonClaim;
@@ -351,7 +351,7 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** The clause the bound is written in, which is only an identity here. */
     private static LineOrigin aBound() {
         return new LineOrigin.InvariantOrigin(
-                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.weigh", "Amount")), 0),
@@ -384,7 +384,7 @@ class OneBorderReadTwiceIsOneReadingTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(ordinal, 0)), ElementsMetOn.EVERY,
-                        LineOrigin.NOTHING_ON_THE_WAY),
+                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(kept, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

@@ -63,7 +63,7 @@ class AnAbsenceIsNotSaidOverABodyNobodyReadTest {
                         new BodyCutInspection.Exhausted())),
                 List.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), Map.of(),
                 ReachingCuts.NONE, closure.partition(), closure.border(), null,
-                WhereTheOperationsStand.NONE)
+                WhereTheOperationsStand.NONE, StringsReached.NONE, List.of())
                 .undivided();
     }
 
@@ -92,7 +92,8 @@ class AnAbsenceIsNotSaidOverABodyNobodyReadTest {
     @Test
     void aBodyNobodyReadSaysNothingAboutTheModel() {
         List<UndividedPosition> said = undividedUnder(
-                MeasureClosure.bodyNotRead("omitted", made(answeredFor())));
+                MeasureClosure.bodyNotRead("omitted", new BodyReading.NotInElaboration(),
+                        made(answeredFor())));
 
         assertEquals(
                 List.of(new UndividedPosition(AT, new UndividedPosition.Why.BodyNotInEvaluation())),

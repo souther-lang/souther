@@ -25,16 +25,21 @@ import souther.compiler.check.TypeView;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.Probe;
+import souther.compiler.coverage.WalkRewrites;
+import souther.compiler.partition.Replacement;
 import souther.compiler.observe.ReplacedRun;
-import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -199,14 +204,14 @@ public final class ExampleVerifier {
             Hir.Example ex = block.read();
             try {
                 v.checkExample(ex, failures, rows);
-            } catch (LinkageError _) {
-                // The generated classes would not link, so nothing could be evaluated here. The
-                // case this was written for is the runtime being off the classpath (it is
-                // `provided`, like CTFE), where the build-time pass still checks this example — but
-                // a `LinkageError` is also what a class that will not verify raises, so what is
-                // recorded is that the linking failed and not which of its causes it was. Nothing
-                // was observed, and a measure that read the empty result as "no row covers this"
-                // would report a gap nobody left.
+            } catch (LinkageError e) {
+                // The runtime is off the classpath (it is `provided`, like CTFE), so nothing could
+                // be evaluated here, and the build-time pass still checks this example. Any other
+                // link failure is not that: a class this compiler generated wrongly, or one that
+                // failed to initialize, is not a fact about the example. Nothing was observed, and
+                // a measure that read the empty result as "no row covers this" would report a gap
+                // nobody left.
+                EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
                         Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
             }
@@ -427,22 +432,19 @@ public final class ExampleVerifier {
         // Through the run's deadline, as a row is — which is what decides where the work runs and
         // what bounds it, and is the same answer for both. An observation reaching the applied code
         // by a different route would be the binding meaning two things again.
-        switch (deadline.given(new Deadline.Work.Table(behavior, entry.at()),
+        return switch (deadline.given(new Deadline.Work.Table(behavior, entry.at()),
                 () -> observing(behavior, entry))) {
-            case Deadline.Outcome.Finished(StandinObservation observed) -> {
-                return observed;
-            }
+            case Deadline.Outcome.Finished(StandinObservation observed) -> observed;
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
-                return new StandinObservation.Unobserved(
+                yield new StandinObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
                                 "the observation did not answer within "
                                         + within(deadline) + "ms of this compile's own time"));
             }
-            case Deadline.Outcome.Threw(Throwable cause) -> {
-                return new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
-            }
-        }
+            case Deadline.Outcome.Threw(Throwable cause) ->
+                    new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
+        };
     }
 
     /**
@@ -464,22 +466,20 @@ public final class ExampleVerifier {
      * the binding meaning three things.
      */
     ContractObservation contractOnly(String behavior, Hir.ExampleRow row) {
-        switch (deadline.given(new Deadline.Work.WholeRow(behavior, row.pos(), row.identity()),
+        return switch (deadline.given(
+                new Deadline.Work.WholeRow(behavior, row.pos(), row.identity()),
                 () -> checkingContract(behavior, row))) {
-            case Deadline.Outcome.Finished(ContractObservation observed) -> {
-                return observed;
-            }
+            case Deadline.Outcome.Finished(ContractObservation observed) -> observed;
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
-                return new ContractObservation.Unobserved(
+                yield new ContractObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
                                 "the observation did not answer within "
                                         + within(deadline) + "ms of this compile's own time"));
             }
-            case Deadline.Outcome.Threw(Throwable cause) -> {
-                return new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
-            }
-        }
+            case Deadline.Outcome.Threw(Throwable cause) ->
+                    new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
+        };
     }
 
     private ContractObservation checkingContract(String behavior, Hir.ExampleRow row) {
@@ -734,7 +734,7 @@ public final class ExampleVerifier {
                     stoppedAt(WorkFigure.RECURSION_DEPTH.at(policy.recursionDepthLimit()));
             case TIMEOUT -> stoppedAt(WorkFigure.COMPILER_TIME.at(within(deadline)));
             case INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION, COMPARISON,
-                 STACK_EXHAUSTED, VALUE_CROSSING ->
+                 STACK_EXHAUSTED, OUT_OF_ROOM, VALUE_CROSSING ->
                     Incompleteness.Cause.of(Incompleteness.Code.ROW_UNDECIDED);
             case NONE -> throw new IllegalStateException(
                     "a row that ended undecided says what stopped it, and nothing went wrong here");
@@ -904,19 +904,14 @@ public final class ExampleVerifier {
          * a path that quietly hands the values over anyway.
          */
         Handing handing() {
-            switch (answer) {
-                case Answerer.Answer.Nothing _ -> {
-                    return new Handing.NothingApplies();
-                }
-                case Answerer.Answer.Unavailable _ -> {
-                    return new Handing.NotMade();
-                }
-                case Answerer.Answer.Something applies -> {
-                    return agreement != null && !(agreement instanceof Agreement.Agree)
-                            ? new Handing.NotEstablished(agreement)
-                            : new Handing.MayApply(applies);
-                }
-            }
+            return switch (answer) {
+                case Answerer.Answer.Nothing _ -> new Handing.NothingApplies();
+                case Answerer.Answer.Unavailable _ -> new Handing.NotMade();
+                case Answerer.Answer.Something applies ->
+                        agreement != null && !(agreement instanceof Agreement.Agree)
+                                ? new Handing.NotEstablished(agreement)
+                                : new Handing.MayApply(applies);
+            };
         }
     }
 
@@ -1238,16 +1233,15 @@ public final class ExampleVerifier {
         }
         return Diagnostic.at(ex.pos())
                 .say(new ExampleMessage.TheTargetCannotBeEvaluated(name))
-                .hint(new ExampleMessage.WhatAnExampleRuns(
-                        "it is a helper `let`, and this module declares no behavior of that name"))
+                .hint(new ExampleMessage.WhatAnExampleRuns())
                 .build();
     }
 
     // --- one row ------------------------------------------------------------------------------
 
     /**
-     * One row evaluated again with arms of the body answering as siblings, under the row's own
-     * budget and with a state of its own, so nothing it does is read as the row's.
+     * One row evaluated again with the body rewritten, under the row's own budget and with a state
+     * of its own, so nothing it does is read as the row's.
      */
     private static final class ReplacedWork implements Callable<RowState> {
 
@@ -1255,15 +1249,15 @@ public final class ExampleVerifier {
         private final ExampleTarget target;
         private final Sig sig;
         private final Hir.ExampleRow row;
-        private final Map<Integer, Integer> replacing;
+        private final Rewriting asked;
 
         ReplacedWork(ExampleVerifier verifier, ExampleTarget target, Sig sig, Hir.ExampleRow row,
-                     Map<Integer, Integer> replacing) {
+                     Rewriting asked) {
             this.verifier = verifier;
             this.target = target;
             this.sig = sig;
             this.row = row;
-            this.replacing = replacing;
+            this.asked = asked;
         }
 
         /**
@@ -1275,7 +1269,7 @@ public final class ExampleVerifier {
         @Override
         public RowState call() {
             RowState state = new RowState();
-            Intervention.begin(replacing);
+            Intervention.begin(asked);
             EvaluationContext.begin(verifier.policy.stepLimit(),
                     verifier.policy.recursionDepthLimit());
             try {
@@ -1336,7 +1330,7 @@ public final class ExampleVerifier {
             // Under the numbering the classes this row runs against were emitted with. Classes
             // that record nothing start no recording, and what comes back is no account of a run.
             if (verifier.probes
-                    instanceof ProbeImage.Instrumented(var numbering, var _)) {
+                    instanceof ProbeImage.Instrumented(var numbering, var _, var _)) {
                 Probe.begin(numbering);
             }
             // On this thread, because this thread is the evaluation: the budget belongs to the row,
@@ -1532,35 +1526,40 @@ public final class ExampleVerifier {
 
     /**
      * The row run again once per arm it went through and sibling the classes carry there, each with
-     * that sibling answering in the arm's place.
+     * that sibling answering in the arm's place, and once per walk it entered and way the classes
+     * can run that walk.
      *
      * <p>Of every row whose run was recorded, whether or not it answered: the arms it went through
-     * are what the recording says, and a row that stopped without an answer may hold under the
-     * rewrite, which tells the two apart. Each run is its own piece of work, after the row's, so
-     * that however these go the row's own outcome is what it was.
+     * and the walks it entered are what the recording says, and a row that stopped without an
+     * answer may hold under the rewrite, which tells the two apart. Each run is its own piece of
+     * work, after the row's, so that however these go the row's own outcome is what it was.
      *
-     * <p>Each run has the row's budget of steps, which is what stops a replacement that would go
-     * round for ever, and the same answer on every machine. The deadline is behind that, for a run
-     * the steps do not stop; once one run of the row is given up on, the row's remaining
-     * replacements are not run, so a row costs at most one deadline past its own however many arms
-     * it went through. Each of them is still here, as a run that ran out of its time: every
-     * rewrite of every arm the row went through has a run in this list, so a reader never has to
+     * <p>Each run has the row's budget of steps, which is what stops a rewrite that would go round
+     * for ever, and the same answer on every machine. The deadline is behind that, for a run the
+     * steps do not stop; once one run of the row is given up on, the row's remaining rewrites are
+     * not run, so a row costs at most one deadline past its own however many arms it went through.
+     * Each of them is still here, as a run that ran out of its time: every rewrite of every arm the
+     * row went through and every walk it entered has a run in this list, so a reader never has to
      * read anything off one being missing.
      */
     private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Hir.ExampleRow row,
                                            RowState state) {
-        if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements))
+        if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements,
+                WalkRewrites walks))
                 || !(state.recorded instanceof RunRecord.Recorded(Observation seen))) {
             return List.of();
         }
+        List<RunRewrite> rewrites = new ArrayList<>(replacements.through(seen.arms()));
+        rewrites.addAll(walks.through(seen.walks()));
         List<ReplacedRun> out = new ArrayList<>();
         boolean givenUp = false;
-        for (ArmReplacements.Rewrite each : replacements.through(seen.arms())) {
+        for (RunRewrite each : rewrites) {
+            Replacement replaced = Replacement.of(each);
             Optional<ReplacedRun> ran = givenUp ? Optional.empty()
-                    : replacedRun(target, sig, row, state.reached, state.disposition,
-                            each.fork(), each.part(), each.with(), each.replacing());
+                    : replacedRun(target, sig, row, state.reached, state.disposition, replaced,
+                            each.asked());
             givenUp = ran.isEmpty();
-            out.add(ran.orElseGet(() -> ranOut(each.fork(), each.part(), each.with(),
+            out.add(ran.orElseGet(() -> ranOut(replaced,
                     Optional.of(WorkFigure.COMPILER_TIME.at(within(deadline))))));
         }
         return out;
@@ -1577,9 +1576,8 @@ public final class ExampleVerifier {
      */
     private Optional<ReplacedRun> replacedRun(ExampleTarget target, Sig sig, Hir.ExampleRow row,
                                               Reached written, Disposition asWritten,
-                                              SourceConstructOrigin fork, int part, int with,
-                                              Map<Integer, Integer> replacing) {
-        ReplacedWork work = new ReplacedWork(this, target, sig, row, replacing);
+                                              Replacement replaced, Rewriting asked) {
+        ReplacedWork work = new ReplacedWork(this, target, sig, row, asked);
         return switch (deadline.given(
                 new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
             case Deadline.Outcome.Finished(RowState state) -> {
@@ -1592,7 +1590,7 @@ public final class ExampleVerifier {
                         && state.disposition == Disposition.INCOMPLETE
                         ? leftUndecidedBy(state.failurePhase).figure().stream().toList()
                         : List.of();
-                yield Optional.of(new ReplacedRun(fork, part, with,
+                yield Optional.of(new ReplacedRun(replaced,
                         state.reached.answer(reader::observed),
                         reader.change(written.answer(reader::structured),
                                 state.reached.answer(reader::structured), sig.outputType()),
@@ -1610,7 +1608,7 @@ public final class ExampleVerifier {
                 // A budget or the stack running out is the replaced program's to have done, and
                 // says nothing either way about whether the row would notice it.
                 if (RunLimits.reached(cause)) {
-                    yield Optional.of(ranOut(fork, part, with, RunLimits.figureOf(cause, policy)));
+                    yield Optional.of(ranOut(replaced, RunLimits.figureOf(cause, policy)));
                 }
                 if (cause instanceof RuntimeException re) {
                     throw re;
@@ -1622,9 +1620,8 @@ public final class ExampleVerifier {
 
     /** A replaced run that ran out, at {@code limit}: where it was a figure, the one figure that
      *  left the row untold. */
-    private static ReplacedRun ranOut(SourceConstructOrigin fork, int part, int with,
-                                      Optional<Figure> limit) {
-        return new ReplacedRun(fork, part, with, new AnswerObservation.RanOut(limit),
+    private static ReplacedRun ranOut(Replacement replaced, Optional<Figure> limit) {
+        return new ReplacedRun(replaced, new AnswerObservation.RanOut(limit),
                 AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL,
                 limit.stream().toList());
     }
@@ -1764,6 +1761,14 @@ public final class ExampleVerifier {
                     rows.add(outcomeOf(target, row, evaluation.state, List.of()));
                     return;
                 }
+                // And so does a run short of the platform's room outside the behavior — a decoder
+                // or an encoder writing a number past what its representation keeps.
+                if (isShortOfRoom(cause)) {
+                    out.add(shortOfRoom(row, cause));
+                    evaluation.state.incomplete(FailurePhase.OUT_OF_ROOM);
+                    rows.add(outcomeOf(target, row, evaluation.state, List.of()));
+                    return;
+                }
                 // Whoever is compiling asked to stop. Nothing is known about this row — no result was
                 // produced and no comparison was made — so this is not a failing example, and
                 // reporting it as one would put a diagnostic on a model that may be correct.
@@ -1825,6 +1830,21 @@ public final class ExampleVerifier {
                 .hint(depth ? new ExampleMessage.ReachingTheDepthLimitIsNotDiverging()
                         : new ExampleMessage.SpendingTheBudgetIsNotDiverging())
                 .build();
+    }
+
+    /** Whether {@code cause} is a run short of the platform's room ({@code souther.runtime.OutOfRoom}),
+     *  matched by name: the applied code runs under its own loader. */
+    private static boolean isShortOfRoom(Throwable cause) {
+        return cause != null && "souther.runtime.OutOfRoom".equals(cause.getClass().getName());
+    }
+
+    /** A row short of the platform's room for an answer it worked out (E1941): undecided, since
+     *  the answer is a value and a platform with more room writes it. */
+    private static Diagnostic shortOfRoom(Hir.ExampleRow row, Throwable cause) {
+        return Diagnostic.at(row.pos())
+                .say(new ExampleMessage.TheEvaluationHadNoRoomForAnAnswer(
+                        String.valueOf(cause.getMessage())))
+                .hint(new ExampleMessage.RunningShortOfRoomIsNotAWrongAnswer()).build();
     }
 
     /**
@@ -1916,6 +1936,13 @@ public final class ExampleVerifier {
                             : new Expectation.TheValue(expected.asserted());
                     evidence = evidenceOf(fixtures, stated, expected, answer, sig);
                     statedValue = expected;
+                    // A value the text writes as no construction — a date, a number, a call — is
+                    // still a value of one case, and the expectation built above is that value.
+                    // Read off it as built, not off what the behavior answered: an answer standing
+                    // in for the expectation would count a wrong answer as the case expected.
+                    if (named == null && expected != null) {
+                        state.expectedArm = fixtures.caseOfValue(expected.live(), sig.outputType());
+                    }
                 } catch (FixtureException fe) {
                     out.add(Diagnostic.at(row.pos())
                             .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -2040,7 +2067,7 @@ public final class ExampleVerifier {
         try {
             result = applying.to(handed(fixtures, target, args, ins));
         } catch (InvocationFailure f) {
-            applicationFailed(fixtures, row, stated, f.getCause(), out, state);
+            applicationFailed(fixtures, row, stated, sig.outputType(), f.getCause(), out, state);
             return;
         } catch (ImplementationNotReached e) {
             // Nothing was applied: what would have applied it could not be reached. Told as the row
@@ -2048,7 +2075,8 @@ public final class ExampleVerifier {
             // one throw — saying it differently is a change to what a row is told, and a different
             // thing from where the two are told apart.
             state.neverEntered();
-            aborted(fixtures, row, stated, String.valueOf(e.getMessage()), out, state);
+            aborted(fixtures, row, stated, sig.outputType(), String.valueOf(e.getMessage()), out,
+                    state);
             return;
         } catch (FixtureException fe) {
             // The row's input could not be put in the form the answerer reads. Nothing about the row
@@ -2063,7 +2091,11 @@ public final class ExampleVerifier {
         result = projected(result, sig.outputType());
         // The case the run answered with is the one the value is. Its class names the module that
         // declares it, and what this module means by that class's spelling is a different question.
-        state.resultArm = fixtures.typeOf(result);
+        // A primitive case declares no class, so a date or a number is matched against the cases the
+        // output declares instead.
+        TypeSymbol declared = fixtures.typeOf(result);
+        state.resultArm = declared != null ? declared
+                : fixtures.caseOfValue(result, sig.outputType());
         // The answer is in hand, which is as far as a row gets before anything is done with it. A
         // measure reading what the behavior answered reads a row that got here, and the two things
         // done with an answer — holding it to the declaration, holding it to what the row states —
@@ -2071,8 +2103,8 @@ public final class ExampleVerifier {
         // so that a reader asking whether another run would have answered alike has the answer and
         // not only its case — kept as built, and read after the row (Reached#answer).
         state.answered(result);
-        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result, out,
-                state)) {
+        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result,
+                declared, out, state)) {
             return;
         }
         // Compared where the row states something to compare against. A row whose answer is owed
@@ -2093,7 +2125,7 @@ public final class ExampleVerifier {
             // The whole of each side, so the two can be read against each other, and then where they
             // part: a row that wrote a name the answer does not wear differs at one position by its
             // type, which reading two whole values does not say on its own.
-            out.add(mismatch(fixtures, row, fixtures.shown(stated),
+            out.add(mismatch(fixtures, row, fixtures.shown(stated, sig.outputType()),
                     answerShown(fixtures, stated, result, sig.outputType()), differs));
             state.failed(FailurePhase.COMPARISON);
             return;
@@ -2117,7 +2149,7 @@ public final class ExampleVerifier {
                     TypeView.asWritten(position, symbols, kinds, sums).wrappers(), fixture);
         } catch (RuntimeException e) {
             // the row's budget is gone, or the row was given up on; it is not a form that could not be read
-            EvaluationContext.rethrowIfOverspent(e);
+            EvaluationContext.rethrowUnlessAboutTheValue(e);
             return null;
         }
     }
@@ -2260,8 +2292,8 @@ public final class ExampleVerifier {
      */
     private boolean keepsWhatIsDeclaredOfWhatItAnswered(FixtureReader fixtures, Hir.ExampleRow row,
                                                         ExampleTarget target, Sig sig, Object[] args,
-                                                        Object answered, List<Diagnostic> out,
-                                                        RowState state) {
+                                                        Object answered, TypeSymbol declared,
+                                                        List<Diagnostic> out, RowState state) {
         // Asked of what applied the row and not of how the behavior is written. The reason the
         // check runs here is that nothing else ran it: an implementation supplied from outside is
         // what answered, so the callee's own check is not what came back. A behavior written with a
@@ -2272,7 +2304,7 @@ public final class ExampleVerifier {
         }
         Object here;
         try {
-            here = inTheseClasses(fixtures, state.resultArm, sig, answered);
+            here = inTheseClasses(fixtures, declared, sig, answered);
         } catch (FixtureException | ImplementationNotReached e) {
             // The answer could not be brought into the classes the check reads, so nothing was
             // checked. Undecided rather than failed: the model may be right, and this saw nothing.
@@ -2419,8 +2451,8 @@ public final class ExampleVerifier {
             // Nothing this module can name says what it answers, which is not a missing fake. A
             // dependency reaches here only after the check accepted the clause that named it, so a
             // signature that is not here is a module that did not build far enough to have one.
-            return notRead(dependency, row.pos(), fakeMissingDiag(target, req, row, "`" + depName
-                    + "` has no signature to build a stand-in against"));
+            return notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
+                    new ExampleMessage.TheDependencyHasNoSignature(depName)));
         }
         BoundaryOutput outType = depSig.out();
         // What stands in, and where it was written, is ExampleProvisioning's; building the value it
@@ -2449,12 +2481,9 @@ public final class ExampleVerifier {
             }
             case ExampleProvisioning.Standin.InTheModule inTheModule ->
                     tableStandin(fixtures, inTheModule.table(), dependency, depSig);
-            case ExampleProvisioning.Standin.Nothing _ -> {
-                String spelt = spelling(dependency);
-                yield notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
-                        "add `with " + spelt + " = ...` on the row, or a `fake " + spelt
-                                + "` table"));
-            }
+            case ExampleProvisioning.Standin.Nothing _ ->
+                    notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
+                            new ExampleMessage.WriteAFakeOnTheRowOrInTheModule(spelling(dependency))));
             // Saying nothing, as a row reaching a table that would not build says nothing: what is
             // wrong is wrong about what the module wrote and is said where the blocks are. A row
             // told a stand-in is missing here would be pointed at a requirement it wrote two
@@ -2499,8 +2528,8 @@ public final class ExampleVerifier {
      * a composition takes the requirements of its stages — the stage that wants it is named, so the
      * author is not left to walk the composition to find out which one.
      */
-    private Diagnostic fakeMissingDiag(String target, BehaviorRequirement req, Hir.ExampleRow row,
-                                       String detail) {
+    private <M extends Message & Supporting> Diagnostic fakeMissingDiag(
+            String target, BehaviorRequirement req, Hir.ExampleRow row, M detail) {
         List<String> stages = new ArrayList<>();
         for (String requester : req.requiredBy()) {
             if (!requester.equals(target)) {
@@ -2514,7 +2543,7 @@ public final class ExampleVerifier {
                 : Diagnostic.at(row.pos())
                         .say(new ExampleMessage.ADependencyReachedThroughHasNoFake(target,
                                 req.dependency().name(), String.join(", ", stages)));
-        return d.hint(new ExampleMessage.WriteAFakeLikeThis(detail)).build();
+        return d.hint(detail).build();
     }
 
     /** What the module's table stands the dependency in with, and what this row's report says the
@@ -2669,7 +2698,8 @@ public final class ExampleVerifier {
      * where the row is given its deadline, and read as anything else the reason is lost.
      */
     private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
-                                   Throwable cause, List<Diagnostic> out, RowState state) {
+                                   Type answers, Throwable cause, List<Diagnostic> out,
+                                   RowState state) {
         EvaluationContext.rethrowIfOverspent(cause);
         if (cause instanceof FakeMissException fm) {
             out.add(Diagnostic.at(row.pos())
@@ -2696,15 +2726,23 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
         }
-        aborted(fixtures, row, stated,
+        // Short of the platform's room for an answer the language defines: the row is not wrong,
+        // and what it would have decided is what was not found out. Matched by name for the reason
+        // an unreachable point is.
+        if (isShortOfRoom(cause)) {
+            out.add(shortOfRoom(row, cause));
+            state.incomplete(FailurePhase.OUT_OF_ROOM);
+            return;
+        }
+        aborted(fixtures, row, stated, answers,
                 cause == null ? "aborted" : String.valueOf(cause.getMessage()), out, state);
     }
 
     /** The behavior stopped itself while the row ran — an invariant it broke, or anything else it
      * ended with. Reported against what the row said it would answer, so the two can be read together. */
-    private void aborted(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated, String why,
-                         List<Diagnostic> out, RowState state) {
-        out.add(mismatch(fixtures, row, fixtures.shown(stated), "aborted: " + why, null));
+    private void aborted(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
+                         Type answers, String why, List<Diagnostic> out, RowState state) {
+        out.add(mismatch(fixtures, row, fixtures.shown(stated, answers), "aborted: " + why, null));
         state.failed(FailurePhase.INVOCATION);
     }
 }

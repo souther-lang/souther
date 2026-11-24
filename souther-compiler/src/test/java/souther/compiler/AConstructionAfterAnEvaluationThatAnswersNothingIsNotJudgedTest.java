@@ -352,16 +352,17 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
     }
 
     /**
-     * A {@code Decimal} divide at a scale the run time cannot take, which aborts as an overflow does
-     * (spec §stdlib-decimal). The rule is the operand's and not the arithmetic's, so it is the same
-     * rule as the divisor's and it reaches the same answer.
+     * A {@code Decimal} divide has a quotient at every scale (spec §stdlib-decimal): one no
+     * {@code BigDecimal} takes is a run short of room, which is the platform's and no answer about
+     * the arm. So the arm is entered at a scale past an {@code int} as at one inside it, and the
+     * value it builds is refused at both.
      */
     @Test
-    void aDivideAtAScaleTheRunTimeCannotTakeLeavesTheArmUnentered() {
-        assertEquals(List.of(NOTHING_REACHES), reported(atScale("4294967298")),
-                "no run leaves the divide, so the construction the arm builds is not judged");
+    void aDivideAtAScalePastAnIntEntersTheArmAsAnyScaleDoes() {
+        assertEquals(List.of("E2010"), reported(atScale("4294967298")),
+                "a quotient at this scale is a decimal, so the arm is entered");
         assertEquals(List.of("E2010"), reported(atScale("2")),
-                "and at a scale it does take the arm is entered and the value is refused");
+                "and at a scale inside an int the arm is entered and the value is refused");
     }
 
     /** A {@code Decimal} divide by a divisor held off nought, building a {@code Negative} the values

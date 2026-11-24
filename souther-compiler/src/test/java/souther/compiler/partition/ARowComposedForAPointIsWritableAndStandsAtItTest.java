@@ -2,12 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.Located;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -152,25 +151,39 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
 
     /** What the compiler says about a model, less the one thing an invented answer causes. */
     private static List<String> otherThanTheAnswer(String source) {
+        return errorsOtherThanTheAnswer(measuredAndAnswered(source));
+    }
+
+    private static Compilation measuredAndAnswered(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        List<String> said = new ArrayList<>();
-        for (Map.Entry<SourceId, List<Located>> each : compilation.diagnostics().entrySet()) {
-            for (Located found : each.getValue()) {
-                if (!THE_ANSWER_DISAGREES.equals(found.diagnostic().code())) {
-                    said.add(found.diagnostic().code());
-                }
-            }
-        }
-        return said;
+        return compilation;
+    }
+
+    /** The errors of the model, but for the one a wrong stated answer causes. */
+    private static List<String> errorsOtherThanTheAnswer(Compilation compilation) {
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code())
+                .filter(code -> !THE_ANSWER_DISAGREES.equals(code))
+                .toList();
+    }
+
+    /**
+     * The codes the model is held to be refused with: those of a stated answer that disagrees, and
+     * nothing else, however many rows disagree.
+     */
+    private static List<String> onlyTheAnswerDisagreeing(Compilation compilation) {
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code())
+                .filter(THE_ANSWER_DISAGREES::equals)
+                .toList();
     }
 
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<BorderAssessment> lines(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredAndAnswered(source);
+        ACompiledModel.refusedWith(onlyTheAnswerDisagreeing(compilation), compilation);
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, () -> "the model under test compiles: " + source);
         List<BorderAssessment> lines = read.get("f");

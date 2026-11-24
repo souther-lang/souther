@@ -1,11 +1,13 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,7 +37,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      * past each of those.
      */
     private static String atAHundredThousand(String comparison) {
-        return "[n/x < 100000, n/100000 <= x] unread [] points ["
+        return "[n: x < 100000, n: 100000 <= x] unread [] points ["
                 + "ON point of " + comparison + ", "
                 + "OFF point of " + comparison + ", "
                 + "IN point of " + comparison + ", "
@@ -79,7 +81,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      */
     @Test
     void membersWritingOneFormTwoWaysAreStillTheSameLine() {
-        assertEquals("[n/x <= 49999, n/49999 < x] unread [] points ["
+        assertEquals("[n: x <= 49999, n: 49999 < x] unread [] points ["
                         + "ON point of comparison@0:19:40, "
                         + "OFF point of comparison@0:19:40, "
                         + "IN point of comparison@0:19:40, "
@@ -109,7 +111,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                         if List.any((k) -> reaches(n, k), ks) then Yes else No
                     }"""));
         String at = "comparison@0:13:37";
-        assertEquals("[n/x < 100000, n/100000 <= x < 200000, n/200000 <= x] unread [] points ["
+        assertEquals("[n: x < 100000, n: 100000 <= x < 200000, n: 200000 <= x] unread [] points ["
                 + "ON point of " + at + ", OFF point of " + at + ", IN point of " + at + ", "
                 + "OUT point of " + at + "]", reading("""
                 {
@@ -135,7 +137,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
      */
     @Test
     void aModelReachesItsThresholdThroughACandidateListAndAnArm() {
-        assertEquals("[予定費用/x < 100000, 予定費用/100000 <= x, 役職/x <= 3, 役職/3 < x] "
+        assertEquals("[予定費用: x < 100000, 予定費用: 100000 <= x, 役職: x <= 3, 役職: 3 < x] "
                         + "unread [] points ["
                         + "ON point of comparison@0:16:44, "
                         + "OFF point of comparison@0:16:44, "
@@ -210,11 +212,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     private static String readingOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " "
-                        + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport.BehaviorReport read = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
@@ -228,7 +226,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
                 .map(point -> RuleHandleProse.said(point.said(read.rulePlace()),
                         new souther.compiler.diag.SourceRendering(
                                 souther.compiler.source.SourceId::value,
-                                compilation.texts()), null))
+                                compilation.texts()), Locale.ENGLISH, null))
                 .collect(Collectors.joining(", ")) + "]";
     }
 }

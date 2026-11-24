@@ -19,16 +19,14 @@ class TheMonthAndTheDayOfOneDateAreComparedAsTheDateGivesThemTest {
     private static final String NOT_REACHED = "not shown to reach every value here";
 
     private static String about(String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
 
                 behavior f : (birthday: Date, on: Date) -> Bool
                 let f (birthday, on) = %s
-                """.formatted(body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(body), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static final String BEFORE_THE_BIRTHDAY =

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeView;
@@ -82,19 +84,22 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
         }
     }
 
-    /** Worked out by hand: one step of each order from where an unbounded range is entered. */
+    /** Worked out by hand: one step of each order from where an unbounded range is entered, which
+     *  for a date is the day the rows are written on and for a date-time and a moment the start of
+     *  it — and outward from the day, the day after before the day before. */
     @Test
     void eachOrderStepsByItsOwnUnit() {
-        assertEquals(List.of("Date(\"1970-01-01\")", "Date(\"1970-01-02\")",
-                        "Date(\"1970-01-03\")"),
+        assertEquals(List.of("Date(\"" + TestDay.DATE + "\")",
+                        "Date(\"" + TestDay.DATE.plusDays(1) + "\")",
+                        "Date(\"" + TestDay.DATE.minusDays(1) + "\")"),
                 stepped(Type.DATE, 3));
         assertEquals(List.of("Time(\"00:00:00\")", "Time(\"00:00:01\")"),
                 stepped(Type.TIME, 2));
-        assertEquals(List.of("DateTime(\"1970-01-01T00:00:00\")",
-                        "DateTime(\"1970-01-01T00:00:01\")"),
+        assertEquals(List.of("DateTime(\"" + TestDay.DATE + "T00:00:00\")",
+                        "DateTime(\"" + TestDay.DATE + "T00:00:01\")"),
                 stepped(Type.DATETIME, 2));
-        assertEquals(List.of("Instant(\"1970-01-01T00:00:00Z\")",
-                        "Instant(\"1970-01-01T00:00:00.000000001Z\")"),
+        assertEquals(List.of("Instant(\"" + TestDay.DATE + "T00:00:00Z\")",
+                        "Instant(\"" + TestDay.DATE + "T00:00:00.000000001Z\")"),
                 stepped(Type.INSTANT, 2));
     }
 
@@ -126,28 +131,28 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     private static final String NOT_THE_DAY = """
             module p
             data NotTheDay = Date
-              invariant value /= Date("1970-01-01")
+              invariant value /= Date("%s")
             behavior h : (d: NotTheDay) -> Int
             let h (d) = 1
-            """;
+            """.formatted(TestDay.DATE);
 
     /**
      * A position whose rule refuses the one value it is ordinarily offered is offered the one beside
      * it on the same order, a date as much as a whole number: the day after the day where an
-     * unbounded range of dates is entered.
+     * unbounded range of dates is entered, which is the day the rows are written on.
      */
     @Test
     void aDateItsRuleRefusesIsDisplacedAlongItsOrder() {
-        Compilation compilation = Compilation.ofSource(NOT_THE_DAY, "Main");
+        Compilation compilation = Compilation.ofSource(NOT_THE_DAY, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Adequacy.Filling filling = Adequacy.generatedOf(compilation.db(), "p").get("h");
         assertNotNull(filling, "the behavior under test is generated for");
         List<String> written = filling.rules().byRule().values().stream()
                 .map(row -> row.inputs().get(0).text())
                 .toList();
 
-        assertEquals(List.of("NotTheDay(Date(\"1970-01-02\"))"), written);
+        assertEquals(List.of("NotTheDay(Date(\"" + TestDay.DATE.plusDays(1) + "\"))"), written);
     }
 
     /**
@@ -185,11 +190,10 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     }
 
     private static RuleReadingContext reading() {
-        Compilation compilation = Compilation.ofSource(
-                MODEL.formatted(TYPES, "Set<Date>", "Set.size(s)", 3), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(
+                MODEL.formatted(TYPES, "Set<Date>", "Set.size(s)", 3));
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
 
     private static Type declared(String name) {
@@ -197,9 +201,7 @@ class AnElementIsSteppedOnTheOrderItsValuesAreComparedOnTest {
     }
 
     private static BorderAssessment lineOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
         assertNotNull(read, "the model under test compiles");
         List<BorderAssessment> lines = read.get("f");

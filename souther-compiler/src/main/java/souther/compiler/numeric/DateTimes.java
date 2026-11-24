@@ -47,11 +47,12 @@ public final class DateTimes {
      * <p>Both are whole. {@code LocalDateTime.MAX} carries a fraction of a second that no
      * {@code DateTime} can be written as, so the last one that can is the second it falls in.
      */
-    public static final Count MIN = countAt(LocalDateTime.MIN);
+    public static final Count MIN = secondOf(LocalDateTime.MIN);
 
-    public static final Count MAX = countAt(LocalDateTime.MAX);
+    public static final Count MAX = secondOf(LocalDateTime.MAX);
 
-    private static Count countAt(LocalDateTime at) {
+    /** The second {@code at} counts to, its fraction of a second left out. */
+    public static Count secondOf(LocalDateTime at) {
         return Count.of(at.toEpochSecond(ZoneOffset.UTC));
     }
 

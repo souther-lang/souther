@@ -1,5 +1,6 @@
 package souther.compiler.publish;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -29,6 +30,7 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -400,7 +402,7 @@ class TwoHandlesADocumentWritesApartAreTwoValuesTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(MODEL), ModulePath.of(published));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         // Read off the page rather than off a reading, because a reading holds no place: what a
         // sentence about one of these is written from is what the page was assembled with, and
         // this is asking that.
@@ -424,7 +426,7 @@ class TwoHandlesADocumentWritesApartAreTwoValuesTest {
      * which makes the property below hold over a projection that says nothing.
      */
     private static String said(PublishedRuleHandle handle) {
-        return RuleHandleProse.said(handle, REACHED.sources(), null);
+        return RuleHandleProse.said(handle, REACHED.sources(), Locale.ENGLISH, null);
     }
 
     /**

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
@@ -9,6 +10,7 @@ import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Case;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
@@ -119,7 +121,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 symbols(), ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                 Set.of(tag.refine(caseOf("Tag"))),
                 Requirements.NONE.and(tag, caseOf("NoTag")),
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         ConstructionPlan.ModelRefusal.Conflict against = assertInstanceOf(
                 ConstructionPlan.ModelRefusal.Conflict.class,
@@ -154,7 +156,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                         Set.of(tag),
                         Requirements.NONE.and(tag, caseOf("Tag")),
-                        ConstructionPlan.ContentsComposed.NONE, ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false));
 
         assertTrue(said.getMessage().contains("query.tag") && said.getMessage().contains("Tag"),
                 "the answer names the position said twice: " + said.getMessage());
@@ -192,7 +194,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         ScopedDeclarations.sumsOf(heldSymbols()), Set.of(),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false)))
                                 .and(absent, caseOf("Tag")),
-                        ConstructionPlan.ContentsComposed.NONE, ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false));
 
         assertTrue(said.getMessage().contains("query.tag@None"),
                 "the answer names the position that holds no value: " + said.getMessage());
@@ -216,7 +218,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         ScopedDeclarations.kindsOf(heldSymbols()),
                         ScopedDeclarations.sumsOf(heldSymbols()), Set.of(absent.then("value")),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false))),
-                        ConstructionPlan.ContentsComposed.NONE, ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false));
 
         assertTrue(said.getMessage().contains("query.tag@None.value"),
                 "the answer names the value fixed where nothing stands: " + said.getMessage());
@@ -235,7 +237,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 ConstructionPlan.of(typeOf(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbols()), symbols(),
                         ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
-                        decided, additional, ConstructionPlan.ContentsComposed.NONE, ANY),
+                        decided, additional, ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false),
                 "nothing here asks one position to be two things").plan();
     }
 
@@ -263,8 +265,8 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
     }
 
     private static Read readOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

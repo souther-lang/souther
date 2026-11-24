@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -18,7 +19,6 @@ import souther.compiler.query.Shapes;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.types.Type;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -86,8 +85,8 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
     void aParameterRefusedAtSomeOfItsClassesIsStillBuiltAtTheOthers() {
         Offered three = offeredWithTheGateRefusedOpen(3);
         Offered six = offeredWithTheGateRefusedOpen(6);
-        assertTrue(three.classes().contains("left.f0=On")
-                        && three.classes().contains("left.f0=Off"),
+        assertTrue(three.classes().contains("On at left.f0")
+                        && three.classes().contains("Off at left.f0"),
                 "a row is offered for each class of the first record's field, with the gate shut: "
                         + three.classes());
         assertEquals(three.classes(), six.classes(),
@@ -105,7 +104,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
         Generator.CandidateCheck refusingAnOpenGate = (parameter, candidate) -> {
             if (parameter == 0 && candidate.text().contains("Open")) {
                 open.incrementAndGet();
-                return new Generator.CandidateCheck.Built.Refused("the gate is open");
+                return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the gate is open");
             }
             return new Generator.CandidateCheck.Built.NothingBuiltIt();
         };
@@ -133,7 +132,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
      */
     @Test
     void aSearchBesideMoreFieldsThanItCouldWalkEnds() {
-        Searched forty = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> searched(40));
+        Searched forty = searched(40);
         assertEquals(searched(3).gateBuilt(), forty.gateBuilt(),
                 "and builds the refused parameter as often as beside three");
     }
@@ -147,10 +146,9 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
      */
     @Test
     void anOriginThatCannotWriteAParameterIsLeftHoweverManyFieldsAreBesideIt() {
-        Set<String> forty = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> besideTheOtherParameter(writtenAgainstAValueOfTheFirst(40)));
+        Set<String> forty = besideTheOtherParameter(writtenAgainstAValueOfTheFirst(40));
         Set<String> three = besideTheOtherParameter(writtenAgainstAValueOfTheFirst(3));
-        assertTrue(three.contains("left.inner.g=Off"),
+        assertTrue(three.contains("Off at left.inner.g"),
                 "a row is composed for the class the stated value does not have: " + three);
         assertEquals(three, forty,
                 "and the rows for the first parameter's classes and for the decisions together are"
@@ -167,7 +165,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
             for (Generator.Purpose purpose : row.purposes()) {
                 switch (purpose) {
                     case Generator.Purpose.ForAClass cls -> {
-                        if (cls.label().startsWith("left.")) {
+                        if (cls.at().term().startsWith("left.")) {
                             out.add(cls.label());
                         }
                     }
@@ -207,9 +205,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
 
                 let usualLeft = Left { inner = Inner { g = On } }
                 """.formatted(flags(fields));
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface(module)).value();
         assertNotNull(surface, "the module is assembled");
@@ -239,7 +235,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
         Generator.CandidateCheck refusingTheGate = (parameter, candidate) -> {
             if (parameter == 0) {
                 gate.incrementAndGet();
-                return new Generator.CandidateCheck.Built.Refused("the gate is shut");
+                return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the gate is shut");
             }
             return new Generator.CandidateCheck.Built.NothingBuiltIt();
         };
@@ -295,8 +291,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
     private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         static Model of(String source, String behavior) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.answered(source);
             return of(compilation, compilation.modules().get(0), behavior);
         }
 

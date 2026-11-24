@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.EmptyInput;
@@ -167,7 +168,7 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
     }
 
     private static Quantities quantities() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs =

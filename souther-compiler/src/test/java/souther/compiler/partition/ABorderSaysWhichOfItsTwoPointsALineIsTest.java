@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +15,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
@@ -125,12 +126,14 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      */
     @Test
     void theSameValueIsTheOtherPointUnderTheOtherOperator() {
-        assertTrue(report(CLOSED).contains("""
+        String closed = report(CLOSED);
+        assertTrue(closed.contains("""
                 the ON point (comparison@10:10)
-                          · read as sized/n: = 100"""), report(CLOSED));
-        assertTrue(report(OPENED).contains("""
+                          · read as sized/n: = 100"""), closed);
+        String opened = report(OPENED);
+        assertTrue(opened.contains("""
                 the OFF point (comparison@10:10)
-                          · read as sized/n: = 100"""), report(OPENED));
+                          · read as sized/n: = 100"""), opened);
     }
 
     /**
@@ -310,7 +313,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
     /** The one statement of the one conjunct that clause was written in. */
     private static DeclaredLine theOnlyStatement() {
-        return new DeclaredLine.OfAStatement(new InvariantStatementId(
+        return new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                 new PartId<>(invariant(), THE_ONLY_CONJUNCT), 0));
     }
 
@@ -373,9 +376,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
     /** Each item of the model's borders as {@code point:relation against}, in document order. */
     private static List<String> pointsAsked(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         JsonNode root = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         List<String> out = new ArrayList<>();
@@ -386,9 +387,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

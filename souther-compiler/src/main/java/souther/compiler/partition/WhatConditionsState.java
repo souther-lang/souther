@@ -68,13 +68,35 @@ final class WhatConditionsState {
     private final Map<AComparison, Pullback.OnTheInput> comparisons = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
+    private final Map<ANode, Pullback.Pulled> holdings = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
+    private final Map<ANode, List<Pullback.OfAClause>> constructions = new HashMap<>();
     private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
-    private final Map<ANode, Optional<Proposition>> operatorsAnswer = new HashMap<>();
+    private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
+    private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswerOfTheRelation =
+            new HashMap<>();
+    private final Map<ANodeLeavingOut, Pullback.OperatorsAnswer> operatorsAnswerLeavingOut =
+            new HashMap<>();
     private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
+    private final Pullback.KeptByTheInput readingsKept = new Pullback.KeptByTheInput();
 
     private WhatConditionsState(InputReading read) {
         this.read = read;
+    }
+
+    /** What the Pullbacks made over this reading kept of the readings they made, for each other
+     *  to take ({@link Pullback.KeptByTheInput}). */
+    Pullback.KeptByTheInput readingsKept() {
+        return readingsKept;
+    }
+
+    /** How many comparisons, truths, forks and operator answers have been read through this, which
+     *  is what a walk that reads no condition leaves at nought. */
+    int readings() {
+        return comparisons.size() + truths.size() + presences.size() + holdings.size()
+                + arms.size() + constructions.size() + dividedInputs.size()
+                + operatorsAnswer.size() + operatorsAnswerOfTheRelation.size()
+                + operatorsAnswerLeavingOut.size();
     }
 
     /** What the conditions met over {@code read} state, kept for that reading. */
@@ -125,13 +147,55 @@ final class WhatConditionsState {
     }
 
     /** Where every operator {@code body} works out answers with its names as {@code reads} has
-     *  them, under {@code read} ({@link Pullback#whereItsOperatorsAnswer}) — empty where nothing
-     *  says it answers only somewhere. */
-    Optional<Proposition> whereItsOperatorsAnswer(Core body, InputReads reads,
-                                                  InputReading read) {
+     *  them, under {@code read} ({@link Pullback#whereItsOperatorsAnswer}) — no answers where
+     *  nothing says it answers only somewhere — and which of them may stop a run where nothing
+     *  says. */
+    Pullback.OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
+                                                     InputReading read) {
         heldTo(read);
-        return kept(operatorsAnswer, new ANode(body, reads), () -> Optional.ofNullable(
-                Pullback.whereItsOperatorsAnswer(body, reads, read)));
+        return kept(operatorsAnswer, new ANode(body, reads),
+                () -> Pullback.whereItsOperatorsAnswer(body, reads, read));
+    }
+
+    /** The same, of what the relation being read itself works out
+     *  ({@link Pullback#whereTheRelationsOwnOperatorsAnswer}). */
+    Pullback.OperatorsAnswer whereTheRelationsOwnOperatorsAnswer(Core body, InputReads reads,
+                                                                 InputReading read) {
+        heldTo(read);
+        return kept(operatorsAnswerOfTheRelation, new ANode(body, reads),
+                () -> Pullback.whereTheRelationsOwnOperatorsAnswer(body, reads, read));
+    }
+
+    /** The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}
+     *  ({@link Pullback#whereItsOperatorsAnswerLeavingOut}). */
+    Pullback.OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                               Set<Core> callsMakingWhatItReads,
+                                                               InputReads reads,
+                                                               InputReading read) {
+        heldTo(read);
+        return kept(operatorsAnswerLeavingOut,
+                new ANodeLeavingOut(body, leftOut, callsMakingWhatItReads, reads),
+                () -> Pullback.whereItsOperatorsAnswerLeavingOut(body, leftOut,
+                        callsMakingWhatItReads,
+                        reads, read));
+    }
+
+    /** A node read leaving out one of its nodes and what the calls making what the comparison
+     *  reads may stop a run on, by the nodes and the set they are, under names. */
+    record ANodeLeavingOut(Core value, Core leftOut, Set<Core> making, InputReads reads) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ANodeLeavingOut that && value == that.value
+                    && leftOut == that.leftOut && making == that.making
+                    && reads.equals(that.reads);
+        }
+
+        @Override
+        public int hashCode() {
+            return ((System.identityHashCode(value) * 31 + System.identityHashCode(leftOut)) * 31
+                    + System.identityHashCode(making)) * 31 + reads.hashCode();
+        }
     }
 
     /** What {@code truth} holding states with its names as {@code reads} has them, under
@@ -148,6 +212,21 @@ final class WhatConditionsState {
         heldTo(read);
         return kept(presences, new ANode(optional, reads),
                 () -> Pullback.ofAPresence(optional, reads, read, Optional.empty()));
+    }
+
+    /** What {@code container} holding something states with its names as {@code reads} has them,
+     *  under {@code read}. */
+    Pullback.Pulled holdingSomething(Core container, InputReads reads, InputReading read) {
+        heldTo(read);
+        return kept(holdings, new ANode(container, reads),
+                () -> Pullback.ofHoldingSomething(container, reads, read, Optional.empty()));
+    }
+
+    /** What a run getting past {@code construction} states of each clause it is held to, with its
+     *  names as {@code reads} has them ({@link Pullback#ofAConstruction}). */
+    List<Pullback.OfAClause> constructed(Core.Construct construction, InputReads reads) {
+        return kept(constructions, new ANode(construction, reads),
+                () -> Pullback.ofAConstruction(construction, reads, read));
     }
 
     /** What a run entering arm {@code part} of {@code fork} states with its names as {@code reads}
@@ -239,7 +318,7 @@ final class WhatConditionsState {
         return switch (stated) {
             case Proposition.InCases(DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)
                     when holds -> new CaseOfAnInput(of, cases);
-            case Proposition.Any(List<Proposition> parts, _) -> {
+            case Proposition.Any(List<Proposition> parts, _, _) -> {
                 DecisionSubject.AnInput of = null;
                 Set<Refinement> atoms = new LinkedHashSet<>();
                 for (Proposition part : parts) {
@@ -252,7 +331,7 @@ final class WhatConditionsState {
                 }
                 yield casesOf(of, atoms);
             }
-            case Proposition.All(List<Proposition> parts, _) -> {
+            case Proposition.All(List<Proposition> parts, _, _) -> {
                 DecisionSubject.AnInput of = null;
                 Set<Refinement> atoms = null;
                 Set<Refinement> denied = new HashSet<>();

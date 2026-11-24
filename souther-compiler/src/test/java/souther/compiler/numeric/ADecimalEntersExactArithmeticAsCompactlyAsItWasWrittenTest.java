@@ -1,20 +1,21 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+
+import souther.test.Allocated;
+import souther.test.Growth;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is therefore reached by every domain that answers one: a value taken in compactly and spelled out
  * on the way back has only moved the cost.
  */
-@Timeout(value = 20, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
 
     /** A scale no run would finish at if the power of ten were built, and one a {@code Decimal}
@@ -152,20 +152,29 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
      * <p>The constructor puts a ratio in its canonical form whatever it was handed, so an embedding
      * that built the power of ten would answer with the same compact value — the numbers say nothing
      * about what was formed on the way to them. The cost is the only thing that tells the two apart,
-     * and so the cost is what this holds.
-     *
-     * <p>The margin is why a wall clock is safe here: the work this does is a few microseconds and
-     * an embedding proportional to the scale is minutes at this width, so nothing a machine varies
-     * by stands between them.
+     * and the cost is what is allocated: a power of ten built to the scale is a number of as many
+     * bits as the scale says, and a value held by its exponents allocates the same at a quarter of
+     * the scale as at the whole.
      */
     @Test
     void takingADecimalInAndHandingItBackDoesNotCostWhatItsScaleSays() {
-        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            ExactRatio embedded = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH);
-            assertEquals(0, A_MILLIONTH_OF_A_MILLIONTH.compareTo(WrittenDecimals.of(embedded)));
-            assertEquals(ExactRatio.ONE, embedded.unitsRemoved());
-            assertTrue(embedded.compareTo(ExactRatio.ONE) < 0);
-        });
+        // Scales no other test takes in, since a decimal taken in before is not taken in again.
+        BigDecimal warm = BigDecimal.ONE.scaleByPowerOfTen(-WIDE / 2 - 3);
+        BigDecimal quarter = BigDecimal.ONE.scaleByPowerOfTen(-WIDE / 4 - 5);
+        BigDecimal whole = BigDecimal.ONE.scaleByPowerOfTen(-WIDE - 7);
+        takenInAndHandedBack(warm);
+        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+        bySize.put(WIDE / 4, Allocated.by(() -> takenInAndHandedBack(quarter)));
+        bySize.put(WIDE, Allocated.by(() -> takenInAndHandedBack(whole)));
+        Growth.eachAtMost(bySize, 2, 1);
+        takenInAndHandedBack(A_MILLIONTH_OF_A_MILLIONTH);
+    }
+
+    private static void takenInAndHandedBack(BigDecimal written) {
+        ExactRatio embedded = ExactRatio.of(written);
+        assertEquals(0, written.compareTo(WrittenDecimals.of(embedded)));
+        assertEquals(ExactRatio.ONE, embedded.unitsRemoved());
+        assertTrue(embedded.compareTo(ExactRatio.ONE) < 0);
     }
 
     /**
@@ -180,7 +189,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     void aBoundAtACompactDecimalIsHandedBackAsCompactlyAsItArrived() {
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(LinearForm.atomMinusConstant("a", ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH)),
-                        Rel.LE, Map.of("a", Granularity.DENSE));
+                        Rel.LE, Map.of("a", NumberSpace.spacedOnly(Granularity.DENSE)));
         Endpoint most = domain.boundsOf("a").max();
         assertNotNull(most);
         BigDecimal at = ((Count) most.at()).at();
@@ -396,22 +405,30 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
      * through that. Found one division at a time, holding a whole number becomes work proportional
      * to the number — so a form adopted to stop work proportional to a scale would have started work
      * proportional to a value. A power of two is where a number's bits stop, and that is one reading.
+     *
+     * <p>Every division allocates a number as long as the one divided, so one division at a time
+     * allocates the square of the bits. Four times the bits is then sixteen times what is
+     * allocated, and a reading of the bits is four times.
      */
     @Test
     void takingAPowerOfTwoInCostsWhatReadingItsBitsCosts() {
-        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            for (int bits : new int[] {1_000_000, 4_000_000}) {
-                ExactRatio held = ExactRatio.of(BigInteger.ONE.shiftLeft(bits));
-                assertEquals(bits, held.twos());
-                assertEquals(BigInteger.ONE, held.numeratorWithoutUnits());
-            }
-            // And a sum whose answer is one, which is where the work is not the input's own size.
-            ExactRatio summed = ExactRatio.of(
-                    BigInteger.ONE.shiftLeft(2_000_000).subtract(BigInteger.ONE))
-                    .plus(ExactRatio.ONE)
-                    .orNull();
-            assertEquals(2_000_000, summed.twos());
-        });
+        takenInAsAPowerOfTwoAndAsASum(50_000);
+        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+        for (int bits : new int[] {50_000, 200_000}) {
+            bySize.put(bits, Allocated.by(() -> takenInAsAPowerOfTwoAndAsASum(bits)));
+        }
+        Growth.eachAtMost(bySize, 8, 1);
+    }
+
+    private static void takenInAsAPowerOfTwoAndAsASum(int bits) {
+        ExactRatio held = ExactRatio.of(BigInteger.ONE.shiftLeft(bits));
+        assertEquals(bits, held.twos());
+        assertEquals(BigInteger.ONE, held.numeratorWithoutUnits());
+        // And a sum whose answer is one, which is where the work is not the input's own size.
+        ExactRatio summed = ExactRatio.of(BigInteger.ONE.shiftLeft(bits).subtract(BigInteger.ONE))
+                .plus(ExactRatio.ONE)
+                .orNull();
+        assertEquals(bits, summed.twos());
     }
 
     /**

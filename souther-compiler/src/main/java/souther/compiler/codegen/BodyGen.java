@@ -4,6 +4,8 @@ import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.PhysicalPos;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorAnswers;
@@ -30,6 +32,8 @@ import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.WalkProbe;
+import souther.compiler.coverage.WalkRewrite;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
@@ -51,6 +55,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -443,20 +448,9 @@ final class BodyGen {
             }
             switch (e) {
                 case Core.LetIn li -> {
-                    if (Core.withoutStanding(li.value()) instanceof Core.Call call
-                            && behaviorOf(call) != null
-                            && requiredNames.contains(behaviorOf(call))) {
-                        // call an injected required behavior; requiredCall handles both the unary
-                        // Behavior contract and a multi-input base (issue #57), leaving the success
-                        // value cast on the stack
-                        requiredCall(call);
-                        standAs(call.type(), li.value().type());
-                        storeLet(li, li.value().type());
-                    } else {
-                        Type vt = li.value().type();
-                        emitValue(li.value(), vt);
-                        storeLet(li, vt);
-                    }
+                    Type vt = li.value().type();
+                    emitValue(li.value(), vt);
+                    storeLet(li, vt);
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     emitTail(li.body(), cdB, requiredNames, expected);
                 }
@@ -495,7 +489,7 @@ final class BodyGen {
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     invoke(ctx.construction(nd.typeName()));
-                    code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
+                    refusedAt(nd);
                     returnValue();
                 }
                 // None of these answers with one of its parts, so what it answers is computed as a
@@ -643,11 +637,39 @@ final class BodyGen {
          * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
-        private void comparisonProbe(Core.Binary bin) {
-            if (places == Places.NUMBERED_NOWHERE || !ctx.measuring()) {
+        private void comparisonProbe(Core.Binary bin, int[] sides) {
+            if (!probed(bin)) {
                 return;
             }
-            ctx.comparisonSiteOf(bin).ifPresent(this::comparisonProbeAt);
+            comparisonProbeAt(ctx.comparisonSiteOf(bin).orElseThrow(), sides);
+        }
+
+        /** Whether a run through the comparison {@code bin} is recorded. */
+        private boolean probed(Core.Binary bin) {
+            return places != Places.NUMBERED_NOWHERE && ctx.measuring()
+                    && ctx.comparisonSiteOf(bin).isPresent();
+        }
+
+        /**
+         * The right side of a comparison of two whole numbers whose left side is on the stack,
+         * pushed after it — each kept in a slot on the way where {@code keep} says the run is
+         * recorded, so that the probe after the comparison hands both over ({@link Compared}).
+         *
+         * @return the two slots, left then right; null where nothing was kept
+         */
+        private int[] rightOfTwoWholeNumbers(Comparison comparison, boolean keep) {
+            if (!keep) {
+                operand(comparison, comparison.right());
+                return null;
+            }
+            int left = slot(Type.INT);
+            code.lstore(left);
+            operand(comparison, comparison.right());
+            int right = slot(Type.INT);
+            code.lstore(right);
+            code.lload(left);
+            code.lload(right);
+            return new int[] {left, right};
         }
 
         /**
@@ -683,10 +705,28 @@ final class BodyGen {
          * number and nothing else — a probed class has no numbering to ask what it addresses.
          */
         private void comparisonProbeAt(ConditionOutcomeSite site) {
+            comparisonProbeAt(site, null);
+        }
+
+        /**
+         * The same, where {@code sides} holds the slots a comparison of two whole numbers kept its
+         * sides in: the call then hands over the way it came out and what each side came to as
+         * one visit — kept as the comparison worked them out, so handing them over works nothing
+         * out again.
+         */
+        private void comparisonProbeAt(ConditionOutcomeSite site, int[] sides) {
             ctx.emitted(site.raw());
+            int raw = site.raw();
             code.dup();
-            code.loadConstant(site.raw());
-            code.invokestatic(CD_Probe, "condition", MTD_Probe_condition);
+            if (sides == null) {
+                code.loadConstant(raw);
+                code.invokestatic(CD_Probe, "condition", MTD_Probe_condition);
+                return;
+            }
+            code.lload(sides[0]);
+            code.lload(sides[1]);
+            code.loadConstant(raw);
+            code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
         }
 
         /**
@@ -785,7 +825,7 @@ final class BodyGen {
          * binds a line of its own costs nothing: two lines at one offset are one entry, the last.
          */
         private void emitLine(Core e) {
-            souther.compiler.diag.PhysicalPos sits = ctx.sits(e.pos());
+            PhysicalPos sits = ctx.sits(e.pos());
             int line = sits == null ? 0 : sits.line();
             if (line > 0 && line != lastEmittedLine) {
                 code.lineNumber(line);
@@ -906,8 +946,8 @@ final class BodyGen {
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> {
-                    if (binary(bin) != null) {
-                        comparisonProbe(bin);
+                    if (binary(bin) instanceof Compared compared) {
+                        comparisonProbe(bin, compared.sides());
                     }
                 }
                 case Core.Construct nd -> construct(nd);
@@ -959,8 +999,38 @@ final class BodyGen {
                                 .hint(new NameMessage.WriteItWhereTheTypeIsStated()).say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
             }
             code.loadConstant(abortMessage(u));
+            reachedAt(u);
             code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);
             castFromObject(code, shape);
+        }
+
+        /**
+         * Pushes where {@code u} is written, for the abort to carry beside its message
+         * ({@link #writtenAt}).
+         *
+         * <p>Where it is written, and not where this class's line table could put it, for the
+         * reason a refused construction's site is ({@link #refusedAt}).
+         */
+        private void reachedAt(Core.Unreachable u) {
+            writtenAt(u.pos());
+        }
+
+        /**
+         * Pushes where {@code place} is written: the module whose text it is in and the line and
+         * column there, or no module and a line of nought where this compilation holds no such
+         * place ({@link CodegenContext#writtenAt}), which the runtime reads as no place.
+         */
+        private void writtenAt(SourcePos place) {
+            Optional<CodegenContext.WrittenAt> at = ctx.writtenAt(place);
+            if (at.isPresent()) {
+                code.loadConstant(at.get().module());
+                code.loadConstant(at.get().sits().line());
+                code.loadConstant(at.get().sits().column());
+            } else {
+                code.aconst_null();
+                code.loadConstant(0);
+                code.loadConstant(0);
+            }
         }
 
         /**
@@ -974,10 +1044,12 @@ final class BodyGen {
          * <p>Which is why an {@code unreachable} that came in with an inlined helper of another file
          * says its reason and no numbers. A place with no file beside it is read against the frame's,
          * and the frame's file is this class's — so a line of the helper's file put here would be
-         * read as a line of this one. The reason is what the model wrote and stands on its own.
+         * read as a line of this one. The reason is what the model wrote and stands on its own; the
+         * helper's module and its line there travel beside the message as data ({@link #reachedAt}),
+         * where nothing reads them against the frame.
          */
         private String abortMessage(Core.Unreachable u) {
-            souther.compiler.diag.PhysicalPos sits = ctx.sits(u.pos());
+            PhysicalPos sits = ctx.sits(u.pos());
             return sits == null ? u.reason() : u.reason() + " (" + sits + ")";
         }
 
@@ -1146,7 +1218,9 @@ final class BodyGen {
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
                 emitFieldValues(flds, nd.values());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                finishInvariantConstruct(built, cdType);
+                invoke(ctx.construction(built));
+                refusedAt(nd);
+                code.checkcast(cdType);
                 return;
             }
             MethodTypeDesc ctor = MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds));
@@ -1289,13 +1363,20 @@ final class BodyGen {
             }
         }
 
-        /** Emits the checked-construction tail — the entry the type offers ({@code __construct(fields)
-         * -> Result}), {@code orThrow} (yield, or abort on invariant violation), and a narrowing cast
-         * — with the field values already on the stack. */
-        private void finishInvariantConstruct(TypeSymbol.AtModule built, ClassDesc cdType) {
-            invoke(ctx.construction(built));
-            code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
-            code.checkcast(cdType);
+        /**
+         * Emits {@code orThrow} over the {@code Result} a checked construction left on the stack:
+         * the value, or an abort naming {@code nd} by the module whose text it is written in and the
+         * line and column it is written at there. A construction this compilation holds no laid-out
+         * text for names none.
+         *
+         * <p>Where it is written, and not where this class's line table could put it: a body inlined
+         * from another module's helper writes its constructions in that module's text, and the site
+         * is data a reader of the run is handed, not a line of this class ({@link
+         * CodegenContext#writtenAt}).
+         */
+        private void refusedAt(Core.Construct nd) {
+            writtenAt(nd.pos());
+            code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrowAt);
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---
@@ -1512,8 +1593,27 @@ final class BodyGen {
             for (int i = 0; i < call.args().size(); i++) {
                 box(code, emitArgument(call, i));
             }
+            reachedAsACall(call);
             invokeRecursiveHelper(call);
             castFromObject(code, call.type());
+        }
+
+        /**
+         * Records that a walk the language owes rows of was reached, where it is run as a call of
+         * the library's method and not as the loop it is. Called with the arguments worked out, so
+         * a run that stopped working them out has not reached the walk.
+         *
+         * <p>Only that it was reached: the method is one for every walk of the program, so there is
+         * no switch to carry here and no second element to take note of.
+         */
+        private void reachedAsACall(Core.Call call) {
+            Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
+                    ? ctx.walkSiteOf(call) : Optional.empty();
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
         }
 
         /**
@@ -1550,12 +1650,14 @@ final class BodyGen {
         private void buildList(Core.Call call) {
             // A list's builder compares nothing it is given, so making one is the same call
             // everywhere.
-            if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
+            if (call.runsAsALoop(ctx.symbols.theWalk())
+                    && walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
                 return;
             }
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
+            reachedAsACall(call);
             ctx.callRuntime(code, CD_Lists, "build", MTD_Lists_build, Work.CHECKPOINTED);
         }
 
@@ -1582,12 +1684,14 @@ final class BodyGen {
         private void buildMap(Core.Call call) {
             // A map's builder compares the keys written into it, so an evaluated class makes one that
             // holds the checkpoint they are compared under.
-            if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
+            if (call.runsAsALoop(ctx.symbols.theWalk())
+                    && walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
                 return;
             }
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
+            reachedAsACall(call);
             ctx.callRuntime(code, CD_Maps, "build", MTD_Maps_build, Work.CHECKPOINTED);
         }
 
@@ -1596,6 +1700,11 @@ final class BodyGen {
          * step's own body as the loop body reading the accumulator and the element from locals.
          * Answers whether it was emitted that way — a walk that starts past the head, or whose step
          * is one that never runs, is left to the {@code foldFrom} method (spec §fn-declaration).
+         *
+         * <p>A step that is not written where the fold hands it over — chosen as the program runs,
+         * or reached as a value — is evaluated once before the walk and applied as a function in
+         * the loop. The loop is the same one, so what is recorded and what a run can switch at the
+         * walk does not depend on how the step is run.
          *
          * <p>This is what makes a fold cost what a loop costs, and {@code fold} is the one loop the
          * language has, so it is the whole of what a program's loops cost. Handed to a method instead,
@@ -1607,14 +1716,14 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (call.stepRunWhereItStands(ctx.symbols.theWalk()) == null) {
+            if (!call.runsAsALoop(ctx.symbols.theWalk())) {
                 return false;
             }
             Core seed = call.args().get(1);
-            return walked(call.args().get(0), call.args().get(2), () -> {
+            return walked(call, call.args().get(0), call.args().get(2), () -> {
                 Type produced = emitValue(seed, null);
                 asAccumulator(produced, accumulatorOf(call.args().get(0)));
-            }, () -> { });
+            }, () -> { }, false);
         }
 
         /** The same walk, accumulating into a builder that is sealed at the end (see
@@ -1622,9 +1731,9 @@ final class BodyGen {
          *  walk answers with. */
         private boolean walked(Core.Call call, ClassDesc helpers,
                                MethodTypeDesc builder, MethodTypeDesc sealed, Work making) {
-            return walked(call.args().get(0), call.args().get(1),
+            return walked(call, call.args().get(0), call.args().get(1),
                     () -> ctx.callRuntime(code, helpers, "builder", builder, making),
-                    () -> code.invokestatic(helpers, "sealed", sealed));
+                    () -> code.invokestatic(helpers, "sealed", sealed), true);
         }
 
         /** The accumulator's type, as the checker put it on the step. */
@@ -1641,31 +1750,89 @@ final class BodyGen {
             }
         }
 
-        private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
+        /**
+         * The loop {@code call} is, over {@code walked}, with {@code stepValue}'s body as the loop
+         * body.
+         *
+         * <p>Where this generation measures and the plan numbered the walk, entering it is recorded,
+         * and where the classes carry its switch, the run is asked how to walk it
+         * ({@link WalkRewrite}): stopping after the first step, or handing each step the seed where
+         * it is handed what the step before it answered. The seed handed again is the value the
+         * walk started from, worked out once, or — where the seed is a builder, which the steps
+         * write into — a new builder, which is what an empty seed is.
+         *
+         * @param freshSeed whether the seed is a builder the steps write into, so that handing it
+         *                  again is making another rather than reading the first
+         */
+        private boolean walked(Core.Call call, Core stepValue, Core walked, Runnable seed,
+                               Runnable answer, boolean freshSeed) {
             Core.Block step = Core.runsWhereItStands(stepValue);
+            Type.FnOf stepType = (Type.FnOf) stepValue.type();
+            Type accType = step != null ? step.paramTypes().get(0) : stepType.params().get(0);
+            Type elementType = step != null ? step.paramTypes().get(1) : stepType.params().get(1);
+
+            // A step handed over as a value is worked out once, before the walk, and applied at
+            // each element: choosing it again at an element would be another fold.
+            int handedOver = -1;
             if (step == null) {
-                return false;
+                handedOver = slot(Type.STRING);   // a reference slot; the type is not read back
+                emitValue(stepValue, null);
+                code.astore(handedOver);
             }
-            Type accType = step.paramTypes().get(0);
-            Type elementType = step.paramTypes().get(1);
+
+            Optional<WalkProbe> site = places == Places.COUNTED && ctx.measuring()
+                    ? ctx.walkSiteOf(call) : Optional.empty();
+            // A copy carried in another arm's place carries nothing of its own, as at a fork.
+            boolean switched = site.isPresent() && carrying == 0 && ctx.carriesTheWalk(call);
+
+            // In the order the call writes them: the step, the seed, then the list.
+            int acc = slot(accType);
+            seed.run();
+            store(code, acc, accType);
 
             int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
             genExpr(walked);
             code.invokeinterface(CD_List, "iterator", MTD_iterator);
             code.astore(iterator);
-
-            int acc = slot(accType);
-            seed.run();
-            store(code, acc, accType);
+            // Recorded once what the walk is handed has been worked out, as at a call of the
+            // library's method: a run that stopped working it out has not entered the walk.
+            if (site.isPresent()) {
+                ctx.emitted(site.get().raw());
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walked", MTD_Probe_hit);
+            }
+            // How many elements the walk has taken, where entering it is recorded: so is its
+            // taking a second, which is what tells a list of one element from a longer one.
+            int taken = -1;
+            if (site.isPresent()) {
+                taken = slot(Type.BOOL);   // an int slot
+                code.iconst_0();
+                code.istore(taken);
+            }
+            int how = -1;
+            int startedFrom = -1;
+            if (switched) {
+                how = slot(Type.BOOL);   // an int slot, holding a rewrite's code or -1
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Intervention, "walkAt", MTD_Intervention_walkAt);
+                code.istore(how);
+                if (!freshSeed) {
+                    startedFrom = slot(accType);
+                    load(code, acc, accType);
+                    store(code, startedFrom, accType);
+                }
+            }
 
             // The step's body is emitted here rather than in a class of its own, so the names it binds
             // would otherwise stay bound after the walk — and a step that destructures its accumulator
             // binds ordinary names (`let (i, ys) = acc`), which are the caller's names as often as not.
             // The whole scope is put back, the slots it took staying taken.
             Map<BindingId, Var> enclosing = new HashMap<>(locals);
-            bind(step.params().get(0), acc, accType);
             int element = slot(elementType);
-            bind(step.params().get(1), element, elementType);
+            if (step != null) {
+                bind(step.params().get(0), acc, accType);
+                bind(step.params().get(1), element, elementType);
+            }
 
             Label next = code.newLabel();
             Label done = code.newLabel();
@@ -1676,10 +1843,56 @@ final class BodyGen {
             code.aload(iterator);
             code.invokeinterface(CD_Iterator, "next", MTD_next);
             unbox(code, elementType, element);
-            Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
-            asAccumulator(stepped, accType);
+            if (site.isPresent()) {
+                Label notTheSecond = code.newLabel();
+                code.iload(taken);
+                code.iconst_1();
+                code.if_icmpne(notTheSecond);
+                code.loadConstant(site.get().raw());
+                code.invokestatic(CD_Probe, "walkedOn", MTD_Probe_hit);
+                code.labelBinding(notTheSecond);
+                code.iinc(taken, 1);
+            }
+            if (switched) {
+                Label asCarried = code.newLabel();
+                code.iload(how);
+                code.loadConstant(WalkRewrite.STEPS_FROM_THE_SEED.code());
+                code.if_icmpne(asCarried);
+                if (freshSeed) {
+                    seed.run();
+                } else {
+                    load(code, startedFrom, accType);
+                }
+                store(code, acc, accType);
+                code.labelBinding(asCarried);
+            }
+            if (step != null) {
+                Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
+                asAccumulator(stepped, accType);
+            } else {
+                code.aload(handedOver);
+                pushInt(code, 2);
+                code.anewarray(CD_Object);
+                code.dup();
+                pushInt(code, 0);
+                load(code, acc, accType);
+                box(code, accType);
+                code.aastore();
+                code.dup();
+                pushInt(code, 1);
+                load(code, element, elementType);
+                box(code, elementType);
+                code.aastore();
+                code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
+                castFromObject(code, accType);
+            }
             store(code, acc, accType);
             countOneStep();
+            if (switched) {
+                code.iload(how);
+                code.loadConstant(WalkRewrite.STOPS_AFTER_ONE_STEP.code());
+                code.if_icmpeq(done);
+            }
             code.goto_(next);
             code.labelBinding(done);
 
@@ -1890,10 +2103,10 @@ final class BodyGen {
          * type. What is wanted here is that an operator added to the language stops the compile
          * until this has decided what to emit for it, and only an expression asks javac for that.
          *
-         * <p>What comes back is what a probe records, so a caller has the recognition rather than
-         * the node and a lookup that answers for everything else.
+         * <p>What comes back is what the probe after a comparison records, so a caller has it
+         * from the emission rather than from the node and a lookup that answers for everything else.
          */
-        private Comparison binary(Core.Binary bin) {
+        private Compared binary(Core.Binary bin) {
             return switch (bin.op()) {
                 // Left to right, stopping as soon as the answer is settled. Not an optimisation:
                 // `/` aborts on a zero divisor and `Int` overflows, so a left operand is how the
@@ -1928,16 +2141,16 @@ final class BodyGen {
                 // §an-operator-takes-the-types-it-is-defined-for). The two arms below are the
                 // carriers' kernels and so are reached by the first two; arithmetic any Rational
                 // takes part in is exact and went to the arm above. Int aborts on overflow, and `/`
-                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and `/`
-                // over two of them answers an exact quotient that leaves the type and aborts on a
-                // zero divisor as well. Case handling for a zero divisor is the divide/remainder
-                // functions, not the operator.
+                // aborts on a zero divisor; a Decimal sum, difference or product always has an
+                // answer, and `/` over two of them answers an exact quotient that leaves the type
+                // and aborts on a zero divisor as well. Case handling for a zero divisor is the
+                // divide/remainder functions, not the operator.
                 //
                 // Both go through the runtime that owns the arithmetic — IntMath and DecimalMath —
-                // rather than to a host method. What an operator means is the runtime's, and calling
-                // BigDecimal here is what let a scale overflow leave a behavior as a
-                // java.lang.ArithmeticException (ADR-0112, issue #976). This said "Decimal does not
-                // overflow", which is not true of a sum, a difference or a product either.
+                // rather than to a host method. What an operator means is the runtime's: a
+                // BigDecimal has no place for an answer past its scales and reports it as a
+                // java.lang.ArithmeticException, which DecimalMath says as the run having no room
+                // to write it (ADR-0112).
                 //
                 // One arm each, and the runtime's method named in it. Read off the operator a
                 // second time inside a single arm, the last of the four is whatever is left over,
@@ -1981,11 +2194,21 @@ final class BodyGen {
                     // that law stops holding for is said rather than emitted against.
                     Comparison comparison =
                             Comparison.of(bin).orElseThrow(() -> placedNothing(bin));
-                    emitComparison(comparison);
-                    yield comparison;
+                    yield new Compared(emitComparison(comparison, probed(bin)));
                 }
             };
         }
+
+        /**
+         * A comparison just emitted, and the slots its two sides were kept in for the probe after
+         * it — null where they were not kept: the sides are no pair of whole numbers a coverage plan
+         * numbers, or no run through the comparison is recorded.
+         *
+         * <p>Handed back from the emission and not left in a field for the probe to find. Left
+         * there, which comparison the slots were of was a matter of nothing being emitted between
+         * the two, and a comparison emitted with no probe after it left its slots for the next.
+         */
+        private record Compared(int[] sides) {}
 
         /** That an operator this arm names as one that compares placed nothing, which is the law
          *  above having stopped holding for it. */
@@ -2090,13 +2313,16 @@ final class BodyGen {
          * only for as long as somebody kept them so.
          *
          * <p>Each operand is pushed as the pair is read ({@link #operand}), which says how far it
-         * is opened.
+         * is opened. Where {@code recorded} says a run through it is recorded and the two are whole
+         * numbers, what each came to is kept for the probe after it.
+         *
+         * @return the slots the two sides were kept in, left then right; null where none were
          */
-        private void emitComparison(Comparison comparison) {
-            switch (comparison.claim()) {
-                case ComparisonClaim.Cut cut -> ordered(comparison, cut);
-                case ComparisonClaim.Singled singled -> same(comparison, singled);
-            }
+        private int[] emitComparison(Comparison comparison, boolean recorded) {
+            return switch (comparison.claim()) {
+                case ComparisonClaim.Cut cut -> ordered(comparison, cut, recorded);
+                case ComparisonClaim.Singled singled -> same(comparison, singled, recorded);
+            };
         }
 
         /**
@@ -2129,18 +2355,21 @@ final class BodyGen {
          * <p>The switch carries no {@code default}: reading the representation instead is what let
          * {@code StageN < StageN} fall past every ordering arm into an equality test, and an order
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
+         *
+         * @return the slots two whole numbers were kept in, left then right; null where none were
          */
-        private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
+        private int[] ordered(Comparison comparison, ComparisonClaim.Cut cut, boolean recorded) {
             // Whether the two may be compared at all, and what orders them, was settled by
             // BinaryElaborator against the types as written; this lowers that order.
             Core.OrderingBasis basis = comparison.ordering().orElseThrow(
                     () -> new IllegalStateException("a comparison the checker admitted says what"
                             + " orders it: " + comparison.left().type() + " "
                             + cut.statedRelation() + " " + comparison.right().type()));
+            int[] kept = null;
             switch (Ordering.ofBasis(basis)) {
                 case Ordering.Longs _ -> {
                     operand(comparison, comparison.left());
-                    operand(comparison, comparison.right());
+                    kept = rightOfTwoWholeNumbers(comparison, recorded);
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
                 case Ordering.Strings _ -> {
@@ -2188,6 +2417,7 @@ final class BodyGen {
                 case Ordering.Wrapped _ -> throw new IllegalStateException(
                         "an opened order is never a wrapped one: " + comparison.left().type());
             }
+            return kept;
         }
 
         /**
@@ -2196,18 +2426,26 @@ final class BodyGen {
          * <p>{@link ComparisonClaim.Singled#holdsAtTheValue} says which of the two classes the
          * comparison selects, so a comparison met where the value is not the one named is this test
          * inverted.
+         *
+         * @return the slots two whole numbers were kept in, left then right; null where none were
          */
-        private void same(Comparison comparison, ComparisonClaim.Singled singled) {
+        private int[] same(Comparison comparison, ComparisonClaim.Singled singled,
+                           boolean recorded) {
             // Read at their exact values, the two are Rationals, equal by exact mathematical value,
             // which is what the runtime value's own equality is: one representation per value, so
             // `Values.equal` asking it is asking this.
             Type lt = operand(comparison, comparison.left());
+            if (lt == Type.INT) {
+                int[] kept = rightOfTwoWholeNumbers(comparison, recorded);
+                comparisonMaterialize(singled.statedRelation(), true);
+                return kept;
+            }
             operand(comparison, comparison.right());
             if (lt == Type.STRING && !ctx.counting()) {
                 code.invokevirtual(CD_String, "equals",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
                 selecting(singled);
-                return;
+                return null;
             }
             if (isReference(lt)) {
                 // What sameness is, is the runtime's to say: a data compares by its fields, an
@@ -2217,9 +2455,10 @@ final class BodyGen {
                 // them is as long as they are and passes nothing.
                 emitValueEquals(ctx, code, lt == Type.DECIMAL);
                 selecting(singled);
-                return;
+                return null;
             }
-            comparisonMaterialize(singled.statedRelation(), lt == Type.INT);
+            comparisonMaterialize(singled.statedRelation(), false);
+            return null;
         }
 
         /** Turns a test of sameness into the class the comparison selects: the one it is met at is

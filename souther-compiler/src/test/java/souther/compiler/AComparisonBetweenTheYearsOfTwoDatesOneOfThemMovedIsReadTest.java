@@ -48,7 +48,12 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
             "Date.year(on) - Date.year(Date.addDays(0 - 1, birthday)) >= 60";
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return ACompiledModel.compiles(answered(source));
+    }
+
+    /** The model answered in full, whether or not it compiles. */
+    private static Compilation answered(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
@@ -56,7 +61,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String about(String body) {
@@ -136,7 +141,6 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
                 %s""".formatted(ATTAINED, rows));
         String report = report(compilation);
 
-        assertEquals(0, compilation.errors().size(), report);
         assertTrue(readSaveForWhatTheOtherYearReaches(report), report);
         assertFalse(report.contains("no row is at the ON point"), report);
         assertFalse(report.contains("no row is at the OFF point"), report);
@@ -169,7 +173,6 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
                 %s""".formatted(ATTAINED, rows));
         String report = report(compilation);
 
-        assertEquals(0, compilation.errors().size(), report);
         assertTrue(report.contains("no row is at the OFF point"), report);
         assertFalse(report.contains("no row is at the ON point"), report);
     }
@@ -206,7 +209,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         List<int[]> yearsOfEach = new ArrayList<>();
         offered.lines().filter(each -> each.contains("Date(\"")).forEach(each -> {
@@ -247,13 +250,15 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         assertFalse(offered.contains("answer several of their own numbers"), offered);
-        // A date in the year of the line, on the month of it and on each side of it.
-        assertTrue(offered.contains("Date(\"2026-06-01\")"), offered);
-        assertTrue(offered.contains("Date(\"2026-05-01\")"), offered);
-        assertTrue(offered.contains("Date(\"2026-07-01\")"), offered);
+        // A date in the year nearest the day that the line on the year leaves, on the month of the
+        // other line and on each side of it.
+        int year = Math.max(TestDay.DATE.getYear(), 2026);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 6, 1) + "\")"), offered);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 5, 1) + "\")"), offered);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 7, 1) + "\")"), offered);
     }
 
     /**
@@ -274,7 +279,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("p")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(offered.contains("THREW"), offered);
@@ -303,7 +308,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
     @Test
     void aShiftUndoneAtTheEndOfTheRangeAbortsAndIsNoRowThatReachedALine() {
-        Compilation past = compiled("""
+        Compilation past = ACompiledModel.refusedWith(List.of("E1905"), answered("""
                 module p
 
                 behavior f : (birthday: Date) -> Bool
@@ -311,13 +316,11 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
                 example f
                     | (Date("+999999999-12-31")) -> true
-                """);
-
-        assertEquals(1, past.errors().size(), "the program aborts there: " + report(past));
+                """));
 
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(past.db(), OfferingRequest.overTheModule("p")), Map.of(),
-                SourceRendering.namedByIdentity(past.texts()), past.db()).text();
+                SourceRendering.namedByIdentity(past.texts()), past.db()).textInEnglish();
         assertFalse(offered.contains("+999999999-12-31"),
                 "no row is offered at the date whose first shift aborts: " + offered);
     }
@@ -338,8 +341,14 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
      * A count another input supplies is no shift of one position: it is a number of two, and the
      * comparison relates them. The counts that settle the comparison whatever the date is are the
      * ones moving the least date past the year or the greatest short of it, which is where the
-     * dates stop and no line the model draws, so the count is read with no line on it. What the
-     * date is shown is still not every value: a count moving it past the last date there is.
+     * dates stop and no line the model draws, so the count is read with no line on it.
+     *
+     * <p>Moving the date is told as what it is, an operation a run stops at where the date passes
+     * the ends of the calendar, and a row is shown to get past it only where it holds at the row.
+     * The date nearest nought is no date such a row stands at for a count past the calendar's
+     * length, so the operations are solved for the dates the date takes, and the count is related
+     * with the region where every run stops said, on either side of the calendar. Every date has a
+     * count that gets the year past 2027 and one that leaves it short, so the date is related too.
      */
     @Test
     void aShiftByACountAnotherInputSuppliesIsNotAShiftOfOnePosition() {
@@ -355,8 +364,12 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertTrue(report.contains("read as f/birthday + days"), report);
         assertTrue(report.contains("it relates the value here to another value rather than"
                 + " dividing the values here, about `days`"), report);
-        assertTrue(report.contains("relates the value here to another value not shown to reach"
-                + " every value here, so which values here settle it on their own is not worked"
-                + " out, about `birthday`"), report);
+        assertTrue(report.contains("stops in birthday + days where birthday + days is"
+                + " at least 365241780472"), report);
+        assertTrue(report.contains("in birthday + days where birthday + days is at most"
+                + " -365243219163"), report);
+        assertTrue(report.contains("it relates the value here to another value rather than"
+                + " dividing the values here, about `birthday`"), report);
+        assertFalse(report.contains("not worked out"), report);
     }
 }

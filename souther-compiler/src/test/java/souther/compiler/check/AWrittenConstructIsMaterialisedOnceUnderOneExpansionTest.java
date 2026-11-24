@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
@@ -78,6 +79,15 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
             let over (xs) = List.all(x -> x >= 240, xs)
             """;
 
+    /** Sources, and the errors they are written to be refused with, which is none for a source
+     *  written to compile. */
+    private record Written(List<String> sources, List<String> refusedWith) {
+
+        static Written clean(String source) {
+            return new Written(List.of(source), List.of());
+        }
+    }
+
     /** What one walk of one body in one representation found. */
     private static final class Found {
 
@@ -127,7 +137,7 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
     void oneConstructCalledTwiceStandsInTwoCopies() {
         boolean twoCopies = false;
         Map<SourceConstructOrigin, Integer> seen = new LinkedHashMap<>();
-        for (Found found : inlinedBodiesOf(List.of(List.of(SPLICED)))) {
+        for (Found found : inlinedBodiesOf(List.of(Written.clean(SPLICED)))) {
             Map<SourceConstructOrigin, Integer> copiesOf = new LinkedHashMap<>();
             found.at.keySet().forEach(which -> copiesOf.merge(which.origin(), 1, Integer::sum));
             twoCopies |= copiesOf.values().stream().anyMatch(copies -> copies > 1);
@@ -148,7 +158,7 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
      */
     @Test
     void thePopulationReachesAComparisonInsideAnOperationOfTheLanguage() {
-        List<Found> walks = inlinedBodiesOf(List.of(List.of(COMBINATOR)));
+        List<Found> walks = inlinedBodiesOf(List.of(Written.clean(COMBINATOR)));
 
         List<String> copied = new ArrayList<>();
         List<String> asWritten = new ArrayList<>();
@@ -167,26 +177,27 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
     }
 
     private static List<Found> everyInlinedBody() {
-        List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
-        sources.add(List.of(SPLICED));
-        sources.add(List.of(COMBINATOR));
-        return inlinedBodiesOf(sources);
+        List<Written> models = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus ->
+                models.add(new Written(corpus.sources(), corpus.refusedWith())));
+        models.add(Written.clean(SPLICED));
+        models.add(Written.clean(COMBINATOR));
+        return inlinedBodiesOf(models);
     }
 
     /**
-     * Every body of every module of {@code sources}, in both representations.
+     * Every body of every module of {@code models}, in both representations.
      *
      * <p>Both, and walked apart. Which of them a construct stands in is what an occurrence must not
      * turn on, so what is asked here is whether either materialises a construct twice in one copy;
      * whether the two agree with each other is the question after this one, and gathering them would
      * answer this one with the walk's own doing.
      */
-    private static List<Found> inlinedBodiesOf(List<List<String>> sources) {
+    private static List<Found> inlinedBodiesOf(List<Written> models) {
         List<Found> out = new ArrayList<>();
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (Written each : models) {
+            Compilation compilation = Compilation.ofSources(each.sources(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(each.refusedWith(), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

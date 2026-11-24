@@ -2,13 +2,18 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Figure;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.ItemAssessment.Coverage;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One authored line is read at every position of every behavior carrying the type, and what the debt
@@ -38,6 +43,31 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
                 ObligationCoverage.acrossTheReadings(List.of(
                         missed(), found(), unread())),
                 "one reading is at the point, which is what the line asked for");
+    }
+
+    /**
+     * A row found in a case the line was shown to decide in settles the line, whichever readings of
+     * cases nobody worked out are beside it and in whatever order: those leave open only whether a
+     * row is in a case the line decides in, which the row found answers. Without it, the debt is
+     * left undecided for that reason and no other.
+     */
+    @Test
+    void aRowFoundBesideCasesNobodyWorkedOutSettlesTheDebt() {
+        WeakeningSet whichCase = WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
+                new ReadingGap.CasesNotWorkedOut(List.of(new Figure.Budget(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared())))));
+        Measurement<Coverage> notWorkedOut =
+                new Measurement.Partial<>(new Coverage.NoHit(), whichCase);
+        for (List<Measurement<Coverage>> readings : List.of(List.of(found(), notWorkedOut),
+                List.of(notWorkedOut, found()), List.of(notWorkedOut, found(), notWorkedOut))) {
+            assertEquals(new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
+                    ObligationCoverage.acrossTheReadings(readings),
+                    () -> "the row found is at the point, read in the order " + readings);
+        }
+        assertEquals(new ObligationCoverage.Undecided(whichCase),
+                ObligationCoverage.acrossTheReadings(List.of(notWorkedOut)),
+                "and with no row found, what is open is which case the row is in");
     }
 
     /**
@@ -119,6 +149,50 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
                 ObligationCoverage.acrossTheReadings(List.of(
                         new Measurement.Partial<>(new Coverage.Hit(RowWitnesses.ANOTHER_ROW), WEAKENED))),
                 "found is found, whatever the reading beside it went without");
+    }
+
+    /**
+     * A point that only a reading no row can settle it through holds open is one a row can be
+     * offered for, and no other undecided point is.
+     *
+     * <p>Said of the fold and not of a model, since what decides it is which readings come together
+     * and a model reaches only the combinations it happens to produce. The reading that is not tied
+     * to the point hides no row that would count; a reading that did not run to the end, or one
+     * nobody asked that could be holding a row, does — and the second ranks below the first in the
+     * state, so the state has to keep it for the question to be answerable from the state alone.
+     */
+    @Test
+    void aPointIsHeldOpenOnlyByUntiedReadingsWhereNothingBesideThemCouldHoldARow() {
+        assertTrue(heldOpenOnlyByUntied(List.of(untied(), missed())),
+                "a reading that read to the end and found none is an answer");
+        assertTrue(heldOpenOnlyByUntied(List.of(untied(), noRows())),
+                "and so is a reading of a behavior nobody wrote a row for, which hides nothing");
+        assertFalse(heldOpenOnlyByUntied(List.of(untied(), notAsked())),
+                "rows the build never looked at may be at the point");
+        assertFalse(heldOpenOnlyByUntied(List.of(untied(), new Measurement.NotMeasured<>(
+                Coverage.NotAsked.ARMS_NOT_ASKED))),
+                "and so may rows of the arms it did not ask for");
+        assertFalse(heldOpenOnlyByUntied(List.of(untied(), unread())),
+                "and a reading that did not run to the end");
+        assertFalse(heldOpenOnlyByUntied(List.of(untied(), untied(), notAsked())),
+                "however many untied readings there are");
+        assertInstanceOf(ObligationCoverage.Witnessed.class,
+                ObligationCoverage.acrossTheReadings(List.of(untied(), found())),
+                "and a row found settles it, which is not undecided at all");
+    }
+
+    /** Whether the readings together leave the point undecided by untied readings and nothing
+     *  else. */
+    private static boolean heldOpenOnlyByUntied(List<Measurement<Coverage>> readings) {
+        return assertInstanceOf(ObligationCoverage.Undecided.class,
+                ObligationCoverage.acrossTheReadings(readings),
+                "the untied reading holds the point open")
+                .heldOpenOnlyByUntiedReadings();
+    }
+
+    /** A reading that could not be tied to the point it is filed under. */
+    private static Measurement<Coverage> untied() {
+        return ItemAssessment.notTiedTo(OneBorder.border());
     }
 
     /** A reading that found the row. */

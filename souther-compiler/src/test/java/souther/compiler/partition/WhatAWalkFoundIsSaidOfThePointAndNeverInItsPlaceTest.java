@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.report.InEnglish;
 
 import java.util.Optional;
 import java.util.Set;
@@ -27,15 +29,19 @@ class WhatAWalkFoundIsSaidOfThePointAndNeverInItsPlaceTest {
 
     private static final String FOUND = "nothing stands at `opps[*].accountId` in the value built";
 
+    private static final SearchMessage FOUND_SAID =
+            new SearchMessage.NothingStandsThereInTheValueBuilt("opps[*].accountId");
+
     /** A walk that had everything and composed nothing, and said why. */
     @Test
     void aWalkThatComposedNothingSaysWhyBesideThePoint() {
         Generator.UnresolvedCombination why = whyOf(new TermRealizations.Realization.None(
-                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, FOUND));
+                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, FOUND_SAID));
 
         assertEquals(LABEL, why.subject(), "the point is what no row was found for");
         assertNull(why.detail(), "and no position stands in for it");
-        assertEquals(Optional.of(FOUND), why.said(), "what the walk found is what the point said");
+        assertEquals(Optional.of(FOUND), InEnglish.said(why.told()),
+                "what the walk found is what the point said");
     }
 
     /** A walk that wrote some of a population, and said where it was short. */
@@ -43,11 +49,12 @@ class WhatAWalkFoundIsSaidOfThePointAndNeverInItsPlaceTest {
     void aWalkThatWroteSomeOfAPopulationSaysWhereBesideThePoint() {
         Generator.UnresolvedCombination why = whyOf(new TermRealizations.Realization.Unexhausted(
                 CompositionShortfall.writing(Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)),
-                FOUND));
+                FOUND_SAID));
 
         assertEquals(LABEL, why.subject(), "the point is what no row was found for");
         assertNull(why.detail(), "and no position stands in for it");
-        assertEquals(Optional.of(FOUND), why.said(), "what the walk found is what the point said");
+        assertEquals(Optional.of(FOUND), InEnglish.said(why.told()),
+                "what the walk found is what the point said");
     }
 
     /** What an edge that offered nothing comes to at {@link #LABEL}, as the account reads it. */

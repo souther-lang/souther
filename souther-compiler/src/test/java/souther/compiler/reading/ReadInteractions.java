@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -26,7 +27,7 @@ final class ReadInteractions {
     /** Everything the reading of {@code behavior} of {@code source} came to, the sums it met and
      *  could not join among it. */
     static CoverageRead.Read readAll(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

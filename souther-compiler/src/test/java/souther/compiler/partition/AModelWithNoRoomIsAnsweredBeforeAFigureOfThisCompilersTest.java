@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
+import souther.compiler.report.InEnglish;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.FieldDomains;
@@ -116,7 +119,7 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
     @Test
     void theAnswerSaysWhatTheRulesLeaveRoomFor() {
         for (CameToNothing each : unresolved()) {
-            String said = each.why().said().orElse(null);
+            String said = InEnglish.said(each.why().told()).orElse(null);
 
             assertNotNull(said, () -> "the answer says what it is about: " + each);
             assertTrue(said.contains("box.xs") && said.contains("hold 1")
@@ -160,12 +163,13 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         FieldDomains read = FieldDomains.of(
                 TypeSymbols.declared(new TypeKey("example.placing", "Box")),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES), settled);
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                settled);
         return Partitions.heldRange(
                 new Type.ListOf(new Type.Ref(
                         TypeSymbols.declared(new TypeKey("example.placing", "Awkward")))),
                 RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 read.heldAt(RuleKey.of("xs")));
     }
 
@@ -215,7 +219,7 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         }
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList(),

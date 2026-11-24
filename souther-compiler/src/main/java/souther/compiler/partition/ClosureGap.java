@@ -69,6 +69,25 @@ public sealed interface ClosureGap {
     }
 
     /**
+     * Where the runs of the rows tried for what this holds stopped without answering, each once
+     * and in {@link WhereARunStopped#IN_A_STEADY_ORDER}; none where no row was tried.
+     *
+     * <p>Asked of the stops as {@link #figures} is, and for the same reason: a reader told only
+     * that a question stands, and not that rows were tried for it and their runs stopped, cannot
+     * tell which input the model has not decided about.
+     */
+    default List<WhereARunStopped> runsStopped() {
+        return switch (this) {
+            case QuestionUnanswered it -> it.question().stopped().all().stream()
+                    .flatMap(each -> ReportedReason.runsStopped(each).stream()).distinct()
+                    .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList();
+            // A position the reading never got into, a rule it never reached and a line it never
+            // derived had no row tried for them.
+            case PositionNotReachedInto _, RulesNotReached _, LineNotDerived _ -> List.of();
+        };
+    }
+
+    /**
      * What tells one of these from another.
      *
      * <p>The value itself, wherever everything the arm holds is what a reader is told. Where the

@@ -65,23 +65,21 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
-     * {@code Int.abs} is written in {@code souther.int}, and this compile has no source for it.
+     * {@code List.filter} is written in {@code souther.list}, and this compile has no source for it.
      *
-     * <p>One call, two subjects. Its {@code then} arm is owed a row and the one row here is
-     * positive, so nothing goes through it; the comparison it forks on draws lines on {@code n} that
-     * no row is at. Both are reported at the call on line 7.
+     * <p>The predicate the model hands it decides the fork, so the fork's arms are owed a row, and
+     * the one row here keeps its element, so nothing goes through the {@code else} arm. The
+     * predicate is a bare truth, so the model draws no line of its own. The arm is reported at the
+     * call on line 5.
      */
     private static final String OUT_OF_SIGHT = """
             module demo
 
-            data Size = Int
+            behavior kept : (bs: List<Bool>) -> List<Bool>
+            let kept (bs) = List.filter(b -> b, bs)
 
-            behavior sized : (n: Int) -> Size
-                constructs Size
-            let sized (n) = Size(Int.abs(n))
-
-            example sized
-                | "a positive one" : (5) -> Size(5)
+            example kept
+                | "a true one" : ([true]) -> [true]
             """;
 
     /** The control: the same two gaps with the fork written in the module's own source. Whatever the
@@ -130,7 +128,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 | "a positive one" : (5) -> Size(5)
             """);
 
-    private static final String DECLARATION = "Int.abs";
+    private static final String DECLARATION = "List.filter";
 
     // --- the arm, in each of the four renderings that say where it is -------------------------------
 
@@ -181,11 +179,11 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     /**
      * And a guard written out of sight draws no line in a model that calls it.
      *
-     * <p>{@code Int.abs} forks at nought, and a reading made over a tree with that body spliced in
-     * drew a line there and owed the caller a row either side of it. The number is that operation's
-     * implementation: this model says nothing about nought, and a row at it is a row owed for how
-     * the library happens to be written. So the reading keeps the operation standing and the lines
-     * a caller is answerable for are the ones a caller wrote.
+     * <p>A library operation compares as its implementation happens to be written, and a reading
+     * made over a tree with that body spliced in drew a line there and owed the caller a row either
+     * side of it. This model says nothing about those numbers, and a row at one is a row owed for
+     * how the library happens to be written. So the reading keeps the operation standing and the
+     * lines a caller is answerable for are the ones a caller wrote.
      *
      * <p>Which leaves the arm above as this model's whole subject. The tree that runs still holds
      * the arms of the spliced body — a run either goes through them or does not — so a place that
@@ -410,9 +408,8 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     }
 
     private static Said readEveryRenderingOnce(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(model, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         AdequacyReport report = AdequacyReport.of(compilation);
 
         List<Diagnostic> arms = new ArrayList<>();
@@ -429,7 +426,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         assertEquals(1, arms.size(), () -> "one arm is unreached: " + arms.size());
         Diagnostic arm = arms.get(0);
 
-        List<String> human = report.human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+        List<String> human = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
         List<String> armLines = human.stream()
                 // The sentence and not the mark it is printed under. What a build does about a
@@ -481,12 +478,12 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         Compilation compilation = Compilation.ofSources(ANOTHER_SOURCE,
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         SourceRendering names = new SourceRendering(
                 id -> "0".equals(id.value()) ? "up.sou" : "down.sou", compilation.texts());
         AdequacyReport report = AdequacyReport.of(compilation);
 
-        List<String> lines = report.human(names).lines().map(String::strip)
+        List<String> lines = report.humanInEnglish(names).lines().map(String::strip)
                 // The sentence and not the mark it is printed under. What a build does about a
                 // finding is written down now and is somebody else's test; this one is about the
                 // place the sentence names, and reading the mark here would be a second holder of it.
@@ -504,7 +501,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         List<JsonNode> unreached = armsNoRowGoesThrough(down.get("behaviors").get(0));
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         JsonNode at = unreached.get(0).get("at");
-        List<String> edges = report.human(names).lines().map(String::strip)
+        List<String> edges = report.humanInEnglish(names).lines().map(String::strip)
                 .filter(line -> line.contains("no row is at")).toList();
         List<String> jsonOrigins = new ArrayList<>();
         down.get("behaviors").get(0).get("partition").get("boundaries")

@@ -10,7 +10,6 @@ import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.TextRule;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.runtime.BoundaryScalars;
 import souther.runtime.Representations;
@@ -52,7 +51,7 @@ import java.util.Map;
  * the same rules in Java for the shapes no class was emitted for.
  *
  * <p>Nothing here says anything to a reader. What went wrong comes back as a {@link Read} or as the
- * reflective failure it was, and whoever asked decides how to say it: {@code souther run} makes a
+ * failure it was, thrown as it was, and whoever asked decides how to say it: {@code souther run} makes a
  * message with a position in the argument vector, which is a thing only it knows about.
  */
 public final class JsonBoundary {
@@ -67,32 +66,23 @@ public final class JsonBoundary {
 
         /** The decoder refused it, and these are the issues it found, at their paths. */
         record Refused(Issues issues) implements Read {}
-
-        /**
-         * It is not even the shape the decoder reads — an array where an object belongs — which the
-         * decoder reports by throwing rather than as an issue. {@code type} is the declared type as
-         * it is written, for a caller that wants to name it.
-         */
-        record Malformed(String type) implements Read {}
     }
 
-    /** {@code raw} read as {@code shape}. */
+    /**
+     * {@code raw} read as {@code shape}.
+     *
+     * <p>Every input a decoder refuses comes back as issues, an array where an object belongs
+     * among them. What a decoder throws is therefore not about the input: it is the platform
+     * having no room for something the decoder computed — an invariant's arithmetic past what a
+     * {@code BigDecimal} keeps, which is the runtime's {@code OutOfRoom} — or a defect. Neither
+     * is turned into a statement about the input here; it reaches the caller as it was thrown.
+     */
     public static Read read(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
         Decoder<JsonNode, ?> decoder = decoderFor(loader, shape);
-        Result<?> result;
-        try {
-            result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
-        } catch (RuntimeException _) {
-            return new Read.Malformed(Type.show(shape.type()));
-        }
+        Result<?> result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
         return result instanceof Ok<?> ok
                 ? new Read.Value(ok.value())
                 : new Read.Refused(((Err<?>) result).issues());
-    }
-
-    /** Whether {@code raw} reads as {@code shape} at all. */
-    public static boolean reads(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
-        return read(loader, shape, raw) instanceof Read.Value;
     }
 
     /**

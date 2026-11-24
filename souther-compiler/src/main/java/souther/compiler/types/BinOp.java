@@ -1,6 +1,7 @@
 package souther.compiler.types;
 
 import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+import souther.compiler.numeric.Rel;
 
 import java.util.Objects;
 
@@ -84,6 +85,24 @@ public enum BinOp implements DelegatedEqualityIsTheCrossingAnswer {
      *  is written the same way reads. */
     public boolean compares() {
         return family == Family.COMPARISON;
+    }
+
+    /**
+     * The relation this states of its two operands, the left one first: the order or the equality
+     * a comparison writes. The one table of the six, so that no reader keeps one beside it. Refused
+     * for an operator that compares nothing.
+     */
+    public Rel relation() {
+        return switch (this) {
+            case EQ -> Rel.EQ;
+            case NE -> Rel.NE;
+            case LT -> Rel.LT;
+            case LE -> Rel.LE;
+            case GT -> Rel.GT;
+            case GE -> Rel.GE;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT ->
+                    throw new IllegalArgumentException(this + " is no comparison");
+        };
     }
 
     /** Whether this places its two operands on an order, which is what {@code <}, {@code <=},

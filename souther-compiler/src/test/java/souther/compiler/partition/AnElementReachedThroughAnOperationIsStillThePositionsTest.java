@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -42,10 +43,8 @@ class AnElementReachedThroughAnOperationIsStillThePositionsTest {
             """;
 
     private static List<String> axesOf(String filtered) {
-        Compilation compilation =
-                Compilation.ofSource(MODEL.replace("FILTERED", filtered), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                MODEL.replace("FILTERED", filtered), Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
         assertNotNull(coverage, () -> "the model under test compiles: " + filtered);

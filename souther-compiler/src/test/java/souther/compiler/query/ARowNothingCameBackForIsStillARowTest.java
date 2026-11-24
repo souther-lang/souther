@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Prepared;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Incompleteness;
@@ -218,6 +219,7 @@ class ARowNothingCameBackForIsStillARowTest {
     private static Read read(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         Acceptance.of(compilation);
+        ACompiledModel.compiles(compilation);
         Db db = compilation.db();
         return new Read(db.ask(new Shapes.Prepared("demo")).value(), db, "demo");
     }

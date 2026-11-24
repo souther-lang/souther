@@ -1,5 +1,6 @@
 package souther.compiler.derive;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
@@ -55,11 +56,12 @@ class AFieldWhoseTypeIsNowhereNamedIsLeftOutWhereverTheNameSitsTest {
 
     /** Compiles both, with {@code upstream} as written or with a line that does not parse
      *  appended, and answers what each document was told. */
-    private static Map<SourceId, List<Located>> diagnostics(String upstream) {
+    private static Map<SourceId, List<Located>> diagnostics(List<String> refusedWith, String upstream) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(UPSTREAM.toString(), upstream);
         byId.put(DOWNSTREAM.toString(), IMPORTING);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).diagnostics();
+        return ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)).diagnostics();
     }
 
     /**
@@ -69,7 +71,8 @@ class AFieldWhoseTypeIsNowhereNamedIsLeftOutWhereverTheNameSitsTest {
      */
     @Test
     void aBrokenImportIsReportedWhereItIsWrittenAndTheProductSaysNothing() {
-        Map<SourceId, List<Located>> told = diagnostics(IMPORTED + "\n-- not a comment\n");
+        Map<SourceId, List<Located>> told = diagnostics(List.of("E2301", "E1504"),
+                IMPORTED + "\n-- not a comment\n");
         assertFalse(told.get(UPSTREAM).isEmpty(), "the line that does not parse is reported");
         assertEquals(List.of("E1504"), codes(told.get(DOWNSTREAM)),
                 "the importing document is told of its import and of nothing else");
@@ -82,7 +85,7 @@ class AFieldWhoseTypeIsNowhereNamedIsLeftOutWhereverTheNameSitsTest {
     /** The negative control: as written, the pair compiles and neither document is told anything. */
     @Test
     void asWrittenNothingIsReported() {
-        Map<SourceId, List<Located>> told = diagnostics(IMPORTED);
+        Map<SourceId, List<Located>> told = diagnostics(List.of(), IMPORTED);
         assertEquals(List.of(), told.get(UPSTREAM));
         assertEquals(List.of(), told.get(DOWNSTREAM));
     }
@@ -97,7 +100,8 @@ class AFieldWhoseTypeIsNowhereNamedIsLeftOutWhereverTheNameSitsTest {
                 "Map<String, Missing>", "List<Option<Missing>>")) {
             Map<String, String> byId = new LinkedHashMap<>();
             byId.put("demo.sou", "module demo\ndata X = { f: " + type + " }\n");
-            List<String> codes = codes(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+            List<String> codes = codes(ACompiledModel.refusedWith(List.of("E1023"),
+                    Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY))
                     .diagnostics().get(new SourceId("demo.sou")));
             assertEquals(List.of("E1023"), codes, type + " is told " + codes);
         }

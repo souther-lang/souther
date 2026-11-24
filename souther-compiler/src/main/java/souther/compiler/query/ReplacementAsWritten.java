@@ -65,6 +65,26 @@ public sealed interface ReplacementAsWritten {
     }
 
     /**
+     * A walk run another way, told from the other walks of the body by the fold the source wrote.
+     */
+    record OfAWalk(Replacement.OfAWalk replacement) implements ReplacementAsWritten {
+
+        public OfAWalk {
+            Objects.requireNonNull(replacement, "a rewrite is some rewrite");
+        }
+
+        /**
+         * The definition that wrote the fold, which is what tells two walks apart where this build
+         * holds no source of either to point at — for the reason {@link OfAnArm#writtenBy} is the
+         * definition.
+         */
+        public ValueName.Helper writtenBy() {
+            WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(replacement.walk().owner());
+            return new ValueName.Helper(body.module(), body.definition());
+        }
+    }
+
+    /**
      * The body answering one value, told from another value's by the row that came to it
      * ({@link Replacement.ByOneAnswer#answeredBy}).
      *

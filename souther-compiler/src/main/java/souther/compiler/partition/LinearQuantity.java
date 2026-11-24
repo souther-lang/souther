@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -39,6 +38,9 @@ public sealed interface LinearQuantity extends BorderQuantity
      * long as the two agree and one reader's answer the day they do not.
      */
     List<NumericTerm> terms();
+
+    /** What a search has to solve to put a row at one item. */
+    Standing standingAt(Criterion where);
 
     /**
      * The same quantity, with {@code from} taken at {@code to} instead — or null where it is not
@@ -122,44 +124,7 @@ public sealed interface LinearQuantity extends BorderQuantity
      * did.
      */
     default QuantityReading read(Observation observation) {
-        Map<TermOrders, WhatATermRead> answers = new LinkedHashMap<>();
-        for (NumericTerm term : terms()) {
-            TermOrders orders = ordersOf(term);
-            WhatATermRead read = switch (term) {
-                case NumericTerm.OfAnElementsNeighbours _ ->
-                        WhatATermRead.inItsOccurrence(orders, observation);
-                case NumericTerm.FromOnePosition one ->
-                        WhatATermRead.at(orders, observation.at(one.position()));
-                case NumericTerm.OccurrencesOfItsValue among ->
-                        WhatATermRead.amongEveryOccurrence(orders, observation,
-                                among.subjectPath());
-                case NumericTerm.OccurrencesOfAKey asked ->
-                        WhatATermRead.ofAKey(orders, observation, asked.subjectPath(),
-                                asked.key());
-                case NumericTerm.GatheredUnderItsKey _ ->
-                        WhatATermRead.underItsKey(orders, observation);
-                case NumericTerm.GatheredUnderAKey asked ->
-                        WhatATermRead.underAKey(orders, observation, asked.asked());
-                case NumericTerm.TakenOver over -> switch (over.source()) {
-                    // The nodes of a tree are found below its root, which is where they are read
-                    // from ({@code TermReading}).
-                    case RunSource.ProjectedOccurrences _, RunSource.FlattenedOccurrences _,
-                         RunSource.ReachableNodes _ ->
-                            WhatATermRead.over(orders, observation, over.subjectPath());
-                    case RunSource.ComputedOccurrences computed ->
-                            WhatATermRead.overElements(orders, computed, observation);
-                };
-            };
-            // One entry per term, which the orders say they are of, so two could only meet where a
-            // quantity is taken of one term twice. Refused rather than let the second stand: a
-            // reading that kept one of them would answer for a term with what another one read.
-            if (answers.put(orders, read) != null) {
-                throw new IllegalStateException(
-                        "a quantity is taken of each of its terms once, and this names " + orders
-                                + " among " + terms());
-            }
-        }
-        return new QuantityReading(answers);
+        return QuantityReading.of(this, observation);
     }
 
     /**
@@ -254,6 +219,8 @@ public sealed interface LinearQuantity extends BorderQuantity
 
     @Override
     default void lookAt(Observation row) {
-        read(row);
+        if (row.firstLookAt(this)) {
+            read(row);
+        }
     }
 }

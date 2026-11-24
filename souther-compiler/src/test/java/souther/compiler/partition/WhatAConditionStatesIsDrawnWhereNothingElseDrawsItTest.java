@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -83,7 +84,7 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
         ComparisonAssessment.Several several = assertInstanceOf(ComparisonAssessment.Several.class,
                 assertInstanceOf(BoundaryPolicy.Standing.Admitted.class, check.standing()).read());
         assertTrue(several.parts().getFirst().cases().stream()
-                        .anyMatch(each -> each.condition().key().contains("o.open")),
+                        .anyMatch(each -> each.condition().spelledOut().contains("o.open")),
                 () -> "it decides where the order is open: " + several);
         assertEquals(List.of(), walked.leftToTheFork());
     }
@@ -192,9 +193,7 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
                 let f (o) =
                     if (%s) then 1 else 0
                 """.formatted(condition.indent(8).strip()), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -203,7 +202,8 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
-        ComparisonReadings walked = ComparisonReadings.of("f", analysis, read, reads);
+        ComparisonReadings walked = ComparisonReadings.of("f", analysis, read, reads,
+                ComparisonWitnesses.AtComparisons.NONE);
         return new Walked(walked.comparisons(), walked.forks().stream()
                 .flatMap(fork -> fork.leftHere().stream()).toList());
     }

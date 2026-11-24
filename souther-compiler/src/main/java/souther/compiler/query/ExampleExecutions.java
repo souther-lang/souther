@@ -10,7 +10,12 @@ import souther.compiler.check.DerivedSymbols;
 import souther.compiler.core.Contract;
 import souther.compiler.core.ValueShape;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.FieldTypes;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.Position;
+import souther.compiler.observe.ValueTypes;
+import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -125,6 +130,22 @@ public final class ExampleExecutions {
                     db.ask(new Shapes.ValueShapes(declared.module())).value();
             return shapes == null ? null : shapes.get(declared);
         }));
+    }
+
+    /**
+     * Whether two values of a type are the same value, as the language says and not as the values
+     * are written or held: a decimal is the amount it stands for whatever scale it was written at,
+     * and a set is its elements in whatever order they were met. Answered no for a value that is
+     * not there in full, which the language asks of a value it compares.
+     *
+     * <p>The one place a reading that compares the values of a row asks, so that what is the same
+     * value is not settled twice.
+     */
+    static BehaviorInputs.SameValue sameValue(Db db) {
+        ValueTypes types = ValueTypes.over(checkedFieldTypes(db));
+        return (found, expected, type) -> Limits.UNBOUNDED.stoppedBy(found) == null
+                && Limits.UNBOUNDED.stoppedBy(expected) == null
+                && Comparisons.same(found, expected, types, Position.at(type));
     }
 
     /**

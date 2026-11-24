@@ -166,7 +166,7 @@ class WhatASourceIsCalledIsNotDecidedByWhatItMayReachTest {
                 library(), warnings, Adequacy.Asked.NOTHING);
 
         assertEquals(List.of("orders"), analyzed.modules());
-        assertEquals(List.of(), analyzed.errors());
+        ACompiledModel.compiles(analyzed);
     }
 
     /**

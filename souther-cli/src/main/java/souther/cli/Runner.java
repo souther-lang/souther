@@ -4,6 +4,7 @@ import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.JsonBoundary;
 import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Hir;
@@ -13,11 +14,13 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
+import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.query.Bodies;
 import souther.compiler.types.ValueName;
+import souther.runtime.OutOfRoom;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
 
@@ -28,8 +31,10 @@ import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.StreamWriteConstraints;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.exc.StreamConstraintsException;
+import tools.jackson.core.exc.StreamReadException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.File;
@@ -87,8 +92,9 @@ public final class Runner {
          * decoder's catalog, so it is resolved per locale rather than fixed at throw time. */
         private final transient Issues issues;
 
-        RunException(String messageKey, String message, int exitCode, Issues issues, Object... args) {
-            super(message);
+        RunException(String messageKey, int exitCode, Issues issues, Object... args) {
+            super(DiagnosticRenderer.legacyText(messageKey, args) + (exitCode == 2
+                    ? "\n" + DiagnosticRenderer.legacyText("run.usage.line") : ""));
             this.exitCode = exitCode;
             this.messageKey = messageKey;
             this.args = args;
@@ -124,10 +130,10 @@ public final class Runner {
     private static final ResourceBundleMessageResolver DECODE_MESSAGES =
             new ResourceBundleMessageResolver("net.unit8.raoh.messages");
 
-    /** A failure that names a catalog key: the English literal for a Java caller, the key for the
-     * command line's chosen locale. */
-    private static RunException fail(String key, String message, Object... args) {
-        return new RunException(key, message, 1, null, args);
+    /** A failure that names a catalog key, read in English by a Java caller and in the command
+     * line's chosen language by the command line. */
+    private static RunException fail(String key, Object... args) {
+        return new RunException(key, 1, null, args);
     }
 
     /**
@@ -168,14 +174,14 @@ public final class Runner {
                 }
                 default -> {
                     if (file != null) {
-                        throw usage("run.usage.singlefile", "run takes a single .sou file");
+                        throw usage("run.usage.singlefile");
                     }
                     file = environment.path(args[i]);
                 }
             }
         }
         if (file == null) {
-            throw usage("run.usage.nofile", "no source file given");
+            throw usage("run.usage.nofile");
         }
         return new Invocation(file, behaviorName, inputJson, pathOf(classPath));
     }
@@ -198,15 +204,13 @@ public final class Runner {
 
     private static String value(String[] args, int i, String option) {
         if (i >= args.length) {
-            throw usage("run.usage.optionvalue", "`" + option + "` needs a value", option);
+            throw usage("run.usage.optionvalue", option);
         }
         return args[i];
     }
 
-    private static RunException usage(String key, String problem, Object... args) {
-        return new RunException(key, problem
-                + "\nusage: souther run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]",
-                2, null, args);
+    private static RunException usage(String key, Object... args) {
+        return new RunException(key, 2, null, args);
     }
 
     /** Compiles {@code file}, drives {@code behaviorName} with {@code inputJson}, and returns the
@@ -376,14 +380,9 @@ public final class Runner {
                 return drivable.values().iterator().next();
             }
             if (drivable.isEmpty()) {
-                throw fail("run.behavior.none", "no behavior in this module can be run. "
-                        + "`run` runs a behavior that is runnable — implemented in Souther and"
-                        + " needing nothing injected, a `>->` pipeline when every stage is — and"
-                        + " that the module exposes.");
+                throw fail("run.behavior.none");
             }
-            String names = String.join(", ", drivable.sequencedKeySet());
-            throw usage("run.behavior.several",
-                    "several behaviors can be run — pick one with --behavior: " + names, names);
+            throw usage("run.behavior.several", String.join(", ", drivable.sequencedKeySet()));
         }
         Hir.BehaviorDef found = drivable.get(requested);
         if (found != null) {
@@ -392,9 +391,9 @@ public final class Runner {
         throw whyNotRunnable(compilation, module, requested, drivable.sequencedKeySet());
     }
 
-    /** A reason a behavior cannot be driven, in both forms: the catalog key with its arguments, and
-     * the English literal. The list of behaviors that can be driven is appended to both. */
-    private record Blocker(String key, String message, Object... args) {}
+    /** A reason a behavior cannot be driven: the catalog key with its arguments, to which the list
+     * of behaviors that can be driven is appended. */
+    private record Blocker(String key, Object... args) {}
 
     /**
      * Why a {@code >->} pipeline cannot be driven by {@code run}, or null when every stage is
@@ -421,10 +420,7 @@ public final class Runner {
         BehaviorRequirement first = requires.get(0);
         if (first.requiredBy().contains(pipe.name())) {
             String stage = first.dependency().toString();
-            return new Blocker("run.pipeline.noimpl",
-                    "`" + pipe.name() + "` is a pipeline whose stage `" + stage
-                            + "` has no implementation (it is injected from Java), which `run` cannot supply.",
-                    pipe.name(), stage);
+            return new Blocker("run.pipeline.noimpl", pipe.name(), stage);
         }
         String stage = first.requiredBy().get(0);
         List<String> wanted = new java.util.ArrayList<>();
@@ -433,12 +429,7 @@ public final class Runner {
                 wanted.add("`" + each.dependency().name() + "`");
             }
         }
-        String dependencies = String.join(", ", wanted);
-        return new Blocker("run.pipeline.depends",
-                "`" + pipe.name() + "` is a pipeline whose stage `" + stage
-                        + "` depends on injected dependencies (" + dependencies
-                        + "), which `run` cannot supply.",
-                pipe.name(), stage, dependencies);
+        return new Blocker("run.pipeline.depends", pipe.name(), stage, String.join(", ", wanted));
     }
 
     /**
@@ -482,21 +473,17 @@ public final class Runner {
                 continue;
             }
             if (!exposes(module, name)) {
-                return fail("run.behavior.notexposed",
-                        "`" + name + "` is not exposed, and `run` drives a behavior the module"
-                                + " exposes — add it to `exposing`. Available to run: " + available + ".",
-                        name, available);
+                return fail("run.behavior.notexposed", name, available);
             }
             if (b instanceof Hir.PipeBehavior pipe) {
                 Blocker blocker = pipelineBlocker(pipe, requirements);
                 if (blocker == null) {
-                    return fail("run.behavior.runnable",
-                            "`" + name + "` is runnable. Available to run: " + available + ".", name, available);
+                    return fail("run.behavior.runnable", name, available);
                 }
                 Object[] args = new Object[blocker.args().length + 1];
                 System.arraycopy(blocker.args(), 0, args, 0, blocker.args().length);
                 args[args.length - 1] = available;
-                return fail(blocker.key(), blocker.message() + " Available to run: " + available + ".", args);
+                return fail(blocker.key(), args);
             }
             if (b instanceof Hir.SpecBehavior spec) {
                 // Two ways to have no body, and they send an author to different places: one is
@@ -506,28 +493,18 @@ public final class Runner {
                         new ValueName.Behavior(module.name(), spec.name()))) {
                     case IMPLEMENTED -> { }
                     case INJECTION_TARGET -> {
-                        return fail("run.behavior.noimpl",
-                                "`" + name + "` has no implementation (it is injected from Java)."
-                                        + " Available to run: " + available + ".", name, available);
+                        return fail("run.behavior.noimpl", name, available);
                     }
                     case UNIMPLEMENTED -> {
-                        return fail("run.behavior.unwritten",
-                                "`" + name + "` declares what it depends on and has no `let` yet,"
-                                        + " so there is nothing to run. Available to run: "
-                                        + available + ".", name, available);
+                        return fail("run.behavior.unwritten", name, available);
                     }
                 }
                 if (!spec.dependsOn().isEmpty()) {
-                    String dependencies = dependencyNames(spec);
-                    return fail("run.behavior.depends",
-                            "`" + name + "` depends on injected dependencies (" + dependencies
-                                    + "), which `run` cannot supply. Available to run: " + available + ".",
-                            name, dependencies, available);
+                    return fail("run.behavior.depends", name, dependencyNames(spec), available);
                 }
             }
         }
-        return fail("run.behavior.unknown",
-                "no behavior named `" + name + "`. Available to run: " + available + ".", name, available);
+        return fail("run.behavior.unknown", name, available);
     }
 
     // --- input --------------------------------------------------------------------------------
@@ -550,20 +527,17 @@ public final class Runner {
             return new Object[0];
         }
         if (inputJson == null) {
-            throw usage("run.input.missing", "`" + name + "` takes " + arity + " input"
-                    + (arity == 1 ? "" : "s") + " — pass --input", name, arity);
+            throw usage("run.input.missing", name, arity);
         }
         JsonNode tree = parseJson(inputJson);
         if (arity == 1) {
             return new Object[] {decodeSoleInput(loader, ins.get(0), tree)};
         }
         if (!tree.isArray()) {
-            throw fail("run.input.notarray", "`" + name + "` takes " + arity
-                    + " inputs — --input must be a JSON array of that length", name, arity);
+            throw fail("run.input.notarray", name, arity);
         }
         if (tree.size() != arity) {
-            throw fail("run.input.count", "`" + name + "` takes " + arity + " inputs, but --input has "
-                    + tree.size(), name, arity, tree.size());
+            throw fail("run.input.count", name, arity, tree.size());
         }
         Object[] args = new Object[arity];
         for (int i = 0; i < arity; i++) {
@@ -580,23 +554,27 @@ public final class Runner {
      * decodes on the first attempt and never reaches it. Being an array is not the mistake; failing as
      * the value while succeeding as the array's sole element is. When the element fails too, the input
      * is wrong for some other reason and the decoder's own report is what says so.
+     *
+     * <p>Only a refusal asks for the second reading. A run with no room for what decoding computed
+     * is not a refusal of the value, so it ends the read where it happened and nothing is decoded
+     * again after it.
      */
     private static Object decodeSoleInput(ClassLoader loader, BoundaryInput shape,
                                           JsonNode tree) {
-        try {
-            return decode(loader, shape, tree, 0);
-        } catch (RunException asWritten) {
-            if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
-                throw fail("run.input.wrapped", "This behavior has one parameter. Pass its value"
-                        + " directly to --input; remove the outer array.");
+        return switch (read(loader, shape, tree, 0)) {
+            case JsonBoundary.Read.Value v -> v.value();
+            case JsonBoundary.Read.Refused r -> {
+                if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
+                    throw fail("run.input.wrapped");
+                }
+                throw refusal(r, 0);
             }
-            throw asWritten;
-        }
+        };
     }
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
     private static boolean decodes(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
-        return JsonBoundary.reads(loader, shape, raw);
+        return read(loader, shape, raw, 0) instanceof JsonBoundary.Read.Value;
     }
 
     // --- decode / encode ----------------------------------------------------------------------
@@ -610,15 +588,32 @@ public final class Runner {
      */
     private static Object decode(ClassLoader loader, BoundaryInput shape, JsonNode raw,
                                  int index) {
-        return switch (JsonBoundary.read(loader, shape, raw)) {
+        return switch (read(loader, shape, raw, index)) {
             case JsonBoundary.Read.Value v -> v.value();
-            case JsonBoundary.Read.Malformed m -> throw fail("run.decode.malformed",
-                    "input #" + (index + 1) + " is not shaped like `" + m.type() + "` — check --input",
-                    index + 1, m.type());
-            case JsonBoundary.Read.Refused r -> throw new RunException("run.decode.failed",
-                    "input #" + (index + 1) + " could not be decoded — " + detail(r.issues()), 1,
-                    r.issues(), index + 1, detail(r.issues()));
+            case JsonBoundary.Read.Refused r -> throw refusal(r, index);
         };
+    }
+
+    /** A decoder's refusal of the input at {@code index}, as the message a reader gets. */
+    private static RunException refusal(JsonBoundary.Read.Refused refused, int index) {
+        return new RunException("run.decode.failed", 1, refused.issues(), index + 1,
+                detail(refused.issues()));
+    }
+
+    /**
+     * {@link JsonBoundary#read}, with the one thing a decoder throws that is not a defect said as
+     * what it is: the run having no room for what the decoder computed, an invariant's arithmetic
+     * past what a {@code BigDecimal} keeps. It is the platform failing and says nothing about the
+     * input's shape, so it is neither a refusal of the value nor an input that is not shaped like its
+     * type (spec §jvm-abort).
+     */
+    private static JsonBoundary.Read read(ClassLoader loader, BoundaryInput shape, JsonNode raw,
+                                          int index) {
+        try {
+            return JsonBoundary.read(loader, shape, raw);
+        } catch (OutOfRoom e) {
+            throw fail("run.decode.outofroom", index + 1, e.getMessage());
+        }
     }
 
     /** The decoder's issues as one line: each at its JSON pointer, in the order they were found. */
@@ -643,8 +638,7 @@ public final class Runner {
         try {
             return JsonBoundary.write(loader, pkg, behavior, out, result);
         } catch (StackOverflowError _) {
-            throw fail("run.encode.toodeep",
-                    "the output nests too deeply for this boundary to encode.");
+            throw fail("run.encode.toodeep");
         }
     }
 
@@ -660,20 +654,33 @@ public final class Runner {
      * as the behavior having run and failed, and sends the author looking through a body that was
      * never entered.
      */
-    private static Object invoke(ClassLoader loader, String pkg, String behavior, Object[] args) {
+    static Object invoke(ClassLoader loader, String pkg, String behavior, Object[] args) {
         try {
             return GeneratedBehavior.apply(loader, pkg, behavior, args);
+        } catch (LinkageError e) {
+            // Loading the compiled class is where the JVM verifies it, and that failure arrives
+            // here as it is and not wrapped by a call. A class this compile generated that will not
+            // link is the compiler failing; what is left is the class's own initializer or the
+            // runtime, which is the behavior not running.
+            GeneratedLinkage.rejectDefect(e);
+            Throwable ended = whatTheInitializerThrew(e);
+            throw fail("run.behavior.failed", behavior, String.valueOf(ended));
         } catch (java.lang.reflect.InvocationTargetException e) {
             Throwable cause = e.getCause();
-            throw fail("run.behavior.failed", "`" + behavior + "` failed: " + cause,
-                    behavior, String.valueOf(cause));
+            GeneratedLinkage.rejectDefect(cause);
+            Throwable ended = whatTheInitializerThrew(cause);
+            throw fail("run.behavior.failed", behavior, String.valueOf(ended));
         } catch (ReflectiveOperationException e) {
-            String className = GeneratedBehavior.implClass(pkg, behavior);
-            throw fail("run.behavior.unreachable",
-                    "`" + behavior + "` could not be started — the compiled `" + className
-                            + "` is not reachable: " + e + ". This is a defect in the compiler,"
-                            + " not in the module.", behavior, className, e.toString());
+            throw fail("run.behavior.unreachable", behavior,
+                    GeneratedBehavior.implClass(pkg, behavior), e.toString());
         }
+    }
+
+    /** What {@code thrown} says of the behavior failing: an initializer's error says only that it
+     *  failed, and what it threw is its cause. */
+    private static Throwable whatTheInitializerThrew(Throwable thrown) {
+        return thrown instanceof ExceptionInInitializerError initializer
+                && initializer.getCause() != null ? initializer.getCause() : thrown;
     }
 
     // --- small utilities ----------------------------------------------------------------------
@@ -682,8 +689,7 @@ public final class Runner {
         try {
             return Files.readString(file);
         } catch (IOException e) {
-            throw fail("run.read.failed", "cannot read " + file + ": " + e.getMessage(),
-                    file.toString(), e.getMessage());
+            throw fail("run.read.failed", file.toString(), e.getMessage());
         }
     }
 
@@ -698,9 +704,19 @@ public final class Runner {
      * nearest binary value instead of the number that was written (spec
      * §a-boundary-scalar-is-read-not-converted); the decoder refuses that, so a program's input
      * could not be read at all.
+     *
+     * <p>An object that names a member twice is refused rather than read as the last of them: the
+     * tree would keep one value and drop the other before any decoder saw either, and what a program
+     * is run on would not be what was written.
+     *
+     * <p>What follows the first value is asked of the parser in {@link #parseJson}, not left to the
+     * mapper. The mapper reports it as the same exception type it reports a repeated member with, and
+     * a type that stands for two reasons cannot say which one happened.
      */
     private static final JsonMapper JSON = JsonMapper.builder()
-            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+            .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
 
     /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
     private static final int READ_DEPTH_LIMIT =
@@ -726,20 +742,46 @@ public final class Runner {
      *
      * <p>Input with nothing in it reads as the missing node rather than as no node at all, so an
      * empty {@code --input} reaches the same refusal as input of the wrong shape.
+     *
+     * <p>What fails is told apart by the type the mapper throws, never by its text, and each type is
+     * said as what it is. A number whose exponent no {@code BigDecimal} keeps in its 32-bit scale is
+     * valid JSON and a {@code Decimal}, and is the run having no room to write it (spec §jvm-abort).
+     * The reader's own limits — a number, a name or a document too long — refuse text that is as much
+     * JSON. A member named twice is valid JSON that the tree would read as the last of them, so it is
+     * refused. A second value after the first is not JSON as a document, which is asked of the parser
+     * directly so that the mapper's one exception type for a repeated member stands for that alone.
+     * Only a {@code StreamReadException} that is none of these is a syntax error. Which type the
+     * mapper uses for each is what was measured against the version this module builds with, and
+     * {@code RunnerTest} pins it: an upgrade that wraps one of them fails there and not in a
+     * diagnostic. A failure of any other type is not attributed to the input; it reaches the caller
+     * as thrown.
      */
     private static JsonNode parseJson(String input) {
         JsonParser parser = JSON.createParser(input);
         try {
             JsonNode tree = JSON.readTree(parser);
+            if (tree != null && parser.nextToken() != null) {
+                throw fail("run.input.trailing");
+            }
             return tree == null ? JSON.missingNode() : tree;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             TokenStreamContext where = parser.streamReadContext();
             if (refusedForDepth(e, where, READ_REFUSAL_DEPTH)) {
-                throw tooDeep("run.input.toodeep", "--input nests deeper than this boundary accepts",
-                        where, READ_DEPTH_LIMIT);
+                throw tooDeep("run.input.toodeep", where, READ_DEPTH_LIMIT);
             }
-            throw fail("run.input.badjson", "--input is not valid JSON: " + e.getMessage(),
-                    e.getMessage());
+            if (e instanceof NumberFormatException) {
+                throw fail("run.input.outofroom", depthPath(where));
+            }
+            if (e instanceof MismatchedInputException) {
+                throw fail("run.input.duplicate", depthPath(where));
+            }
+            if (e instanceof StreamConstraintsException) {
+                throw fail("run.input.limit", depthPath(where), e.getMessage());
+            }
+            if (e instanceof StreamReadException) {
+                throw fail("run.input.badjson", e.getMessage());
+            }
+            throw e;
         } finally {
             parser.close();
         }
@@ -756,12 +798,9 @@ public final class Runner {
             // read before the close in `finally`, which resets the generator's context to the root
             TokenStreamContext where = generator.streamWriteContext();
             if (refusedForDepth(e, where, WRITE_REFUSAL_DEPTH)) {
-                throw tooDeep("run.output.toodeep",
-                        "the output nests deeper than this boundary can render",
-                        where, WRITE_DEPTH_LIMIT);
+                throw tooDeep("run.output.toodeep", where, WRITE_DEPTH_LIMIT);
             }
-            throw fail("run.output.json", "could not render the output as JSON: " + e.getMessage(),
-                    e.getMessage());
+            throw fail("run.output.json", e.getMessage());
         } finally {
             generator.close();
         }
@@ -778,7 +817,7 @@ public final class Runner {
      * <p>Standing at {@code refusalDepth} is the depth refusal and can be nothing else. A value
      * refused for another reason stands shallower: the reader admits scalars at every level up to
      * the limit, so the deepest a long number can be refused at is one level short of where a
-     * refusal for depth stands. Every other constraint keeps the wording it had.
+     * refusal for depth stands. Every other constraint is the reader's limit and not a depth.
      */
     private static boolean refusedForDepth(Exception failure, TokenStreamContext where,
                                            int refusalDepth) {
@@ -794,11 +833,8 @@ public final class Runner {
      * counted is levels of JSON, which is not levels of the data — one level of a self-referential
      * data spends a level for its object and another for the list that carries the next one.
      */
-    private static RunException tooDeep(String key, String english, TokenStreamContext where,
-                                        int limit) {
-        String path = depthPath(where);
-        return fail(key, english + ": " + path + " and below (JSON nesting past " + limit
-                + " levels)", path, limit);
+    private static RunException tooDeep(String key, TokenStreamContext where, int limit) {
+        return fail(key, depthPath(where), Integer.toString(limit));
     }
 
     /** How much of the path to the deepest level is worth reading. */

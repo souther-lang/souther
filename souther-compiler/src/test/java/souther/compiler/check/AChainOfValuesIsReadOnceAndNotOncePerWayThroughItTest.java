@@ -2,11 +2,10 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
+import souther.test.Growth;
 
-import java.time.Duration;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import java.util.LinkedHashMap;
+import java.util.SequencedMap;
 
 /**
  * A value is held once for the analysis however many ways there are through the values that name
@@ -14,13 +13,12 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  *
  * <p>Each value here names the one before it in two forks, so the number of ways down the chain
  * doubles with every link. A tree that held a copy of a value for every region that builds it
- * would double with them, and the compile of forty links is not one anybody waits for. Held as a
- * time and not as a size: what the value being held once is for is that nothing scales with the
- * ways, and a tree that stopped growing but was still read once per way would pass a count.
+ * would double with them, and the compile of forty links is not one anybody waits for. A tree that
+ * stopped growing but was still read once per way would pass a count of its size, so what is
+ * counted is the nodes the compile names and the walks it starts: doubling the chain may at most
+ * double them, where one reading per way squares them.
  */
 class AChainOfValuesIsReadOnceAndNotOncePerWayThroughItTest {
-
-    private static final int LINKS = 80;
 
     private static String diamonds(int links) {
         StringBuilder source = new StringBuilder(
@@ -35,9 +33,27 @@ class AChainOfValuesIsReadOnceAndNotOncePerWayThroughItTest {
                 .append(links).append('\n').toString();
     }
 
+    /** What compiling a chain of {@code links} names and the walks it starts, as one count. */
+    private static long readsOver(int links) {
+        long[] named = {0};
+        long[] walks = {0};
+        Terms.COUNTING_NAMED = named;
+        Terms.COUNTING_WALKS = walks;
+        try {
+            Compiler.compile(diamonds(links));
+        } finally {
+            Terms.COUNTING_NAMED = null;
+            Terms.COUNTING_WALKS = null;
+        }
+        return named[0] + walks[0];
+    }
+
     @Test
-    void aLongChainIsCompiledInATimeAPersonWouldWait() {
-        assertTimeoutPreemptively(Duration.ofSeconds(20),
-                () -> assertDoesNotThrow(() -> Compiler.compile(diamonds(LINKS))));
+    void doublingTheChainAtMostDoublesWhatIsRead() {
+        SequencedMap<Integer, Long> reads = new LinkedHashMap<>();
+        for (int links : new int[] {3, 6, 12}) {
+            reads.put(links, readsOver(links));
+        }
+        Growth.eachAtMost(reads, 3, 1);
     }
 }

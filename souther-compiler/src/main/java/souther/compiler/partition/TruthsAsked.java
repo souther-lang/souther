@@ -89,7 +89,7 @@ public record TruthsAsked(Map<TermPath, Boolean> at) {
     TermPath writtenInto(LocationWrites decided) {
         for (Map.Entry<TermPath, Boolean> each : at.entrySet()) {
             if (decided.write(each.getKey(), List.of(FixtureTemplate.bool(each.getValue())))
-                    == LocationWrites.Written.CONFLICTING) {
+                    instanceof LocationWrites.Written.Conflicting) {
                 return each.getKey();
             }
         }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -62,7 +63,8 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     /** Six only where both sets hold every case, and nothing above it. */
     @Test
     void theSizesOfTwoSetsComeToTheValueOnlyWhereBothHoldEveryCase() {
-        Map<DomainPoint, String> points = atEachPoint(SETS, "Set.size(a) + Set.size(b) == 6",
+        Map<DomainPoint, String> points = atEachPointOfTheQuantity(SETS,
+                "Set.size(a) + Set.size(b) == 6",
                 AValueSingledOutOnAQuantityOverPositionsIsALineTest::sizes);
 
         assertEquals("3 + 3", points.get(new DomainPoint.AtTheLine()));
@@ -76,7 +78,8 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     /** One below what the two can reach together has a row either side of it. */
     @Test
     void aValueBelowTheMostTheyComeToHasARowEitherSide() {
-        Map<DomainPoint, String> points = atEachPoint(SETS, "Set.size(a) + Set.size(b) == 5",
+        Map<DomainPoint, String> points = atEachPointOfTheQuantity(SETS,
+                "Set.size(a) + Set.size(b) == 5",
                 AValueSingledOutOnAQuantityOverPositionsIsALineTest::sizes);
 
         assertEquals(5, sum(points.get(new DomainPoint.AtTheLine())));
@@ -97,7 +100,7 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
      */
     @Test
     void theValueBesideItIsTheNearestTheWeightsLetTheQuantityComeTo() {
-        Map<DomainPoint, String> points = atEachPoint(SETS,
+        Map<DomainPoint, String> points = atEachPointOfTheQuantity(SETS,
                 "2 * Set.size(a) + 2 * Set.size(b) == 12",
                 AValueSingledOutOnAQuantityOverPositionsIsALineTest::sizes);
 
@@ -109,9 +112,9 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     /** Which position a rule names first is no part of the quantity. */
     @Test
     void theOrderThePositionsAreWrittenInChangesNothing() {
-        assertEquals(atEachPoint(SETS, "Set.size(a) + Set.size(b) == 6",
+        assertEquals(atEachPointOfTheQuantity(SETS, "Set.size(a) + Set.size(b) == 6",
                         AValueSingledOutOnAQuantityOverPositionsIsALineTest::sizes),
-                atEachPoint(SETS, "Set.size(b) + Set.size(a) == 6",
+                atEachPointOfTheQuantity(SETS, "Set.size(b) + Set.size(a) == 6",
                         AValueSingledOutOnAQuantityOverPositionsIsALineTest::sizes));
     }
 
@@ -296,6 +299,35 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
         return points(lines.get(0), read);
     }
 
+    /** The same, of the one line over the quantity, beside those of the numbers it is made of. */
+    private static Map<DomainPoint, String> atEachPointOfTheQuantity(
+            String model, String condition, Function<List<String>, String> read) {
+        List<BorderAssessment> lines = overTheQuantity(lines(model, condition));
+        assertEquals(1, lines.size(), () -> condition + " draws one line over it: " + lines);
+        return points(lines.get(0), read);
+    }
+
+    /** The lines over the quantity itself, and not those of one of the numbers it is made of. */
+    private static List<BorderAssessment> overTheQuantity(List<BorderAssessment> lines) {
+        return lines.stream()
+                .filter(each -> each.border().cut().of() instanceof BorderQuantity.OverAForm)
+                .toList();
+    }
+
+    /**
+     * A size the element type is shown to give is a number of its own, so it is a line where it
+     * alone settles the quantity: with each set holding three at most, one of them short of three
+     * leaves the two short of six whatever the other holds.
+     */
+    @Test
+    void aSizeShownToTakeEveryValueIsALineWhereItAloneSettlesTheQuantity() {
+        List<BorderAssessment> all = lines(SETS, "Set.size(a) + Set.size(b) == 6");
+        assertEquals(3, all.stream().map(each -> each.border().cut().of()).distinct().count(),
+                () -> "the quantity and each of its sizes: " + all);
+        assertEquals(1, overTheQuantity(all).stream().map(each -> each.border().cut().of())
+                .distinct().count());
+    }
+
     /** The same, of the comparison's line among the declaration's. */
     private static Map<DomainPoint, String> comparisonPoints(String model, String condition) {
         List<BorderAssessment> lines = ofTheComparison(model, condition);
@@ -387,9 +419,7 @@ class AValueSingledOutOnAQuantityOverPositionsIsALineTest {
     }
 
     private static List<BorderAssessment> linesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).lines();
     }
 }

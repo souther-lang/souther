@@ -1,0 +1,472 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+import souther.test.Allocated;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The values one step from a value are those with one whole number moved by one, the number being
+ * what the position's type says is one.
+ *
+ * <p>Read through the type and not through the value: a boundary carries a whole number where a
+ * {@code Decimal} stands, and the value alone cannot tell that from an {@code Int}.
+ */
+class NearbyValuesTest {
+
+    private static final String MODULE = """
+            module example.nearby
+
+            data Point = { x: Int, y: Int }
+
+            data Basket = { items: List<Int> }
+
+            data Code = Int
+                invariant value >= 0
+
+            data Priced = { code: Code, price: Decimal }
+
+            data Dot
+            data Bar = { length: Int }
+            data Mark = Dot | Bar
+            """;
+
+    private static final RuleReadingContext READING = reading();
+
+    private static ObservedValue whole(long n) {
+        return new ObservedValue.Integer(n);
+    }
+
+    private static List<ObservedValue> all(ObservedValue value, Type type) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.of(value, type, READING).forEachRemaining(out::add);
+        return out;
+    }
+
+    private static ObservedValue point(long x, long y) {
+        return new ObservedValue.Constructed(declared("Point"), Map.of("x", whole(x), "y", whole(y)));
+    }
+
+    /** Twenty of them one inside another: asked twice at each, the innermost is asked a million
+     *  times for its one element. */
+    @Test
+    void theInnermostOfNestedWalksIsAskedOnceForEachElement() {
+        int[] asked = {0};
+        Iterator<Integer> walk = new Iterator<>() {
+            private boolean taken;
+
+            @Override
+            public boolean hasNext() {
+                asked[0]++;
+                return !taken;
+            }
+
+            @Override
+            public Integer next() {
+                taken = true;
+                return 7;
+            }
+        };
+        for (int depth = 0; depth < 20; depth++) {
+            Iterator<Integer> inner = walk;
+            walk = NearbyValues.flat(List.of(0).iterator(), _ -> inner);
+        }
+
+        assertEquals(7, walk.next());
+        assertFalse(walk.hasNext());
+        assertEquals(2, asked[0]);
+    }
+
+    @Test
+    void aWholeNumberHasOneMoreAndOneLess() {
+        assertEquals(List.of(whole(6), whole(4)), all(whole(5), Type.INT));
+    }
+
+    /** Nothing past the ends: a step that overflows is no neighbour. */
+    @Test
+    void theEndsOfTheRangeHaveOneNeighbour() {
+        assertEquals(List.of(whole(Long.MAX_VALUE - 1)), all(whole(Long.MAX_VALUE), Type.INT));
+        assertEquals(List.of(whole(Long.MIN_VALUE + 1)), all(whole(Long.MIN_VALUE), Type.INT));
+    }
+
+    /** One number at a time, the rest as it was, in the order the declaration writes the fields. */
+    @Test
+    void aRecordMovesOneFieldPerCandidate() {
+        assertEquals(List.of(point(2, 7), point(0, 7), point(1, 8), point(1, 6)),
+                all(point(1, 7), Type.ref(declared("Point"))));
+    }
+
+    @Test
+    void aListMovesOneElementPerCandidate() {
+        ObservedValue held = new ObservedValue.Sequence(List.of(whole(1), whole(10)));
+        assertEquals(List.of(
+                        new ObservedValue.Sequence(List.of(whole(2), whole(10))),
+                        new ObservedValue.Sequence(List.of(whole(0), whole(10))),
+                        new ObservedValue.Sequence(List.of(whole(1), whole(11))),
+                        new ObservedValue.Sequence(List.of(whole(1), whole(9)))),
+                all(held, Type.list(Type.INT)));
+    }
+
+    /** The name the position wears goes back on what was moved. */
+    @Test
+    void aNewtypeKeepsItsNameAroundTheNumber() {
+        ObservedValue code = new ObservedValue.Constructed(declared("Code"),
+                Map.of("value", whole(3)));
+        assertEquals(List.of(
+                        new ObservedValue.Constructed(declared("Code"), Map.of("value", whole(4))),
+                        new ObservedValue.Constructed(declared("Code"), Map.of("value", whole(2)))),
+                all(code, Type.ref(declared("Code"))));
+    }
+
+    /**
+     * A whole number standing at a {@code Decimal} is a decimal, and a decimal has nothing directly
+     * beside it. The number beside it in the same record is still moved.
+     */
+    @Test
+    void aWholeNumberAtADecimalIsNotMoved() {
+        ObservedValue priced = new ObservedValue.Constructed(declared("Priced"), Map.of(
+                "code", new ObservedValue.Constructed(declared("Code"), Map.of("value", whole(3))),
+                "price", whole(10)));
+
+        List<ObservedValue> near = all(priced, Type.ref(declared("Priced")));
+
+        assertEquals(2, near.size(), "the code's two neighbours and none for the price");
+        for (ObservedValue each : near) {
+            assertEquals(whole(10), ((ObservedValue.Constructed) each).field("price"));
+        }
+        assertEquals(List.of(), all(whole(10), Type.DECIMAL));
+    }
+
+    /** A sum is read as the case the value is, and a case with no number has no neighbour. */
+    @Test
+    void aSumIsMovedInsideTheCaseItIs() {
+        ObservedValue bar = new ObservedValue.Constructed(declared("Bar"),
+                Map.of("length", whole(4)));
+
+        assertEquals(List.of(
+                        new ObservedValue.Constructed(declared("Bar"), Map.of("length", whole(5))),
+                        new ObservedValue.Constructed(declared("Bar"), Map.of("length", whole(3)))),
+                all(bar, Type.ref(declared("Mark"))));
+        assertEquals(List.of(),
+                all(new ObservedValue.Unit(declared("Dot")), Type.ref(declared("Mark"))));
+    }
+
+    /** A present optional is the value it holds, and an absent one holds none. */
+    @Test
+    void anOptionalIsMovedWhereItHoldsANumber() {
+        assertEquals(List.of(whole(8), whole(6)), all(whole(7), Type.option(Type.INT)));
+        assertEquals(List.of(), all(new ObservedValue.Absent(), Type.option(Type.INT)));
+    }
+
+    @Test
+    void whatIsNotANumberHasNoNeighbour() {
+        assertEquals(List.of(), all(new ObservedValue.Text("a"), Type.STRING));
+        assertEquals(List.of(), all(new ObservedValue.Bool(true), Type.BOOL));
+        assertEquals(List.of(), all(new ObservedValue.Unknown("unreadable"), Type.INT));
+    }
+
+    /**
+     * Made when asked for. A list of many numbers has as many candidates as it has numbers twice,
+     * and a search that takes a few leaves the rest unmade.
+     */
+    @Test
+    void aCandidateIsMadeOnlyWhenAsked() {
+        List<ObservedValue> elements = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            elements.add(whole(i));
+        }
+        Iterator<ObservedValue> near = NearbyValues.of(new ObservedValue.Sequence(elements),
+                Type.list(Type.INT), READING);
+
+        ObservedValue.Sequence first = (ObservedValue.Sequence) near.next();
+
+        assertEquals(whole(1), first.elements().get(0));
+        assertEquals(1000, first.elements().size());
+        assertTrue(near.hasNext(), "the rest are still to come");
+    }
+
+    private static ObservedValue decimal(String text) {
+        return new ObservedValue.Decimal(new java.math.BigDecimal(text));
+    }
+
+    private static List<ObservedValue> oneUnitFrom(ObservedValue value, Type type) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.oneUnitFrom(value, type, READING).forEachRemaining(out::add);
+        return out;
+    }
+
+    /** A decimal is a unit of its scale from the next, either way, where it has no neighbour. */
+    @Test
+    void aDecimalIsOneUnitOfItsScaleFromTheNext() {
+        assertEquals(List.of(decimal("0.1"), decimal("-0.1")), oneUnitFrom(decimal("0.0"),
+                Type.DECIMAL));
+        assertEquals(List.of(decimal("3"), decimal("1")), oneUnitFrom(decimal("2"),
+                Type.DECIMAL));
+        assertEquals(List.of(), all(decimal("0.0"), Type.DECIMAL),
+                "the moves of a number seen are not changed by this");
+    }
+
+    /** A whole number is moved by one here as it is there, inside what holds it. */
+    @Test
+    void aUnitStepIsTakenInsideARecordAndANewtype() {
+        ObservedValue priced = new ObservedValue.Constructed(declared("Priced"), Map.of(
+                "code", new ObservedValue.Constructed(declared("Code"), Map.of("value", whole(3))),
+                "price", decimal("1.50")));
+
+        List<ObservedValue> near = new ArrayList<>();
+        NearbyValues.oneUnitFrom(priced, Type.ref(declared("Priced")), READING)
+                .forEachRemaining(near::add);
+
+        assertEquals(4, near.size(), "the code up and down, the price up and down");
+    }
+
+    /** A decimal written to more places than the host can step by has no unit step, and is not
+     *  an error. */
+    @Test
+    void aDecimalTooWideToStepHasNoUnitStep() {
+        ObservedValue wide = new ObservedValue.Decimal(
+                java.math.BigDecimal.ONE.scaleByPowerOfTen(Integer.MAX_VALUE));
+
+        assertEquals(List.of(), oneUnitFrom(wide, Type.DECIMAL));
+    }
+
+    private static List<ObservedValue> grown(InputsRowsRanWith ranWith,
+                                             java.util.function.Function<Type, List<ObservedValue>> stoodFor) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.grown(new ObservedValue.Sequence(List.of()), Type.list(Type.INT), READING,
+                ranWith, type -> stoodFor.apply(type).iterator()).forEachRemaining(out::add);
+        return out;
+    }
+
+    private static ObservedValue listOf(ObservedValue... elements) {
+        return new ObservedValue.Sequence(List.of(elements));
+    }
+
+    private static InputsRowsRanWith ranWithInts(int count) {
+        List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            rows.add(List.of(new InputsRowsRanWith.Taken(Type.INT, whole(100 + i))));
+        }
+        return InputsRowsRanWith.of(rows.isEmpty() ? List.of() : List.of(rows), List.of());
+    }
+
+    /** What the rows ran with and what stands for the type are taken in turn, so that the type's
+     *  are reached however many the rows ran with. */
+    @Test
+    void theRowsAndTheTypeAreTakenInTurn() {
+        List<ObservedValue> grown = grown(ranWithInts(50), _ -> List.of(whole(0), whole(1)));
+
+        assertEquals(List.of(listOf(whole(100)), listOf(whole(0)), listOf(whole(101)),
+                listOf(whole(1))), grown.subList(0, 4));
+        assertEquals(52, grown.size(), "and what is left of the longer is taken after");
+    }
+
+    @Test
+    void aValueTheRowsRanWithIsNotOfferedAgainFromTheType() {
+        List<ObservedValue> grown = grown(ranWithInts(1), _ -> List.of(whole(100), whole(7)));
+
+        assertEquals(List.of(listOf(whole(100)), listOf(whole(7))), grown);
+    }
+
+    /** What stands for the type is made when it is first wanted. */
+    @Test
+    void theTypesValuesAreAskedForOnlyWhenTheSecondIsWanted() {
+        int[] asked = {0};
+        Iterator<ObservedValue> grown = NearbyValues.grown(new ObservedValue.Sequence(List.of()),
+                Type.list(Type.INT), READING, ranWithInts(3), _ -> {
+                    asked[0]++;
+                    return List.of(whole(0)).iterator();
+                });
+
+        grown.next();
+        assertEquals(0, asked[0]);
+        grown.next();
+        assertEquals(1, asked[0]);
+    }
+
+    /** A list that holds nothing is filled, one that holds something is left as it is: the value
+     *  goes a level deeper and no longer. */
+    @Test
+    void anEmptyListIsFilledAndAFullOneIsNot() {
+        Type listOfLists = Type.list(Type.list(Type.INT));
+        List<ObservedValue> filled = new ArrayList<>();
+        NearbyValues.populated(listOf(listOf(), listOf(whole(1))), listOfLists, READING,
+                type -> List.of(whole(7)).iterator()).forEachRemaining(filled::add);
+
+        assertEquals(List.of(listOf(listOf(whole(7)), listOf(whole(1)))), filled);
+
+        List<ObservedValue> none = new ArrayList<>();
+        NearbyValues.populated(listOf(listOf(whole(1))), listOfLists, READING,
+                type -> List.of(whole(7)).iterator()).forEachRemaining(none::add);
+
+        assertEquals(List.of(), none);
+    }
+
+    private static ObservedValue basket(ObservedValue... items) {
+        return new ObservedValue.Constructed(declared("Basket"), Map.of("items", listOf(items)));
+    }
+
+    private static List<ObservedValue> grownAt(ObservedValue value, Type type,
+                                               NearbyValues.Put where) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.grown(value, type, READING, ranWithInts(1),
+                _ -> List.<ObservedValue>of().iterator(), where, NearbyValues.Lists.ANY)
+                .forEachRemaining(out::add);
+        return out;
+    }
+
+    /** The new element is put after the others, and before them where that is asked. */
+    @Test
+    void aListTakesItsNewElementWhereItIsToldTo() {
+        Type list = Type.list(Type.INT);
+
+        assertEquals(List.of(listOf(whole(1), whole(100))),
+                grownAt(listOf(whole(1)), list, NearbyValues.Put.AFTER));
+        assertEquals(List.of(listOf(whole(1), whole(100)), listOf(whole(100), whole(1))),
+                grownAt(listOf(whole(1)), list, NearbyValues.Put.BEFORE_AND_AFTER));
+        assertEquals(List.of(listOf(whole(100))),
+                grownAt(listOf(), list, NearbyValues.Put.BEFORE_AND_AFTER),
+                "a list of nothing has one place to put it");
+    }
+
+    /** The same wherever the list stands: in a field of a record, not only as the value itself. */
+    @Test
+    void aListInAFieldTakesItsNewElementWhereItIsToldTo() {
+        Type basket = Type.ref(declared("Basket"));
+
+        assertEquals(List.of(basket(whole(1), whole(100)), basket(whole(100), whole(1))),
+                grownAt(basket(whole(1)), basket, NearbyValues.Put.BEFORE_AND_AFTER));
+        assertEquals(List.of(basket(whole(1), whole(100))),
+                grownAt(basket(whole(1)), basket, NearbyValues.Put.AFTER));
+    }
+
+    /** And in a list of lists, and in the lists of a record in a list: any depth. */
+    @Test
+    void aListInAListTakesItsNewElementWhereItIsToldTo() {
+        Type nested = Type.list(Type.list(Type.INT));
+        ObservedValue held = listOf(listOf(whole(1)), listOf(whole(2)));
+
+        List<ObservedValue> grown = grownAt(held, nested, NearbyValues.Put.BEFORE_AND_AFTER);
+
+        assertTrue(grown.contains(listOf(listOf(whole(1), whole(100)), listOf(whole(2)))));
+        assertTrue(grown.contains(listOf(listOf(whole(100), whole(1)), listOf(whole(2)))));
+        assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(2), whole(100)))));
+        assertTrue(grown.contains(listOf(listOf(whole(1)), listOf(whole(100), whole(2)))));
+    }
+
+    /** A list is counted where the location names it, in a field and in an element of a list. */
+    @Test
+    void theElementsOfTheListALocationNamesAreCountedWhereverItStands() {
+        Type basket = Type.ref(declared("Basket"));
+        TermPath items = new TermPath("b", List.of()).then("items");
+
+        assertEquals(3, NearbyValues.heldAt(basket(whole(1), whole(2), whole(3)), basket,
+                READING, items));
+        assertEquals(0, NearbyValues.heldAt(basket(whole(1)), basket, READING,
+                new TermPath("b", List.of()).then("other")), "a location the value has none at");
+        assertEquals(3, NearbyValues.heldAt(listOf(basket(whole(1)), basket(whole(2), whole(3))),
+                Type.list(basket), READING, new TermPath("b", List.of()).element().then("items")),
+                "between the lists of the elements");
+    }
+
+    /** Only the list the location names grows: another list of the value is no step of a walk. */
+    @Test
+    void onlyTheListALocationNamesGrows() {
+        Type baskets = Type.list(Type.ref(declared("Basket")));
+        ObservedValue held = listOf(basket(whole(1)), basket(whole(2)));
+        TermPath outer = new TermPath("xs", List.of());
+
+        assertEquals(List.of(listOf(basket(whole(1)), basket(whole(2)), basket(whole(7)))),
+                grownWithin(held, baskets, outer),
+                "the list named gets an element and the lists inside its elements do not");
+        assertEquals(List.of(listOf(basket(whole(1), whole(100)), basket(whole(2))),
+                        listOf(basket(whole(1)), basket(whole(2), whole(100)))),
+                grownWithin(held, baskets, outer.element().then("items")),
+                "and the lists a location names inside the elements, an element at a time");
+        assertEquals(List.of(), grownWithin(held, baskets, outer.then("other")),
+                "a location the value has no list at grows nothing");
+    }
+
+    private static List<ObservedValue> grownWithin(ObservedValue value, Type type,
+                                                   TermPath within) {
+        List<ObservedValue> out = new ArrayList<>();
+        NearbyValues.grownWithin(value, type, READING, ranWithInts(1),
+                        elementType -> elementType.equals(Type.ref(declared("Basket")))
+                                ? List.<ObservedValue>of(basket(whole(7))).iterator()
+                                : List.<ObservedValue>of().iterator(),
+                        NearbyValues.Put.AFTER, NearbyValues.Lists.ANY, within)
+                .forEachRemaining(out::add);
+        return out;
+    }
+
+    private static InputsRowsRanWith ranWithManyInts(int count) {
+        List<List<InputsRowsRanWith.Taken>> rows = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            rows.add(List.of(new InputsRowsRanWith.Taken(Type.INT, whole(1000 + i))));
+        }
+        return InputsRowsRanWith.of(List.of(rows), List.of());
+    }
+
+    /**
+     * An element changed is made when asked for. A list of many elements changed to each of many
+     * values has as many candidates as the two come to multiplied, each a copy of the list, and a
+     * search that takes one leaves the rest unmade: what is allocated to hand over the first is the
+     * list and a little more, and not every list there could be.
+     */
+    @Test
+    void anElementChangedIsMadeOnlyWhenAsked() {
+        List<ObservedValue> elements = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            elements.add(whole(i));
+        }
+        InputsRowsRanWith ranWith = ranWithManyInts(400);
+        List<Iterator<ObservedValue>> nears = new ArrayList<>();
+        List<ObservedValue.Sequence> firsts = new ArrayList<>();
+
+        long allocated = Allocated.by(() -> {
+            Iterator<ObservedValue> made = NearbyValues.withAnElementChanged(
+                    new ObservedValue.Sequence(elements), Type.list(Type.INT), READING, ranWith);
+            nears.add(made);
+            firsts.add((ObservedValue.Sequence) made.next());
+        });
+        Iterator<ObservedValue> near = nears.get(0);
+        ObservedValue.Sequence first = firsts.get(0);
+
+        assertEquals(whole(1000), first.elements().get(0));
+        assertEquals(400, first.elements().size());
+        assertTrue(near.hasNext(), "the rest are still to come");
+        // The list is 400 references, a few KB; every candidate there could be is tens of MB.
+        assertTrue(allocated < 1_000_000, () -> "allocated " + allocated + " bytes for the first");
+    }
+
+    private static TypeSymbol declared(String name) {
+        return TypeSymbols.declared(new TypeKey("example.nearby", name));
+    }
+
+    private static RuleReadingContext reading() {
+        Compilation compilation = ACompiledModel.answered(MODULE);
+        return RuleReadingContext.unshared(
+                RuleReadings.of(compilation, compilation.modules().get(0)),
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
+    }
+}

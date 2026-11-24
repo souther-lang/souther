@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.Level;
 
@@ -64,9 +65,7 @@ class ALineBehindCountsAskedTwoWaysIsDrawnForNoRowTest {
     }
 
     private static void drawnForNoRow(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         List<BorderAssessment> edges = compilation.db()
                 .ask(new Adequacy.BoundarySearch("probe.closed", "f")).value();
         assertNotNull(edges, "the lines of this behavior were searched");

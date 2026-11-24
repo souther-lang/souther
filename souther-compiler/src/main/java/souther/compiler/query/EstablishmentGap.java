@@ -248,8 +248,8 @@ public sealed interface EstablishmentGap {
                     ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
         }
 
-        /** The budgets the search met, each a figure fixed where it is declared, whatever else of
-         *  this compiler's it met beside them. */
+        /** The budgets the search met, each at the figure the compilation held it to, whatever
+         *  else of this compiler's it met beside them. */
         @Override
         public List<Figure> figures() {
             return Figure.inOrder(budgets.written().stream().map(CompositionBudget::figure)

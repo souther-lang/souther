@@ -4,6 +4,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
@@ -66,11 +67,11 @@ final class WhichOfThemHold {
                         instanceof Quantity.HowManyHold(List<Proposition> each))) {
             return null;
         }
-        Map<String, Proposition> once = new LinkedHashMap<>();
-        Map<String, Integer> written = new LinkedHashMap<>();
+        Map<Spelling, Proposition> once = new LinkedHashMap<>();
+        Map<Spelling, Integer> written = new LinkedHashMap<>();
         for (Proposition one : each) {
-            once.putIfAbsent(one.key(), one);
-            written.merge(one.key(), 1, Integer::sum);
+            once.putIfAbsent(one.spelling(), one);
+            written.merge(one.spelling(), 1, Integer::sum);
         }
         ExactRatio by = form.coefs().values().iterator().next();
         boolean[] admitted = new boolean[each.size() + 1];
@@ -109,18 +110,16 @@ final class WhichOfThemHold {
      * statements and the counts alone, and on no figure a reader has in hand.
      */
     Proposition stated() {
-        Written within = written(ONE_CHOICE,
-                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum(),
-                CompositionBudget.READINGS_OF_ONE_CONDITION,
-                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES);
-        if (within.choices() != null) {
-            return within.choices();
+        if (within(ONE_CHOICE, CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum(),
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES)
+                instanceof Within.Choices(var choices, var _)) {
+            return choices;
         }
         List<Integer> byKey = new ArrayList<>(statements.size());
         for (int one = 0; one < statements.size(); one++) {
             byKey.add(one);
         }
-        byKey.sort(Comparator.comparing((Integer one) -> statements.get(one).key()));
+        byKey.sort(Comparator.comparing((Integer one) -> statements.get(one).spelling()));
         List<Proposition> kept = new ArrayList<>(statements.size());
         List<Integer> weighed = new ArrayList<>(statements.size());
         byKey.forEach(one -> {
@@ -145,7 +144,7 @@ final class WhichOfThemHold {
      * @param parts     how many parts {@code choices} come to written out, and nought where there
      *                  are none — what a reader walking them is charged
      */
-    record Written(Proposition choices, CompositionBudget stoppedAt, long parts) {}
+    record Written(Proposition choices, Figure.Budget stoppedAt, long parts) {}
 
     /**
      * What {@link Written} says of the choices, held to {@code choicesFigure} by how many they are
@@ -157,13 +156,28 @@ final class WhichOfThemHold {
      * its denial are in many choices, and are counted the first time and known after.
      */
     Written written(CompositionBudget choicesFigure, CompositionBudget partsFigure) {
-        return written(choicesFigure.maximum(), partsFigure.maximum(), choicesFigure, partsFigure);
+        Within within = within(choicesFigure.maximum(), partsFigure.maximum(), partsFigure);
+        return switch (within) {
+            case Within.Choices(var choices, var parts) -> new Written(choices, null, parts);
+            case Within.PastTheChoices _ -> new Written(null, choicesFigure.reached(), 0);
+            case Within.PastTheParts _ -> new Written(null, partsFigure.reached(), 0);
+        };
     }
 
-    /** The same, held to {@code mostChoices} and {@code mostParts}, which {@code choicesFigure}
-     *  and {@code partsFigure} are named for where the choices are past one of them. */
-    private Written written(long mostChoices, long mostParts, CompositionBudget choicesFigure,
-                            CompositionBudget partsFigure) {
+    /** The choices held to {@code mostChoices} by how many they are and {@code mostParts} by the
+     *  parts they come to, or which of the two they were past. No figure is named here, so the one
+     *  a stop names is the one whose number it was held to ({@link #written}). */
+    private sealed interface Within {
+
+        record Choices(Proposition choices, long parts) implements Within {}
+
+        record PastTheChoices() implements Within {}
+
+        record PastTheParts() implements Within {}
+    }
+
+    /** {@link Within} of these, the parts counted as {@code partsFigure} counts them. */
+    private Within within(long mostChoices, long mostParts, CompositionBudget partsFigure) {
         // One counting for every choice: the statements are the same in each, and each, and each
         // denial of one, is counted once and then known.
         Conclusion counting = Conclusion.countingTo(partsFigure);
@@ -183,12 +197,12 @@ final class WhichOfThemHold {
             return true;
         });
         if (pastTheChoices[0]) {
-            return new Written(null, choicesFigure, 0);
+            return new Within.PastTheChoices();
         }
         Proposition written = whole ? Proposition.any(ways) : null;
         long counted = written == null ? 0 : counting.partsWrittenOut(written);
-        return written != null && counted <= mostParts ? new Written(written, null, counted)
-                : new Written(null, partsFigure, 0);
+        return written != null && counted <= mostParts ? new Within.Choices(written, counted)
+                : new Within.PastTheParts();
     }
 
     /**

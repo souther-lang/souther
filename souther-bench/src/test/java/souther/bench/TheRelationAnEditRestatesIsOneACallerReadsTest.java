@@ -3,6 +3,7 @@ package souther.bench;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AssumedContract;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -158,8 +159,9 @@ class TheRelationAnEditRestatesIsOneACallerReadsTest {
      *  arrangement rather than the contract being reached from somewhere else. */
     @Test
     void whatThatCallerIsCheckedAgainstIncludesWhatItStates() {
+        Compilation compilation = ACompiledModel.compiles(before());
         Map<ValueName.Behavior, AssumedContract> read =
-                before().db().ask(new Bodies.ContractsForBody(MODULE, CALLER)).value();
+                compilation.db().ask(new Bodies.ContractsForBody(MODULE, CALLER)).value();
         assertNotNull(read, () -> MODULE + "." + CALLER + " has no body to read contracts for");
         AssumedContract assumed = read.get(STATING);
         assertNotNull(assumed, () -> MODULE + "." + CALLER + " reads no contract of " + STATING
@@ -188,11 +190,13 @@ class TheRelationAnEditRestatesIsOneACallerReadsTest {
                 "two rounds of the relation edit write one text, so the second is no edit and the"
                         + " round after it times the floor");
 
-        assertEquals(List.of(), errorsOf(after()),
+        Compilation first = ACompiledModel.compiles(before());
+        Compilation restated = ACompiledModel.compiles(after());
+        assertEquals(List.of(), errorsOf(restated),
                 "the corpus no longer compiles once the relation is restated");
 
-        AssumedContract was = before().db().ask(new Bodies.Assumptions(STATING)).value();
-        AssumedContract now = after().db().ask(new Bodies.Assumptions(STATING)).value();
+        AssumedContract was = first.db().ask(new Bodies.Assumptions(STATING)).value();
+        AssumedContract now = restated.db().ask(new Bodies.Assumptions(STATING)).value();
         assertNotNull(was, () -> STATING + " states nothing before the edit");
         assertNotEquals(was, now, "restating the rule left what a caller may assume unchanged, so"
                 + " the store has nothing to re-establish and the round times the floor");
@@ -215,9 +219,11 @@ class TheRelationAnEditRestatesIsOneACallerReadsTest {
      */
     @Test
     void restatingItLeavesTheOtherReadingsOfTheCorpusWhereTheyWere() {
-        assertEquals(diagnosticsOf(before()), diagnosticsOf(after()),
+        Compilation first = ACompiledModel.compiles(before());
+        Compilation restated = ACompiledModel.compiles(after());
+        assertEquals(diagnosticsOf(first), diagnosticsOf(restated),
                 "restating the rule moved what the compiler says about the corpus");
-        assertEquals(before().adequacy(MODULE), after().adequacy(MODULE),
+        assertEquals(first.adequacy(MODULE), restated.adequacy(MODULE),
                 "restating the rule moved how well the module's rows are said to cover it, so the"
                         + " round times an edit to that reading as well as to the caller's");
     }
@@ -232,8 +238,7 @@ class TheRelationAnEditRestatesIsOneACallerReadsTest {
 
     private static Compilation compiled(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static List<String> errorsOf(Compilation compilation) {

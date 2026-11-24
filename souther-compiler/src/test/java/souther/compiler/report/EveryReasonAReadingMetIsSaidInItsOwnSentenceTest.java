@@ -3,9 +3,11 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.query.Weakening;
@@ -52,7 +54,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
         List<ReadingGap> reasons = everyReason();
         Set<String> said = new LinkedHashSet<>();
         for (ReadingGap each : reasons) {
-            said.add(AdequacyReport.atTheBorder(each));
+            said.add(InEnglish.said(AdequacyReport.atTheBorder(each)));
         }
 
         assertEquals(reasons.size(), said.size(),
@@ -94,7 +96,8 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_UNREADABLE, Set.of("Observation"),
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
-                                Set.of("CouldNotWalk", "CouldNotReadRow", "ReachNotRead"),
+                                Set.of("CouldNotWalk", "CouldNotReadRow", "KeysNotTold",
+                                        "SamenessNotTold", "ReachNotRead", "CasesNotWorkedOut"),
                         WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
@@ -122,6 +125,8 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                 case "NoValue" -> out.add(ReadingGap.NO_VALUE);
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
+                case "KeysNotTold" -> out.add(ReadingGap.KEYS_NOT_TOLD);
+                case "SamenessNotTold" -> out.add(ReadingGap.SAMENESS_NOT_TOLD);
                 case "CouldNotWorkOut" -> {
                     for (UnheldNumber why : UnheldNumber.values()) {
                         out.add(ReadingGap.of(why));
@@ -132,6 +137,9 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
+                case "CasesNotWorkedOut" -> out.add(new ReadingGap.CasesNotWorkedOut(List.of(
+                        new Figure.Budget(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared()))));
                 // A reason added to the type and not to this list. Written as a failure rather than
                 // skipped: a reason nothing here can build is one nothing here is checking.
                 default -> throw new IllegalStateException(

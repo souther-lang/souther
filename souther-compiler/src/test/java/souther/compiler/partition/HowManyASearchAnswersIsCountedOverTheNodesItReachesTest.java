@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -159,7 +160,7 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
     /** That {@code stated} counts no run over every node below every tree, or every tag of every
      *  order's items, whatever else it is read as. */
     private static void assertNoRunOverAllOfThem(Proposition stated) {
-        assertTrue(!stated.key().contains("node below") && !stated.key().contains("tags[*])"),
+        assertTrue(!stated.spelledOut().contains("node below") && !stated.spelledOut().contains("tags[*])"),
                 () -> "read as " + stated);
     }
 
@@ -180,7 +181,7 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
         Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
         Map<RunSource, ExactRatio> out = new LinkedHashMap<>();
         affine.form().coefs().forEach((number, by) -> {
-            if (number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over)
+            if (number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over, var _)
                     && over.source() instanceof RunSource.ReachableNodes) {
                 assertInstanceOf(TakenAs.HowManyItHolds.class, over.takenAs());
                 out.put(over.source(), by);
@@ -205,9 +206,7 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
                 let f (i) =
                     if (%s) then 1 else 0
                 """.formatted(condition), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), () -> "compiles: " + condition);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");

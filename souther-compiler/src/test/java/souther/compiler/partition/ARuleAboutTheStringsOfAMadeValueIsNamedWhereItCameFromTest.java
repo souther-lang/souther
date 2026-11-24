@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -240,9 +241,7 @@ class ARuleAboutTheStringsOfAMadeValueIsNamedWhereItCameFromTest {
             """;
 
     private static PartitionEvidence measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         PartitionEvidence f = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("f");
         assertNotNull(f, "the model under test compiles");
@@ -527,9 +526,7 @@ class ARuleAboutTheStringsOfAMadeValueIsNamedWhereItCameFromTest {
      */
     @Test
     void theDocumentWritesAHandleForTheRule() {
-        Compilation compilation = Compilation.ofSource(ONE_POSITION, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(ONE_POSITION, Adequacy.Asked.fullReport());
         List<RuleCitation.Written> cited = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("f").notRead().stream()
                 .flatMap(each -> each.cited().stream())

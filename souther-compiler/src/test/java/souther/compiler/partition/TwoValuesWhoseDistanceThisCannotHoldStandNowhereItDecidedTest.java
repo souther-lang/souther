@@ -5,6 +5,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RunSensitivity;
@@ -74,6 +75,11 @@ class TwoValuesWhoseDistanceThisCannotHoldStandNowhereItDecidedTest {
 
     private static BorderQuantity.Observation row(BigDecimal on, BigDecimal against) {
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

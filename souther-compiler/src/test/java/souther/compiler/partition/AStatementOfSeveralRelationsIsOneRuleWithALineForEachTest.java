@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.ExactAnswer;
@@ -98,6 +99,33 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
         JsonNode report = reportOf("Int.max(0, a) <= b.v", "");
         assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
                 () -> "the line between the arms decides nowhere: " + reasonsAt(report, "a"));
+    }
+
+    /**
+     * What selects a case of the magnitude, {@code a >= 0}, is the library's and owes no point;
+     * the same relation written by the author beside it is the author's and does.
+     */
+    @Test
+    void theSignTestOfTheMagnitudeOwesNoPointUnlessTheAuthorWroteIt() {
+        Set<String> library = new TreeSet<>();
+        pointsAnywhere(reportOf("Int.abs(a) > 3", ""), library);
+        assertFalse(library.isEmpty(), "the magnitude's own comparison is a line");
+        assertTrue(library.stream().noneMatch(each -> each.endsWith(" 0")),
+                () -> "nothing is owed at the sign test: " + library);
+        Set<String> written = new TreeSet<>();
+        pointsAnywhere(reportOf("Int.abs(a) < 7 && a >= 0", ""), written);
+        assertTrue(written.contains("pick/a 0"),
+                () -> "what the author wrote is owed: " + written);
+    }
+
+    /** The point every obligation of the report is owed at, whatever line it is on. */
+    private static void pointsAnywhere(JsonNode node, Set<String> out) {
+        if (node.isObject() && node.has("point") && node.has("readings")
+                && node.has("obligationId")) {
+            out.add(node.path("readings").get(0).path("axis").asString() + " "
+                    + node.path("readings").get(0).path("against").asString());
+        }
+        node.forEach(child -> pointsAnywhere(child, out));
     }
 
     /**
@@ -334,8 +362,7 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                     ensures big = High -> Int.max(a, b) > 5
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+        ACompiledModel.compiles(compilation);
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(obligationsOfParts(report).isEmpty(), "no line of the clause is drawn");
@@ -577,8 +604,7 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     private static JsonNode reportOfSource(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+        ACompiledModel.compiles(compilation);
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

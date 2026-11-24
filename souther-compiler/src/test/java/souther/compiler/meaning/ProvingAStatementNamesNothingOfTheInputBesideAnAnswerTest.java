@@ -9,13 +9,13 @@ import souther.compiler.types.ValueName;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A statement is about an answer alone only where it is read to the end and names nothing of the
- * input beside it. A part nothing read is not that: what it leaves unsaid may be a position of the
- * input, so it is not proved to name none.
+ * What a statement about an answer names of the input beside it is said only where the statement
+ * is read to the end. A part nothing read is not that: what it leaves unsaid may be a position of
+ * the input, so nothing is said of what it names. A statement read to the end names the positions
+ * it names, and none where it asks the answer alone.
  */
 class ProvingAStatementNamesNothingOfTheInputBesideAnAnswerTest {
 
@@ -35,14 +35,14 @@ class ProvingAStatementNamesNothingOfTheInputBesideAnAnswerTest {
     void whatIsAskedOfTheAnswerAloneNamesNothingOfTheInput() {
         Proposition truth = new Proposition.Truth(rows().element(), true);
 
-        assertTrue(Proposition.aboutAnAnswerAlone(truth));
-        assertTrue(Proposition.aboutAnAnswerAlone(
+        assertEquals(Optional.of(List.of()), PositionsAStatementReads.besideAnAnswer(truth));
+        assertEquals(Optional.of(List.of()), PositionsAStatementReads.besideAnAnswer(
                 new Proposition.Some(rows(), truth, true)));
     }
 
     @Test
     void anElementStatementNothingReadIsNotProvedToNameNothingOfTheInput() {
-        assertFalse(Proposition.aboutAnAnswerAlone(
+        assertEquals(Optional.empty(), PositionsAStatementReads.besideAnAnswer(
                 new Proposition.Some(rows(), nothingRead(), true)));
     }
 
@@ -50,7 +50,7 @@ class ProvingAStatementNamesNothingOfTheInputBesideAnAnswerTest {
     void aPartNothingReadBesideAStatementOfTheAnswerIsNotProvedEither() {
         Proposition truth = new Proposition.Truth(rows().element(), true);
 
-        assertFalse(Proposition.aboutAnAnswerAlone(
+        assertEquals(Optional.empty(), PositionsAStatementReads.besideAnAnswer(
                 Proposition.all(List.of(truth, nothingRead()))));
     }
 
@@ -60,15 +60,22 @@ class ProvingAStatementNamesNothingOfTheInputBesideAnAnswerTest {
         Proposition search = new Proposition.SomeReachable(TermPath.of("t"), TermPath.of("t"),
                 List.of("children"), atANode, Optional.of(atANode), true);
 
-        assertFalse(Proposition.aboutAnAnswerAlone(search));
+        assertEquals(Optional.empty(), PositionsAStatementReads.besideAnAnswer(search));
     }
 
     @Test
-    void aStatementThatNamesAPositionOfTheInputBesideTheAnswerIsNot() {
+    void aStatementThatNamesAPositionOfTheInputBesideTheAnswerNamesThatPosition() {
         Proposition sameKey = new Proposition.SameValue(rows().element(),
                 new DecisionSubject.AnInput(TermPath.of("sku")), true);
 
-        assertFalse(Proposition.aboutAnAnswerAlone(
-                new Proposition.Some(rows(), sameKey, true)));
+        assertEquals(Optional.of(List.of(TermPath.of("sku"))),
+                PositionsAStatementReads.besideAnAnswer(new Proposition.Some(rows(), sameKey,
+                        true)));
+    }
+
+    @Test
+    void aStatementAboutNoAnswerSaysNothingOfWhatItNamesBesideOne() {
+        assertEquals(Optional.empty(), PositionsAStatementReads.besideAnAnswer(
+                new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("flag")), true)));
     }
 }

@@ -3,7 +3,6 @@ package souther.compiler;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
-import souther.compiler.diag.Severity;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
@@ -14,7 +13,6 @@ import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +68,7 @@ class AModuleOffThePathIsCheckedAsItWasClassifiedWhereItWasCompiledTest {
         compiled.put("written", BehaviorImplementation.IMPLEMENTED);
         compiled.put("chained", BehaviorImplementation.IMPLEMENTED);
         compiled.put("again", BehaviorImplementation.IMPLEMENTED);
-        Db here = Compilation.ofSource(LIB, "Main").db();
+        Db here = ACompiledModel.compiles(Compilation.ofSource(LIB, "Main")).db();
         assertEquals(compiled, here.ask(new Bodies.Implementation("lib.s")).value().states(),
                 "the module classified where it is compiled");
 
@@ -131,13 +129,6 @@ class AModuleOffThePathIsCheckedAsItWasClassifiedWhereItWasCompiledTest {
                 """;
         Compilation compilation = againstThePath(lib, app);
 
-        List<String> errors = new ArrayList<>();
-        compilation.diagnostics().forEach((_, said) -> said.forEach(each -> {
-            if (each.diagnostic().severity() == Severity.ERROR) {
-                errors.add(String.valueOf(each.diagnostic().code()));
-            }
-        }));
-        assertEquals(List.of(), errors);
         assertTrue(compilation.db().ask(new Bodies.ModuleCheck("lib.k")).value().sound(),
                 "the module off the path was checked and found nothing wrong");
     }
@@ -147,7 +138,6 @@ class AModuleOffThePathIsCheckedAsItWasClassifiedWhereItWasCompiledTest {
     private static Compilation againstThePath(String lib, String app) {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(lib));
         Compilation compilation = Compilation.ofSources(List.of(app), ModulePath.of(classes));
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

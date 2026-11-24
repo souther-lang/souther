@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.query.Adequacy;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.meaning.AuthoredPointMapping;
@@ -19,7 +21,7 @@ import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.ClauseName;
@@ -88,7 +90,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
                 example take
                     | "one" : (R { lo = 1, hi = 1 }) -> Yes
-                """)).human(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                """)).humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         org.junit.jupiter.api.Assertions.assertTrue(block.contains("example.same"), block);
     }
@@ -140,11 +142,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     }
 
     private static souther.compiler.query.Compilation compiled(String model) {
-        souther.compiler.query.Compilation compilation =
-                souther.compiler.query.Compilation.ofSource(model, "Main");
-        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 
     /** A bound is where what it leaves stops, and stops nothing else. */
@@ -197,7 +195,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
     private static LineOrigin.InvariantOrigin aBound() {
         return new LineOrigin.InvariantOrigin(
-                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.weigh", "Amount")), 0),
@@ -218,7 +216,8 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY),
+                        List.of(WHERE), ElementsMetOn.EVERY, LineOrigin.NOTHING_ON_THE_WAY,
+                        Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

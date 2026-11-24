@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -45,12 +46,12 @@ class AFieldReadBackOutOfAConstructionStandsWhereWhatItWasGivenStandsTest {
 
     private static Core.Construct key() {
         return new Core.Construct(KEY, List.of(new Core.FieldValue("label", LABEL, POS)),
-                Type.ref(KEY), POS);
+                Type.ref(KEY), OccurrenceLineage.ORIGINAL, POS);
     }
 
     private static Core.Construct outer() {
         return new Core.Construct(OUTER, List.of(new Core.FieldValue("key", key(), POS)),
-                Type.ref(OUTER), POS);
+                Type.ref(OUTER), OccurrenceLineage.ORIGINAL, POS);
     }
 
     private static ElementProjection read(Core answer, Map<BindingId, Core> held) {

@@ -65,7 +65,7 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
 
     /** The one statement of the first conjunct of clause {@code by}. */
     private static LineProvenance statementOf(int by) {
-        return new LineProvenance.Direct(new InvariantStatementId(
+        return new LineProvenance.Direct(AStatementOfAConjunct.numbered(
                 new PartId<>(rule(by), 0), 0));
     }
 

@@ -3,10 +3,10 @@ package souther.compiler.coverage;
 /**
  * What one number the instrumentation hands out is an address of.
  *
- * <p>Two families under one numbering. An arm and a condition are both places a run is recorded at
- * and both take a number from the one counter, because what records a run is one set of numbers; a
- * number written for an arm and a number written for a condition are told apart by nothing in the
- * number itself. So the numbering says which each was issued to, and says it here.
+ * <p>Three families under one numbering. An arm, a condition and a walk are all places a run is
+ * recorded at and all take a number from the one counter, because what records a run is one set of
+ * numbers; a number written for one family and a number written for another are told apart by
+ * nothing in the number itself. So the numbering says which each was issued to, and says it here.
  *
  * <p>The whole of what a number means, so that a numbering can be held against another one. A number
  * means a place in a body, and a place is where it is rather than which object stood there
@@ -48,6 +48,22 @@ public sealed interface SiteAddress {
         @Override
         public String toString() {
             return "condition at " + at;
+        }
+    }
+
+    /** Where a run entering one walk is recorded: the call the walk is. A walk is entered or not,
+     *  so there is no part and no way it came out. */
+    record Walk(NodeAddress call) implements SiteAddress {
+
+        public Walk {
+            if (call == null) {
+                throw new IllegalArgumentException("a walk is a call standing somewhere");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return "walk at " + call;
         }
     }
 }

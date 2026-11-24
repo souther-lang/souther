@@ -124,9 +124,13 @@ A build may also run the compiler as the `SoutherProcessor` annotation processor
 souther examples businesstrip.sou
 ```
 
-It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over exactly those, which is the form a build takes.
+It answers on the positions of an input — which classes the behavior's own rules divide it into, and which of them no row stands in — on the boundary values those rules place, on the rules of the body and which of them a row goes through, and on the invariants of the types the behavior reaches, which are owed a row wherever such a value is constructed. What nothing covers is marked `!`, and `--strict` exits non-zero over those, which is the form a build takes.
 
-An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model.
+A boundary on a number only a run works out, such as a sum over a list, has no rule saying which input lands on it. The compiler writes candidate rows, runs them, and reads what each came to. Where none reaches the point, the report names the candidates it tried. That does not make the point unreachable: a row written by hand may still reach it.
+
+Where measuring a behavior stops at a limit of the compiler in a condition the compiler can say how to change, the report says that instead of measuring the rest of it. `--strict` refuses such a behavior too, and `--to-the-end` measures it as it is written.
+
+An adequacy line closes the report. It is not a grade: where the report could not settle a question it says `undetermined` and lists what each open position is waiting on, separating what a wider search would decide from what only a new row can. A limit of the compiler is never reported as an answer about the model. `--strict` passes an `undetermined` report, so an exit of 0 there says no gap was found, not that every measure was made.
 
 ```sh
 souther examples businesstrip.sou --behavior submitTrip   # one behavior
@@ -134,7 +138,7 @@ souther examples businesstrip.sou --generate              # rows for what nothin
 souther examples businesstrip.sou --strict                # refuse over the gaps
 ```
 
-`--generate` writes the rows themselves, with the inputs filled in and `<?>` where the answer is owed — a row the report then counts as waiting for one. The [tutorial](https://souther-lang.org/tutorial/) works a model up from a record layout to a covered one by reading this report.
+`--generate` writes the rows themselves, with the inputs filled in and `<?>` where the answer is owed — a row the report then counts as waiting for one. It also offers a behavior the inputs that the rows of the behaviors it calls were written with. Those rows owe nothing: the header counts them apart as optional, and each carries the comment `suggested input; no uncovered obligation`. The [tutorial](https://souther-lang.org/tutorial/) works a model up from a record layout to a covered one by reading this report.
 
 ## Run a behavior
 
@@ -160,7 +164,7 @@ souther run hello.sou --behavior greet --input '"world"'
 
 The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
 
-The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no stack flag — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The `souther` binary sets it for itself.
+The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -Xss4m -XX:+UseCompactObjectHeaders -jar souther-lsp.jar`. Where the `souther` binary is already on the path, `souther lsp` serves the same server and needs no jar path and no flags — this is what an agent harness takes, alongside `souther mcp`. The stack flag is the compiler's supported one, not a tuning knob: what a definition may say is bounded, and a source at that bound needs about a megabyte to walk. The layout flag is the object layout the compiler is measured under, which holds what a compile keeps in less. The `souther` binary sets both for itself.
 
 An editor integration should not copy any of this out of prose. Both jars carry `META-INF/souther/tooling.json`, which states the language id, the source extension, the minimum Java and the JVM arguments the server needs, and where the syntax contract and the schema of `initializationOptions.souther` are inside the jar. It is a file in an archive so that a client can read it before it has a Java that can run anything here; `souther tooling` prints the same file. The syntax contract is versioned by the release it ships in and has no version of its own; the options schema has one, in its file name. In the answer to `initialize`, `capabilities.experimental.souther` names each `souther` option the running server reads, one key per option, and a key that is absent is an option that server does not read. An option it does not read is ignored; one it reads, written with a value the schema does not allow, is read as unset and reported with `window/showMessage` after `initialized`.
 

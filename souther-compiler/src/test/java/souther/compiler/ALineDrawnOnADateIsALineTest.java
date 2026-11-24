@@ -41,8 +41,8 @@ class ALineDrawnOnADateIsALineTest {
     private static String report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The position is divided, where it used to be one nothing was established about. */
@@ -83,7 +83,7 @@ class ALineDrawnOnADateIsALineTest {
     void theStructuredReportWritesALevelAsTheDate() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
 

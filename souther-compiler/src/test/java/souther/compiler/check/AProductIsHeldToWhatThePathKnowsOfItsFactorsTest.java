@@ -7,6 +7,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -60,7 +61,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         NumericDomain<FactSubject> d = NumericDomain.top(FactSubject.inOneOrder());
         for (FactSubject atom : atoms) {
             LinearForm<FactSubject> form = LinearForm.atom(atom);
-            d = d.assume(form, Rel.GE, terms.kindsOf(form));
+            d = d.assume(form, Rel.GE, terms.spacesOf(form));
         }
         return d;
     }
@@ -146,6 +147,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 arithmetic(BinOp.MUL, read("a", a), read("b", b)), at);
         FactSubject atom = product.coefs().keySet().iterator().next();
 
-        assertEquals(Map.of(atom, Granularity.DISCRETE), terms.kindsOf(product));
+        Map<FactSubject, NumberSpace> spaces = terms.spacesOf(product);
+        assertEquals(Set.of(atom), spaces.keySet());
+        assertEquals(Granularity.DISCRETE, spaces.get(atom).spacing());
     }
 }

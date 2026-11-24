@@ -2,9 +2,12 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.ConstructOccurrence;
@@ -303,8 +306,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> CoverageSites.of(
                         HandBuiltBodies.ofBehaviors("demo", Map.of("b", fork)),
-                        souther.compiler.coverage.DecisionSources.NONE,
-                        souther.compiler.coverage.SuppliedRules.NONE));
+                        DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk()));
 
         assertTrue(refused.getMessage().contains("no source wrote it"),
                 () -> "the walk says what is wrong with the tree: " + refused.getMessage());
@@ -370,7 +372,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     private static Map<String, Core> bodiesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
@@ -380,7 +382,6 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     private static CoverageSites.Plan planOf(String source) {
         return CoverageSites.of(
                 HandBuiltBodies.ofBehaviors("demo", bodiesOf(source)),
-                souther.compiler.coverage.DecisionSources.NONE,
-                souther.compiler.coverage.SuppliedRules.NONE);
+                DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk());
     }
 }

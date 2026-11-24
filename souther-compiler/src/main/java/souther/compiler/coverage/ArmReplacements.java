@@ -213,12 +213,35 @@ public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
      * {@code with}, at {@code replacing}'s sites ({@link #replacing}).
      */
     public record Rewrite(SourceConstructOrigin fork, int part, int with,
-                          SequencedMap<Integer, Integer> replacing) {
+                          SequencedMap<Integer, Integer> replacing) implements RunRewrite {
 
         public Rewrite {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
         }
+
+        @Override
+        public Rewriting asked() {
+            return Rewriting.ofArms(replacing);
+        }
+    }
+
+    /**
+     * These rewrites at the sites {@code kept} says yes to, and at no other.
+     *
+     * <p>Asked by the plan, which holds the numbering a site number is a place under. An arm
+     * written once stands at as many sites as the behaviors that reach it have, and what is shown
+     * of a rewrite — the ways nothing arrives at, the rows that went through — is shown of the sites
+     * of one behavior ({@link CoverageSites.Plan#keepingTheArmsOf}).
+     */
+    ArmReplacements keeping(Predicate<Integer> kept) {
+        SequencedMap<Integer, AtSite> out = new TreeMap<>();
+        bySite.forEach((site, at) -> {
+            if (kept.test(site)) {
+                out.put(site, at);
+            }
+        });
+        return new ArmReplacements(out);
     }
 
     /**

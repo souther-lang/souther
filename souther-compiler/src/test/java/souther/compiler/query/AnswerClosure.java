@@ -390,6 +390,7 @@ final class AnswerClosure {
 
     private static final Locus.Step ELEMENT = new Locus.Step.Element();
     private static final Locus.Step VALUE = new Locus.Step.MapValue();
+    private static final Locus.Step KEY = new Locus.Step.MapKey();
 
     /**
      * The end itself, on the way to what is holding it.
@@ -428,6 +429,8 @@ final class AnswerClosure {
                 m("souther.compiler.partition.PartitionClass", "recognises"),
                 m("souther.compiler.partition.Recognition$Under", "inner"),
                 m("souther.compiler.partition.Recognition$OfASet", "values"),
+                m("souther.compiler.values.ValuesAtLengths", "pieces"), ELEMENT,
+                m("souther.compiler.values.ValuesWithin", "values"),
                 m("souther.compiler.values.ValueSet$Matching", "language"),
                 m("souther.compiler.regex.Language", "machine")));
         return new Known(at(question, "net.unit8.notation199x.pattern.Automaton",
@@ -587,6 +590,19 @@ final class AnswerClosure {
                     m("souther.compiler.partition.Partitions$Partitioning", "measurements"),
                     ELEMENT, m("souther.compiler.partition.PositionMeasurements", "position"),
                     m("souther.compiler.partition.PositionAccount", "admits")),
+            // And what a declaration's rule about the strings of a position comes to, filed under
+            // what each machine is a fact about: the set a plan realized, the set whose extent was
+            // taken, and the language a stretch was met with.
+            machineUnderALanguage(Q + "Machines$OfDeclaration", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m("souther.compiler.values.StringFacts", "realized"),
+                    VALUE),
+            machineUnderALanguage(Q + "Machines$OfDeclaration", walked(Scenario.THE_CORPORA),
+                    m(ANSWER, "value"), m("souther.compiler.values.StringFacts", "extents"), KEY),
+            new Known(at(Q + "Machines$OfDeclaration", "net.unit8.notation199x.pattern.Automaton",
+                    m(ANSWER, "value"), m("souther.compiler.values.StringFacts", "inside"), KEY,
+                    m("souther.compiler.values.StringFacts$Stretch", "language"),
+                    m("souther.compiler.regex.Language", "machine")),
+                    A_MACHINE_UNDER_A_LANGUAGE, Set.of(walked(Scenario.THE_CORPORA))),
             new Known(at(EVERY_ANSWER, "souther.compiler.diag.Diagnostic",
                     m(ANSWER, "reports"), ELEMENT, m("souther.compiler.query.Report", "diagnostic")),
                     A_REPORT, BOTH_EVERYWHERE));
@@ -967,7 +983,9 @@ final class AnswerClosure {
                 part("souther.compiler.partition.Axis", "classes"), HELD,
                 part("souther.compiler.partition.PartitionClass", "recognises"),
                 arm("souther.compiler.partition.Recognition$OfASet"),
-                part("souther.compiler.partition.Recognition$OfASet", "values"));
+                part("souther.compiler.partition.Recognition$OfASet", "values"),
+                part("souther.compiler.values.ValuesAtLengths", "pieces"), HELD,
+                part("souther.compiler.values.ValuesWithin", "values"));
         theMachineUnderALanguage(out, Q + "Adequacy$Dividing",
                 THE_GEOMETRY_THE_READING_LEFT,
                 part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
@@ -990,6 +1008,10 @@ final class AnswerClosure {
                 part(facts, "realized"), MAP_KEY,
                 arm("souther.compiler.values.AdmittedPlan$Of"),
                 part("souther.compiler.values.AdmittedPlan$Of", "set"));
+        theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
+                part(facts, "realized"), MAP_KEY,
+                arm("souther.compiler.values.AdmittedPlan$Without"),
+                part("souther.compiler.values.AdmittedPlan$Without", "set"));
         theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
                 part(facts, "realized"), MAP_VALUE);
         theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
@@ -1016,8 +1038,29 @@ final class AnswerClosure {
                             part("souther.compiler.partition.Axis", "classes"), HELD,
                             part("souther.compiler.partition.PartitionClass", "recognises"),
                             arm("souther.compiler.partition.Recognition$OfASet"),
-                            part("souther.compiler.partition.Recognition$OfASet", "values")));
+                            part("souther.compiler.partition.Recognition$OfASet", "values"),
+                            part("souther.compiler.values.ValuesAtLengths", "pieces"), HELD,
+                            part("souther.compiler.values.ValuesWithin", "values")));
+            // And the values the rules were shown on neither side of, which an axis carries as
+            // what its classes are asked beside: the same meaning of a set, held under a name of
+            // its own.
+            theMachineUnderALanguage(out, question,
+                    then(toTheAxes, HELD,
+                            part("souther.compiler.partition.Axis", "openAt"), HELD,
+                            arm("souther.compiler.partition.Recognition$OfASet"),
+                            part("souther.compiler.partition.Recognition$OfASet", "values"),
+                            part("souther.compiler.values.ValuesAtLengths", "pieces"), HELD,
+                            part("souther.compiler.values.ValuesWithin", "values")));
         }
+        theMachineUnderALanguage(out, Q + "Adequacy$Dividing",
+                THE_GEOMETRY_THE_READING_LEFT,
+                part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
+                part("souther.compiler.partition.PositionMeasurements", "axes"), HELD,
+                part("souther.compiler.partition.Axis", "openAt"), HELD,
+                arm("souther.compiler.partition.Recognition$OfASet"),
+                part("souther.compiler.partition.Recognition$OfASet", "values"),
+                part("souther.compiler.values.ValuesAtLengths", "pieces"), HELD,
+                part("souther.compiler.values.ValuesWithin", "values"));
         // And through what the position itself was left holding, which is what a behavior's rules
         // divide: an invariant restricts and a behavior divides what is left, so the values the
         // declarations leave travel with the position and are reached wherever it is.
@@ -1138,6 +1181,48 @@ final class AnswerClosure {
     private static String operandMethodsUnderPrepared(String named, Scenario scenario) {
         return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$Prepared.Answer#value"
                 + ".Prepared#surface.CheckSurface#operandMethods." + named + " in " + scenario;
+    }
+
+    /**
+     * Every field an answer holds that a walk does not go into, the rest deciding it
+     * ({@code DecidedByTheRest}), as {@code Declaring#field}.
+     *
+     * <p>Held to exactly by the walk of the declarations, and the walk of each store holds only
+     * fields from here. What a walk leaves out is what it was not asked about,
+     * so a field marked that way is a claim that nothing under it is part of what the answer
+     * means — made at the field by whoever wrote it, and read here by whoever reviews it. One
+     * arriving that is not written down is a field the walks stopped asking about without anybody
+     * having decided they should.
+     */
+    static Set<String> passedOver() {
+        return Set.of(
+                // What the terms of a return type come to, read off the terms where it is made.
+                "souther.compiler.ast.Hir$RetType#meaning",
+                // The type each crossing answers with, made from the witness it was admitted from
+                // or read off the union it was handed.
+                "souther.compiler.check.BoundaryInput$Nominal#type",
+                "souther.compiler.check.BoundaryOutput$Cases#type",
+                "souther.compiler.check.BoundaryOutput$Nominal#type",
+                // How each entry a helper table emits is reached, read off the entries.
+                "souther.compiler.check.HelperTable#heldAs",
+                // What each type is under the declarations a source reads, worked out once for each
+                // type asked of it, which the declarations decide ({@code TypeViews}).
+                "souther.compiler.check.RuleReadingSource#folds",
+                "souther.compiler.check.RuleReadingSource#views",
+                // The denial a proposition keeps, which is what denying its parts makes and is
+                // equal to what any other making makes ({@code Proposition.Denial}).
+                "souther.compiler.meaning.Proposition$All#denial",
+                "souther.compiler.meaning.Proposition$Any#denial",
+                "souther.compiler.meaning.Proposition$Compared#denial",
+                "souther.compiler.meaning.Proposition$OnAnApplication#denial",
+                "souther.compiler.meaning.Proposition$SoManyHold#denial",
+                "souther.compiler.meaning.Quantity$WhatAnOperationAnswers#derivation",
+                // What an entry on a way hashes as, folded from its other components where it is
+                // made, since it is looked up in every set a way is compared by.
+                "souther.compiler.partition.OnTheWay$TakenIn#hash",
+                // The terms of a condition over a form in the one order, kept once asked for,
+                // which the form decides ({@code TakenConstraint.TermsInOrder}).
+                "souther.compiler.partition.TakenConstraint$Affine#inOrder");
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

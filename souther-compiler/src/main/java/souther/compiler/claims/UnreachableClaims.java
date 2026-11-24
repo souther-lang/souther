@@ -12,9 +12,9 @@ import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.UnreachableReasons;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValueDefinitions;
+import souther.compiler.inputs.ValuesAt;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -139,12 +139,12 @@ public final class UnreachableClaims {
                                   NormalReturn answering, List<Claim> found) {
         // A claim is about a position, so a scrutinee that names none carries none.
         TermPath path = switch (reads.pathOf(match.scrutinee(), newtypes)) {
-            case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesAt.At(var at) -> at;
+            case ValuesAt.NotAPosition _ -> null;
             // A claim is about one position, and a scrutinee that only may stand at one is about
             // whichever of them the run is in. Claimed of each, a case unreachable in one sequence
             // would be claimed unreachable in the other.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
         if (path == null) {
             return;

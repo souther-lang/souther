@@ -198,22 +198,18 @@ class AManyValuedNumberIsComposedBesideAnotherLocationTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String generated(String model) {
         Compilation compilation = measured(model);
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 }

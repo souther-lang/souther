@@ -6,6 +6,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.query.Compilation;
 
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
@@ -50,6 +51,22 @@ final class Crossing {
         Sig sig = compilation.signatures(written.name()).get(behavior);
         return JsonBoundary.read(compilation.loader(), sig.ins().get(0), JSON.readTree(json));
     }
+
+    /**
+     * {@link #reading}, with a fraction kept as the decimal it was written, the way {@code souther
+     * run} reads one. Read as a {@code double}, a number past what a {@code double} holds is not the
+     * number that was sent.
+     */
+    static JsonBoundary.Read readingExactly(String source, String module, String behavior,
+                                            String json) throws Exception {
+        Compilation compilation = Compiler.compiled(source, module, new ArrayList<>());
+        Prepared written = compilation.module(compilation.modules().get(0));
+        Sig sig = compilation.signatures(written.name()).get(behavior);
+        return JsonBoundary.read(compilation.loader(), sig.ins().get(0), EXACT.readTree(json));
+    }
+
+    private static final JsonMapper EXACT = JsonMapper.builder()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
 
     /** The refusal reading {@code json} came to, for a test that is about the refusal. */
     static JsonBoundary.Read.Refused refusalOf(String source, String module, String behavior,

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Registry;
@@ -151,6 +152,7 @@ class ATableOfDerivedDeclarationsIsNeverReadBackAsNodesTest {
                 data Bad = { value: Nowhere }
                 data Good = { n: Int }
                 """), ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1023"), compilation);
         Db db = compilation.db();
 
         TypeKey bad = new TypeKey("probe.holes", "Bad");

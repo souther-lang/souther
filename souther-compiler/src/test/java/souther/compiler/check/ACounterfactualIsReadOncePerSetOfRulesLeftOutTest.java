@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -60,7 +62,8 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
 
     @Test
     void aSecondNameIsAnsweredOutOfTheReadingsTheFirstMade() {
-        FieldDomains reading = reading();
+        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        FieldDomains reading = reading(compilation, "Held");
         NarrowedBounds hi = reading.at(RuleKey.of("hi"));
         NarrowedBounds also = reading.at(RuleKey.of("also"));
 
@@ -74,6 +77,7 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
                 "the same declarations hold the floor under the other name");
         assertEquals(beforeTheSecond, InvariantChecker.readingsMade(),
                 "and the same clauses left out is the same reading, made once");
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -99,7 +103,8 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
 
     @Test
     void theSecondEndOfANumberLeavesTheSameConjunctsOutAsTheFirst() {
-        FieldDomains reading = reading(BOTH_ENDS, "Bounded");
+        Compilation compilation = Compilation.ofSource(BOTH_ENDS, "Main");
+        FieldDomains reading = reading(compilation, "Bounded");
 
         long before = InvariantChecker.readingsMade();
         assertFalse(reading.movedEnds().isEmpty(),
@@ -107,6 +112,7 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
         assertEquals(4, InvariantChecker.readingsMade() - before,
                 "four sets are left out over the two ends — all three conjuncts, and each of them"
                         + " alone — and the second end asks for the ones the first already made");
+        ACompiledModel.compiles(compilation);
     }
 
     /** The floor of a coordinate is held by whoever the reading says, asked with that floor. */
@@ -114,16 +120,11 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
         return AReadingOfAPosition.holding(narrowed, EndSide.LOWER);
     }
 
-    private static FieldDomains reading() {
-        return reading(SOURCE, "Held");
-    }
-
-    private static FieldDomains reading(String source, String declaration) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+    private static FieldDomains reading(Compilation compilation, String declaration) {
         TypeSymbol.AtModule of = TypeSymbols.declared(new TypeKey("demo", declaration));
         return FieldDomains.of(of,
                 RuleReadingContext.unshared(
                         RuleReadings.of(compilation, compilation.modules().get(0)),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

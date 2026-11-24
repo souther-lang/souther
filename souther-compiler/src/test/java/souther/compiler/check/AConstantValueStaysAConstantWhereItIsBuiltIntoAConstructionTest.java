@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -67,7 +68,7 @@ class AConstantValueStaysAConstantWhereItIsBuiltIntoAConstructionTest {
 
     @Test
     void aConstantTwoMethodValuesNameIsBuiltOnceByTheRegionThatBuildsThem() {
-        Hir.Expr body = Compiler.compiled(SHARED, "m").db()
+        Hir.Expr body = ACompiledModel.answered(SHARED).db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
                 .value().value().definition().writtenBody();
 
@@ -85,7 +86,7 @@ class AConstantValueStaysAConstantWhereItIsBuiltIntoAConstructionTest {
 
     @Test
     void aValueTheFoldEvaluatesIsNotCalledAsAMethod() {
-        Hir.Expr body = Compiler.compiled(MODULE, "m").db()
+        Hir.Expr body = ACompiledModel.answered(MODULE).db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("go")))
                 .value().value().definition().writtenBody();
 

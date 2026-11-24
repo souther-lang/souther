@@ -31,8 +31,8 @@ class AProofIsNotToldAsASearchThatTriedEverythingTest {
     /** The model's word says what the model leaves and nothing about how this came to know it. */
     @Test
     void theRulesLeavingNothingIsSaidWithoutASearch() {
-        String said = GeneratedRows.why(
-                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        String said = InEnglish.said(GeneratedRows.why(
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE));
 
         assertTrue(said.contains("no value can stand"),
                 () -> "what the model settles is what is said: " + said);
@@ -52,8 +52,8 @@ class AProofIsNotToldAsASearchThatTriedEverythingTest {
      */
     @Test
     void aSearchThatLeftSomethingUntriedStillSaysSo() {
-        String said = GeneratedRows.why(
-                Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+        String said = InEnglish.said(GeneratedRows.why(
+                Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
 
         assertTrue(OF_A_SEARCH.stream().anyMatch(said::contains),
                 () -> "what this compiler did not manage is said as a search: " + said);

@@ -58,5 +58,8 @@ public enum SubjectWord {
     MEASURE,
 
     /** What the rows reach of one position, which a behavior has one of per position. */
-    AXIS_MEASURE
+    AXIS_MEASURE,
+
+    /** One rewrite of a behavior's body, which two of one behavior's are not the same of. */
+    REPLACEMENT
 }

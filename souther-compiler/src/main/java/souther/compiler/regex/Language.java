@@ -1,5 +1,11 @@
 package souther.compiler.regex;
 
+import java.math.BigInteger;
+import java.util.BitSet;
+import java.util.List;
+import java.util.Map;
+import java.util.function.IntPredicate;
+
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
@@ -48,6 +54,11 @@ public final class Language {
             throw new IllegalArgumentException("a language is some machine");
         }
         this.machine = canonical;
+    }
+
+    /** The machine, for a builder in this package that makes a language out of another. */
+    Automaton machine() {
+        return machine;
     }
 
     /**
@@ -206,6 +217,126 @@ public final class Language {
     }
 
     /**
+     * One string it holds with no control code but TAB, LF and CR, as {@link #someWritten}, whose
+     * code points come to {@code sum}, of a length {@code lengths} admits and no longer than
+     * {@code longest}; or that it holds none of those; or that finding one would take more than
+     * {@code work} steps.
+     *
+     * <p>Of the code points each symbol is, so of the string before anything makes it NFC: a caller
+     * offering it as a value asks whether the text it is let in as still answers. The code points
+     * are the least of {@code preferred} that lead to the sum, wherever there is one.
+     */
+    public ComingTo comingTo(long sum, IntPredicate lengths, int longest, CodePoints preferred,
+                             int work) {
+        return CodePointSums.comingTo(machine, sum, lengths, longest, preferred, work);
+    }
+
+    /**
+     * The same, of a string holding at each index {@code at} names one of the code points it names
+     * there, and with nothing asked of what its code points come to where {@code sum} is null: one
+     * string for every index, and not a string for each.
+     */
+    public ComingTo holding(Map<Integer, CodePoints> at, Long sum, IntPredicate lengths,
+                            int longest, CodePoints preferred, int work) {
+        return CodePointSums.holding(machine, at, sum, lengths, longest, preferred, work);
+    }
+
+    /**
+     * The strings of this one a {@code String} holds as they are written
+     * ({@link StringsHeldAsWritten}).
+     */
+    public StringsHeldAsWritten heldAsWritten() {
+        return StringsHeldAsWritten.of(machine);
+    }
+
+    /**
+     * The fewest code points a string of it a {@code String} holds as written has
+     * ({@link StringsHeldAsWritten}), or -1 where it holds none. Answered without making their
+     * machine.
+     */
+    public long shortestHeldAsWritten() {
+        return StringsHeldAsWritten.shortestIn(machine);
+    }
+
+    /**
+     * Whether a string a {@code String} holds as written has every length {@code wanted} names.
+     * {@code endless} where the lengths it names have no greatest. They are the lengths of one
+     * stretch. False also where that was not shown within what is walked.
+     */
+    public boolean reachesEveryLength(IntPredicate wanted, boolean endless) {
+        return heldAsWritten().reachesEveryLength(wanted, endless);
+    }
+
+    /** Where the code point a string it holds has at {@code index} lies, or null where it holds
+     *  no string that long. */
+    public Ends codePointsAt(int index) {
+        return EndsOfAMachine.codePointsAt(machine, index);
+    }
+
+    /** The code points that stand at {@code index} of a string it holds of {@code length} code
+     *  points. */
+    public CodePoints codePointsAt(int length, int index) {
+        return CodePointRemainders.standingAt(machine, length, index);
+    }
+
+    /**
+     * {@code among} taken apart into sets of code points that stand alike at {@code index} of its
+     * strings of {@code length} code points: a string holding one of a set there is a string
+     * holding any other of the set there, the rest of it as it was.
+     */
+    public List<CodePoints> alikeAt(int length, int index, CodePoints among) {
+        return CodePointRemainders.alikeAt(machine, length, index, among);
+    }
+
+    /**
+     * The remainders {@code shift} and the code points of a string it holds of {@code length}
+     * code points, each weighed by what {@code weights} has for its index and nought where it has
+     * nothing, leave divided by {@code divisor}, with the code point at each index {@code at}
+     * names one of those it names. Null where working that out would move more than {@code work}
+     * remainders.
+     */
+    public BitSet remaindersLeft(int length, Map<Integer, Long> weights, long shift, int divisor,
+                                 Map<Integer, CodePoints> at, int work) {
+        return CodePointRemainders.left(machine, length, weights, shift, divisor, at, work);
+    }
+
+    /** What looking for a string coming to a sum came to. */
+    public sealed interface ComingTo {
+
+        /** A string coming to it. */
+        record Written(String text) implements ComingTo {}
+
+        /** No string of the lengths asked comes to it. */
+        record NoneDoes() implements ComingTo {}
+
+        /** The steps allowed ran out before either was found. */
+        record PastTheWork() implements ComingTo {}
+    }
+
+    /**
+     * Where what the code points of a string it holds come to lies, or null where it holds none.
+     * Read off the machine, which is walked once ({@link EndsOfAMachine}).
+     */
+    public Ends sumsOfCodePoints() {
+        return EndsOfAMachine.sumsOfCodePoints(machine);
+    }
+
+    /** Where how many code points a string it holds is lies, or null where it holds none. */
+    public Ends lengths() {
+        return EndsOfAMachine.lengths(machine);
+    }
+
+    /**
+     * The least and the greatest of some number of the strings of a language: every such number
+     * lies between them, and not every number between them need be one.
+     *
+     * @param least the least of them
+     * @param most  the greatest, or null where a string of the language goes round a loop that
+     *              adds to the number, and so they have none
+     */
+    public record Ends(long least, Long most) {}
+
+    /**
      * The same strings and these others, or null past what {@code meter} allows.
      *
      * <p>Takes the words themselves rather than a plan. What joining them costs is the words — a
@@ -229,6 +360,14 @@ public final class Language {
         Automaton theirs = Automaton.ofWords(words, meter);
         Automaton left = theirs == null ? null : theirs.not(meter);
         return left == null ? null : canonical(machine.and(left, meter), meter);
+    }
+
+    /**
+     * How many strings it holds, or null where it holds endlessly many. Read off the canonical
+     * machine, and nothing is built ({@link HowManyStringsAMachineHolds}).
+     */
+    public BigInteger howManyStrings() {
+        return HowManyStringsAMachineHolds.of(machine);
     }
 
     /** How many states hold it, which is what a caller answering for its work counts. */
@@ -276,11 +415,25 @@ public final class Language {
      *
      * <p>Agrees with {@link #equals} both ways, being read off the same canonical table, and unlike
      * {@link #hashCode} it says which of two unequal ones comes first without ever saying that of
-     * two equal ones. Costs nothing to ask: the machine it reads was built when the language was.
+     * two equal ones. The machine it reads was built when the language was, and the table is
+     * written out once, the first time it is asked, and then appended as it was: a language is
+     * ordered against many others, and writing the table out walks all of it.
      */
     public void writtenInto(StringBuilder out) {
-        machine.writtenInto(out);
+        String text = written;
+        if (text == null) {
+            StringBuilder table = new StringBuilder();
+            machine.writtenInto(table);
+            text = table.toString();
+            written = text;
+        }
+        out.append(text);
     }
+
+    /** What {@link #writtenInto} writes, or null before it was first asked. A string is complete
+     *  once another thread can see it, so two that ask at once write the same text twice and
+     *  keep either. */
+    private String written;
 
     @Override
     public String toString() {

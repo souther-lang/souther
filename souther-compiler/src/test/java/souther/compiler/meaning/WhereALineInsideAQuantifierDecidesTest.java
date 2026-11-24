@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -55,7 +56,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         assertFalse(cases.isEmpty(), "the line decides somewhere");
         for (Proposition each : cases) {
             assertTrue(unquantified(each).stream().noneMatch(atom -> atom.equals(
-                            compared(N, 0, Rel.GE).key())),
+                            compared(N, 0, Rel.GE).spelledOut())),
                     () -> "the element below nought is the other quantifier's: " + each);
         }
     }
@@ -135,22 +136,34 @@ class WhereALineInsideAQuantifierDecidesTest {
     }
 
     /**
-     * A quantifier holding eighteen relations about the row, each or one about its element and
+     * A quantifier holding seventeen relations about the row, each or one about its element and
      * every one of those choices together, is said outside the quantifier once for every way the
-     * eighteen come out, which is more than a statement is read in. Nothing is taken apart then,
+     * seventeen come out, which is as many as a statement is read in. Nothing is taken apart then,
      * and every line says so, naming the figure.
      */
     @Test
     void aQuantifierPastTheStepsLeavesEveryLineNotTakenApart() {
+        assertEveryLineIsNotTakenApart(17, Allowances.DECLARED);
+    }
+
+    /** The same at a figure of sixteen steps, which five relations pass. */
+    @Test
+    void aQuantifierPastANarrowerFigureOfStepsLeavesEveryLineNotTakenApart() {
+        assertEveryLineIsNotTakenApart(5,
+                Allowances.DECLARED.with(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN, 16));
+    }
+
+    private static void assertEveryLineIsNotTakenApart(int relations, Allowances held) {
         List<Proposition> each = new ArrayList<>();
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < relations; i++) {
             each.add(Proposition.any(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }
         Proposition stated = new Proposition.Some(CONTAINER, Proposition.all(each), true);
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        List<WhereEachLineDecides.Decides> lines =
+                held.over(() -> WhereEachLineDecides.in(stated, term -> false));
 
-        assertEquals(36, lines.size(), lines::toString);
+        assertEquals(2 * relations, lines.size(), lines::toString);
         for (WhereEachLineDecides.Decides line : lines) {
             assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     stoppedAt(line.cases()), () -> "nothing taken apart: " + line);
@@ -158,22 +171,22 @@ class WhereALineInsideAQuantifierDecidesTest {
     }
 
     /**
-     * Eighteen relations about the row, each with one about the element, any of them enough: some
+     * Seventeen relations about the row, each with one about the element, any of them enough: some
      * element meeting one of them is one of them with some element meeting its other half, so
-     * nothing is said once for each way the eighteen come out, and the statement is read. Where a
+     * nothing is said once for each way the seventeen come out, and the statement is read. Where a
      * line decides is then more cases than are taken apart, which is the figure said, and not how
      * many steps a statement is read in.
      */
     @Test
     void aQuantifierOverChoicesIsSaidChoiceByChoice() {
         List<Proposition> each = new ArrayList<>();
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < 17; i++) {
             each.add(Proposition.all(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }
         Proposition stated = new Proposition.Some(CONTAINER, Proposition.any(each), true);
 
-        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
+        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated, term -> false)) {
             assertFalse(notTakenApartAt(line.cases())
                             .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     () -> "read: " + line.line());
@@ -274,7 +287,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         Proposition stated = Proposition.any(List.of(entry, Proposition.all(List.of(other, d))));
 
         List<Proposition> ofTheLine = casesOf(stated, line);
-        assertTrue(ofTheLine.stream().anyMatch(each -> each.key().contains(d.key())),
+        assertTrue(ofTheLine.stream().anyMatch(each -> each.spelledOut().contains(d.spelledOut())),
                 () -> "the default's line tells the cases apart: " + ofTheLine);
     }
 
@@ -339,7 +352,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         Proposition.Some other = new Proposition.Some(CONTAINER,
                 new Proposition.All(List.of(n, k)), true);
 
-        assertFalse(one.key().equals(other.key()), "spelled apart");
+        assertFalse(one.spelledOut().equals(other.spelledOut()), "spelled apart");
         assertFalse(one.elementAsked().holdsOnlyWhere(other.elementAsked()));
         assertFalse(other.elementAsked().holdsOnlyWhere(one.elementAsked()));
     }
@@ -365,7 +378,7 @@ class WhereALineInsideAQuantifierDecidesTest {
                     alternatives.forEach(one -> notTakenApartAt(one, into));
             case DecidingCase.Cases.Together(var factors) ->
                     factors.forEach(one -> notTakenApartAt(one, into));
-            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure);
+            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure.budget());
         }
     }
 
@@ -385,7 +398,7 @@ class WhereALineInsideAQuantifierDecidesTest {
                     alternatives.forEach(one -> stoppedAt(one, into));
             case DecidingCase.Cases.Together(var factors) ->
                     factors.forEach(one -> stoppedAt(one, into));
-            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure);
+            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure.budget());
         }
     }
 
@@ -407,9 +420,9 @@ class WhereALineInsideAQuantifierDecidesTest {
 
     private static List<DecidingCase> decidingCasesOf(Proposition stated,
                                                       Proposition.Compared line) {
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, term -> false);
         for (WhereEachLineDecides.Decides each : lines) {
-            if (each.line().key().equals(line.key())) {
+            if (each.line().spelledOut().equals(line.spelledOut())) {
                 return each.cases();
             }
         }
@@ -424,7 +437,7 @@ class WhereALineInsideAQuantifierDecidesTest {
             case Proposition.Any any -> any.parts().forEach(part -> out.addAll(unquantified(part)));
             case Proposition.Some _ -> { }
             default -> out.add(stated instanceof Proposition.Compared compared && !compared.holds()
-                    ? compared.denied().key() : stated.key());
+                    ? compared.denied().spelledOut() : stated.spelledOut());
         }
         return out;
     }

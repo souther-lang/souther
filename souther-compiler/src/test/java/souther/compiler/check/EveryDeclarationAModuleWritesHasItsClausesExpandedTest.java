@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -53,7 +54,7 @@ class EveryDeclarationAModuleWritesHasItsClausesExpandedTest {
     }
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         return new Read(RuleReadings.of(compilation, module), module);
     }

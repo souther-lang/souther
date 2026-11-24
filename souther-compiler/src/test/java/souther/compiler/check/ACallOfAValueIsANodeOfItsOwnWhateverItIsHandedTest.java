@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -37,7 +38,8 @@ class ACallOfAValueIsANodeOfItsOwnWhateverItIsHandedTest {
             """;
 
     private static Hir.Expr lowered(String name) {
-        return Compiler.compiled(SOURCE, "m").db()
+        Compilation compiled = ACompiledModel.compiles(Compiler.compiled(SOURCE, "m"));
+        return compiled.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(name)))
                 .value().value().definition().writtenBody();
     }
@@ -97,7 +99,7 @@ class ACallOfAValueIsANodeOfItsOwnWhateverItIsHandedTest {
 
     @Test
     void aValueAnotherModuleDeclaresIsCalledAsTheSameKindOfNode() {
-        Compilation compiled = Compiler.compiledModules(List.of("""
+        Compilation compiled = ACompiledModel.compiles(Compiler.compiledModules(List.of("""
                 module up exposing (cap)
 
                 let cap = List.length([1, 2, 3])
@@ -108,7 +110,7 @@ class ACallOfAValueIsANodeOfItsOwnWhateverItIsHandedTest {
 
                 behavior f : (x: Int) -> Int
                 let f (x) = cap
-                """), ModulePath.EMPTY, new ArrayList<>());
+                """), ModulePath.EMPTY, new ArrayList<>()));
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("down", new DefinitionName("f")))
                 .value().value().definition().writtenBody();

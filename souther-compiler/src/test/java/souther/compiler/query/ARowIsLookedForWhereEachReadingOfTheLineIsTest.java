@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BorderObligationId;
 import souther.compiler.partition.PointRole;
 
@@ -96,10 +97,7 @@ class ARowIsLookedForWhereEachReadingOfTheLineIsTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(TWICE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(TWICE, Adequacy.Asked.fullReport());
     }
 
     /** A helper called from both arms of a fork, so its comparison is read once per call. */

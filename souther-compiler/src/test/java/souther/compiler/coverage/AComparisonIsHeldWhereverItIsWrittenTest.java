@@ -2,12 +2,15 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
@@ -39,7 +42,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     private record Checked(String module, Map<String, Core> bodies) {}
 
     private static Checked bodiesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(module)).value();
@@ -78,7 +81,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     private static CoverageSites.Plan planOf(Checked checked) {
         return CoverageSites.of(bodiesOfAModule(checked.module(),
                         new LinkedHashMap<>(checked.bodies())),
-                DecisionSources.NONE, SuppliedRules.NONE);
+                DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk());
     }
 
     private static void collect(Core e, ComparisonCatalog catalog, List<Core.Binary> out) {
@@ -317,7 +320,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 """;
         CoverageSites.Plan here = CoverageSites.of(
                 bodiesOfAModule("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")).bodies())),
-                DecisionSources.NONE, SuppliedRules.NONE);
+                DecisionSources.NONE, SuppliedRules.NONE, DeclarationNewtypes.NONE, DefaultStdlib.get().walk());
         ConstructOccurrence there = ComparisonCatalog.of(bodiesOfAModule(
                 "two", new LinkedHashMap<>(bodiesOf(body.formatted("two")).bodies()))).all().get(0).which();
 
@@ -350,7 +353,8 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
                         numbered, new IdentityHashMap<>(), List.of(), Set.of(),
                         new LinkedHashMap<>(), catalogOf(checked), numbering, Methods.NONE,
-                        new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of()));
+                        new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of(),
+                        List.of(), new IdentityHashMap<>(), WalkRewrites.NONE));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
     }

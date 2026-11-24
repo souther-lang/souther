@@ -103,7 +103,7 @@ class APositionOfAFormIsReadFromARegionHoldingTheLevelTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         String block = GeneratedRows.of(compilation, null, null,
-                new SourceRendering(id -> "pay.sou", compilation.texts())).text();
+                new SourceRendering(id -> "pay.sou", compilation.texts())).textInEnglish();
         Pattern yen = Pattern.compile("Yen\\((\\d+)\\)");
         List<BigInteger> sums = new ArrayList<>();
         for (String row : block.split("-> <\\?>")) {

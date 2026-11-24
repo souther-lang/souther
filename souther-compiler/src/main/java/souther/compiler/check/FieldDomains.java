@@ -1,21 +1,31 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
+import souther.compiler.inputs.RepresentationBounds;
+import souther.compiler.inputs.RuleSite;
+import souther.compiler.numeric.AffineConstraint;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.StoppedReading;
@@ -32,7 +42,11 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.OperationLaw;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import souther.compiler.types.ValueName;
@@ -41,10 +55,12 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.IntFunction;
+import java.util.stream.Collectors;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -93,10 +109,10 @@ public final class FieldDomains {
                     NOTHING_NAMED,
                     ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
-                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE,
+                    Map.of(), Map.of(), List.of(), Map.of(), List.of(), StringFacts.NONE,
                     RevisionKnowledge.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
-                    SettledOrderEnvelope.nothing());
+                    SettledOrderEnvelope.nothing(), Map.of(), null, Map.of());
 
     private final Map<RuleKey, NumericDomain.Bounds> byName;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -159,6 +175,14 @@ public final class FieldDomains {
      * holding it and {@link #leftAt} picks between them off the coordinate it was handed.
      */
     private final SettledOrderEnvelope settledOrder;
+    /**
+     * What the order leaves each position some rule of it stopped: one run, runs apart, or none.
+     *
+     * <p>Not the envelope above, whose ends hold the gaps between runs: this is read where a value
+     * is chosen ({@link Composing#at}), and a value chosen between the envelope's ends may be one
+     * every alternative refuses.
+     */
+    private final Map<RuleKey, OrderedRuns> orderedRegions;
     /** Which choice an author is sent to for a line on one of those numbers that nothing placed —
      *  see {@link #endsLeftOpenAt}. */
     private final Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen;
@@ -205,8 +229,16 @@ public final class FieldDomains {
     private final ConstraintState<FactSubject> constraints;
     /** What this was read from, so that it can be read again without one declaration's clauses —
      *  the declaration the reading is of, which a lent reading may have of a name beneath the one
-     *  asked about. */
+     *  asked about. Null where the value stands under no declaration — a string or a number a
+     *  container holds — which is a reading of {@link #inherited} alone. The rules a container
+     *  states are named by the part that states each, so what a rule came from is never read off
+     *  this. */
     private final TypeSymbol.AtModule named;
+    /** What a container states of every element, where this is the reading of one of its elements;
+     *  null where it is not. Held to read the value again without a rule of it. */
+    private final InvariantChecker.Inherited inherited;
+    /** What a rule of this value states of every element of the container at each name. */
+    private final Map<RuleKey, List<ElementGuarantee>> guarantees;
     /** The scope and the representation together, so that a second reading of this declaration reads
      *  the same tree. Held apart, a counterfactual could be taken against the other form and what
      *  moved would be read as what a rule did. */
@@ -216,6 +248,8 @@ public final class FieldDomains {
      *  same way. A second reading of one declaration under another policy would answer a name
      *  differently while both stayed sound, and what moved would be read as what the rule did. */
     private final ReadingPolicy policy;
+    /** The day this value was read on, kept with the policy for the same reason. */
+    private final Today today;
     /** The atom a range is taken of at each name: what stands there, and the count of it where a
      *  count is taken. A name with neither has no range to be exact about. */
     private final Map<RuleKey, FactSubject> atomAt;
@@ -225,7 +259,7 @@ public final class FieldDomains {
     private final List<InvariantChecker.Written> readings;
     /** How each atom's values are spaced, so that settling one afterwards states the same equality
      *  the reading would have stated for it. */
-    private final Map<FactSubject, souther.compiler.numeric.Granularity> spacing;
+    private final Map<FactSubject, NumberSpace> spaces;
     /**
      * The string machines this reading answered from and made.
      *
@@ -270,6 +304,10 @@ public final class FieldDomains {
      */
     private final Map<RuleKey, HeldClass> classes = new ConcurrentHashMap<>();
 
+    /** What the rules hold the date at each place to ({@link #rulesOfTheDateAt}), kept under the
+     *  place for the same reason: asked at every point of every line on a part of it. */
+    private final Map<RuleKey, DateRules> dateRules = new ConcurrentHashMap<>();
+
     /**
      * The readings of the declarations the elements of this value's containers are of, made when
      * whether one of them holds a value is first asked ({@link #elementHoldsAValue}).
@@ -278,6 +316,47 @@ public final class FieldDomains {
      * world this one was, and nothing here answers anything its rules do not already say.
      */
     private final Map<TypeSymbol.AtModule, FieldDomains> elements = new ConcurrentHashMap<>();
+
+    /**
+     * The value written down at each set of places tied together, with some of them held to
+     * constants, that every rule naming one of them holds of ({@link #writtenOver}) — kept for the
+     * same reason {@link #classes} is: asked at every place a projection is asked of and for every
+     * value a builder writes there, and the answer turns on the rules of this value alone.
+     */
+    private final Map<Joint, Optional<Map<RuleKey, Object>>> heldTogether =
+            new ConcurrentHashMap<>();
+
+    /** Which places the parts of this value's rules tie together, made the first time it is
+     *  asked ({@link #tied}). */
+    private volatile TiedPlaces tied;
+
+    /**
+     * A set of places tied together, with the constants some of them are held to.
+     *
+     * @param together the places
+     * @param held     the constants, as the fold reads one, at the places among them a caller has
+     *                 already put a value at; none where a value of all of them is asked for
+     */
+    private record Joint(Set<RuleKey> together, Map<RuleKey, Object> held) {
+
+        Joint {
+            together = Set.copyOf(together);
+            held = Map.copyOf(held);
+        }
+    }
+
+    /** What {@link #projection} answers, worked out the first time it is asked. */
+    private volatile ProjectionEvidence projected;
+
+    /** What {@link #projection} is made of, worked out the first time it is asked. */
+    private volatile Gathered gathered;
+
+    /** What {@link #countsRelatedToAnotherNumber} answers, worked out the first time it is asked. */
+    private volatile Set<FactSubject> relatedCounts;
+
+    /** What {@link #projectionAt} answers at each place, kept for the same reason as
+     *  {@link #classes}. */
+    private final Map<RuleKey, ProjectionEvidence> projectedAt = new ConcurrentHashMap<>();
 
     /** The place {@link #classLeavingNothing} found, worked out the first time it is asked. */
     private volatile Optional<RuleKey> leavingNothing;
@@ -297,6 +376,20 @@ public final class FieldDomains {
 
     private final Map<TypeSymbol.AtModule, Map<RuleKey, List<List<String>>>> writtenApart =
             new ConcurrentHashMap<>();
+
+    /** What the rules of this value ask each map of ({@link #entriesHeldAt}), read the first time
+     *  it is asked. */
+    private volatile Map<RuleKey, List<EntryHeld.Requirement>> entriesHeld;
+
+    /** The numbers these rules write as arithmetic over places, each with the order its steps
+     *  answer on: settling a place states an equality on an atom the rules already have, so they
+     *  are the same for every settling. Read with the rules, where the terms that know those
+     *  orders are. */
+    private final List<ComputedNumbers.Computed> computedNumbers;
+
+    /** What the rules of this value ask of each list about its sides
+     *  ({@link #sidesBalancedAt}), read the first time it is asked. */
+    private volatile Map<RuleKey, List<SidesBalanced.Requirement>> sidesBalanced;
 
     private FieldDomains(Map<RuleKey, NumericDomain.Bounds> byName,
                          Map<RuleKey, NumericDomain.Bounds> heldByName,
@@ -320,11 +413,18 @@ public final class FieldDomains {
                          Set<RuleKey> unreadOfEveryValue,
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          List<InvariantChecker.Written> readings,
-                         Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
+                         Map<FactSubject, NumberSpace> spaces,
+                         List<ComputedNumbers.Computed> computedNumbers,
                          StringFacts stringMachines, RevisionKnowledge revision,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
-                         BoundaryState derived, SettledOrderEnvelope settledOrder) {
+                         BoundaryState derived, SettledOrderEnvelope settledOrder,
+                         Map<RuleKey, OrderedRuns> orderedRegions,
+                         InvariantChecker.Inherited inherited,
+                         Map<RuleKey, List<ElementGuarantee>> guarantees) {
+        this.inherited = inherited;
+        this.guarantees = guarantees;
+        this.orderedRegions = orderedRegions;
         this.endsLeftOpen = endsLeftOpen;
         this.boundsLeftOpen = boundsLeftOpen;
         this.derived = derived;
@@ -335,6 +435,7 @@ public final class FieldDomains {
         // (borrowing) — and nothing where no reading was made.
         this.source = readIn == null ? null : readIn.source();
         this.policy = readIn == null ? null : readIn.policy();
+        this.today = readIn == null ? null : readIn.today();
         this.revision = revision;
         this.byName = byName;
         this.heldByName = heldByName;
@@ -362,7 +463,8 @@ public final class FieldDomains {
         this.atomAt = atomAt;
         this.countAt = countAt;
         this.readings = readings;
-        this.spacing = spacing;
+        this.spaces = spaces;
+        this.computedNumbers = computedNumbers;
     }
 
     /**
@@ -379,15 +481,20 @@ public final class FieldDomains {
      * the domain it asked had never heard of the rules.
      *
      * <p>And of the classes a place is held to, which that state holds as atoms of their own
-     * ({@link #classLeavingNothing}).
+     * ({@link #classLeavingNothing}), and of where the numbers' orders stop: a value holds each
+     * number inside its order, so rules only numbers past an end hold leave no value
+     * ({@link NumericDomain#leavesNoRow}). Asked here, of a value, and not of the state wherever it
+     * is read: a region a reading narrowed to nothing reads as a region nothing is said of.
      */
     public boolean infeasible() {
-        return constraints.isBottom() || classLeavingNothing() != null;
+        return constraints.isBottom() || classLeavingNothing() != null
+                || constraints.numbers().leavesNoRow();
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public boolean infeasible(StringMachineAnswers machines) {
-        return constraints.isBottom(machines) || classLeavingNothing() != null;
+        return constraints.isBottom(machines) || classLeavingNothing() != null
+                || constraints.numbers().leavesNoRow();
     }
 
     /**
@@ -401,12 +508,21 @@ public final class FieldDomains {
      * subject, and what this value's rules call the place it is at is known here and nowhere else.
      */
     public Optional<Emptiness> holdsNothing() {
-        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing);
+        return constraints.holdsNothing(spelled(namedBy)).or(this::aClassHoldsNothing)
+                .or(this::noRowOfTheNumbers);
     }
 
     /** The same, borrowing what {@code machines} has already made where deciding takes one. */
     public Optional<Emptiness> holdsNothing(StringMachineAnswers machines) {
-        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing);
+        return constraints.holdsNothing(spelled(namedBy), machines).or(this::aClassHoldsNothing)
+                .or(this::noRowOfTheNumbers);
+    }
+
+    /** The rules contradicting where the numbers' orders stop, as the general sentence: what
+     *  they leave holds no number inside its order ({@link NumericDomain#leavesNoRow}). */
+    private Optional<Emptiness> noRowOfTheNumbers() {
+        return constraints.numbers().leavesNoRow()
+                ? Optional.of(new Emptiness.ConflictingRules()) : Optional.empty();
     }
 
     /**
@@ -496,13 +612,35 @@ public final class FieldDomains {
      */
     static FieldDomains of(DeclarationReading read, RuleReadingContext reading,
                            InvariantChecker.Reach reach) {
-        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach));
+        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach, null));
+    }
+
+    /**
+     * What the value one element of a container is leaves its places able to hold, given what the
+     * container states of every element.
+     *
+     * <p>{@code named} is the declaration the element wears, or null where it wears none — a string
+     * or a number a container holds. A value with no declaration has no rules of its own to read,
+     * so what it holds is what the container's rules leave it.
+     */
+    public static FieldDomains ofElement(TypeSymbol.AtModule named, Type type,
+                                         List<ElementGuarantee> guarantees,
+                                         RuleReadingContext reading) {
+        return of(named, reading, Map.of(), InvariantChecker.Reach.EVERYTHING,
+                new InvariantChecker.Inherited(type, guarantees));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
                                    Map<NumberAt<RuleKey>, Count> settled,
                                    InvariantChecker.Reach reach) {
+        return of(named, reading, settled, reach, null);
+    }
+
+    private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                   Map<NumberAt<RuleKey>, Count> settled,
+                                   InvariantChecker.Reach reach,
+                                   InvariantChecker.Inherited inherited) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the value it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
@@ -517,8 +655,10 @@ public final class FieldDomains {
         // Under the declaration the reading is of, which a lent reading may have of a name beneath
         // the one asked about: the terms are bound under that one, and what is derived is kept with
         // the reading for every asker after the first.
-        DeclarationReading read = InvariantChecker.readFields(named, reading, settled, reach);
-        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, settled, reach));
+        DeclarationReading read =
+                InvariantChecker.readFields(named, reading, settled, reach, inherited);
+        return read.fields(seeded ->
+                leftBy(seeded, read.owner(), reading, settled, reach, inherited));
     }
 
     /** What the reading {@code seeded} leaves the fields able to hold, under the terms it was made
@@ -526,7 +666,8 @@ public final class FieldDomains {
     private static FieldDomains leftBy(InvariantChecker.Seeded seeded, TypeSymbol.AtModule named,
                                        RuleReadingContext reading,
                                        Map<NumberAt<RuleKey>, Count> settled,
-                                       InvariantChecker.Reach reach) {
+                                       InvariantChecker.Reach reach,
+                                       InvariantChecker.Inherited inherited) {
         Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no name of its own, and its range is the one thing not worth
@@ -581,12 +722,12 @@ public final class FieldDomains {
                 seeded.notGathered(), seeded.handedOn(), placeOf,
                 seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readings(), seeded.spacing(), seeded.stringMachines(),
+                seeded.readings(), seeded.spaces(), seeded.computed(), seeded.stringMachines(),
                 // What the revision has worked out, which is what a counterfactual of this reading
                 // borrows its work from.
                 reading.readings().revision(),
                 seeded.endsLeftOpen(), seeded.boundsLeftOpen(), seeded.derived(),
-                seeded.settledOrder());
+                seeded.settledOrder(), seeded.orderedRegions(), inherited, seeded.guarantees());
     }
 
     /**
@@ -779,11 +920,19 @@ public final class FieldDomains {
      *             back off the text: a reader holding the expression alone has no way to say which
      *             of two identical parts it is
      * @param read the part itself
+     * @param sentTo where a reader goes about it: the call the arithmetic stopped at where that is
+     *             why, and the rule itself otherwise
      * @param why  what would have to change before this rule could be a line, in this compiler's
      *             own terms
      */
     public record NoLine(NumberAt<RuleKey> at, PartId<RuleRef.Invariant> part, Core read,
-                         BlockReason.RuleWithoutLineReason why) {
+                         RuleSite sentTo, BlockReason.RuleWithoutLineReason why) {
+
+        /** A rule without a line that is sent to the rule itself. */
+        NoLine(NumberAt<RuleKey> at, PartId<RuleRef.Invariant> part, Core read,
+               BlockReason.RuleWithoutLineReason why) {
+            this(at, part, read, RuleSite.theRuleItself(), why);
+        }
 
         /** What the value's rules call where the end was to have been placed. */
         public RuleKey path() {
@@ -791,14 +940,15 @@ public final class FieldDomains {
         }
 
         /** What tells two of these apart: all of it, with the figures its reason was met at left
-         *  out ({@link BlockReason#factOf}). */
+         *  out ({@link BlockReason#factOf}). Two calls that stop one part at one place are two
+         *  things to look at. */
         Object key() {
-            return List.of(at, part, read, BlockReason.factOf(why));
+            return List.of(at, part, read, sentTo, BlockReason.factOf(why));
         }
 
         /** Two readers' account of one of these, as one, met at every figure either met it at. */
         NoLine together(NoLine other) {
-            return new NoLine(at, part, read, BlockReason.together(why, other.why));
+            return new NoLine(at, part, read, sentTo, BlockReason.together(why, other.why));
         }
     }
 
@@ -904,6 +1054,18 @@ public final class FieldDomains {
         return bounds == null ? null : lower ? bounds.min() : bounds.max();
     }
 
+    /**
+     * This value read again without the rules {@code parts} name, everything else it says being
+     * read.
+     *
+     * <p>For a reader that asks what the rest of the rules leave a position once rules it has shown
+     * to hold nothing a row at its line needs are put aside. The reading is the one every
+     * counterfactual here is, made once for the same rules left out.
+     */
+    public FieldDomains leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+        return parts.isEmpty() ? this : counterfactual(new LeftOut.Conjuncts(parts));
+    }
+
     /** This value read again without the clauses of the declarations {@code removed} names. */
     private FieldDomains withoutClausesOf(Set<TypeSymbol.AtModule> removed) {
         return counterfactual(new LeftOut.ClausesOf(removed));
@@ -968,8 +1130,10 @@ public final class FieldDomains {
     private FieldDomains counterfactual(LeftOut omitted) {
         return counterfactuals.computeIfAbsent(omitted, left -> of(named,
                 RuleReadingContext.of(source, policy,
-                        DeclarationReadings.borrowing(named.key(), stringMachines, revision)),
-                settled, left.reach()));
+                        DeclarationReadings.borrowing(named == null ? null : named.key(),
+                                stringMachines, revision),
+                        today),
+                settled, left.reach(), inherited));
     }
 
     /**
@@ -981,10 +1145,18 @@ public final class FieldDomains {
      * ({@code machines}) — and the reading made here keeps what it builds to itself, as every
      * counterfactual does ({@link DeclarationReadings#borrowing}).
      */
-    static FieldDomains withoutParts(TypeSymbol.AtModule named, RuleReadingContext reading,
+    static FieldDomains withoutParts(TypeSymbol.AtModule named,
+                                     InvariantChecker.Inherited inherited,
+                                     RuleReadingContext reading,
                                      Set<PartId<RuleRef.Invariant>> parts, StringFacts machines) {
-        return of(named, reading.forACounterfactual(named.key(), machines), Map.of(),
-                new LeftOut.Conjuncts(parts).reach());
+        return of(named,
+                reading.forACounterfactual(named == null ? null : named.key(), machines),
+                Map.of(), new LeftOut.Conjuncts(parts).reach(), inherited);
+    }
+
+    /** What a rule of this value states of every element of the container at {@code place}. */
+    public List<ElementGuarantee> guaranteesAt(RuleKey place) {
+        return guarantees.getOrDefault(place, List.of());
     }
 
     /**
@@ -1005,7 +1177,7 @@ public final class FieldDomains {
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
         return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt, this::admits,
-                this::classAt);
+                this::classAt, this::orderedRegionAt);
     }
 
     /**
@@ -1046,6 +1218,7 @@ public final class FieldDomains {
      * from.
      */
     public <B> Carried<B> constraintsOver(Function<NumberAt<RuleKey>, B> named,
+                                          Function<TotalSpokenOf, B> totals,
                                           Function<Object, B> otherwise,
                                           CanonicalOrder<B> order) {
         Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
@@ -1064,9 +1237,27 @@ public final class FieldDomains {
                 at(where, atom, NumberAt.valueOf(path));
             }
         });
+        // And a total of a container this value names, under the name the caller gives the number
+        // it is, where it gives one: the term a body reading the same total holds, so what the
+        // rules say of it reaches whoever asks about that term. A name some other subject has
+        // already is left to `otherwise`, which keeps two subjects two — two writings of one
+        // total the rules did not see as one are then related by nothing, which is wider and never
+        // wrong.
+        Set<B> taken = new HashSet<>();
+        where.values().forEach(claim -> taken.add(named.apply(claim)));
+        Map<FactSubject, B> asTotals = new HashMap<>();
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            TotalSpokenOf total = where.containsKey(atom) ? null : totalOf(atom.identity());
+            B name = total == null ? null : totals.apply(total);
+            if (name != null && taken.add(name)) {
+                asTotals.put(atom, name);
+            }
+        }
         InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
             NumberAt<RuleKey> claim = where.get(atom);
-            return claim == null ? otherwise.apply(atom) : named.apply(claim);
+            B total = claim == null ? asTotals.get(atom) : null;
+            return claim != null ? named.apply(claim) : total != null ? total
+                    : otherwise.apply(atom);
         });
         // Spelled, because what a caller does with these is name a place to a reader. The
         // names themselves belong to the value whose rules these are, and a caller holding the
@@ -1099,15 +1290,14 @@ public final class FieldDomains {
         for (Map.Entry<NumberAt<RuleKey>, Count> each : fixed.entrySet()) {
             NumberAt<RuleKey> where = each.getKey();
             FactSubject atom = subjectAt(where.position(), where.of());
-            souther.compiler.numeric.Granularity spaced =
-                    atom == null ? null : spacing.get(atom);
+            NumberSpace space = atom == null ? null : spaces.get(atom);
             // A coordinate no range is taken of here settles nothing, which is less than the caller
             // said and is the safe direction: what is left is wider than what they asked about.
-            if (spaced != null) {
-                taken = ConstraintState.settling(taken, atom, each.getValue(), spaced);
+            if (space != null) {
+                taken = ConstraintState.settling(taken, atom, each.getValue(), space);
             }
         }
-        return taken;
+        return ComputedNumbers.settled(taken, computedNumbers);
     }
 
     /**
@@ -1137,17 +1327,24 @@ public final class FieldDomains {
          *  before it still holds every value left after it. */
         private final Function<RuleKey, HeldClass> classAt;
 
+        /** What the order leaves each place, or null where no rule of it stops the place, as the
+         *  reading this was taken off has it ({@link FieldDomains#orderedRegionAt}). Met with where
+         *  the value stops under the settling, which only takes values away. */
+        private final Function<RuleKey, OrderedRuns> orderedAt;
+
         private Composing(ConstraintState<FactSubject> constraints,
                           Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                           Function<RuleKey, List<List<String>>> keptApartAt,
                           Function<RuleKey, AdmissibleSet> admits,
-                          Function<RuleKey, HeldClass> classAt) {
+                          Function<RuleKey, HeldClass> classAt,
+                          Function<RuleKey, OrderedRuns> orderedAt) {
             this.constraints = constraints;
             this.atomAt = atomAt;
             this.countAt = countAt;
             this.keptApartAt = keptApartAt;
             this.admits = admits;
             this.classAt = classAt;
+            this.orderedAt = orderedAt;
         }
 
         /**
@@ -1168,19 +1365,29 @@ public final class FieldDomains {
             }
             // The value itself is chosen by what a caller builds it of, and nothing here says where
             // it stops — but the class its rules hold it to is its own, and a whole newtype nobody
-            // reads is chosen out of the class as a field is.
+            // reads is chosen out of the class as a field is. So is what the order leaves it, which
+            // no end a caller builds it between can say.
             if (path.isTheValueItself()) {
                 HeldClass own = classAt.apply(path);
-                return own instanceof HeldClass.None ? ConstructionLimits.NONE
-                        : new ConstructionLimits(null, null, ConstructionLimits.NONE.admits(), own);
+                OrderedRuns ordered = orderedAt.apply(path);
+                return own instanceof HeldClass.None && ordered == null ? ConstructionLimits.NONE
+                        : ConstructionLimits.of(null, ordered, null,
+                                ConstructionLimits.NONE.admits(), own);
             }
-            NumericDomain.Bounds values = boundsOn(atomAt.get(path));
             Counted counted = countAt.get(path);
             NumericDomain.Bounds held = counted == null ? null : boundsOn(counted.atom());
             List<List<String>> apart = keptApartAt.apply(path);
-            return new ConstructionLimits(values, held == null && apart.isEmpty() ? null
-                    : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart),
-                    admits.apply(path), classAt.apply(path));
+            Held holds = held == null && apart.isEmpty() ? null
+                    : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart);
+            // Numbers that admit no assignment leave the value nowhere, which is an answer and not
+            // a pair of open ends: read as those, a settling the rules refuse would offer every
+            // value there is.
+            if (atomAt.get(path) != null && constraints.numbers().isBottom()) {
+                return ConstructionLimits.leavingNothing(holds, admits.apply(path),
+                        classAt.apply(path));
+            }
+            return ConstructionLimits.of(boundsOn(atomAt.get(path)), orderedAt.apply(path),
+                    holds, admits.apply(path), classAt.apply(path));
         }
 
         /** Where these constraints stop one subject, or null where they stop it nowhere. */
@@ -1202,15 +1409,19 @@ public final class FieldDomains {
      * settled into it — which is the whole reason a search choosing one position at a time does not
      * have to read the declaration once per position it chooses.
      *
-     * @param values where the value standing at the position stops, or null where nothing stops it
-     * @param held   how many a collection there holds, or null where no rule counts it
-     * @param admits which values may stand at the position, read in full and naming none where the
-     *               rules say nothing about which
-     * @param heldTo the class the value there is held to besides where it stops: a value chosen
-     *               between the ends is one of the class, or the rules refuse it
+     * @param values  where the value standing at the position stops, or null where nothing stops
+     *                it — the ends around {@code ordered} wherever that holds a value
+     * @param ordered what the order leaves the value, met with every rule this was worked out of:
+     *                one run, runs apart, or none, which is a position no value can stand at.
+     *                Null where no rule of the order stops it short of {@code values}
+     * @param held    how many a collection there holds, or null where no rule counts it
+     * @param admits  which values may stand at the position, read in full and naming none where
+     *                the rules say nothing about which
+     * @param heldTo  the class the value there is held to besides where it stops: a value chosen
+     *                between the ends is one of the class, or the rules refuse it
      */
-    public record ConstructionLimits(NumericDomain.Bounds values, Held held,
-                                     AdmissibleSet admits, HeldClass heldTo) {
+    public record ConstructionLimits(NumericDomain.Bounds values, OrderedRuns ordered,
+                                     Held held, AdmissibleSet admits, HeldClass heldTo) {
 
         public ConstructionLimits {
             if (admits == null || heldTo == null) {
@@ -1218,6 +1429,85 @@ public final class FieldDomains {
                         "a position says which values may stand there, every one of them included,"
                                 + " and which class they are of, which is none where it is none");
             }
+            if (ordered != null && !ordered.holdsNothing()
+                    && !ordered.hull().equals(new OrderedInterval(
+                            values == null ? null : values.min(),
+                            values == null ? null : values.max()))) {
+                throw new IllegalArgumentException("where the value stops is the ends around what"
+                        + " the order leaves it: " + values + " beside " + ordered);
+            }
+        }
+
+        /**
+         * The limits of a value the order leaves {@code ordered}, met with where {@code values}
+         * stops it, and with the ends around what is left as where it stops.
+         *
+         * <p>Every shape the meet comes to is kept. One run is where the value stops, and is no
+         * reason to drop what the order said; none is a position nothing can stand at, and is not
+         * the range it was met with.
+         *
+         * @param ordered what the order leaves the position, or null where no rule of it stops it
+         */
+        public static ConstructionLimits of(NumericDomain.Bounds values, OrderedRuns ordered,
+                                            Held held, AdmissibleSet admits, HeldClass heldTo) {
+            if (ordered == null) {
+                return new ConstructionLimits(values, null, held, admits, heldTo);
+            }
+            OrderedRuns left = values == null ? ordered
+                    : ordered.meet(OrderedRuns.of(new OrderedInterval(values.min(), values.max())));
+            if (left.holdsNothing()) {
+                return new ConstructionLimits(values, left, held, admits, heldTo);
+            }
+            OrderedInterval around = left.hull();
+            return new ConstructionLimits(new NumericDomain.Bounds(around.low(), around.high()),
+                    left, held, admits, heldTo);
+        }
+
+        /**
+         * What these limits and {@code other} leave the position together, which is what two
+         * values' rules naming one position leave it.
+         *
+         * <p>Each answer is an over-approximation of the values a row may write there, so the
+         * meet is too: it narrows by each value's rules and never takes out a value both admit.
+         * Every part is met, and the order's region in whatever shape it comes to.
+         */
+        public ConstructionLimits meet(ConstructionLimits other) {
+            NumericDomain.Bounds bounds = values == null ? other.values
+                    : other.values == null ? values : values.meet(other.values);
+            OrderedRuns both = ordered == null ? other.ordered
+                    : other.ordered == null ? ordered : ordered.meet(other.ordered);
+            return of(bounds, both, meet(held, other.held), admits.narrower(other.admits),
+                    heldTo.and(other.heldTo));
+        }
+
+        /** Both answers about how many a collection holds: how many the two leave together, and
+         *  every run either keeps the elements apart at. */
+        private static Held meet(Held one, Held other) {
+            if (one == null || other == null) {
+                return one == null ? other : one;
+            }
+            List<List<String>> apart = new ArrayList<>(one.keptApart());
+            apart.addAll(other.keptApart());
+            return new Held(one.bounds().meet(other.bounds()), List.copyOf(apart));
+        }
+
+        /** The same limits, where the rules leave the value nothing at all. */
+        static ConstructionLimits leavingNothing(Held held, AdmissibleSet admits,
+                                                 HeldClass heldTo) {
+            return new ConstructionLimits(null, OrderedRuns.nothing(), held, admits, heldTo);
+        }
+
+        /**
+         * Where a value is chosen in, lowest first: each run the order leaves, or where the value
+         * stops where the order says nothing more — and none where no value can stand.
+         */
+        public List<NumericDomain.Bounds> runs() {
+            return ordered == null ? Collections.singletonList(values) : ordered.partsOf(null);
+        }
+
+        /** Whether the rules leave the position no value at all, so nothing is to be offered. */
+        public boolean leavesNothing() {
+            return ordered != null && ordered.holdsNothing();
         }
 
         /**
@@ -1266,7 +1556,7 @@ public final class FieldDomains {
 
         /** A position the rules reach in no way. */
         public static final ConstructionLimits NONE =
-                new ConstructionLimits(null, null, AdmissibleSet.complete(ValueSet.ANY),
+                new ConstructionLimits(null, null, null, AdmissibleSet.complete(ValueSet.ANY),
                         HeldClass.NONE);
     }
 
@@ -1515,6 +1805,17 @@ public final class FieldDomains {
         AStandingQuestionWithNoAccount(RuleRef rule, List<FactSubject> named) {
             super("a question stands that nothing accounts for: " + rule + " at " + named);
         }
+    }
+
+    /**
+     * The calls the arithmetic stopped at on a part of {@code rule}, at the place {@code at}, for
+     * the reason {@code why}: where a reader is sent about it. Empty where it stopped at none, and
+     * the reader is sent to the rule.
+     */
+    public Set<RuleSite> sentToWhereTheArithmeticStopped(RuleRef rule, RuleKey at,
+                                                         BlockReason.RuleReadingStopped why) {
+        return rule instanceof RuleRef.Invariant invariant
+                ? took.sentToWhereTheFormStopped(invariant, named(at), why) : Set.of();
     }
 
     /** Every subject the place at {@code path} answers to. */
@@ -1932,6 +2233,41 @@ public final class FieldDomains {
                 : new Held(bounds == null ? NumericDomain.Bounds.OPEN : bounds, apart);
     }
 
+    /**
+     * What the rules of this value ask of the map at {@code path} beside the fields they name, or
+     * nothing where they ask none of it.
+     *
+     * <p>A builder of the value is told it as it is told what the elements of a container are kept
+     * apart at: the rules do not change with where the search is, so they are read once.
+     */
+    public List<EntryHeld.Requirement> entriesHeldAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        Map<RuleKey, List<EntryHeld.Requirement>> held = entriesHeld;
+        if (held == null) {
+            held = EntryHeld.writtenOn(named, source);
+            entriesHeld = held;
+        }
+        return held.getOrDefault(path, List.of());
+    }
+
+    /**
+     * What the rules of this value ask of the list at {@code path} about its sides, or nothing
+     * where they ask none of it ({@link SidesBalanced}), read once like {@link #entriesHeldAt}.
+     */
+    public List<SidesBalanced.Requirement> sidesBalancedAt(RuleKey path) {
+        if (named == null || source == null || path.isTheValueItself()) {
+            return List.of();
+        }
+        Map<RuleKey, List<SidesBalanced.Requirement>> held = sidesBalanced;
+        if (held == null) {
+            held = SidesBalanced.writtenOn(named, source);
+            sidesBalanced = held;
+        }
+        return held.getOrDefault(path, List.of());
+    }
+
     /** What the rules keep the elements of the value at {@code path} apart at, worked out once for
      *  each place since it turns on the rules of this value alone. */
     private List<List<String>> keptApartAt(RuleKey path) {
@@ -1958,6 +2294,18 @@ public final class FieldDomains {
     public NumberAt<RuleKey> countedAt(RuleKey path) {
         Counted counted = countAt.get(path);
         return counted == null ? null : NumberAt.takenAsItStands(path, counted.by());
+    }
+
+    /**
+     * What the order leaves the value at {@code path} — one run, runs apart, or none — or null
+     * where no rule of the order stops it short of its order's own ends.
+     *
+     * <p>Beside {@link #admits} and read off the same reading of the clauses. What a position
+     * admits is a set of values, and this is on the position's order: a date has no value in a set
+     * and a run of days is still a run of its order.
+     */
+    public OrderedRuns orderedRegionAt(RuleKey path) {
+        return orderedRegions.get(path);
     }
 
     /**
@@ -2192,6 +2540,8 @@ public final class FieldDomains {
                     "2 " + orderOf(it.rule()) + " " + it.path();
             case ProjectionEvidence.Cause.Lossy it ->
                     "3 " + orderOf(it.rule()) + " " + it.atom() + " " + it.unstated();
+            case ProjectionEvidence.Cause.OperatorsNotShownToAnswer it ->
+                    "3 " + orderOf(it.rule());
             case ProjectionEvidence.Cause.Rounded it -> "4 " + it.atom();
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
             case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
@@ -2323,6 +2673,182 @@ public final class FieldDomains {
     }
 
     /**
+     * What the declarations hold the date at {@code path} to, where that is shown to be the whole
+     * of what they say of it, or that it is not.
+     *
+     * <p>For a reader proving that a date with some part exists, which a range of each part cannot
+     * answer: a date between the ends of every part is still one a rule of two parts, a choice or
+     * a hole may refuse. So the date is read whole or not at all — as the strings at a place are
+     * by {@link #setBoundsAndRunsAreTheRulesAt} — and whole is shown, never assumed of a rule
+     * nothing here took apart.
+     *
+     * <p>Whole where every rule reaching the value was read, and every part of one that is about
+     * the date is held by the algebra over the value's names and the parts taken of the date as it
+     * stands ({@link #unstatedOver}): a choice is held by no rule of the algebra, and a part of the
+     * date moved is a number of another date. And where every rule of the algebra weighing a
+     * number of the date weighs the date alone, by an end, or its parts as it stands alone: a hole
+     * in the date is no end, and a rule tying it to another place leaves it what the other leaves.
+     */
+    public DateRules rulesOfTheDateAt(RuleKey path) {
+        return dateRules.computeIfAbsent(path, this::dateRulesOf);
+    }
+
+    /** {@link #rulesOfTheDateAt}, worked out. */
+    private DateRules dateRulesOf(RuleKey path) {
+        FactSubject place = atomAt.get(path);
+        // A rule's own reason for going unread at the name is filed under the rule, and the parts
+        // of it that matter are asked below; a reason about the answer is filed under no rule, so
+        // it is asked here, as the strings at a place are.
+        if (place == null || !notGathered.isEmpty() || !unreadOfEveryValue.isEmpty()
+                || unreadByName.getOrDefault(path, List.of()).stream()
+                        .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))
+                || gathered().others().stream().anyMatch(
+                        ProjectionEvidence.Cause.OperatorsNotShownToAnswer.class::isInstance)) {
+            return DateRules.NOT_WHOLE;
+        }
+        Map<FactSubject, TakenAs.DatePart> parts = partsTakenOf(place, path);
+        Set<FactSubject> held = rangedOfTheValue();
+        held.addAll(parts.keySet());
+        // A part that raised no question is filed under the value it is written on, which is
+        // about every name of it.
+        if (unstatedOver(held).stream().anyMatch(each -> each.paths().contains(path)
+                || each.paths().contains(RuleKey.THE_VALUE))) {
+            return DateRules.NOT_WHOLE;
+        }
+        Set<FactSubject> ofTheDate = new HashSet<>();
+        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+            if (mentions(atom.identity(), place.identity())) {
+                ofTheDate.add(atom);
+            }
+        }
+        BigInteger least = BigInteger.valueOf(DatePartsLeft.FIRST_DAY);
+        BigInteger most = BigInteger.valueOf(DatePartsLeft.LAST_DAY);
+        List<RuleOfDateParts> out = new ArrayList<>();
+        for (AffineConstraint<FactSubject> rule
+                : constraints.numbers().rulesWeighingAny(ofTheDate)) {
+            if (weighsOnly(rule, Set.of(place))) {
+                DaysBetween ends = wholeDaysOf(rule, place);
+                if (ends == null) {
+                    return DateRules.NOT_WHOLE;
+                }
+                least = least.max(ends.least());
+                most = most.min(ends.most());
+                continue;
+            }
+            if (aRangeOfOneOf(rule, parts.keySet())) {
+                continue;
+            }
+            RuleOfDateParts read = ruleOfTheParts(rule, parts);
+            if (read == null) {
+                return DateRules.NOT_WHOLE;
+            }
+            out.add(read);
+        }
+        // Held a day past the calendar at most, so that ends past it say no date rather than a
+        // number a day count does not hold.
+        BigInteger first = BigInteger.valueOf(DatePartsLeft.FIRST_DAY);
+        BigInteger last = BigInteger.valueOf(DatePartsLeft.LAST_DAY);
+        return new DateRules.Whole(least.min(last.add(BigInteger.ONE)).longValueExact(),
+                most.max(first.subtract(BigInteger.ONE)).longValueExact(), classAt(path), out);
+    }
+
+    /** The parts taken of the date {@code place} stands for at {@code path} as it stands, by the
+     *  atom each is held under. */
+    private Map<FactSubject, TakenAs.DatePart> partsTakenOf(FactSubject place, RuleKey path) {
+        Map<FactSubject, TakenAs.DatePart> parts = new HashMap<>();
+        for (FactSubject atom : takenOf(place)) {
+            DerivedNumber number = DerivedNumber.readBack(atom.identity(), _ -> path);
+            if (number != null && number.partOfTheDate() instanceof TakenAs.DatePart part) {
+                parts.put(atom, part);
+            }
+        }
+        return parts;
+    }
+
+    /** Whether {@code term} is {@code place} or is made of it, at any depth: a part of a date
+     *  moved is made of the date. */
+    private static boolean mentions(Term term, Term place) {
+        return term.equals(place) || term.parts().stream().anyMatch(each -> mentions(each, place));
+    }
+
+    /** Whether {@code rule} bounds one of {@code these} on its own, which the class holds. A hole
+     *  in it is no range. */
+    private static boolean aRangeOfOneOf(AffineConstraint<FactSubject> rule,
+                                         Set<FactSubject> these) {
+        return rule.form().coefs().size() == 1 && weighsOnly(rule, these)
+                && !(rule instanceof AffineConstraint.Disequality);
+    }
+
+    /** Whether every number {@code rule} weighs is one of {@code these}. */
+    private static boolean weighsOnly(AffineConstraint<FactSubject> rule, Set<FactSubject> these) {
+        return these.containsAll(rule.form().coefs().keySet());
+    }
+
+    /** The days from {@code least} to {@code most}, both counted. */
+    private record DaysBetween(BigInteger least, BigInteger most) {}
+
+    /**
+     * The first and last day a rule of the date {@code place} alone leaves it, as whole numbers of
+     * days, or null where the rule is a hole or its bound divides into no number held: a hole is
+     * no end, and leaving it out would say a day it refuses is one of the date's.
+     */
+    private static DaysBetween wholeDaysOf(AffineConstraint<FactSubject> rule,
+                                           FactSubject place) {
+        ExactRatio weight = rule.form().coefs().get(place);
+        return switch (rule) {
+            case AffineConstraint.Disequality<FactSubject> _ -> null;
+            case AffineConstraint.Equality<FactSubject> at ->
+                    (at.at().dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio day) && day.isWhole()
+                            && day.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                            ? new DaysBetween(whole, whole) : null;
+            case AffineConstraint.HalfSpace<FactSubject> half -> {
+                if (!(half.bound().at().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                    yield null;
+                }
+                boolean below = weight.signum() > 0;
+                BigInteger end = below
+                        ? (half.bound().inclusive() ? at.floor().orNull()
+                                : at.ceiling().map(day -> day.subtract(BigInteger.ONE)).orNull())
+                        : (half.bound().inclusive() ? at.ceiling().orNull()
+                                : at.floor().map(day -> day.add(BigInteger.ONE)).orNull());
+                if (end == null) {
+                    yield null;
+                }
+                yield below ? new DaysBetween(BigInteger.valueOf(DatePartsLeft.FIRST_DAY), end)
+                        : new DaysBetween(end, BigInteger.valueOf(DatePartsLeft.LAST_DAY));
+            }
+        };
+    }
+
+    /**
+     * {@code rule} as a rule of the parts {@code parts} names, or null where it weighs a number
+     * that is none of them, or two that are one part: the rules hold those two apart, and read as
+     * one part the rule would say something else.
+     */
+    private static RuleOfDateParts ruleOfTheParts(AffineConstraint<FactSubject> rule,
+                                                  Map<FactSubject, TakenAs.DatePart> parts) {
+        Map<FactSubject, ExactRatio> coefs = rule.form().coefs();
+        if (!parts.keySet().containsAll(coefs.keySet())) {
+            return null;
+        }
+        Map<TakenAs.DatePart, ExactRatio> weights = new EnumMap<>(TakenAs.DatePart.class);
+        coefs.forEach((atom, weight) -> weights.put(parts.get(atom), weight));
+        if (weights.size() != coefs.size()) {
+            return null;
+        }
+        return switch (rule) {
+            case AffineConstraint.HalfSpace<FactSubject> half -> new RuleOfDateParts(weights,
+                    half.bound().at().negated(), half.bound().inclusive() ? Rel.LE : Rel.LT);
+            case AffineConstraint.Equality<FactSubject> at ->
+                    new RuleOfDateParts(weights, at.at().negated(), Rel.EQ);
+            case AffineConstraint.Disequality<FactSubject> hole ->
+                    new RuleOfDateParts(weights, hole.at().negated(), Rel.NE);
+        };
+    }
+
+    /**
      * What every rule reaching this value leaves what stands at {@code path}, the value itself
      * included.
      *
@@ -2368,6 +2894,51 @@ public final class FieldDomains {
     }
 
     /**
+     * Whether {@code shape} is a choice the reading of the numbers an operation answers took in
+     * whole: it composed the alternatives exactly, which it does only where each of them states a
+     * rule about those numbers and about nothing the other readings hold of the same position
+     * ({@link StatedByClauses.Part}). Asked of that reading's own account of the part, and not
+     * worked out again from the shape of the clause.
+     */
+    private static boolean isAChoiceTheNumbersTookInWhole(InvariantChecker.Written reading,
+                                                          ClauseExpr shape) {
+        ReadByClauses.OfAPart account = reading.adopted().get(shape.at());
+        return shape instanceof ClauseExpr.Joined joined
+                && !(joined.how() == ConditionJoin.BOTH && joined.positive())
+                && account != null && account.byDerivedNumbers().tookEveryPartInWhole();
+    }
+
+    /**
+     * The values {@link #leftAt} leaves the number {@code kind} of {@code path}, as the runs they
+     * lie in, or null where this has no word for them.
+     *
+     * <p>The same rules as {@link #leftAt} and the same reading, which answers the two together:
+     * what it composed of the ends is {@code leftAt}'s, and what it composed of the values is
+     * here. Met with the ends {@code leftAt} gives, so that a rule only the interval algebra read
+     * narrows the runs as it narrows the ends.
+     *
+     * <p>Said only where the runs are the whole of what the rules leave the length
+     * ({@link #setBoundsAndRunsAreTheRulesAt}), and then said however many runs there are: a
+     * reader given these holds the strings as the set of the position met with them, and a rule
+     * nothing states is a string it holds that the position does not. So null is the one answer
+     * that says nothing, and a value that is the same as the ends is not told apart by being
+     * absent. Runs are not the ends: a choice met with a bound can leave one run that stops short
+     * of the end the bound placed — {@code length <= 8 && (length < 8 || length > 8)} leaves up
+     * to seven and its end is eight — and a rule can take out a length past the ends.
+     */
+    public OrderedRuns runsLeftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
+        if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
+                || !setBoundsAndRunsAreTheRulesAt(path)) {
+            return null;
+        }
+        DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
+        OrderedRuns runs = number == null ? null : derived.runsAt(number);
+        NumericDomain.Bounds ends = runs == null ? null : leftAt(path, kind);
+        return ends == null ? runs
+                : runs.meet(OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
+    }
+
+    /**
      * Where the reading that composed this value's connectives stops one of its numbers, or null
      * where no line may be drawn on it.
      *
@@ -2390,10 +2961,12 @@ public final class FieldDomains {
                 yield number == null ? null : derived.knownAt(number);
             }
             // No choice settles how many of a string's code points are in a class, what they come
-            // to, how often a value occurs among its neighbours, or the end of the values of a
-            // key: nothing the declarations write is about them.
+            // to, which one stands at an index, how often a value occurs among its neighbours, or
+            // the end of the values of a key: nothing the declarations write is about them.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
+                 NumberAt.OfWhatNumber.OfTheCodePointAt _,
+                 NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
@@ -2457,6 +3030,57 @@ public final class FieldDomains {
         }
     }
 
+    /**
+     * A number an operation accumulates over what is made of each element of a container of this
+     * value, such as {@code List.sum(List.map(.amount, fs))}: a number of the container as a whole,
+     * which no field of an element and no count of it says.
+     *
+     * <p>Said as what the rule wrote and not as the number a body would read: which number that is
+     * — a taking of the container, or a run over a place of its elements or over what is computed
+     * of each — is the input's reading to settle, and it settles it in one place for a rule and a
+     * body alike ({@link #constraintsOver}).
+     *
+     * @param container what this value calls the container
+     * @param each      what each element adds, as a form of the fields read off it; the element
+     *                  itself where those are none. Fields of the element and not a name of this
+     *                  value: what an element holds is a value with a declaration of its own, and
+     *                  none of this value's rules is written at a name inside it
+     */
+    public record TotalSpokenOf(RuleKey container, ValueName operation,
+                                LinearForm<List<String>> each) {
+
+        public TotalSpokenOf {
+            Objects.requireNonNull(container, "a total is of some container");
+            Objects.requireNonNull(operation, "taken by some operation");
+            Objects.requireNonNull(each, "of something made of each element");
+        }
+    }
+
+    /**
+     * The total {@code call} is, or null where it is none: an operation that accumulates what a
+     * container holds, called on a place of this value or on what a closure of one parameter
+     * makes of each element of one ({@code List.map}), where that is a form of the element's
+     * fields.
+     */
+    private TotalSpokenOf totalOf(Term call) {
+        ValueName operation = call.calledOperation();
+        if (operation == null || call.parts().size() != 1
+                || DefaultBoundOperationFacts.get().accumulates(operation) == null) {
+            return null;
+        }
+        Term walked = call.parts().getFirst();
+        LinearForm<List<String>> each = LinearForm.atom(List.of());
+        BoundOperationFacts.Assembled mapped = walked.calledOperation() == null ? null
+                : DefaultBoundOperationFacts.get().assembles(walked.calledOperation());
+        if (mapped != null && mapped.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER
+                && walked.parts().size() == 2) {
+            each = walked.parts().get(mapped.closure().position()).formAClosureOfOneAnswers();
+            walked = walked.parts().get(mapped.source().position());
+        }
+        RuleKey container = each == null ? null : namedBy.get(FactSubject.of(walked));
+        return container == null ? null : new TotalSpokenOf(container, operation, each);
+    }
+
     /** The atom of a count this reading may not have, which is what every lookup of one wants. */
     private static FactSubject atomOf(Counted counted) {
         return counted == null ? null : counted.atom();
@@ -2480,6 +3104,8 @@ public final class FieldDomains {
             // A number the declarations never mention.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
+                 NumberAt.OfWhatNumber.OfTheCodePointAt _,
+                 NumberAt.OfWhatNumber.OfTheWholeUnitsOf _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _,
@@ -2513,13 +3139,25 @@ public final class FieldDomains {
      * whose rules leave nothing has no place to be exact about.
      */
     public ProjectionEvidence projectionAt(RuleKey place) {
+        // Not computeIfAbsent: showing a rule apart asks the readings of other declarations,
+        // and an update of this map is not to be held open while they are read.
+        ProjectionEvidence known = projectedAt.get(place);
+        if (known == null) {
+            known = projectionWorkedOutAt(place);
+            projectedAt.putIfAbsent(place, known);
+        }
+        return known;
+    }
+
+    /** {@link #projectionAt}, worked out. */
+    private ProjectionEvidence projectionWorkedOutAt(RuleKey place) {
         ProjectionEvidence whole = projection();
         if (place.isTheValueItself()
                 || !(constraints.numbers().projectionCertification()
                         instanceof ProjectionCertification.Certified(var by))) {
             return whole;
         }
-        List<ProjectionEvidence.StandsApart> apart = standingApart(whole, place, Set.of(named));
+        List<ProjectionEvidence.StandsApart> apart = standingApart(whole, place, asked());
         return apart == null ? whole : new ProjectionEvidence.CertifiedExact(by, apart);
     }
 
@@ -2545,16 +3183,19 @@ public final class FieldDomains {
         }
         Set<RuleRef> unheld = new LinkedHashSet<>();
         for (ProjectionEvidence.Cause each : causes) {
+            if (operatorsOfOnlyADefinition(each, place) || theImageOfOnlyADefinition(each, place)) {
+                continue;
+            }
             if (!(each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _))) {
                 return null;
             }
             unheld.add(rule);
         }
-        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
+        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = tied().placesOf();
         List<ProjectionEvidence.StandsApart> apart = new ArrayList<>();
         for (RuleRef rule : unheld) {
             List<ProjectionEvidence.StandsApart> shown =
-                    standsApart(rule, place, placesOf, unheld, asked);
+                    standsApart(rule, place, placesOf, asked);
             if (shown == null) {
                 return null;
             }
@@ -2563,64 +3204,243 @@ public final class FieldDomains {
         return apart;
     }
 
-    /** The places each reading of a part names. */
-    private Map<InvariantChecker.PartReading, Set<RuleKey>> placesEachReadingNames() {
-        Map<InvariantChecker.PartReading, Set<RuleKey>> out = new LinkedHashMap<>();
-        naming.forEach((named, reads) -> reads.forEach(read ->
-                out.computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(named)));
-        return out;
+    /**
+     * Whether {@code cause} is that the operators of a rule are not shown to answer, the rule
+     * saying nothing but that places are numbers made of places it leaves free
+     * ({@link ComputedNumbers#leavesFree}).
+     *
+     * <p>Such a rule is met by the number it comes to at any places: every step of the number is
+     * held inside the order it is worked out in, and the number lies inside what the defined place
+     * admits. So the operators answer wherever the rest of the rules put the places, and a value
+     * exists where the rest has one. That is the question asked where {@code place} is null.
+     *
+     * <p>Of a place the number is made of it says as much: the rule leaves that place as free as
+     * it was ({@link ReadingEvidence#isFreedByDefinition}), so every value the rest of the rules
+     * leave it is in a whole value, with the defined place at the number. Of the defined place it
+     * says nothing, since the values the bounds leave there are the image of the number and not a
+     * box.
+     *
+     * @param place the place asked about, or null where what is asked is whether a value exists
+     */
+    private boolean operatorsOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
+        return cause instanceof ProjectionEvidence.Cause.OperatorsNotShownToAnswer(RuleRef rule)
+                && asksAwayFromWhatOnlyADefinitionDefines(rule, place);
+    }
+
+    /**
+     * Whether {@code cause} is that the bounds hold the hull of what a place defined by a rule
+     * comes to ({@link ReadingEvidence#definitions}), the rule saying nothing but such
+     * definitions: asked of whether a value exists, or of a place the number is made of, the
+     * hull says no less than the image does, as {@link #operatorsOfOnlyADefinition} says of
+     * the operators. Of the defined place it says what it says, which is the hull.
+     */
+    private boolean theImageOfOnlyADefinition(ProjectionEvidence.Cause cause, RuleKey place) {
+        return cause instanceof ProjectionEvidence.Cause.Lossy(RuleRef rule, FactSubject defined,
+                        var _)
+                && rule instanceof RuleRef.Invariant invariant
+                && took.definitions().getOrDefault(invariant, Set.of()).contains(defined)
+                && asksAwayFromWhatOnlyADefinitionDefines(rule, place);
+    }
+
+    /** Whether {@code rule} says nothing but that places are numbers made of places it leaves
+     *  free, and {@code place} is none it defines: null, asking whether a value exists, or one of
+     *  the places it leaves free. */
+    private boolean asksAwayFromWhatOnlyADefinitionDefines(RuleRef rule, RuleKey place) {
+        return took.isOnlyDefining(rule)
+                && (place == null || (rule instanceof RuleRef.Invariant invariant
+                        && atomAt.get(place) instanceof FactSubject at
+                        && took.isFreedByDefinition(invariant, at)));
+    }
+
+    /** Which places the parts of this value's rules tie together, made the first time it is
+     *  asked: the answer turns on the parts naming each place, which are this value's alone. */
+    private TiedPlaces tied() {
+        TiedPlaces known = tied;
+        if (known == null) {
+            known = TiedPlaces.of(naming);
+            tied = known;
+        }
+        return known;
     }
 
     /**
      * Where {@code rule} stands apart from {@code place}, at each place a reading of it names, or
      * null where that is not shown.
      *
-     * <p>Shown at a place where the reading names nothing else; no other place at or under it, or
-     * above it, is named; every reading of a part naming it names nothing else; it is neither at
-     * nor under {@code place}, nor is {@code place} under it; and the rules are shown to leave it
-     * some value ({@link #holdsAValueAt}). A part naming a place above it reads it as well, so it
-     * is not alone there. Each reading is its own: a newtype's rule read at two fields refuses a
-     * value of each, and a value of one has nothing to do with the other.
+     * <p>The places a reading names are tied to one another and to every place a part naming one
+     * of them names, and so on ({@link TiedPlaces}); a part naming a place above one
+     * reads it as well. Shown where none of the places tied to a reading's is the value itself, or
+     * at, under or above {@code place}, and the rules are shown to leave them some value together
+     * ({@link #holdTogether}). No part ties them to anything else, so that value stands beside
+     * every value the rest of the rules leave, and what the rest leave {@code place} is what all of
+     * them do. Each reading is its own: a newtype's rule read at two fields refuses a value of each,
+     * and a value of one has nothing to do with the other.
      *
      * @param placesOf the places each reading of a part names
-     * @param unheld   the rules the bounds do not hold
      */
     private List<ProjectionEvidence.StandsApart> standsApart(
             RuleRef rule, RuleKey place, Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
-            Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+            Set<TypeSymbol.AtModule> asked) {
         List<ProjectionEvidence.StandsApart> out = new ArrayList<>();
         for (Map.Entry<InvariantChecker.PartReading, Set<RuleKey>> read : placesOf.entrySet()) {
             if (!read.getKey().part().rule().equals(rule)) {
                 continue;
             }
-            if (read.getValue().size() != 1) {
+            Set<RuleKey> together = tied().tiedTo(read.getValue().iterator().next());
+            if (!apartFrom(together, place)
+                    || !holdTogether(together, placesOf, asked)) {
                 return null;
             }
-            RuleKey at = read.getValue().iterator().next();
-            if (!aloneAt(at, place, placesOf)
-                    || !holdsAValueAt(at, placesOf, unheld, asked)) {
-                return null;
-            }
-            out.add(new ProjectionEvidence.StandsApart(rule, at));
+            read.getValue().stream().map(at -> new ProjectionEvidence.StandsApart(rule, at))
+                    .filter(each -> !out.contains(each)).forEach(out::add);
         }
         return out.isEmpty() ? null : out;
     }
 
-    /** Whether {@code at} is a place apart from {@code place} that only parts naming nothing else
-     *  name — see {@link #standsApart}. */
-    private boolean aloneAt(RuleKey at, RuleKey place,
-                            Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf) {
-        if (at.isTheValueItself()
-                || (place != null && (at.isAtOrUnder(place) || place.isAtOrUnder(at)))) {
+    /** Whether none of {@code tied} is the value itself, or at, under or above {@code place} —
+     *  which is null where no place is asked about. */
+    private static boolean apartFrom(Set<RuleKey> tied, RuleKey place) {
+        return tied.stream().noneMatch(at -> at.isTheValueItself()
+                || (place != null && (at.isAtOrUnder(place) || place.isAtOrUnder(at))));
+    }
+
+    /**
+     * Whether the rules are shown to leave the places {@code tied} some value together, where no
+     * part ties them to any other place.
+     *
+     * <p>One place is shown to hold a value as {@link #holdsAValueAt} shows it. Several are shown
+     * by a value of this declaration at the fields they are in that every part naming one of them
+     * holds of ({@link ADeclarationsWitness}): each value at each place may be refused by a rule
+     * about another, so a value of each is not a value of all of them.
+     */
+    private boolean holdTogether(Set<RuleKey> together,
+                                 Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
+                                 Set<TypeSymbol.AtModule> asked) {
+        if (together.size() == 1) {
+            return holdsAValueAt(together.iterator().next(), placesOf, asked);
+        }
+        return writtenAt(new Joint(together, Map.of())).isPresent();
+    }
+
+    /** {@link #writtenOver} of {@code joint}, worked out once for each. */
+    private Optional<Map<RuleKey, Object>> writtenAt(Joint joint) {
+        // No declaration stands under the value, so there are no fields to write a value at.
+        if (named == null) {
+            return Optional.empty();
+        }
+        return heldTogether.computeIfAbsent(joint, this::writtenOver);
+    }
+
+    /**
+     * Where {@code place} is one of a set of places a rule the bounds do not hold ties together,
+     * the constant at each place of that set, as the fold reads one, in a value written down that
+     * every part naming one of them holds of and that holds each place {@code fixed} names among
+     * them at what it gives — empty where {@code place} is in no such set or no such value is
+     * written down.
+     *
+     * <p>What a builder of a value of this declaration offers at those places. Chosen a place at a
+     * time against what the rules leave each, the second of {@code String.contains("q", a)} and
+     * {@code String.contains(a, b)} was chosen against nothing, since what a rule relating two
+     * strings leaves one is not a set of strings, and the value was refused.
+     *
+     * <p>Asked with what the builder has already put at the others, because the value is one value
+     * of all of them. A part of a value found with nothing held, written beside another value at
+     * the rest, is a value the rules were never shown to hold of: under
+     * {@code String.contains(a, b)} the empty string at both is a value, and an empty {@code b}
+     * beside an {@code a} of {@code "x"} is none.
+     *
+     * @param fixed the constants, as the fold reads one, a builder has already put at places of this
+     *              value
+     */
+    public Map<RuleKey, Object> writtenTogether(RuleKey place, Map<RuleKey, Object> fixed) {
+        Set<RuleKey> together = tied().tiedTo(place);
+        if (together.size() < 2 || !apartFrom(together, null)
+                || !namedByARuleTheBoundsDoNotHold(together)) {
+            return Map.of();
+        }
+        Map<RuleKey, Object> held = new LinkedHashMap<>();
+        fixed.forEach((at, value) -> {
+            if (together.stream().anyMatch(at::isAtOrUnder)) {
+                held.put(at, value);
+            }
+        });
+        return writtenAt(new Joint(together, held)).orElse(Map.of());
+    }
+
+    /** Whether a part of a rule the bounds do not hold names one of {@code places}. */
+    private boolean namedByARuleTheBoundsDoNotHold(Set<RuleKey> places) {
+        if (!(projection() instanceof ProjectionEvidence.NotCertified(
+                List<ProjectionEvidence.Cause> causes))) {
             return false;
         }
-        for (RuleKey named : naming.keySet()) {
-            if ((named.isAtOrUnder(at) || at.isAtOrUnder(named)) && !named.equals(at)) {
-                return false;
+        Set<RuleRef> unheld = new HashSet<>();
+        causes.forEach(each -> {
+            if (each instanceof ProjectionEvidence.Cause.Unrepresented(RuleRef rule, String _)) {
+                unheld.add(rule);
             }
+        });
+        return places.stream().anyMatch(at -> naming.getOrDefault(at, Set.of()).stream()
+                .anyMatch(read -> unheld.contains(read.part().rule())));
+    }
+
+    /**
+     * A value of this declaration at the fields the places {@code joint} ties together are in,
+     * holding the constants it holds some of them to, that every part naming one of them holds of,
+     * as the constant at each of those places and at each place under one of them — see
+     * {@link #holdTogether}.
+     *
+     * <p>Asked of each clause such a part is in, as it comes out where its other parts hold
+     * ({@link InvariantChecker.Written#withPartsSettled}). Those name places no part ties to these,
+     * and are shown to hold of the places they name by what is shown of those. Asked of the whole
+     * clause, a part about a field not written here stopped the clause from folding, and a rule
+     * written as one clause of two parts was not shown where the same two written as two clauses
+     * were. A binding the clause is read under is still worked out, and one naming a field not
+     * written here stops the fold as it did.
+     */
+    private Optional<Map<RuleKey, Object>> writtenOver(Joint joint) {
+        Set<RuleKey> together = joint.together();
+        Set<String> fields = new LinkedHashSet<>();
+        together.forEach(at -> fields.add(at.steps().getFirst()));
+        Map<InvariantChecker.ReadingId, Set<PartId<RuleRef.Invariant>>> kept =
+                new LinkedHashMap<>();
+        together.forEach(at -> naming.getOrDefault(at, Set.of()).forEach(read ->
+                kept.computeIfAbsent(read.reading(), _ -> new LinkedHashSet<>())
+                        .add(read.part())));
+        Map<Core, Set<Set<PartId<RuleRef.Invariant>>>> seen = new IdentityHashMap<>();
+        List<Core> rules = new ArrayList<>();
+        for (InvariantChecker.Written each : readings) {
+            Set<PartId<RuleRef.Invariant>> parts = kept.get(each.opened());
+            if (parts == null
+                    || !seen.computeIfAbsent(each.clause(), _ -> new HashSet<>()).add(parts)) {
+                continue;
+            }
+            Map<PartId<RuleRef.Invariant>, Boolean> others = new LinkedHashMap<>();
+            each.parts().stream().map(Clauses.StatedPart::id)
+                    .filter(id -> !parts.contains(id))
+                    .forEach(id -> others.put(id, Boolean.TRUE));
+            Core held = each.withPartsSettled(others);
+            if (held == null) {
+                return Optional.empty();
+            }
+            rules.add(held);
         }
-        return naming.getOrDefault(at, Set.of()).stream()
-                .allMatch(read -> placesOf.get(read).equals(Set.of(at)));
+        Map<List<String>, Object> pinned = new LinkedHashMap<>();
+        joint.held().forEach((at, value) -> pinned.put(at.steps(), value));
+        Map<List<String>, Object> written = ADeclarationsWitness.written(source, named, fields,
+                rules, this::stringsAdmittedAt, pinned);
+        if (written == null) {
+            return Optional.empty();
+        }
+        // The fields are written whole, and only the places these are or are under are this
+        // value's to offer: the rest of a field is the rest of the rules'.
+        Map<RuleKey, Object> out = new LinkedHashMap<>();
+        written.forEach((steps, value) -> {
+            RuleKey place = placeReachedBy(steps);
+            if (place != null && together.stream().anyMatch(place::isAtOrUnder)) {
+                out.put(place, value);
+            }
+        });
+        return Optional.of(out);
     }
 
     /**
@@ -2635,17 +3455,23 @@ public final class FieldDomains {
      * call whose law holds of every container that size ({@link WhatALawSaysOfAFewElements}), and,
      * for one element, the element's declaration is shown to hold a value. Under
      * {@code List.length(value) >= 1 && List.allDistinctBy(.product, value)}, a list of one line is
-     * that value whatever the line is.
+     * that value whatever the line is. And a value no set read here holds whole is shown to be
+     * there where the rules say only where one number taken of it falls ({@link #answeredOfIt}).
      *
-     * @param unheld the rules the bounds do not hold, which only a law can be taken in place of
+     * <p>Which of the two a part is is asked of the part. A bound on the size is one the bounds
+     * hold, as the rule it is a part of is held where every part of it is, and a part beside it in
+     * the same clause the bounds do not hold is a part of its own: asked of the rule, the bound was
+     * taken for a call, and a clause written as the two joined was not shown where the same two
+     * written as two clauses were.
      */
     private boolean holdsAValueAt(RuleKey at,
                                   Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf,
-                                  Set<RuleRef> unheld, Set<TypeSymbol.AtModule> asked) {
+                                  Set<TypeSymbol.AtModule> asked) {
         if (!handedOn.contains(at)) {
             AdmissibleSet left = admits(at);
-            return left.completeness() instanceof AdmissibleSet.Completeness.Complete
-                    && !left.approximation().isEmpty();
+            return (left.completeness() instanceof AdmissibleSet.Completeness.Complete
+                    && TextExtents.shownToHoldAValue(left.approximation()))
+                    || answeredOfIt(at);
         }
         Counted counted = countAt.get(at);
         NumericDomain.Bounds sizes = counted == null ? NumericDomain.Bounds.OPEN
@@ -2659,15 +3485,14 @@ public final class FieldDomains {
             if (written == null || !placesOf.get(read).equals(Set.of(at))) {
                 return false;
             }
-            if (unheld.contains(read.part().rule())) {
-                IntFunction<Boolean> law = lawOfTheWholeClause(written, read.part());
-                if (law == null) {
-                    return false;
-                }
-                laws.add(law);
-            } else if (!boundsOnlyTheSize(written, read.part(), counted)) {
+            if (boundsOnlyTheSize(written, read.part(), counted)) {
+                continue;
+            }
+            IntFunction<Boolean> law = lawOfThePart(written, read.part());
+            if (law == null) {
                 return false;
             }
+            laws.add(law);
         }
         for (int size = 0; size <= 1; size++) {
             int held = size;
@@ -2678,6 +3503,97 @@ public final class FieldDomains {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether every rule naming the place {@code at} says where one number an operation answers of
+     * it falls and nothing else, the operation answers every number it can give of some value, and
+     * the rules leave that number a value.
+     *
+     * <p>Then a value of the place answers a number the rules leave, and that is all they ask of
+     * it. Under {@code Date.day(value) == 1}, the first of any month is that value. One number and
+     * not several: each of {@code Date.day} and {@code Date.month} answers every number it can give,
+     * and a day and a month the rules leave one at a time may still be no date together.
+     *
+     * <p>Every part is a comparison of its own, whose forms are over that number alone and are the
+     * part as the bounds hold it, so what the run leaves is what the part admits. And every part is
+     * written as the call held against a whole number and nothing besides
+     * ({@link #comparesACallWithAWholeNumber}): the forms are what the part comes to, and say
+     * nothing of whether a value gets through working it out. {@code Date.day(value) + M > 0}
+     * comes to a day above nought less the greatest {@code Int}, and no date is one it holds of.
+     */
+    private boolean answeredOfIt(RuleKey at) {
+        FactSubject place = atomAt.get(at);
+        if (place == null || classAt(at) instanceof HeldClass.NoValue) {
+            return false;
+        }
+        Set<FactSubject> numbers = constraints.numbers().atomsSpokenOf();
+        FactSubject answered = null;
+        for (InvariantChecker.PartReading read : naming.getOrDefault(at, Set.of())) {
+            InvariantChecker.Written written = writtenBy(read.reading());
+            Map<ClauseOccurrence, InvariantChecker.PartAsRead> parts =
+                    written == null ? null : written.constrained().get(read.part());
+            if (parts == null || parts.isEmpty()) {
+                return false;
+            }
+            for (InvariantChecker.PartAsRead each : parts.values()) {
+                InvariantChecker.PartRead said = each.said();
+                if (!(each.of() instanceof ClauseExpr.Leaf leaf)
+                        || !comparesACallWithAWholeNumber(leaf.of())
+                        || said.narrowable().size() != 1
+                        || said.stated().isEmpty()) {
+                    return false;
+                }
+                FactSubject atom = said.narrowable().iterator().next();
+                // The comparison is a subject as well, which a fact about it is keyed on: what
+                // it may not name is another number.
+                if (!said.constrained().stream().filter(numbers::contains)
+                                .collect(Collectors.toSet()).equals(Set.of(atom))
+                        || !said.stated().stream().allMatch(stated ->
+                                stated.form().coefs().keySet().equals(Set.of(atom)))
+                        || (answered != null && !answered.equals(atom))) {
+                    return false;
+                }
+                answered = atom;
+            }
+        }
+        if (answered == null || !takenOf(place).contains(answered)
+                || answered.identity().parts().size() != 1) {
+            return false;
+        }
+        ValueName operation = answered.identity().calledOperation();
+        NumericDomain.Bounds run = constraints.numbers().wholeRunOf(answered);
+        return operation != null
+                && DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)
+                && run != null && run.holdsAValue();
+    }
+
+    /**
+     * Whether {@code part} is written as a call on places held against a whole number, either way
+     * round, with nothing worked out beside them: the comparison of two whole numbers answers, so
+     * the part is worked out wherever the call is.
+     */
+    private static boolean comparesACallWithAWholeNumber(Core part) {
+        Comparison compared = Core.withoutStanding(part) instanceof Core.Binary binary
+                ? Comparison.of(binary).orElse(null) : null;
+        if (compared == null) {
+            return false;
+        }
+        Core left = Core.withoutStanding(compared.left());
+        Core right = Core.withoutStanding(compared.right());
+        return (aCallOnPlaces(left) && right instanceof Core.Int)
+                || (left instanceof Core.Int && aCallOnPlaces(right));
+    }
+
+    /** Whether {@code e} is a call each argument of which is a place read as it is: one written
+     *  to a function, or one kept as the library operation it calls. */
+    private static boolean aCallOnPlaces(Core e) {
+        List<Core> args = switch (Core.withoutStanding(e)) {
+            case Core.Call call -> call.args();
+            case Core.PreservedCall kept -> kept.args();
+            default -> null;
+        };
+        return args != null && args.stream().allMatch(FieldDomains::readOffAsItStands);
     }
 
     /** The reading {@code opened}, or null where none of this value's readings is. */
@@ -2691,18 +3607,28 @@ public final class FieldDomains {
     }
 
     /**
-     * What {@code written}'s clause comes to at a container of nought or one element, where the
-     * clause is {@code part} alone and is a call of an operation whose truth a law settles, the
-     * container being one of its arguments as written — or null where it is not.
+     * What {@code written}'s clause comes to at a container of nought or one element, where
+     * {@code part} is a call of an operation whose truth a law settles, the container being one of
+     * its arguments as written, and the clause's other parts hold — or null where it is not.
      *
      * <p>The container is the one argument that is a value read off as it stands: the others are a
      * closure or another value the law says nothing of at that size, and a law that turns on them
      * answers null for every size.
+     *
+     * <p>The clause is worked out with the part put in place by what the law says of the call and
+     * the other parts held to hold ({@link InvariantChecker.Written#withPartsSettled}), which they
+     * are shown to by what is asked of the places they name. A binding the clause is read under is
+     * worked out as written, and one naming a place stops the fold, so no size is answered.
      */
-    private static IntFunction<Boolean> lawOfTheWholeClause(InvariantChecker.Written written,
-                                                            PartId<RuleRef.Invariant> part) {
-        if (!written.constrained().keySet().equals(Set.of(part))
-                || !(Core.withoutStanding(written.clause()) instanceof Core.PreservedCall call)
+    private IntFunction<Boolean> lawOfThePart(InvariantChecker.Written written,
+                                              PartId<RuleRef.Invariant> part) {
+        ClauseExpr.Leaf stated = written.parts().stream()
+                .filter(each -> each.id().equals(part))
+                .map(Clauses.StatedPart::of)
+                .filter(ClauseExpr.Leaf.class::isInstance).map(ClauseExpr.Leaf.class::cast)
+                .findFirst().orElse(null);
+        if (stated == null
+                || !(Core.withoutStanding(stated.of()) instanceof Core.PreservedCall call)
                 || !(DefaultBoundOperationFacts.get().settled(call.declared().operation(),
                         OperationLaw.Observed.TRUTH)
                         instanceof BoundOperationFacts.Settled.ByALaw(
@@ -2721,8 +3647,27 @@ public final class FieldDomains {
                 container = i;
             }
         }
+        if (container < 0) {
+            return null;
+        }
         int at = container;
-        return at < 0 ? null : size -> WhatALawSaysOfAFewElements.holds(law, at, size);
+        Map<PartId<RuleRef.Invariant>, Boolean> others = new LinkedHashMap<>();
+        written.parts().stream().map(Clauses.StatedPart::id).filter(id -> !id.equals(part))
+                .forEach(id -> others.put(id, Boolean.TRUE));
+        CoreConstantEval fold = CoreConstantEval.against(source.symbols(), Denotations.none());
+        return size -> {
+            Boolean answers = WhatALawSaysOfAFewElements.holds(law, at, size);
+            if (answers == null) {
+                return null;
+            }
+            Map<PartId<RuleRef.Invariant>, Boolean> settled = new LinkedHashMap<>(others);
+            settled.put(part, answers == stated.positive());
+            Core clause = written.withPartsSettled(settled);
+            if (clause == null) {
+                return null;
+            }
+            return fold.eval(clause).orElse(null) instanceof Boolean holds ? holds : null;
+        };
     }
 
     /** Whether {@code value} is a value read off as it stands: a name, or a field of one, whatever
@@ -2765,13 +3710,16 @@ public final class FieldDomains {
         deeper.add(element);
         return elements.computeIfAbsent(element, each -> of(each, RuleReadingContext.of(source,
                         policy, DeclarationReadings.borrowing(named.key(), stringMachines,
-                                revision))))
+                                revision), today)))
                 .shownToHoldAValue(deeper);
     }
 
     /** The declaration the elements of the list or set at {@code at} are of, or null where they are
      *  not of one, or {@code at} is not reached through fields. */
     private TypeSymbol.AtModule elementOf(RuleKey at) {
+        if (named == null) {
+            return null;
+        }
         Type here = new Type.Ref(named);
         for (String step : at.steps()) {
             if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
@@ -2799,31 +3747,107 @@ public final class FieldDomains {
      * ({@link #holdsAValueAt}). A certificate speaks for this value's own rules and for none of
      * those.
      */
+    public boolean shownToHoldAValue() {
+        return shownToHoldAValue(asked());
+    }
+
+    /** The same, where {@code asked} are the declarations already being asked, so that one holding
+     *  itself is not asked again. */
     private boolean shownToHoldAValue(Set<TypeSymbol.AtModule> asked) {
         if (!notGathered.isEmpty() || infeasible()) {
             return false;
         }
         ProjectionEvidence whole = projection();
-        Set<RuleRef> unheld = new LinkedHashSet<>();
         Set<RuleKey> shown = new LinkedHashSet<>();
         if (!(whole instanceof ProjectionEvidence.CertifiedExact)) {
             List<ProjectionEvidence.StandsApart> apart = standingApart(whole, null, asked);
             if (apart == null) {
-                return false;
+                return handedOn.isEmpty() && holdsInAWitness();
             }
-            apart.forEach(each -> {
-                unheld.add(each.rule());
-                shown.add(each.at());
-            });
+            apart.forEach(each -> shown.add(each.at()));
         }
-        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = placesEachReadingNames();
+        Map<InvariantChecker.PartReading, Set<RuleKey>> placesOf = tied().placesOf();
         for (RuleKey container : handedOn) {
-            if (!shown.contains(container) && (!aloneAt(container, null, placesOf)
-                    || !holdsAValueAt(container, placesOf, unheld, asked))) {
+            Set<RuleKey> together = tied().tiedTo(container);
+            if (!shown.contains(container) && (!apartFrom(together, null)
+                    || !holdTogether(together, placesOf, asked))) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a value of this declaration is written down that every rule of it holds of
+     * ({@link ADeclarationsWitness}).
+     *
+     * <p>What shows a value to exist where the bounds are not the whole of what the rules leave: a
+     * rule relating several numbers to one another states no end, so no certificate speaks for the
+     * declaration, and a value is exhibited instead. Asked of the rules as the reading of this
+     * declaration holds them, each over the bindings of its fields.
+     */
+    private boolean holdsInAWitness() {
+        return writtenWhole(Map.of()) != null;
+    }
+
+    /**
+     * Whether a value of this declaration is written down holding the constants {@code held} at
+     * the places they name, that every rule of the declaration holds of. Where none is, the
+     * places are not shown to hold those numbers together, which says nothing about whether a
+     * value does.
+     *
+     * <p>Asked only where every clause of the declaration was gathered: a clause left out is a
+     * rule the value written is not held to, so a value written would stand for none of them.
+     *
+     * @param held the constant at each place, by the fields that reach it, as the fold reads a
+     *             constant: a {@code Long} for an {@code Int}, a {@code BigDecimal} for a
+     *             {@code Decimal}
+     */
+    public boolean holdsAValueWith(Map<RuleKey, Object> held) {
+        if (!notGathered.isEmpty()) {
+            return false;
+        }
+        Map<List<String>, Object> pinned = new LinkedHashMap<>();
+        held.forEach((at, value) -> pinned.put(at.steps(), value));
+        return writtenWhole(pinned) != null;
+    }
+
+    /** {@link ADeclarationsWitness#written} of every rule of the declaration over all its fields,
+     *  holding {@code pinned}, or null where no value is written. */
+    private Map<List<String>, Object> writtenWhole(Map<List<String>, Object> pinned) {
+        // A witness is a value of a declaration with its fields written down. A value no declaration
+        // stands under has no fields to write, so none is exhibited.
+        if (named == null) {
+            return null;
+        }
+        Map<Core, Boolean> seen = new IdentityHashMap<>();
+        List<Core> rules = new ArrayList<>();
+        for (InvariantChecker.Written each : readings) {
+            if (seen.put(each.clause(), Boolean.TRUE) == null) {
+                rules.add(each.clause());
+            }
+        }
+        return ADeclarationsWitness.written(source, named, Set.copyOf(source.layout().of(named)),
+                rules, this::stringsAdmittedAt, pinned);
+    }
+
+    /** A string the reading of this declaration admits at {@code place}: the least one its
+     *  language holds, or each string a finite set lists. */
+    private List<String> stringsAdmittedAt(List<String> steps) {
+        RuleKey place = placeReachedBy(steps);
+        return place == null ? List.of() : admits(place).approximation().stringsItNames();
+    }
+
+    /**
+     * The name the reading knows the place the fields {@code steps} reach by, or null where it
+     * knows it by none.
+     *
+     * <p>Found among those it has rather than made: what a rule may name is decided where names
+     * are read, and this has no say in it.
+     */
+    private RuleKey placeReachedBy(List<String> steps) {
+        return admittedByName.keySet().stream()
+                .filter(each -> each.steps().equals(steps)).findFirst().orElse(null);
     }
 
     /**
@@ -2842,8 +3866,231 @@ public final class FieldDomains {
      *
      * <p>Where this is not exact the bounds still hold: every value they exclude is truly excluded,
      * and a value they admit may be one nothing can build. What settles such an edge is a witness.
+     *
+     * <p>Worked out the first time it is asked: the answer turns on the readings of this value
+     * alone, and it is asked again at every place a projection is asked of.
      */
     public ProjectionEvidence projection() {
+        ProjectionEvidence known = projected;
+        if (known == null) {
+            known = evidenceLeaving(List.of());
+            projected = known;
+        }
+        return known;
+    }
+
+    /**
+     * What {@link #projection} says of what the readings were given, which it is made of and which
+     * the question below is made of as well.
+     *
+     * @param others        every cause but a part left unrepresented, unordered
+     * @param certification what the algebra says of the ranges it derived
+     * @param unstated      the parts of rules the bounds hold nothing of
+     */
+    private record Gathered(List<ProjectionEvidence.Cause> others,
+                            souther.compiler.numeric.ProjectionCertification certification,
+                            List<PartUnstated> unstated) {}
+
+    /**
+     * One occurrence of a part the bounds hold nothing of.
+     *
+     * <p>Whether the set of values holds the statement it is a statement of whole: what is needed to
+     * take it out of what stands in the way of the bounds where the set holds it. A cause names a
+     * rule and a place, which is as far as an author is sent; whether the set holds a rule is a
+     * question about one statement of it, asked where the statement is known.
+     *
+     * @param paths          the names the occurrence is about
+     * @param valuesHoldWhole false for a connective or a binding above the statements, which no
+     *                        reading decides anything at
+     * @param runsHoldWhole  whether the part is a choice between bounds on the length of one
+     *                        string, which the runs of the length hold whole beside the ends
+     *                        ({@link #runsLeftAt}). A cause all the same for what reads the ends
+     *                        and the set without the runs: they hold nothing of it
+     */
+    private record PartUnstated(RuleRef.Invariant rule, Set<RuleKey> paths,
+                                boolean valuesHoldWhole, boolean runsHoldWhole) {}
+
+    /** An occurrence of a part the bounds hold nothing of, the names it is about, and whether
+     *  the runs of a length hold it whole. */
+    private record Occurrence(ClauseOccurrence at, Set<RuleKey> paths, boolean runsHoldWhole) {}
+
+    /**
+     * What {@link #projection} says with {@code setAside} not counted among what stands in the way.
+     *
+     * <p>One reading of the rules, and the one {@link #projection} is: a part set aside is a part
+     * the bounds still state nothing of, and what that leaves is a question for whoever takes it
+     * from somewhere else.
+     */
+    private ProjectionEvidence evidenceLeaving(List<PartUnstated> setAside) {
+        Gathered read = gathered();
+        List<ProjectionEvidence.Cause> causes = new ArrayList<>(read.others());
+        // Said once per rule and place, after every reading of the rule has been met. A clause is
+        // read once per place the walk opens a value at, and what a rule left a place without is
+        // one fact about the rule however many readings there were.
+        Set<ProjectionEvidence.Cause> unrepresented = new LinkedHashSet<>();
+        for (PartUnstated each : read.unstated()) {
+            if (!setAside.contains(each)) {
+                each.paths().forEach(path -> unrepresented.add(
+                        new ProjectionEvidence.Cause.Unrepresented(each.rule(), path.toString())));
+            }
+        }
+        causes.addAll(unrepresented);
+        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
+        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
+        // a value with two conjuncts short of the bounds printed its two causes in whichever order
+        // this run happened to give them. Sorted rather than kept in insertion order, because the
+        // causes come from several producers and there is no one order they arrive in.
+        causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
+        if (read.certification() instanceof souther.compiler.numeric.ProjectionCertification
+                .Certified(var by) && causes.isEmpty()) {
+            return new ProjectionEvidence.CertifiedExact(by, List.of());
+        }
+        return new ProjectionEvidence.NotCertified(causes);
+    }
+
+    /**
+     * Whether the set of values at {@code place}, met with what the bounds say of its count, is
+     * what the rules leave it.
+     *
+     * <p>Where some statement the bounds hold nothing of is one the set of values holds whole, and
+     * the rest of what the rules say about the place is stated by the bounds exactly. The set holds
+     * the first and the count the second, so a string that is in the set and has a count the bounds
+     * leave is a string no statement refuses.
+     *
+     * <p>A statement the set holds is taken out of what stands in the way only where it is about the
+     * place alone. What stands in the way after that is left to be shown apart from the place, as
+     * it is for the bounds ({@link #projectionAt}): rules about other places that leave them some
+     * value and are related to nothing here. And no number of the place may be related to a number
+     * of any other, which would let what another place holds change which counts are left here.
+     */
+    public boolean valuesAndCountAreTheRulesAt(RuleKey place) {
+        Counted counted = countAt.get(place);
+        if (counted == null || !notGathered.isEmpty()) {
+            return false;
+        }
+        // A set short because what the rules leave was not built is short of no rule, and a count
+        // met with it is no more than the set was.
+        if (unreadByName.getOrDefault(place, List.of()).stream()
+                .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
+            return false;
+        }
+        Gathered read = gathered();
+        if (!(read.certification() instanceof ProjectionCertification.Certified)
+                || countsRelatedToAnotherNumber().contains(counted.atom())) {
+            return false;
+        }
+        List<PartUnstated> heldHere = read.unstated().stream()
+                .filter(each -> each.valuesHoldWhole() && each.paths().equals(Set.of(place)))
+                .toList();
+        if (heldHere.isEmpty()) {
+            return false;
+        }
+        ProjectionEvidence rest = evidenceLeaving(heldHere);
+        return rest.isCertified() || standingApart(rest, place, asked()) != null;
+    }
+
+    /**
+     * The declarations being asked about when this is asked whether it holds a value: the one this
+     * is a reading of, and none where there is none — a value no declaration stands under has no
+     * declaration to be asked again.
+     */
+    private Set<TypeSymbol.AtModule> asked() {
+        return named == null ? Set.of() : Set.of(named);
+    }
+
+    /**
+     * Whether the set of values, the ends of the length at {@code place} and the runs held beside
+     * the ends ({@link #runsLeftAt}) are the whole of what the rules leave the string there.
+     *
+     * <p>Not {@link #valuesAndCountAreTheRulesAt}, which is what makes the set read in full, and
+     * nothing says of a position the set is read in full for that the ends leave a hole in it: a
+     * reader of that answer holds the length as the ends and would hold the strings of the hole.
+     * This is the answer for a reader that holds the runs as well, so it has the same conditions
+     * with one more thing allowed to stand in the way: the lengths taken out, which are held.
+     *
+     * <p>The rules the set holds whole are taken out of what stands in the way, as there; and what
+     * is left is nothing, or the lengths a rule takes out from between the ends of the count.
+     */
+    private boolean setBoundsAndRunsAreTheRulesAt(RuleKey place) {
+        Counted counted = countAt.get(place);
+        if (counted == null || !notGathered.isEmpty()
+                || !RepresentationBounds.isTheLengthOfAString(counted.by())
+                || unreadByName.getOrDefault(place, List.of()).stream()
+                        .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
+            return false;
+        }
+        Gathered read = gathered();
+        // A rule the algebra did not prove is named by a cause beside it ({@link #gathered}), so a
+        // refusal of that kind is told apart below by what the causes are.
+        if (!(read.certification() instanceof ProjectionCertification.Certified
+                || read.certification() instanceof ProjectionCertification.NotEveryRuleIsProven)
+                || countsRelatedToAnotherNumber().contains(counted.atom())) {
+            return false;
+        }
+        List<PartUnstated> heldHere = read.unstated().stream()
+                .filter(each -> (each.valuesHoldWhole() || each.runsHoldWhole())
+                        && each.paths().equals(Set.of(place)))
+                .toList();
+        ProjectionEvidence rest = evidenceLeaving(heldHere);
+        return rest.isCertified() || onlyTheHolesTheRunsHold(rest, counted);
+    }
+
+    /**
+     * Whether what stands in the way of {@code rest} is the lengths a rule takes out from between
+     * the ends of the count {@code counted}, which the runs of the derived number hold
+     * ({@link #runsLeftAt}) and the ends do not.
+     *
+     * <p>Only holes in that count: a hole in another is a rule the bounds and the set between
+     * them do not state, and the runs hold none of it.
+     */
+    private static boolean onlyTheHolesTheRunsHold(ProjectionEvidence rest, Counted counted) {
+        return rest instanceof ProjectionEvidence.NotCertified(var causes)
+                && causes.stream().allMatch(each ->
+                        each instanceof ProjectionEvidence.Cause.Lossy lossy
+                                && lossy.unstated().equals(
+                                        Set.of(ProjectionEvidence.Cause.Unstated.A_HOLE))
+                                && lossy.atom().equals(counted.atom()));
+    }
+
+    /** The counts some stated constraint relates to another number, worked out the first time it
+     *  is asked. */
+    private Set<FactSubject> countsRelatedToAnotherNumber() {
+        Set<FactSubject> known = relatedCounts;
+        if (known == null) {
+            Set<FactSubject> counts = new HashSet<>();
+            countAt.values().forEach(counted -> counts.add(counted.atom()));
+            Set<FactSubject> related = new HashSet<>();
+            for (InvariantChecker.Written reading : readings) {
+                for (Map<ClauseOccurrence, InvariantChecker.PartAsRead> byOccurrence
+                        : reading.constrained().values()) {
+                    for (InvariantChecker.PartAsRead one : byOccurrence.values()) {
+                        for (NumericConstraint each : one.said().stated()) {
+                            Set<FactSubject> atoms = each.atoms();
+                            if (atoms.size() > 1) {
+                                atoms.stream().filter(counts::contains).forEach(related::add);
+                            }
+                        }
+                    }
+                }
+            }
+            known = Set.copyOf(related);
+            relatedCounts = known;
+        }
+        return known;
+    }
+
+    /** What {@link #projection} is made of, read off the readings the first time it is asked. */
+    private Gathered gathered() {
+        Gathered known = gathered;
+        if (known == null) {
+            known = gatheredFromTheReadings();
+            gathered = known;
+        }
+        return known;
+    }
+
+    /** {@link #gathered}, read off the readings. */
+    private Gathered gatheredFromTheReadings() {
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
         // A rule that never arrived first. Which rule it was is not known here and there is nothing
         // to say: what a stop leaves is a name and every name under it.
@@ -2851,23 +4098,37 @@ public final class FieldDomains {
         for (RuleKey stopped : unreadOfEveryValue) {
             causes.add(new ProjectionEvidence.Cause.Unavailable(stopped.toString()));
         }
-        // Every name of this value, by the atom a range of it is taken under. A rule that
-        // narrowed one of these is in the bounds; a rule that narrowed only an atom standing for an
-        // arithmetic this cannot carry narrowed nothing anybody reads off them.
+        Set<FactSubject> ranged = rangedOfTheValue();
+        return gatheredBeside(causes, ranged, unstatedOver(ranged));
+    }
+
+    /**
+     * Every name of this value, by the atom a range of it is taken under. A rule that narrowed one
+     * of these is in the bounds; a rule that narrowed only an atom standing for an arithmetic this
+     * cannot carry narrowed nothing anybody reads off them.
+     */
+    private Set<FactSubject> rangedOfTheValue() {
         Set<FactSubject> ranged = new LinkedHashSet<>(atomAt.values());
         countAt.values().forEach(counted -> ranged.add(counted.atom()));
-        // Asked of every rule the reading was handed, and not of the questions the rules raise. A
-        // pattern raises none — which values may stand somewhere and where a line falls are not what
-        // it is about — and it is still a way the value can be refused at an edge of the number
-        // beside it.
-        // What each rule leaves unrepresented, met from every reading of it and held by the rule.
-        // A clause is read once per place the walk opens a value at, so a set held by the reading
-        // would say a rule left a position without a representation once per reading that met it —
-        // and what a rule left a position without is one fact about the rule however many readings
-        // there were.
-        Map<RuleRef.Invariant, Set<RuleKey>> unrepresented = new LinkedHashMap<>();
+        return ranged;
+    }
+
+    /**
+     * The parts of rules nothing {@code ranged} holds a range of was narrowed by: what a reading
+     * that holds those atoms and nothing else holds nothing of, by the names each part is about.
+     *
+     * <p>Asked of every rule the reading was handed, and not of the questions the rules raise. A
+     * pattern raises none — which values may stand somewhere and where a line falls are not what
+     * it is about — and it is still a way the value can be refused at an edge of the number beside
+     * it.
+     */
+    private List<PartUnstated> unstatedOver(Set<FactSubject> ranged) {
+        List<PartUnstated> unstated = new ArrayList<>();
         readings.forEach(reading -> {
             RuleRef.Invariant rule = reading.from();
+            // What this reading left unrepresented, told to the statement each is a statement of
+            // once the part has been walked.
+            List<Occurrence> pending = new ArrayList<>();
             // Where in the clause this reading recorded a shape, which is what a conjunction below
             // asks about its two halves.
             Set<ClauseOccurrence> recorded = new LinkedHashSet<>();
@@ -2877,9 +4138,9 @@ public final class FieldDomains {
             // leaves the range wider than the rule however well the conjunct written beside it went,
             // and a set unioned over the whole clause answers for the failing half with the other
             // one — which is the same shape as reading a clause's evidence for one of its parts.
-            Set<RuleKey> said = unrepresented.computeIfAbsent(rule, _ -> new LinkedHashSet<>());
             reading.constrained().values().forEach(byOccurrence ->
                     byOccurrence.values().forEach(one -> {
+                Set<RuleKey> told = new LinkedHashSet<>();
                 ClauseExpr shape = one.of();
                 InvariantChecker.PartRead read = one.said();
                 // A conjunction says what its conjuncts say, and they are here beside it. Asked of
@@ -2923,21 +4184,47 @@ public final class FieldDomains {
                 if (required != null) {
                     required.obligations().forEach(owed -> {
                         switch (owed) {
-                            case Owed.AdmittedValues it -> said.add(it.path());
-                            case Owed.Boundary it -> said.add(it.on().position());
+                            case Owed.AdmittedValues it -> told.add(it.path());
+                            case Owed.Boundary it -> told.add(it.on().position());
                         }
                     });
                 }
                 // A part that raised no question is about the value it is written on, which is the
                 // name of no steps.
                 if (required == null || required.obligations().isEmpty()) {
-                    said.add(RuleKey.THE_VALUE);
+                    told.add(RuleKey.THE_VALUE);
                 }
+                // A choice between bounds on the length of one string is still a part the bounds
+                // hold nothing of: they hold the ends of each alternative, and the lengths the
+                // choice takes out from between them are held beside them as runs.
+                pending.add(new Occurrence(shape.at(), told,
+                        isAChoiceTheNumbersTookInWhole(reading, shape)));
             }));
+            if (pending.isEmpty()) {
+                return;
+            }
+            // Which statement each is a statement of, and so whether the set of values holds it:
+            // asked of the statement and not of the authored part holding it, which a helper's body
+            // makes more than one.
+            Map<ClauseOccurrence, InvariantStatementId> statements =
+                    InvariantChecker.statementsOf(reading);
+            for (Occurrence each : pending) {
+                InvariantStatementId statement = statements.get(each.at());
+                unstated.add(new PartUnstated(rule, each.paths(),
+                        statement != null && took.valuesHoldWhole(statement),
+                        each.runsHoldWhole()));
+            }
         });
-        // And said once per rule, after every reading of it has been met.
-        unrepresented.forEach((rule, said) -> said.forEach(path ->
-                causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path.toString()))));
+        return unstated;
+    }
+
+    /**
+     * {@link #gathered}, with {@code causes} already found and the parts {@code unstated} the
+     * bounds over {@code ranged} hold nothing of: what the algebra was given and does not hold, and
+     * what it made of the ranges it derived.
+     */
+    private Gathered gatheredBeside(List<ProjectionEvidence.Cause> causes, Set<FactSubject> ranged,
+                                    List<PartUnstated> unstated) {
         // And what the algebra was given and what it projects does not hold.
         //
         // Asked of what was derived and of nothing else. Asking the whole state whether it holds a
@@ -2957,19 +4244,53 @@ public final class FieldDomains {
                 byOccurrence.values().forEach(one -> {
             RuleRef.Invariant rule = reading.from();
             for (NumericConstraint each : one.said().stated()) {
+                if (!constraints.numbers()
+                        .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
+                    for (FactSubject atom : each.atoms()) {
+                        lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                                Set.of(each.rel() == Rel.NE
+                                        ? ProjectionEvidence.Cause.Unstated.A_HOLE
+                                        : ProjectionEvidence.Cause.Unstated.A_RELATION)));
+                    }
+                    continue;
+                }
+                // Proved, and still not stated where it is proved of an atom standing for an
+                // arithmetic over the places: the box holds that atom as the hull of what the
+                // arithmetic comes to, free of the places it is made of, and a place tied to it
+                // takes the arithmetic's values and not the hull's. A product of a quantity of one
+                // or two and a price up to ten is never eleven, though the hull holds it.
+                if (each.atoms().stream().anyMatch(ComputedNumbers::standsForArithmetic)) {
+                    each.atoms().stream().filter(ranged::contains).forEach(atom ->
+                            lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                                    Set.of(ProjectionEvidence.Cause.Unstated.A_RELATION))));
+                }
+            }
+        })));
+        // And what a run needs of the numbers to work each rule out, which the bounds are the rule
+        // over the whole numbers and so say nothing of. Asked of the same state as above: what is
+        // needed and is not held is a relation the range cannot carry, and what could not be
+        // said is a cause of its own.
+        Set<ProjectionEvidence.Cause> unsaid = new LinkedHashSet<>();
+        readings.forEach(reading -> reading.workedOut().forEach((part, needs) -> {
+            for (NumericConstraint each : needs.asked()) {
                 if (constraints.numbers()
                         .provenByTheBoxAndItsDifferences(each.form(), each.rel())) {
                     continue;
                 }
                 for (FactSubject atom : each.atoms()) {
-                    lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
+                    lossy.add(new ProjectionEvidence.Cause.Lossy(part.rule(), atom,
                             Set.of(each.rel() == Rel.NE
                                     ? ProjectionEvidence.Cause.Unstated.A_HOLE
                                     : ProjectionEvidence.Cause.Unstated.A_RELATION)));
                 }
             }
-        })));
+            if (!needs.read()) {
+                unsaid.add(new ProjectionEvidence.Cause.OperatorsNotShownToAnswer(
+                        part.rule()));
+            }
+        }));
         causes.addAll(lossy);
+        causes.addAll(unsaid);
         // And whether the ends handed over are the ends the rules drew. Asked of every subject the
         // algebra speaks of, because this is not about any one rule: the reasoning reached the edge
         // exactly and the writing could not carry it.
@@ -3002,17 +4323,7 @@ public final class FieldDomains {
                 }
             }
         }
-        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
-        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
-        // a value with two conjuncts short of the bounds printed its two causes in whichever order
-        // this run happened to give them. Sorted rather than kept in insertion order, because the
-        // causes come from several producers and there is no one order they arrive in.
-        causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
-        if (certification instanceof souther.compiler.numeric.ProjectionCertification.Certified(
-                var by) && causes.isEmpty()) {
-            return new ProjectionEvidence.CertifiedExact(by, List.of());
-        }
-        return new ProjectionEvidence.NotCertified(causes);
+        return new Gathered(causes, certification, unstated);
     }
 
 }

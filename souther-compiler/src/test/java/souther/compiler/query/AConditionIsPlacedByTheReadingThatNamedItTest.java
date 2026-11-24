@@ -1,13 +1,13 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Citation;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.OnTheWay;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,10 +49,7 @@ class AConditionIsPlacedByTheReadingThatNamedItTest {
     @Test
     void aConditionOfTheDecisionIsPlacedWhereTheDecisionMetIt() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         DecisionReading read = compilation.db().ask(new Adequacy.Decides("example.truth"))
                 .value().get("g").read();
         Map<ConditionOccurrence, Citation> divided = compilation.db()

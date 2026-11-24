@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.NonAffineOperation;
@@ -41,16 +42,16 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
             data Order = { x: Int, y: Int, floor: Int, lines: List<Line> }
 
             behavior written : (o: Order) -> Bool
-            let written (o) = 2 * o.x * o.y > 8 || List.all(l -> l.price > o.floor, o.lines)
+            let written (o) = 2 * o.x * o.x > 8 || List.all(l -> l.price > o.floor, o.lines)
 
             behavior denied : (o: Order) -> Bool
             let denied (o) =
-                Bool.not(2 * o.x * o.y <= 8 && List.any(l -> l.price <= o.floor, o.lines))
+                Bool.not(2 * o.x * o.x <= 8 && List.any(l -> l.price <= o.floor, o.lines))
             """;
 
     /** What the walk declined, and why, in the order it met them. */
     private static List<WhyNotTaken> whys(String behavior, boolean holding) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

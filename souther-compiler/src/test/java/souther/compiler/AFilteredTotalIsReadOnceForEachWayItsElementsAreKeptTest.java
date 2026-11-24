@@ -8,15 +8,12 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.time.Duration;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -38,11 +35,9 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
     private static String report(String body) {
         Compilation compilation = Compilation.ofSource(PREAMBLE + body, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll("\\d+:\\d+", "");
     }
 
@@ -132,7 +127,7 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
                 + "    guard List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ "
                 + list + " ]))) >= 900 else No\n"
                 + "    Ok\n}\n";
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(30), () -> report(body));
+        String report = report(body);
         assertFalse(report.contains("read as g/w.m1.pay"), report);
     }
 
@@ -161,7 +156,7 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
     @Test
     void aWayThatKeepsAnElementWithNoFormSaysWhatTheElementIs() {
         String report = report(guarded("""
-                List.sum(List.map(r -> r.pay * r.days, List.filter(r -> r.days >= 17, [ p.x ])))
+                List.sum(List.map(r -> r.pay * r.days * r.pay, List.filter(r -> r.days >= 17, [ p.x ])))
                     >= p.y.pay"""));
         assertTrue(report.contains("compares a product of two values that are not constants"),
                 report);

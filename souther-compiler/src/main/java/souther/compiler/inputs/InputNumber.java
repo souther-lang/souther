@@ -1,17 +1,20 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ARowsRun;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DateShifts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
@@ -23,14 +26,18 @@ import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -66,8 +73,9 @@ public final class InputNumber {
      */
     public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
                                  RuleReadingSource source, ElementsMet met) {
-        return met.admits(e, reads, source.newtypes())
-                ? ofAlone(e, inputs, reads, source) : null;
+        NumericTerm one = alone(formAlone(e, inputs, reads, source));
+        return met.admits(e, elementsHeldIn(one == null ? null : LinearForm.atom(one)), reads,
+                source.newtypes()) ? one : null;
     }
 
     /**
@@ -81,11 +89,30 @@ public final class InputNumber {
      */
     public static LinearForm<NumericTerm> formOf(Core e, InputDomain inputs, InputReads reads,
                                                  RuleReadingSource source, ElementsMet met) {
-        if (!met.admits(e, reads, source.newtypes())) {
-            return null;
+        LinearForm<NumericTerm> alone = formAlone(e, inputs, reads, source);
+        LinearForm<NumericTerm> form = alone != null ? alone
+                : codePointsWeighed(e, inputs, reads, source);
+        return met.admits(e, elementsHeldIn(form), reads, source.newtypes()) ? form : null;
+    }
+
+    /**
+     * The elements of containers {@code form} holds a number of: the innermost element each of
+     * its numbers read at one position stands in. None of a number gathered across a container,
+     * which is of every element and of no one of them.
+     */
+    private static Set<ElementsNamed.Slot> elementsHeldIn(LinearForm<NumericTerm> form) {
+        if (form == null) {
+            return Set.of();
         }
-        LinearForm<NumericTerm> form = formAlone(e, inputs, reads, source);
-        return form != null ? form : codePointsWeighed(e, inputs, reads, source);
+        Set<ElementsNamed.Slot> out = new LinkedHashSet<>();
+        for (NumericTerm term : form.coefs().keySet()) {
+            if (term instanceof NumericTerm.FromOnePosition one
+                    && ElementsNamed.Slot.innermostOf(one.position()) instanceof
+                    ElementsNamed.Slot slot) {
+                out.add(slot);
+            }
+        }
+        return out;
     }
 
     /**
@@ -109,7 +136,7 @@ public final class InputNumber {
                                                      RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> reads.folded(each, symbols, source.newtypes()));
+                each -> reads.folded(each, symbols, source.newtypes(), source.folds()));
         if (measured != null) {
             // A taking is of a location, or of what a location's value was moved into, so an
             // argument that is neither is one there is no location to take it of.
@@ -129,16 +156,158 @@ public final class InputNumber {
             // those values are read from a place.
             return overARun(measured, inputs, reads, source);
         }
+        // An element an index picks of a list of a string's code points is the code point at the
+        // index of the string that stands there.
+        InputReads.PickedAtAnIndex picked = reads.pickedAtAnIndex(e);
+        NumericTerm codePoint = picked == null ? null : codePointPicked(picked, inputs, source);
+        if (codePoint != null) {
+            return LinearForm.atom(codePoint);
+        }
         // And a number of the input is the value at a position, so an expression naming none names
         // no number here.
         return switch (reads.pathOf(e, source.newtypes())) {
-            case PathResolution.At(var at) -> LinearForm.atom(new NumericTerm.ValueOf(at));
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesAt.At(var at) -> LinearForm.atom(new NumericTerm.ValueOf(at));
+            // Asked only of what stands at no position, which is what a call is: following what an
+            // expression stands as is a walk of its own, and every value of the input would pay it.
+            case ValuesAt.NotAPosition _ -> atomOf(wholeUnitsOf(e, inputs, reads, source));
             // And a number of the input is the value at one position. A name standing at one of
             // several would be a number at whichever of them a reader picked, and a line drawn on
             // it would fall at a place the rule may say nothing about.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
+    }
+
+    /**
+     * The number {@code measure} takes of {@code of}, which takes no argument beside it, as the
+     * term a call of it over {@code of} reads as — or null where {@code of} is no location and no
+     * value made of one that such a taking is read off.
+     *
+     * <p>For a reader holding the value a number is taken of and no call taking it: the month of a
+     * date a move by months is made of is the month of that date, whatever was written round it.
+     */
+    public static NumericTerm takenOf(ValueName.Stdlib measure, Core of, InputDomain inputs,
+                                      InputReads reads, RuleReadingSource source) {
+        TakenAs how = DefaultBoundOperationFacts.get().takenAs(measure);
+        if (how == null) {
+            return null;
+        }
+        NumericMeasures.Measured measured =
+                new NumericMeasures.Measured(measure, of, TakenArguments.NONE, how);
+        ObservationSource from = sourceOf(measured, reads, source);
+        return from == null ? null : NumericTerm.TakenOf.of(measure, from, TakenArguments.NONE,
+                inputs.typeAt(from.position(), source), source.inners(), source.symbols());
+    }
+
+    /**
+     * What a run works out of each element to make {@code walk}, a call of an operation applying
+     * a closure to the elements of a container that stands at a place, or a walk from a seed
+     * carrying no whole number ({@link #theStepOfAWalkCarryingNoWholeNumber}): each whole-number
+     * operation the closure or the step writes, the values it gives a name among them, in the
+     * order it works them out
+     * ({@link ElementValue#operationsOf}). None where {@code walk} is no such call. Null where
+     * they are not every one: one is not read as a form of the places of the element, or the
+     * elements stand at no place, as the elements a filter keeps stand at none, and a run is then
+     * over some of the values at a place, not the values there — unless the closure works out
+     * nothing that may end a run, and then there are none.
+     */
+    public static List<LinearForm<NumericTerm>> operationsAtEachElement(Core walk,
+                                                                        InputReads reads,
+                                                                        RuleReadingSource source) {
+        Denotation met = reads.denotes(walk, source.symbols(), source.newtypes());
+        if (met == null) {
+            return List.of();
+        }
+        InputReads where = met.at();
+        BindingId element = WalkElements.elementBindingOf(met.value(), where, source.symbols(),
+                source.newtypes());
+        ElementAnswer closure = element == null ? null : where.answerAt(element);
+        if (closure == null && element != null) {
+            closure = theStepOfAWalkCarryingNoWholeNumber(met.value(), element);
+        }
+        if (closure == null) {
+            return List.of();
+        }
+        if (where.everyElementAt(element, source.newtypes())
+                instanceof ValuesHeld.At(TermPath stands)) {
+            return ElementValue.operationsOf(closure, where.heldByTheBody(), source,
+                    new ElementValue.ElementsAt(stands, where.declared()));
+        }
+        // An element a walk made, one way and of every element of a container of the input, is
+        // read through the names the walks hand it by, down to the element of the input it was
+        // made of, which is what the closure is read over: the name it is handed is one of them.
+        Core container = WalkElements.containerOf(met.value(), where, source.symbols(),
+                source.newtypes());
+        InputReads.WalkedElement walked = container == null ? null
+                : where.walkedElementOf(container, element, null, source.symbols(),
+                        source.newtypes());
+        if (walked != null && walked.subject() == null && walked.keptBy().isEmpty()) {
+            return ElementValue.operationsOf(
+                    new ElementAnswer(walked.element(), closure.body(), null),
+                    walked.arms().getFirst().held(), source,
+                    new ElementValue.ElementsAt(walked.elements(), where.declared()));
+        }
+        // No form of a place says what the closure works out of an element, which is nothing
+        // to tell where it works out nothing that may end a run, or where it answers a test of
+        // the element: a comparison it makes is read as a comparison, on each element.
+        return (closure.body().type() == Type.BOOL
+                || ARowsRun.getsPastBeneath(closure.body(), source.declarations().answers()))
+                ? List.of() : null;
+    }
+
+    /**
+     * The step of {@code walk}, read as what it works out of the element it is handed on
+     * {@code element}, where it is a walk from a seed carrying a decimal or a rational: what it
+     * carries is no number a whole-number operation of the step is worked out of, and every one
+     * the step works out is of the element, at every element, as a closure's is. Null where it is
+     * no such walk. A walk carrying a whole number is read where its running totals are
+     * ({@link #stepsAnsweringNoElement}), and one carrying a record, a tuple or a container where
+     * each part's own walk is.
+     */
+    private static ElementAnswer theStepOfAWalkCarryingNoWholeNumber(Core walk,
+                                                                    BindingId element) {
+        SeededWalk seeded = SeededWalk.of(walk, closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        Type carried = seeded == null ? null : seeded.step().body().type();
+        return (seeded == null || seeded.element() == null
+                || !element.equals(seeded.element().binding())
+                || (carried != Type.DECIMAL && carried != Type.RATIONAL)) ? null
+                : new ElementAnswer(element, seeded.step().body(), null);
+    }
+
+    /**
+     * The step of {@code walk} where it is a walk from a seed whose step answers a whole number,
+     * handed what it answered last and not an element's answer, which no form of a place of an
+     * element says ({@link #operationsAtEachElement}); none where it is no such walk.
+     */
+    public static List<Core.Block> stepsAnsweringNoElement(Core walk, InputReads reads,
+                                                          RuleReadingSource source) {
+        Denotation met = reads.denotes(walk, source.symbols(), source.newtypes());
+        SeededWalk seeded = met == null ? null : SeededWalk.of(met.value(), closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        return seeded != null && seeded.step().body().type() == Type.INT
+                ? List.of(seeded.step()) : List.of();
+    }
+
+    /**
+     * The step of a coarser order that the value at a location falls in, where {@code e} is a call
+     * of an operation counting whole units, or null where it is none.
+     *
+     * <p>Of a location only: the date of a date-time made of other arithmetic names no position a
+     * row could be asked to hold.
+     */
+    private static NumericTerm wholeUnitsOf(Core e, InputDomain inputs, InputReads reads,
+                                            RuleReadingSource source) {
+        // The call itself, as a taking is read: the walk that reads the arithmetic has followed the
+        // names already, so what reaches here as a name is one standing for no call.
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        Core counted = DefaultBoundOperationFacts.get().wholeUnitsCountedIn(applied);
+        if (counted == null || !(reads.pathOf(counted, source.newtypes())
+                instanceof ValuesAt.At(var at))
+                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        return NumericTerm.WholeUnitsOf.of(operation, at, inputs.typeAt(at, source),
+                source.inners(), source.declarations());
     }
 
     /** {@code term} as a form of it alone, or null where there is none. */
@@ -172,8 +341,8 @@ public final class InputNumber {
                                               RuleReadingSource source) {
         Core of = measured.of();
         return switch (reads.pathOf(of, source.newtypes())) {
-            case PathResolution.At(var at) -> ObservationSource.asItStands(at);
-            case PathResolution.NotAPosition _ -> {
+            case ValuesAt.At(var at) -> ObservationSource.asItStands(at);
+            case ValuesAt.NotAPosition _ -> {
                 ObservationSource moved = movedFromALocation(of, reads, source);
                 if (moved != null || !measured.takenAs().theSameInEveryOrder()) {
                     yield moved;
@@ -184,7 +353,7 @@ public final class InputNumber {
             // A taking is of one location, and a name that only may stand at one is no one of
             // them. Taken of any, the number would be a size of a container the run it is on
             // never walked.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
     }
 
@@ -204,6 +373,25 @@ public final class InputNumber {
      */
     private static ObservationSource movedFromALocation(Core of, InputReads reads,
                                                         RuleReadingSource source) {
+        return movedFromALocation(of, reads, source, new ArrayList<>());
+    }
+
+    /**
+     * The shifts of a date a number taken of {@code date} stands for, each where it is written:
+     * every one on the chain from {@code date} to the location it moves, which the number's
+     * translation keeps defined only at the dates each leaves ({@link ValueTransformation}). So
+     * working each out gets there wherever the number has a value. None where {@code date} is no
+     * such chain.
+     */
+    public static List<Core> theShiftsATakingOfItStandsFor(Core date, InputReads reads,
+                                                           RuleReadingSource source) {
+        List<Core> shifts = new ArrayList<>();
+        return movedFromALocation(date, reads, source, shifts) == null ? List.of() : shifts;
+    }
+
+    private static ObservationSource movedFromALocation(Core of, InputReads reads,
+                                                        RuleReadingSource source,
+                                                        List<Core> shifts) {
         // A shift of a date answers a date, so anything else is no chain and the walk below, which
         // resolves names, is not spent on it.
         if (!Type.DATE.equals(Core.withoutStanding(of).type())) {
@@ -215,11 +403,12 @@ public final class InputNumber {
         for (DateShifts.Step step = shiftOf(met, source); step != null;
                 step = shiftOf(met, source)) {
             days.add(step.days());
+            shifts.add(Core.withoutStanding(met.value()));
             met = met.at().denotes(step.date(), symbols, source.newtypes());
         }
         if (days.isEmpty()
                 || !(met.at().pathOf(met.value(), source.newtypes())
-                        instanceof PathResolution.At(var from))) {
+                        instanceof ValuesAt.At(var from))) {
             return null;
         }
         // The innermost shift first: each one is defined only at the dates the ones inside it
@@ -255,6 +444,23 @@ public final class InputNumber {
                 : NumericTerm.CodePointValueSum.of(at, inputs.typeAt(at, source), source.inners());
     }
 
+    /**
+     * A code point of the string whose code points {@code listed} lists — the first, which stands
+     * for every one of them as far as the numbers a code point comes to — or null where it lists
+     * those of no string standing at one, nor some of them ({@link #codePointsWalked}). For
+     * asking what a code point comes to, and never which one a run reads.
+     */
+    public static NumericTerm aCodePointListedBy(Core listed, InputDomain inputs,
+                                                 InputReads reads, RuleReadingSource source) {
+        TermPath at = stringWhoseCodePointsAre(listed, reads, source);
+        if (at == null) {
+            CodePointsWalked some = codePointsWalked(listed, inputs, reads, source);
+            at = some == null ? null : some.at();
+        }
+        return at == null ? null
+                : NumericTerm.CodePointAt.of(at, 0, inputs.typeAt(at, source), source.inners());
+    }
+
     /** The location of the string whose code points {@code listed} lists, or null where it lists
      *  those of no string standing at one. */
     private static TermPath stringWhoseCodePointsAre(Core listed, InputReads reads,
@@ -266,7 +472,7 @@ public final class InputNumber {
                 : facts.codePointsListedOf(applied.operation());
         Core argument = string == null ? null : applied.argument(string);
         return argument != null && standing.at().pathOf(argument, source.newtypes())
-                instanceof PathResolution.At(var at) ? at : null;
+                instanceof ValuesAt.At(var at) ? at : null;
     }
 
     /**
@@ -292,7 +498,7 @@ public final class InputNumber {
                                                              RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
-                each -> reads.folded(each, symbols, source.newtypes()));
+                each -> reads.folded(each, symbols, source.newtypes(), source.folds()));
         if (measured == null || !measured.arguments().none()
                 || !(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
@@ -314,15 +520,15 @@ public final class InputNumber {
         BindingId element = WalkElements.elementBindingOf(walked.value(), where, source.symbols(),
                 source.newtypes());
         Core listed = element == null ? null : where.containerOfTheElementHandedTo(element);
-        TermPath at = listed == null ? null : stringWhoseCodePointsAre(listed, where, source);
-        ElementAnswer closure = at == null ? null : where.answerAt(element);
-        if (closure == null) {
+        ElementAnswer closure = listed == null ? null : where.answerAt(element);
+        ElementValue computed = closure == null ? null
+                : ElementValue.readWithoutAPlace(closure, where.heldByTheBody(), source);
+        if (computed == null) {
             return null;
         }
-        ElementValue computed =
-                ElementValue.readWithoutAPlace(closure, where.heldByTheBody(), source);
-        if (!(computed instanceof ElementValue.Affine(var form))) {
-            return null;
+        TermPath at = stringWhoseCodePointsAre(listed, where, source);
+        if (at == null || !(computed instanceof ElementValue.Affine(var form))) {
+            return codePointByCodePoint(computed, listed, where, inputs, source);
         }
         ElementProjection codePoint = new ElementProjection(List.of());
         if (!form.coefs().keySet().stream().allMatch(codePoint::equals)) {
@@ -345,6 +551,176 @@ public final class InputNumber {
             weights.put(length, form.constant());
         }
         return new LinearForm<>(ExactRatio.ZERO, weights);
+    }
+
+    /**
+     * What a total of what a closure computed of each code point of a string comes to, written out
+     * code point by code point: {@code Σ a_k·cp(i_k) + b_k}, where the walk's {@code k}-th element
+     * is the code point at {@code i_k} of the string and the closure comes to {@code a_k·c + b_k} of
+     * an element {@code c} standing at {@code k} ({@link ElementValue#atPosition}).
+     *
+     * <p>Where how many code points the string holds is settled by its rules and no more than a
+     * walk writes out ({@link ElementsWrittenOut#MOST_WALKED}), and which of them the walk is handed
+     * at each place is read off what the operations between say of their elements' indices
+     * ({@link #indicesOf}). Null otherwise, and where the closure at some place is no form of the
+     * code point alone: a code point read through a choice of the element, or a product of two, is
+     * a total this does not read rather than one it reads as numbers apart.
+     */
+    private static LinearForm<NumericTerm> codePointByCodePoint(ElementValue computed,
+                                                                Core listed, InputReads where,
+                                                                InputDomain inputs,
+                                                                RuleReadingSource source) {
+        CodePointsWalked walked = indicesOf(listed, where, inputs, source);
+        if (walked == null) {
+            return null;
+        }
+        Type string = inputs.typeAt(walked.at(), source);
+        ElementProjection codePoint = new ElementProjection(List.of());
+        ExactRatio constant = ExactRatio.ZERO;
+        Map<NumericTerm, ExactRatio> weights = new LinkedHashMap<>();
+        for (int k = 0; k < walked.indices().size(); k++) {
+            LinearForm<ElementProjection> here = computed.atPosition(k);
+            if (here == null || !here.coefs().keySet().stream().allMatch(codePoint::equals)
+                    || !(constant.plus(here.constant())
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio added))) {
+                return null;
+            }
+            constant = added;
+            ExactRatio weight = here.coefs().getOrDefault(codePoint, ExactRatio.ZERO);
+            if (weight.isZero()) {
+                continue;
+            }
+            NumericTerm.CodePointAt at = NumericTerm.CodePointAt.of(walked.at(),
+                    walked.indices().get(k), string, source.inners());
+            if (at == null) {
+                return null;
+            }
+            ExactRatio before = weights.getOrDefault(at, ExactRatio.ZERO);
+            if (!(before.plus(weight) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio summed))) {
+                return null;
+            }
+            if (summed.isZero()) {
+                weights.remove(at);
+            } else {
+                weights.put(at, summed);
+            }
+        }
+        return new LinearForm<>(constant, weights);
+    }
+
+    /**
+     * The code point of a string that the element {@code picked} is, where the list is one of the
+     * string's code points that {@link #indicesOf} follows and the index is within it — or null.
+     */
+    private static NumericTerm codePointPicked(InputReads.PickedAtAnIndex picked,
+                                               InputDomain inputs, RuleReadingSource source) {
+        CodePointsWalked walked = indicesOf(picked.list().value(), picked.list().at(), inputs,
+                source);
+        if (walked == null || picked.index() >= walked.indices().size()) {
+            return null;
+        }
+        return NumericTerm.CodePointAt.of(walked.at(),
+                walked.indices().get((int) picked.index()), inputs.typeAt(walked.at(), source),
+                source.inners());
+    }
+
+    /**
+     * The string a list of code points is of, and which of its code points stands at each place of
+     * the list — or null where the list is no such list, or the string holds no number of code
+     * points its rules settle.
+     *
+     * <p>Followed through the operations whose answers' elements the library says the indices of:
+     * the code points of a string are its code points in order; an operation holding the elements
+     * of a list by their index holds them in the order they stand there, each once, so those before
+     * a written count are the first that many and those from it on are the rest
+     * ({@code HoldsTheElementsByIndex}); and one answering a list's elements in the opposite order
+     * holds as many, the last first. Nothing else is followed.
+     */
+    private static CodePointsWalked indicesOf(Core listed, InputReads where, InputDomain inputs,
+                                              RuleReadingSource source) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        Denotation standing = where.standing(listed, source.symbols(), source.newtypes());
+        AnOperationApplied applied = AnOperationApplied.of(standing.value());
+        if (applied == null) {
+            return null;
+        }
+        DeclaredArgument string = facts.codePointsListedOf(applied.operation());
+        if (string != null) {
+            Core argument = applied.argument(string);
+            if (argument == null || !(standing.at().pathOf(argument, source.newtypes())
+                    instanceof ValuesAt.At(var at))) {
+                return null;
+            }
+            Integer length = howManyCodePointsAt(at, inputs, source);
+            if (length == null || length > ElementsWrittenOut.MOST_WALKED) {
+                return null;
+            }
+            List<Integer> indices = new ArrayList<>();
+            for (int i = 0; i < length; i++) {
+                indices.add(i);
+            }
+            return new CodePointsWalked(at, indices);
+        }
+        BoundOperationFacts.KeptByIndex kept = facts.holdsTheElementsByIndex(applied.operation());
+        if (kept != null) {
+            Core count = applied.argument(kept.count());
+            Core list = applied.argument(kept.list());
+            CodePointsWalked inner = count == null || list == null ? null
+                    : indicesOf(list, standing.at(), inputs, source);
+            if (inner == null || !(standing.at().folded(count, source.symbols(),
+                    source.newtypes()).orElse(null) instanceof Long written)) {
+                return null;
+            }
+            int size = inner.indices().size();
+            int cut = Math.clamp(written, 0, size);
+            return new CodePointsWalked(inner.at(), kept.kept() == Rel.LT
+                    ? inner.indices().subList(0, cut) : inner.indices().subList(cut, size));
+        }
+        int reversed = DefaultBoundOperationFacts.positionOfTheArgumentReversed(
+                applied.operation());
+        if (reversed >= 0 && reversed < applied.args().size()) {
+            CodePointsWalked inner = indicesOf(applied.args().get(reversed), standing.at(), inputs,
+                    source);
+            return inner == null ? null
+                    : new CodePointsWalked(inner.at(), inner.indices().reversed());
+        }
+        return null;
+    }
+
+    /**
+     * How many code points the string at {@code at} holds, where its rules settle one number:
+     * what they say of its length met with the shortest and the longest string its format holds.
+     * Null where they leave it more than one, or no number at all.
+     */
+    private static Integer howManyCodePointsAt(TermPath at, InputDomain inputs,
+                                               RuleReadingSource source) {
+        Position position = inputs.at(at);
+        Type string = inputs.typeAt(at, source);
+        NumericTerm.TakenOf length = string == null ? null : NumericTerm.TakenOf.howManyHeldAt(
+                ValueName.Stdlib.operation("String", "length"), at, string, source.inners(),
+                source.symbols());
+        return position == null || length == null ? null : position.codePointsHeld(length);
+    }
+
+    /**
+     * The string a list of code points is of, and the index of its code point at each place of
+     * the list.
+     */
+    public record CodePointsWalked(TermPath at, List<Integer> indices) {
+
+        public CodePointsWalked {
+            indices = List.copyOf(indices);
+        }
+    }
+
+    /**
+     * The code points {@code listed}, read in {@code where}, is the list of, or null where it is no
+     * such list or the string holds no number of code points its rules settle
+     * ({@link #indicesOf}).
+     */
+    public static CodePointsWalked codePointsWalked(Core listed, InputDomain inputs,
+                                                    InputReads where, RuleReadingSource source) {
+        return indicesOf(listed, where, inputs, source);
     }
 
     /**
@@ -412,25 +788,26 @@ public final class InputNumber {
     }
 
     /**
-     * The total of the elements {@code met} keeps of a list by their index — the ones before a
-     * count, or the ones from it on — or null where it keeps none that way, or the count is no
-     * whole number written out, or what they are kept of is not read from a place in an order.
+     * The total of the elements {@code met} keeps of a list by what each holds or by their index —
+     * the ones a filter's closure holds of, the ones before a count, or the ones from it on — or
+     * null where it keeps none that way, or a count is no whole number written out, or what they
+     * are kept of is not read from a place in an order.
      *
-     * <p>Some of the elements, so no total of the list ({@link #sourceOf} refuses it there), and
-     * which of them is fixed by where each stands: the total of each element weighed one where its
-     * position passes the test the library keeps it by and nought where it does not
-     * ({@link ElementValue.ByPosition}). That is a number of the elements in the order they were
-     * kept in, so it is read where that order is shown, as the row writes them or from the far end.
-     * A count past the last keeps every element on one side and none on the other, and a test of
-     * the position says so without a case of its own. A count of nought or less keeps every
-     * element or none whatever the length, which the test says of itself
-     * ({@link ElementValue.PositionTest#holdsOfEveryPosition}): the total of the list, or nought.
-     * A take or drop of another is read the same way ({@link #selectionByIndex}).
+     * <p>Some of the elements, so no total of the list ({@link #sourceOf} refuses it there): the
+     * total of each element weighed one where it passes the tests it is kept by and nought where it
+     * does not ({@link ElementValue.Choose}). Where a test is of the position, that is a number of
+     * the elements in the order they were kept in, so it is read where that order is shown, as the
+     * row writes them or from the far end. A count past the last keeps every element on one side
+     * and none on the other, and a test of the position says so without a case of its own. A count
+     * of nought or less keeps every element or none whatever the length, which the test says of
+     * itself ({@link ElementValue.Test#decided}): the total of the list, or nought. Filters, takes
+     * and drops stacked are read the same way ({@link #selectionOf}).
      *
-     * <p>Kept from what a walk answered, the walk is handed the whole list and the test is of where
-     * its answers stand, which is where it was handed each element. Kept from what a walk is then
-     * handed, the walk would number the kept elements again from nought, so a selection under a
-     * walk is not read here.
+     * <p>Kept by index from what a walk answered, the walk is handed the whole list and the test is
+     * of where its answers stand, which is where it was handed each element. A filter of what a
+     * walk answered tests the answer and not the element the walk was handed, so it is read only
+     * where the answer is the element. A selection of what a walk is then handed is the walk's to
+     * read ({@link #overTheRunWalkedBy}).
      */
     private static LinearForm<NumericTerm> overTheElementsKeptBy(
             NumericMeasures.Measured measured, Denotation met, InputDomain inputs,
@@ -438,33 +815,51 @@ public final class InputNumber {
         if (!(measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
             return null;
         }
-        Selection selected = selectionByIndex(met, source);
+        Selection selected = selectionOf(met, source);
         if (selected == null) {
             return null;
         }
         Denotation listed = selected.list();
         LinearForm<NumericTerm> walked =
-                overTheRunWalkedBy(measured, listed, selected.kept(), inputs, source);
-        if (walked != null) {
-            return walked;
-        }
-        ElementValue computed = keptBy(selected.kept(), new ElementValue.Affine(
-                LinearForm.atom(new ElementProjection(List.of()))));
+                selected.kept().stream().allMatch(ElementValue.Test::readsThePosition)
+                        ? overTheRunWalkedBy(measured, listed, selected.kept(), inputs, source)
+                        : null;
+        ElementValue itself = walked != null ? null : selected.itself(source);
+        return walked != null ? walked : itself == null ? null
+                : overWhatIsKept(measured.operation(), measured.takenAs(), selected, itself,
+                        selected.itsType(), inputs, source);
+    }
+
+    /**
+     * What {@code operation} takes over {@code computed} of each element {@code selected} keeps,
+     * as a number of every element of the list under it, counting nought where it is not kept —
+     * or null where that list is not read from a place, in an order where a test is of the
+     * position.
+     *
+     * @param each what one computed value stands as, or null where it is the element's own value
+     */
+    private static LinearForm<NumericTerm> overWhatIsKept(ValueName.Stdlib operation,
+                                                          TakenAs takenAs, Selection selected,
+                                                          ElementValue computed, Type each,
+                                                          InputDomain inputs,
+                                                          RuleReadingSource source) {
+        Denotation listed = selected.list();
+        ElementValue kept = keptBy(selected.kept(), computed);
         // Kept by a test that holds of every position or of none, the number turns on no position
         // and is one of every element whatever order they stand in.
-        if (!computed.readsThePosition()) {
+        if (!kept.readsThePosition()) {
             return listed.at().everyElementOf(listed.value(), source.newtypes())
-                    instanceof PathResolution.At(TermPath at)
-                    ? overTheElements(measured.operation(), measured.takenAs(), at, computed,
-                            inputs.typeAt(at, source), null, inputs, source)
+                    instanceof ValuesHeld.At(TermPath at)
+                    ? overTheElements(operation, takenAs, at, kept,
+                            each != null ? each : inputs.typeAt(at, source), null, inputs, source)
                     : null;
         }
         for (TraversalDirection direction : TraversalDirection.values()) {
             if (listed.at().inTheOrderOf(listed.value(), direction, source.newtypes())
-                    instanceof PathResolution.At(TermPath at)) {
-                return overTheElements(measured.operation(), measured.takenAs(), at, computed,
-                        inputs.typeAt(at, source), new RunSource.TraversalOrder(at, direction),
-                        inputs, source);
+                    instanceof ValuesHeld.At(TermPath at)) {
+                return overTheElements(operation, takenAs, at, kept,
+                        each != null ? each : inputs.typeAt(at, source),
+                        new RunSource.TraversalOrder(at, direction), inputs, source);
             }
         }
         return null;
@@ -477,9 +872,12 @@ public final class InputNumber {
      *
      * <p>Three numbers are not runs of their own. A total of what is the same number for every
      * element is that number times how many there are — nought where it is nought — as a fold
-     * adding it at every step is. What is the element's own place, at the place's own type, is
-     * the number taken over that place ({@link #overThePlace}). And what is left is a run over what
-     * was computed, in the order the elements were handed where the computation reads it.
+     * adding it at every step is. A total of numbers written out, chosen by what the element holds
+     * ({@link ElementValue#weighsOnlyWhatTheElementMeets}), counts the elements meeting each
+     * choice, which is the count's to say and no run here, so it is null. What is the element's own
+     * place, at the place's own type, is the number taken over that place ({@link #overThePlace}).
+     * And what is left is a run over what was computed, in the order the elements were handed where
+     * the computation reads it.
      *
      * @param each  what one computed value stands as, with which a place is the place
      * @param order the direction the elements were handed in, where {@code computed} reads where
@@ -504,6 +902,10 @@ public final class InputNumber {
             return howMany == null ? null
                     : new LinearForm<>(ExactRatio.ZERO, Map.of(howMany, alike.constant()));
         }
+        if (takenAs instanceof TakenAs.TheSumOfWhatItHolds
+                && computed.weighsOnlyWhatTheElementMeets()) {
+            return null;
+        }
         ElementProjection place = placeStanding(computed, each, elements, inputs, source);
         if (place != null) {
             return atomOf(overThePlace(operation, place.from(elements), inputs, source));
@@ -512,6 +914,78 @@ public final class InputNumber {
         return over == null ? null
                 : atomOf(NumericTerm.TakenOver.of(operation, over, each, source.inners(),
                         source.symbols()));
+    }
+
+    /**
+     * What {@code term} comes to as the totals of the places it adds up and how many elements
+     * there are, where it adds up a form of the places of each element: the total of
+     * {@code c + Σ wᵢ·pᵢ} over {@code n} elements is {@code Σ wᵢ·(the total of pᵢ) + c·n}. Null
+     * where it is no such total, where a part has no term, or where it is the total of one place
+     * itself, which is already the term for it.
+     *
+     * <p>What the numbers come to and nothing about where a run of them stops. A run adding twice
+     * each amount and one adding the amounts stop at different rows on a number too large to
+     * hold; where both answer, they answer this, and where a run stops is read where runs are
+     * ({@link RunReach}). The term made for each total is the one a body reading it holds
+     * ({@link #overThePlace}, {@link #howManyStandAt}), so a rule bounding one of them bounds what
+     * a body asks of the other.
+     */
+    static LinearForm<NumericTerm> whatItAddsUp(NumericTerm term, InputDomain inputs,
+                                                RuleReadingSource source) {
+        if (!(term instanceof NumericTerm.TakenOver over)
+                || !(over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)
+                || !(over.source() instanceof RunSource.ComputedOccurrences(
+                        TermPath elements, ElementValue.Affine(var form), _,
+                        RunSource.TraversalOrder order))
+                || order != null) {
+            return null;
+        }
+        LinearForm<NumericTerm> out = LinearForm.constant(ExactRatio.ZERO);
+        for (Map.Entry<ElementProjection, ExactRatio> part : form.coefs().entrySet()) {
+            NumericTerm ofThePlace = overThePlace(over.operation(),
+                    part.getKey().from(elements), inputs, source);
+            out = ofThePlace == null ? null
+                    : out.plus(LinearForm.weighing(ofThePlace, part.getValue())).orNull();
+            if (out == null) {
+                return null;
+            }
+        }
+        if (!form.constant().isZero()) {
+            NumericTerm howMany = howManyStandAt(elements, inputs, source);
+            out = howMany == null ? null
+                    : out.plus(LinearForm.weighing(howMany, form.constant())).orNull();
+        }
+        return out == null || out.equals(LinearForm.atom(term)) ? null : out;
+    }
+
+    /**
+     * The term for the total {@code total} is of, or null where it is no one term: made where a
+     * body's total of the same computation over the same elements is made
+     * ({@link #overTheElements}), so the rule and the body reading one number hold one term.
+     */
+    static NumericTerm totalOf(TotalOfTheElements total, InputDomain inputs,
+                               RuleReadingSource source) {
+        TakenAs takenAs = DefaultBoundOperationFacts.get().takenAs(total.operation());
+        // What each computed value stands as: what the places it reads stand as, where that is
+        // one type with the names it is written under taken off. A form of places of two types —
+        // whole numbers and decimals — stands as neither, and no type of the rule says which.
+        Type each = null;
+        for (ElementProjection read : total.each().reads()) {
+            Type at = inputs.typeAt(read.from(total.elements()), source);
+            if (at == null || (each != null && !TypeOps.base(each, source.inners())
+                    .equals(TypeOps.base(at, source.inners())))) {
+                return null;
+            }
+            each = at;
+        }
+        LinearForm<NumericTerm> form = takenAs == null || each == null ? null
+                : overTheElements(total.operation(), takenAs, total.elements(), total.each(),
+                        each, null, inputs, source);
+        if (form == null || !form.constant().isZero() || form.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getValue().equals(ExactRatio.ONE) ? only.getKey() : null;
     }
 
     /**
@@ -566,40 +1040,181 @@ public final class InputNumber {
     public record KeptOfAList(Denotation list, ElementValue computed, Type each) {}
 
     /**
-     * What the operation {@code met} keeps of a list by index counts for, where the list is one a
-     * dependency answered — or null where it keeps none that way or the count is no whole number
-     * written out.
+     * What {@code computed} of each element the filters, takes and drops {@code met} is stacked of
+     * keep counts for, where the list under them is one a dependency answered — or null where
+     * {@code met} keeps none that way or a count is no whole number written out.
      *
      * <p>The same selection {@link #overTheElementsKeptBy} reads of a list of the input, so that a
-     * total of the elements a take keeps is one number whichever list it is of. A count that keeps
-     * every element or none is read to the element or to nought, which the caller says what to do
-     * with ({@link ElementValue#readsThePosition}).
+     * total of the elements a filter or a take keeps is one number whichever list it is of. A
+     * count that keeps every element or none is read to the element or to nought, which the
+     * caller says what to do with ({@link ElementValue#readsThePosition}).
+     *
+     * @param computed what is counted of an element kept, or null where it is the element itself
+     * @param each     what one computed value stands as, or null where it is the element itself
      */
-    public static KeptOfAList keptByIndexOfAnAnswer(Denotation met, RuleReadingSource source) {
-        Selection selected = selectionByIndex(met, source);
+    public static KeptOfAList keptOfAnAnswer(Denotation met, ElementValue computed, Type each,
+                                             RuleReadingSource source) {
+        Selection selected = selectionOf(met, source);
         if (selected == null) {
             return null;
         }
-        Type each = Type.elementOf(Core.withoutStanding(selected.list().value()).type());
-        ElementValue computed = keptBy(selected.kept(), new ElementValue.Affine(
-                LinearForm.atom(new ElementProjection(List.of()))));
-        return each == null ? null : new KeptOfAList(selected.list(), computed, each);
+        // What was computed of an element kept is of what a walk beneath answered, where a filter
+        // is of that, and is no number of the answer's element.
+        if (computed != null && selected.through() != null) {
+            return null;
+        }
+        Type of = each != null ? each : selected.itsType() != null ? selected.itsType()
+                : Type.elementOf(Core.withoutStanding(selected.list().value()).type());
+        ElementValue itself = computed != null ? computed : selected.itself(source);
+        return of == null || itself == null ? null
+                : new KeptOfAList(selected.list(), keptBy(selected.kept(), itself), of);
     }
 
     /** One take or drop: which side of the index it keeps, the index, and the list it is of. */
     private record Cut(Rel kept, long index, Core list) {}
 
     /**
-     * Every take and drop stacked over {@code list}, as the tests an element of {@code list} has
-     * to pass to be kept by all of them.
+     * Every filter, take and drop stacked over {@code list}, as the tests an element of
+     * {@code list} has to pass to be kept by all of them.
      *
-     * @param list the list under all of them, which is not itself a take or drop by a count
-     *             written out
-     * @param kept the tests of where an element stands in {@code list}: the first position kept,
-     *             then the one past the last, each only where it keeps something less than the
-     *             whole; and the one test no position passes where nothing is left
+     * @param list the list under all of them, which is not itself one of them
+     * @param kept the tests of what the element holds, one for each filter; then those of where
+     *             it stands in {@code list}: the first position kept, then the one past the last,
+     *             each only where it keeps something less than the whole; and the one test no
+     *             position passes where nothing is left
+     * @param through what an element kept is of the element of {@code list}, where it is what a
+     *                walk answered; null where it is that element
      */
-    private record Selection(Denotation list, List<ElementValue.PositionTest> kept) {}
+    private record Selection(Denotation list, List<ElementValue.Test> kept, Through through) {
+
+        /**
+         * What {@code closure}, handed an element this keeps on {@code parameter}, computes of
+         * the element of {@link #list} — or null where it is not read. As the closure is written
+         * where it is handed the element itself.
+         */
+        ElementValue computedBy(BindingId parameter, Core closure, Map<BindingId, Core> held,
+                                RuleReadingSource source, ElementValue.ElementsAt elements) {
+            return through == null
+                    ? ElementValue.read(new ElementAnswer(parameter, closure, null), held, source,
+                            elements)
+                    : ElementValue.read(new ElementAnswer(through.element(), closure, null),
+                            through.heldWith(parameter), source, elements);
+        }
+
+        /** What an element this keeps is, of the element of {@link #list}. */
+        ElementValue itself(RuleReadingSource source) {
+            return through == null
+                    ? new ElementValue.Affine(LinearForm.atom(new ElementProjection(List.of())))
+                    : ElementValue.read(new ElementAnswer(through.element(), through.value(),
+                            null), through.held(), source, null);
+        }
+
+        /** What an element this keeps stands as, or null where it is the element of
+         *  {@link #list}. */
+        Type itsType() {
+            return through == null ? null : through.value().type();
+        }
+    }
+
+    /**
+     * The list {@code container} holds some of the elements of by tests of what each holds, and
+     * those tests: through every operation on the way that answers an element where its closure
+     * holds of it and nothing where it does not ({@link PieceOfAnElement#THE_ELEMENT_WHERE_IT_HOLDS})
+     * — no test where it is none. Null where a closure on the way is no test of the element.
+     *
+     * <p>An element kept is the element it was, so a number of each element over the ones kept is
+     * that number over the list under, counting nought where a test fails ({@link #keptBy}), and
+     * every element is still an occurrence of the run. Where one kept stands among the others kept
+     * is not where it stood in the list under, so nothing reading the position is read through it.
+     */
+    private record KeptByWhatItHolds(Denotation list, List<ElementValue.Test> tests,
+                                     Through through) {}
+
+    /**
+     * What the elements a selection keeps are, where it crossed a walk answering one value for
+     * each element: {@code filter(p, map(f, xs))} keeps {@code f(x)} for each {@code x} of
+     * {@code xs} that {@code p(f(x))} holds of, which is {@code map(f, filter(p ∘ f, xs))}, and
+     * {@code map(f, xs)} keeps {@code f(x)} for every one. Read as the closures are written,
+     * under names: each closure's parameter on the way stands for what the walk beneath it
+     * answered.
+     *
+     * @param element the binding an element of the list under arrives on
+     * @param value   what an element the selection keeps is, read of {@code element}
+     * @param held    what each binding of the body holds, and what each parameter on the way
+     *                stands for
+     */
+    record Through(BindingId element, Core value, Map<BindingId, Core> held) {
+
+        /** What each binding holds, with {@code parameter} standing for {@link #value} too. */
+        Map<BindingId, Core> heldWith(BindingId parameter) {
+            Map<BindingId, Core> all = new LinkedHashMap<>(held);
+            all.put(parameter, value);
+            return all;
+        }
+    }
+
+    private static KeptByWhatItHolds keptByWhatItHolds(Denotation container,
+                                                       RuleReadingSource source) {
+        // The predicates as written, read once every walk on the way is crossed, and the
+        // parameters that stand for the element where the descent now is.
+        List<ElementAnswer> predicates = new ArrayList<>();
+        List<BindingId> here = new ArrayList<>();
+        Map<BindingId, Core> crossed = new LinkedHashMap<>();
+        Core value = null;
+        Denotation under = container;
+        while (true) {
+            InputReads where = under.at();
+            Function<Core, Core.Block> blockOf = closure -> Core.withoutStanding(where.denotes(
+                    closure, source.symbols(), source.newtypes()).value())
+                    instanceof Core.Block block ? block : null;
+            ElementBindings.PiecesOfEachElement pieces =
+                    ElementBindings.piecesOfEachElement(under.value(), blockOf);
+            if (pieces != null && pieces.piece() == PieceOfAnElement.THE_ELEMENT_WHERE_IT_HOLDS) {
+                if (pieces.element().binding() == null) {
+                    return null;
+                }
+                predicates.add(new ElementAnswer(pieces.element().binding(),
+                        pieces.step().body(), null));
+                here.add(pieces.element().binding());
+                under = where.denotes(pieces.walked(), source.symbols(), source.newtypes());
+                continue;
+            }
+            // A walk answering one value for each element in the order handed: what a filter
+            // above tested, and what is computed of an element kept, is what the walk answered.
+            // The position it may be handed is no name the closures are read with, so an answer
+            // reading it is read nowhere.
+            ElementBindings.StepOnEachElement step =
+                    ElementBindings.stepAnsweredOnEachElement(under.value(), blockOf);
+            ElementAnswer answer = step == null || step.element().binding() == null ? null
+                    : where.answerAt(step.element().binding());
+            if (answer == null || !answersInTheOrderHanded(under.value())) {
+                break;
+            }
+            for (BindingId above : here) {
+                crossed.put(above, answer.body());
+            }
+            value = value != null ? value : answer.body();
+            here = new ArrayList<>(List.of(answer.parameter()));
+            under = where.denotes(step.walked(), source.symbols(), source.newtypes());
+        }
+        Map<BindingId, Core> held = new LinkedHashMap<>(container.at().heldByTheBody());
+        held.putAll(crossed);
+        Through through = value == null ? null : new Through(here.getFirst(), value,
+                Map.copyOf(held));
+        List<ElementValue.Test> tests = new ArrayList<>();
+        for (ElementAnswer predicate : predicates) {
+            // A predicate above a walk is about what the walk answered, which its parameter
+            // stands for; one beneath every walk is about the element as it is.
+            ElementAnswer read = crossed.containsKey(predicate.parameter())
+                    ? new ElementAnswer(through.element(), predicate.body(), null) : predicate;
+            ElementValue.Test test = ElementValue.testOf(read, held, source);
+            if (test == null) {
+                return null;
+            }
+            tests.add(test);
+        }
+        return new KeptByWhatItHolds(under, List.copyOf(tests), through);
+    }
 
     /** The take or drop {@code met} is, or null where it is neither or its count is no whole
      *  number written out. */
@@ -618,8 +1233,15 @@ public final class InputNumber {
     }
 
     /**
-     * The takes and drops {@code met} is stacked of, as tests of the position in the list under
-     * all of them — or null where it is none.
+     * The filters, takes and drops {@code met} is stacked of, as tests of the element and of its
+     * position in the list under all of them, and the walks crossed on the way — or null where it
+     * is none of them. A walk alone keeps every element, and what it keeps is what it answered
+     * ({@link Through}): {@code map(g, map(f, xs))} is {@code g ∘ f} of each element of
+     * {@code xs}.
+     *
+     * <p>The filters outside every take and drop ({@link #keptByWhatItHolds}): a filter keeps an
+     * element by what it holds wherever it stands, and a take or drop outside one would count the
+     * positions among the elements kept, which are no positions of the list under.
      *
      * <p>An element is kept by all of them where it passes each, and the position a take or drop
      * tests is its place in the list it is handed. A drop hands on the list from its index, so
@@ -629,17 +1251,23 @@ public final class InputNumber {
      * stacked, the same elements are the same tests. A count below nought keeps the elements as
      * nought does, and the counts that would not sum in a whole number are no selection.
      */
-    private static Selection selectionByIndex(Denotation met, RuleReadingSource source) {
+    private static Selection selectionOf(Denotation met, RuleReadingSource source) {
+        KeptByWhatItHolds filtered = keptByWhatItHolds(met, source);
+        if (filtered == null) {
+            return null;
+        }
         List<Cut> cuts = new ArrayList<>();
-        Denotation under = met;
+        Denotation under = filtered.list();
         Cut cut = cutBy(under, source);
         while (cut != null) {
             cuts.add(cut);
             under = under.at().denotes(cut.list(), source.symbols(), source.newtypes());
             cut = cutBy(under, source);
         }
+        List<ElementValue.Test> kept = new ArrayList<>(filtered.tests());
         if (cuts.isEmpty()) {
-            return null;
+            return kept.isEmpty() && filtered.through() == null ? null
+                    : new Selection(under, kept, filtered.through());
         }
         long from = 0;
         Long before = null;
@@ -654,7 +1282,6 @@ public final class InputNumber {
                 before = before == null ? from + index : Math.min(before, from + index);
             }
         }
-        List<ElementValue.PositionTest> kept = new ArrayList<>();
         if (before != null && before <= from) {
             kept.add(positionTest(Rel.LT, 0));
         } else {
@@ -665,7 +1292,7 @@ public final class InputNumber {
                 kept.add(positionTest(Rel.LT, before));
             }
         }
-        return new Selection(under, kept);
+        return new Selection(under, kept, filtered.through());
     }
 
     private static ElementValue.PositionTest positionTest(Rel relation, long against) {
@@ -673,34 +1300,33 @@ public final class InputNumber {
                 relation, against);
     }
 
-    /** {@code computed} for an element whose position every test of {@code kept} holds of, and
-     *  nought for the rest. */
-    private static ElementValue keptBy(List<ElementValue.PositionTest> kept,
+    /** {@code computed} for an element every test of {@code kept} holds of, and nought for the
+     *  rest. */
+    private static ElementValue keptBy(List<? extends ElementValue.Test> kept,
                                        ElementValue computed) {
         ElementValue chosen = computed;
-        for (ElementValue.PositionTest test : kept) {
-            chosen = keptBy(test, chosen);
+        for (ElementValue.Test test : kept) {
+            chosen = ElementValue.choosing(test, chosen,
+                    new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO, Map.of())));
         }
         return chosen;
-    }
-
-    /** {@code computed} for an element whose position {@code kept} holds of, and nought for the
-     *  rest. */
-    private static ElementValue keptBy(ElementValue.PositionTest kept, ElementValue computed) {
-        return ElementValue.choosingByPosition(kept, computed,
-                new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO, Map.of())));
     }
 
     /**
      * The number {@code measured} takes over the values the walk {@code met} was given
      * ({@link #overARun}), or null where those values are not read from a place.
      *
+     * <p>A walk of what filters, takes and drops keep of a place ({@link #selectionOf}) is a walk
+     * of the place with what it answers of an element counted where they keep it and nought
+     * elsewhere ({@link #overWhatIsKept}), where what it answers reads no position: the walk
+     * numbers only what was kept.
+     *
      * @param kept the tests of the position an answer of the walk is counted where, the rest
      *             counting nought; none where every answer counts
      */
     private static LinearForm<NumericTerm> overTheRunWalkedBy(NumericMeasures.Measured measured,
                                                               Denotation met,
-                                                              List<ElementValue.PositionTest> kept,
+                                                              List<ElementValue.Test> kept,
                                                               InputDomain inputs,
                                                               RuleReadingSource source) {
         Symbols symbols = source.symbols();
@@ -717,20 +1343,28 @@ public final class InputNumber {
         // leaves no run to take — and a walk over some of them, as one after a filter is, is no
         // run over the values standing there.
         TermPath at = switch (where.everyElementAt(element, source.newtypes())) {
-            case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesHeld.At(var stands) -> stands;
+            case ValuesHeld.NotAPosition _ -> null;
             // A run is over the values at one position, and a walk whose elements come from more
             // than one container is no one run.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesHeld.MayStandAt _ -> null;
         };
+        Selection some = null;
         if (at == null) {
-            return null;
+            Core container = WalkElements.containerOf(walk, where, symbols, source.newtypes());
+            some = container == null || !kept.isEmpty() ? null
+                    : selectionOf(where.denotes(container, symbols, source.newtypes()), source);
+            if (some == null || !(some.list().at().everyElementOf(some.list().value(),
+                    source.newtypes()) instanceof ValuesHeld.At(TermPath stands))) {
+                return null;
+            }
+            at = stands;
         }
         // A total of how many a container inside each element holds is how many occurrences of its
         // element there are — where the elements walked are those of a container no other holds.
         // One inside another is one of many, and every occurrence of the path is under every one
         // of them.
-        if (kept.isEmpty() && answered == null) {
+        if (kept.isEmpty() && some == null && answered == null) {
             ElementProjection counted = countedOfEach(measured, where, element, source);
             if (counted != null && at.containersHoldingIt().size() == 1) {
                 return atomOf(howManyStandAt(counted.from(at).element(), inputs, source));
@@ -743,7 +1377,14 @@ public final class InputNumber {
         // put end to end where several do.
         ElementValue computed;
         Type each;
-        if (answered != null) {
+        if (some != null && some.through() != null) {
+            // Handed what a walk beneath answered, the closure computes it of the element under.
+            boolean summed = measured.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+            computed = closure == null || !summed ? null
+                    : some.computedBy(element, closure.body(), where.heldByTheBody(), source,
+                            new ElementValue.ElementsAt(at, where.declared()));
+            each = closure == null ? null : closure.body().type();
+        } else if (answered != null) {
             computed = new ElementValue.Affine(LinearForm.atom(answered));
             each = inputs.typeAt(answered.from(at), source);
         } else {
@@ -751,8 +1392,12 @@ public final class InputNumber {
                     new ElementValue.ElementsAt(at, where.declared()));
             each = closure == null ? null : closure.body().type();
         }
-        if (computed == null) {
+        if (computed == null || (some != null && computed.readsThePosition())) {
             return null;
+        }
+        if (some != null) {
+            return overWhatIsKept(measured.operation(), measured.takenAs(), some, computed, each,
+                    inputs, source);
         }
         if (!kept.isEmpty()) {
             computed = keptBy(kept, computed);
@@ -806,27 +1451,39 @@ public final class InputNumber {
                                              RuleReadingSource source,
                                              Function<Core, Core.Block> blockOf) {
         SeededWalk walk = SeededWalk.of(e, blockOf);
-        if (walk == null) {
-            return null;
-        }
-        Denotation container =
-                reads.standing(walk.container(), source.symbols(), source.newtypes());
+        return walk == null ? null : ofAWalkAdding(walk, inputs, reads, source);
+    }
+
+    /** The same, of {@code walk} as it is handed: a walk read for one part of what it carries
+     *  ({@link SeededWalk#ofThePart}) is no call standing anywhere. */
+    public static SeedAndAdded ofAWalkAdding(SeededWalk walk, InputDomain inputs, InputReads reads,
+                                             RuleReadingSource source) {
+        // What filters, takes and drops keep of a place, walked, is the place walked adding nought
+        // where they do not keep the element.
+        Denotation walked = reads.standing(walk.container(), source.symbols(), source.newtypes());
+        Selection kept = selectionOf(walked, source);
+        Denotation container = kept == null ? walked : kept.list();
         // Every occurrence of the position and each as often, which a total of what each element
         // adds is a total of.
         if (!(container.at().everyElementOf(container.value(), source.newtypes())
-                instanceof PathResolution.At(TermPath at))) {
+                instanceof ValuesHeld.At(TermPath at))) {
             return null;
         }
         BindingId element = walk.element().binding();
         Map<BindingId, Core> held = reads.heldByTheBody();
         ElementValue.ElementsAt elements =
                 new ElementValue.ElementsAt(at, container.at().declared());
-        ElementValue.Added step = ElementValue.addedTo(
-                new ElementAnswer(element, walk.step().body(), null), walk.accumulator().binding(),
-                held, source, elements);
+        // Handed what a walk beneath a filter answered, the step adds it of the element under.
+        Through through = kept == null ? null : kept.through();
+        ElementValue.Added step = ElementValue.addedTo(through == null
+                        ? new ElementAnswer(element, walk.step().body(), null)
+                        : new ElementAnswer(through.element(), walk.step().body(), null),
+                walk.accumulator().binding(), through == null ? held : through.heldWith(element),
+                source, elements);
         ElementValue.Affine seed = affine(ElementValue.read(
                 new ElementAnswer(element, walk.seed(), null), held, source, elements));
-        if (step == null || seed == null || !seed.form().coefs().isEmpty()) {
+        if (step == null || seed == null || !seed.form().coefs().isEmpty()
+                || (kept != null && !step.heldAt().isEmpty())) {
             return null;
         }
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
@@ -843,9 +1500,12 @@ public final class InputNumber {
         // What the step adds of each element is what a total of it over them is, read where every
         // such total is: a number the same for every element counts them, the element's own place
         // is the taking of that place, and the rest is a run of what was computed.
-        LinearForm<NumericTerm> total = overTheElements(SUM,
-                DefaultBoundOperationFacts.get().takenAs(SUM), at, step.ofTheElement(),
-                walk.step().body().type(), null, inputs, source);
+        TakenAs summed = DefaultBoundOperationFacts.get().takenAs(SUM);
+        LinearForm<NumericTerm> total = kept == null
+                ? overTheElements(SUM, summed, at, step.ofTheElement(), walk.step().body().type(),
+                        null, inputs, source)
+                : overWhatIsKept(SUM, summed, kept, step.ofTheElement(),
+                        walk.step().body().type(), inputs, source);
         if (total == null) {
             return null;
         }
@@ -862,6 +1522,213 @@ public final class InputNumber {
         }
         added.values().removeIf(ExactRatio::isZero);
         return new SeedAndAdded(seed.form().constant(), new LinearForm<>(ExactRatio.ZERO, added));
+    }
+
+    /**
+     * What {@code e} is, where it is a walk from a written number over the entries of one map of
+     * the input whose step adds, to the answer so far, the entry's value times what another map
+     * of the input holds under the entry's key, or nought where it holds none:
+     * {@code acc + quantity * Option.withDefault(0, Map.get(key, prices))}.
+     *
+     * <p>By induction over the walk, which visits every entry once, the answer is the seed and the
+     * total of the products of the values the two maps hold under each key both hold
+     * ({@link RunSource.JoinedOccurrences}): an entry whose key the other map lacks adds nought.
+     * Asked of the step as it is written. A product with the lookup is the one shape taken, the
+     * default is a written nought, and the key looked up is the entry's own.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static SeedAndAdded ofAWalkJoiningTwoMaps(Core e, InputDomain inputs, InputReads reads,
+                                                     RuleReadingSource source,
+                                                     Function<Core, Core.Block> blockOf) {
+        SeededWalk walk = SeededWalk.of(e, blockOf);
+        ExactRatio seed = walk == null ? null : switch (Core.withoutStanding(walk.seed())) {
+            case Core.Int written -> ExactRatio.of(written.value());
+            case Core.Decimal written -> ExactRatio.of(written.value());
+            default -> null;
+        };
+        if (seed == null || walk.step().params().size() != 3) {
+            return null;
+        }
+        Denotation container = reads.standing(walk.container(), source.symbols(), source.newtypes());
+        if (!(container.at().everyElementOf(container.value(), source.newtypes())
+                instanceof ValuesHeld.At(TermPath walked))
+                || walked.containersHoldingIt().size() != 1) {
+            return null;
+        }
+        BindingId accumulator = walk.accumulator().binding();
+        BindingId value = walk.element().binding();
+        BindingId key = null;
+        for (Core.Binder each : walk.step().params()) {
+            if (each != null && each.binding() != null && !each.binding().equals(accumulator)
+                    && !each.binding().equals(value)) {
+                key = each.binding();
+            }
+        }
+        Following names = new Following(reads.heldByTheBody());
+        namedIn(walk.step().body(), names.given);
+        TermPath alongside = lookedUpBy(walk.step().body(), accumulator, value, key, names, reads,
+                source);
+        Type numbers = alongside == null || alongside.containersHoldingIt().size() != 1 ? null
+                : numbersOfMapsKeyedAlike(walked, alongside, inputs, source);
+        if (numbers == null || !names.everyBindingWasRead()) {
+            return null;
+        }
+        NumericTerm.TakenOver total = NumericTerm.TakenOver.of(SUM,
+                new RunSource.JoinedOccurrences(walked, alongside), numbers, source.inners(),
+                source.symbols());
+        return total == null ? null : new SeedAndAdded(seed, LinearForm.atom(total));
+    }
+
+    /**
+     * The total of the values of the map a join looks into, as a number of its own: what that map
+     * comes to added up, or null where {@code join} is no join of two maps.
+     */
+    public static NumericTerm.TakenOver totalOfTheMapLookedInto(NumericTerm.TakenOver join,
+                                                                RuleReadingSource source) {
+        return join.source() instanceof RunSource.JoinedOccurrences joined
+                ? NumericTerm.TakenOver.of(join.operation(),
+                        new RunSource.ProjectedOccurrences(joined.alongside()), Type.INT,
+                        source.inners(), source.symbols())
+                : null;
+    }
+
+    /** Every name {@code e} binds, with what it is bound to, put in {@code into}. */
+    private static void namedIn(Core e, Map<BindingId, Core> into) {
+        Core here = Core.withoutStanding(e);
+        if (here instanceof Core.LetIn binding && binding.binder() != null
+                && binding.binder().binding() != null) {
+            into.put(binding.binder().binding(), binding.value());
+        }
+        Core.forEachChild(here, child -> namedIn(child, into));
+    }
+
+    /**
+     * What a step is followed through to reach the shape it is recognised as: the names it reads
+     * are followed to what they were given, and a binding written around a body is stepped past.
+     *
+     * <p>A binding is worked out whether or not anything reads it, so stepping past one is
+     * recognising the step as a shape that leaves out what the binding does. It is only the shape
+     * where every binding stepped past was read on the way, which makes its value a part of the
+     * shape; one nothing read may stop the run, and the step is then no such shape
+     * ({@link #everyBindingWasRead}).
+     */
+    private static final class Following {
+
+        /** What each name the step binds was given, with those the body holds. */
+        private final Map<BindingId, Core> given;
+        private final Set<BindingId> read = new HashSet<>();
+        private final List<Core.LetIn> steppedPast = new ArrayList<>();
+
+        private Following(Map<BindingId, Core> held) {
+            this.given = new LinkedHashMap<>(held);
+        }
+
+        private Core followed(Core e) {
+            Core here = Core.withoutStanding(e);
+            for (int guard = 0; guard < 64; guard++) {
+                if (here instanceof Core.Read name && given.get(name.binding()) != null) {
+                    read.add(name.binding());
+                    here = Core.withoutStanding(given.get(name.binding()));
+                } else if (here instanceof Core.LetIn binding) {
+                    steppedPast.add(binding);
+                    here = Core.withoutStanding(binding.body());
+                } else {
+                    return here;
+                }
+            }
+            return here;
+        }
+
+        /** Whether every binding stepped past was read on the way to the shape. */
+        private boolean everyBindingWasRead() {
+            return steppedPast.stream().allMatch(binding -> binding.binder() != null
+                    && binding.binder().binding() != null
+                    && read.contains(binding.binder().binding()));
+        }
+    }
+
+    /** {@code e} with every name it is given followed to what it was given. */
+    private static Core followed(Core e, Following names) {
+        return names.followed(e);
+    }
+
+    private static boolean isTheName(Core e, BindingId name, Following names) {
+        return name != null && followed(e, names) instanceof Core.Read read
+                && name.equals(read.binding());
+    }
+
+    /**
+     * The values of the map the step looks into, where the step is the answer so far plus the
+     * entry's value times the lookup of the entry's key in it with a written nought where it
+     * holds none — or null where the step is anything else. The sum and the product are written
+     * with the operator or as the library's operation ({@link WrittenOperation}). A decimal nought
+     * is nought at whatever scale it is written.
+     */
+    private static TermPath lookedUpBy(Core step, BindingId accumulator, BindingId value,
+                                       BindingId key, Following names, InputReads reads,
+                                       RuleReadingSource source) {
+        List<Core> sum = WrittenOperation.operandsOf(followed(step, names), BinOp.ADD);
+        if (sum == null) {
+            return null;
+        }
+        Core added = isTheName(sum.get(0), accumulator, names) ? sum.get(1)
+                : isTheName(sum.get(1), accumulator, names) ? sum.get(0) : null;
+        List<Core> product = added == null ? null
+                : WrittenOperation.operandsOf(followed(added, names), BinOp.MUL);
+        if (product == null) {
+            return null;
+        }
+        Core looked = isTheName(product.get(0), value, names) ? product.get(1)
+                : isTheName(product.get(1), value, names) ? product.get(0) : null;
+        if (looked == null || !(followed(looked, names) instanceof Core.Match option)
+                || option.cases().size() != 2) {
+            return null;
+        }
+        Core.Case some = null;
+        Core.Case none = null;
+        for (Core.Case arm : option.cases()) {
+            if (arm.binding() instanceof Core.ArmBinding.Payload) {
+                some = arm;
+            } else {
+                none = arm;
+            }
+        }
+        if (some == null || none == null || !isANoughtWritten(followed(none.body(), names))
+                || !isTheName(some.body(), some.binding().binder().binding(), names)
+                || !(AnOperationApplied.of(followed(option.scrutinee(), names))
+                        instanceof AnOperationApplied get)
+                || !(get.lookup() instanceof AnOperationApplied.Lookup lookup)
+                || !isTheName(lookup.key(), key, names)
+                || !(followed(lookup.container(), names) instanceof Core.Read map)) {
+            return null;
+        }
+        return reads.forkedOn(map, source.newtypes()) instanceof ValuesAt.At(TermPath at)
+                ? at.element() : null;
+    }
+
+    /** Whether {@code e} is nought written out: a whole number, or a decimal at no more places
+     *  than a row is built at. */
+    private static boolean isANoughtWritten(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Int zero -> zero.value() == 0;
+            case Core.Decimal zero -> zero.value().signum() == 0;
+            default -> false;
+        };
+    }
+
+    /** The numbers the maps whose values stand at the two places hold, where they are two maps
+     *  of whole numbers, or two of decimals, under keys of one type; null otherwise. */
+    private static Type numbersOfMapsKeyedAlike(TermPath walked, TermPath alongside,
+                                                InputDomain inputs, RuleReadingSource source) {
+        TermPath one = walked.containersHoldingIt().getFirst();
+        TermPath other = alongside.containersHoldingIt().getFirst();
+        return !one.equals(other)
+                && inputs.typeAt(one, source) instanceof Type.MapOf first
+                && inputs.typeAt(other, source) instanceof Type.MapOf second
+                && (first.value() == Type.INT || first.value() == Type.DECIMAL)
+                && first.value() == second.value() && first.key().equals(second.key())
+                ? first.value() : null;
     }
 
     /**
@@ -898,8 +1765,13 @@ public final class InputNumber {
                         TakenArguments.NONE, held, source.inners(), source.symbols());
     }
 
-    private static final ValueName.Stdlib.Operation SUM =
-            ValueName.Stdlib.operation("List", "sum");
+    /**
+     * What a total of numbers over the elements of a list is filed as, however it is written:
+     * the sum of those numbers. A walk from a seed adding a number of each element, and that
+     * number of each taken and then summed, come to one total, and filed under one name a reader
+     * is told it once.
+     */
+    public static final ValueName.Stdlib SUM = DefaultBoundOperationFacts.get().totalOf();
 
     /**
      * What the closure the elements of a list a dependency answered were handed to computes of one
@@ -916,22 +1788,17 @@ public final class InputNumber {
     }
 
     /**
-     * What {@code value}, written of the element a walk hands {@code element}, computes of it,
-     * where the elements stand at {@code elements} — or null where it is not read.
-     *
-     * <p>Read as what a closure over the elements answers is ({@link ElementValue#read}), so a
-     * field of the element is one way into it and a {@code match} on a place of it is read arm by
-     * arm under what the declarations put there. Nothing here says the walk's elements are the
-     * ones standing at {@code elements}: that is the caller's to have shown, of every field the
-     * value reads.
-     *
-     * @param reads where {@code value} stands
+     * What {@code walk}'s step adds of an element of a list a dependency answered to the answer
+     * so far, read as a walk over the input's is ({@link #ofAWalkAdding}) — or null where the step
+     * is no such adding, or adds how many a container inside the element holds.
      */
-    public static ElementValue computedOfTheElement(Core value, BindingId element,
-                                                    InputReads reads, TermPath elements,
-                                                    RuleReadingSource source) {
-        return ElementValue.read(new ElementAnswer(element, value, null), reads.heldByTheBody(),
-                source, new ElementValue.ElementsAt(elements, reads.declared()));
+    public static ElementValue addedOfAnAnswersElement(SeededWalk walk, InputReads reads,
+                                                       RuleReadingSource source) {
+        ElementValue.Added step = walk.element().binding() == null ? null
+                : ElementValue.addedTo(new ElementAnswer(walk.element().binding(),
+                        walk.step().body(), null), walk.accumulator().binding(),
+                        reads.heldByTheBody(), source, null);
+        return step == null || !step.heldAt().isEmpty() ? null : step.ofTheElement();
     }
 
     /**
@@ -941,8 +1808,10 @@ public final class InputNumber {
      *
      * <p>Of the element as {@code walked} says it was made, read through the names the walks on
      * the way hand it by. A number stands the same for every element where it is read in
-     * {@code reads} as a position and that position is not at or under where the elements stand:
-     * where the walk is, it holds one value, whichever element is being handed.
+     * {@code reads} as a position neither at, under nor around where the elements stand as the
+     * value is reached ({@link TermPath#standsAtUnderOrAround}): where the walk is, it holds one
+     * value, whichever element is being handed. A narrowing to a case is no step into the value,
+     * and a place under another case of a value the elements are in does not move with them.
      *
      * <p>Where the arm making an element is chosen by its case, the number is read of each arm and
      * is the choice by that case ({@link ElementValue.OfItsCase}), so it is chosen as the key read
@@ -960,8 +1829,8 @@ public final class InputNumber {
             ElementComputation read = ElementValue.readBeside(
                     new ElementAnswer(walked.element(), value, null), arm.standing(), arm.held(),
                     source, new ElementValue.ElementsAt(elements, reads.declared()),
-                    e -> reads.pathOf(e, source.newtypes()) instanceof PathResolution.At(
-                            TermPath at) && !at.isAtOrUnder(elements) && !elements.isAtOrUnder(at)
+                    e -> reads.pathOf(e, source.newtypes()) instanceof ValuesAt.At(
+                            TermPath at) && !at.standsAtUnderOrAround(elements)
                             ? new NumericTerm.ValueOf(at) : null);
             if (read == null || (beside != null && !beside.equals(read.invariant()))) {
                 return null;
@@ -978,17 +1847,17 @@ public final class InputNumber {
 
     /**
      * The number {@code operation} takes of what {@code computed} makes of each element of the list
-     * at {@code list}, handed in {@code direction} — the term a total of the same computation over a
-     * list of the input is — or null where the elements are not one run.
+     * at {@code list}, handed in {@code direction} where it reads the position and in no order
+     * where it does not — the term a total of the same computation over a list of the input is — or
+     * null where the elements are not one run.
      */
-    public static NumericTerm overWhatWasComputedByPosition(ValueName.Stdlib operation,
-                                                            TermPath list, ElementValue computed,
-                                                            Type each, TraversalDirection direction,
-                                                            NewtypeInners inners,
-                                                            Symbols symbols) {
+    public static NumericTerm overWhatWasComputed(ValueName.Stdlib operation, TermPath list,
+                                                  ElementValue computed, Type each,
+                                                  TraversalDirection direction,
+                                                  NewtypeInners inners, Symbols symbols) {
         TermPath elements = list.element();
         RunSource over = RunSource.computedOverTheElementsAt(elements, computed, each,
-                new RunSource.TraversalOrder(elements, direction));
+                direction == null ? null : new RunSource.TraversalOrder(elements, direction));
         return over == null ? null : NumericTerm.TakenOver.of(operation, over, each, inners, symbols);
     }
 
@@ -1028,7 +1897,7 @@ public final class InputNumber {
             InputReads where, BindingId element, TermPath at, RuleReadingSource source) {
         for (TraversalDirection direction : TraversalDirection.values()) {
             if (where.inTheOrderAt(element, direction, source.newtypes())
-                    instanceof PathResolution.At(TermPath shown) && shown.equals(at)) {
+                    instanceof ValuesHeld.At(TermPath shown) && shown.equals(at)) {
                 return new RunSource.TraversalOrder(at, direction);
             }
         }

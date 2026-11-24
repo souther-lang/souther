@@ -28,11 +28,19 @@ public final class WrittenOfANode {
 
     /**
      * Whether a place that stays put at {@code stays} is apart from the node at {@code node}:
-     * neither under the other. Asked of the places before anything is read of the node, since it
-     * turns on nothing else.
+     * neither stands at, under or around the other as the value is reached
+     * ({@link TermPath#standsAtUnderOrAround}), so moving the node moves nothing of the place. A
+     * narrowing to a case is no step into the value, and a place under another case of a value
+     * the node is in does not move with it. Asked of the places before anything is read of the
+     * node, since it turns on nothing else.
+     *
+     * <p>What a statement reads is then told the node's or the staying place's where it stands at
+     * or inside it on every row it stands anywhere ({@link TermPath#standsAtOrUnderOnEveryRow}): a
+     * place under the node narrowed further than the node is moves with it, and one the node is
+     * narrowed further than is the node's only on the rows of that case, so it is neither.
      */
     public static boolean apart(TermPath stays, TermPath node) {
-        return !stays.isAtOrUnder(node) && !node.isAtOrUnder(stays);
+        return !stays.standsAtUnderOrAround(node);
     }
 
     /** Whether {@code stated}, read of the node at {@code node}, says the same of any node. */
@@ -45,7 +53,14 @@ public final class WrittenOfANode {
         return new WrittenOfANode(node, List.copyOf(staying)).reads(stated);
     }
 
+    /** Each statement is read once, however many statements hold it. */
+    private final StatementReading<Boolean> statements = StatementReading.over(this::readsAt);
+
     private boolean reads(Proposition stated) {
+        return statements.read(stated);
+    }
+
+    private boolean readsAt(Proposition stated, StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Unread _, Proposition.SomeReachable _, Proposition.Carried _ -> false;
@@ -57,31 +72,36 @@ public final class WrittenOfANode {
             case Proposition.Truth truth -> reads(truth.of());
             case Proposition.InCases cases -> reads(cases.of());
             case Proposition.Present present -> reads(present.of());
-            case Proposition.SameValue same -> reads(same.one()) && reads(same.other());
+            // Which strings a string is one of is not shown to be asked of a node's own places.
+            case Proposition.InTheStrings _ -> false;
+            case Proposition.SameValue same -> reads(same.one())
+                    && (same.otherSubject() == null || reads(same.otherSubject()));
+            case Proposition.StringInside inside -> reads(inside.inner()) && reads(inside.outer());
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
-            case Proposition.All all -> all.parts().stream().allMatch(this::reads);
-            case Proposition.Any any -> any.parts().stream().allMatch(this::reads);
-            case Proposition.WhereItAnswers where ->
-                    reads(where.answers()) && reads(where.states());
-            case Proposition.OnAnApplication applications ->
-                    applications.each().stream().allMatch(this::reads);
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(this::reads);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                 Proposition.OfTheWays _ -> stated.everyPart(again);
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }
 
     private boolean reads(Quantity quantity) {
         return switch (quantity) {
-            case DecisionAtom.OfTheInput(NumericTerm term) -> reads(term);
+            case DecisionAtom.OfTheInput(NumericTerm term, var _) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
-                 DecisionAtom.ComputedOverAnAnswer _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _ -> false;
+                 DecisionAtom.ComputedOverAnAnswer _, Quantity.OfABinding _, Quantity.OfACall _,
+                 Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _,
+                 Quantity.TheKeptTotal _ -> false;
             case Quantity.HowManyMeet count -> reads(count.container())
                     && reads(count.ofTheElement());
+            case Quantity.HowManyMeetAcross count -> reads(count.container())
+                    && reads(count.inner()) && reads(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream().allMatch(this::reads);
             case Quantity.HowManyDifferent different -> reads(different.container())
                     && reads(different.ofTheElement());
+            case Quantity.HowManyDifferentMeet different -> reads(different.container())
+                    && reads(different.ofTheElement())
+                    && reads(different.meeting().statement());
             case Quantity.HowManyDifferentAcross across -> reads(across.container())
                     && reads(across.ofTheOccurrence());
             case Quantity.HowManyDifferentBelow below -> reads(below.root()) && reads(below.map());
@@ -91,9 +111,11 @@ public final class WrittenOfANode {
             case Quantity.RemainderByAnInput remainder -> remainder.operands().stream()
                     .allMatch(this::reads);
             case Quantity.ProductOfTwo product -> product.factors().stream().allMatch(this::reads);
-            case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
-                    .allMatch(this::reads);
+            // Made of numbers of the input and nothing else, asked of the answer for them once.
+            case Quantity.WhatAnOperationAnswers answers ->
+                    answers.positionsItIsMadeOf().stream().allMatch(this::reads);
             case Quantity.APieceOf piece -> reads(piece.string());
+            case Quantity.ThePieceAt piece -> reads(piece.string());
             case Quantity.IsAmongThePieces among -> reads(among.value()) && reads(among.string());
         };
     }
@@ -104,10 +126,20 @@ public final class WrittenOfANode {
     }
 
     private boolean reads(DecisionSubject subject) {
-        return subject instanceof DecisionSubject.AnInput(TermPath at) && reads(at);
+        return subject instanceof DecisionSubject.AnInput(TermPath at, var _) && reads(at);
+    }
+
+    /** Whether every place a value counted once each is read at is the node's or stays put. */
+    private boolean reads(Quantity.TheValue value) {
+        return switch (value) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject at) -> reads(at);
+            case Quantity.TheValue.ChosenByCase chosen ->
+                    chosen.places().stream().allMatch(this::reads);
+        };
     }
 
     private boolean reads(TermPath at) {
-        return at.isAtOrUnder(node) || staying.stream().anyMatch(at::isAtOrUnder);
+        return at.standsAtOrUnderOnEveryRow(node)
+                || staying.stream().anyMatch(at::standsAtOrUnderOnEveryRow);
     }
 }

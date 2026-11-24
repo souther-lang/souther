@@ -51,10 +51,9 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
 
     /** Every line of {@code gate}, as measured against the one row this model has. */
     private static List<BorderAssessment> linesFor(String rank, String cost, String out) {
-        Compilation compilation = Compilation.ofSource(
-                MODEL.replace("RANK", rank).replace("COST", cost).replace("OUT", out), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                MODEL.replace("RANK", rank).replace("COST", cost).replace("OUT", out),
+                Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), MODULE);
         assertNotNull(boundaries, "the model under test compiles");
@@ -147,11 +146,9 @@ coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().o
      * counted. */
     @Test
     void theComparisonIsNotCountedAsAnArm() {
-        Compilation compilation = Compilation.ofSource(
+        Compilation compilation = ACompiledModel.measured(
                 MODEL.replace("RANK", "0").replace("COST", "100001").replace("OUT", "Manual"),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                Adequacy.Asked.fullReport());
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(MODULE)).value();
         assertNotNull(branches, "the model under test compiles");

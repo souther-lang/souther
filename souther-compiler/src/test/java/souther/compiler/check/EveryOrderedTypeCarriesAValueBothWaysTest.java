@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
@@ -11,6 +12,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Times;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
@@ -52,7 +54,7 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
             """;
 
     private static Symbols symbols() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
     }
 
@@ -113,7 +115,7 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
                 out.add(end.at());
             }
         }
-        Place inside = carrier.somethingInside(extent.low(), extent.high());
+        Place inside = carrier.aPlaceInside(extent.low(), extent.high(), UsualPlace.NONE);
         if (inside != null) {
             out.add(inside);
         }

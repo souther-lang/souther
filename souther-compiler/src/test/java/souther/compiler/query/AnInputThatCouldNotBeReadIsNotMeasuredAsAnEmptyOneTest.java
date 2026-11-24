@@ -2,8 +2,10 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Sig;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -52,8 +54,7 @@ class AnInputThatCouldNotBeReadIsNotMeasuredAsAnEmptyOneTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(UNRESOLVED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1504", "E2105"), compilation);
     }
 
     /** The signature is in hand, which is the weakest of the three and the one that survives. */

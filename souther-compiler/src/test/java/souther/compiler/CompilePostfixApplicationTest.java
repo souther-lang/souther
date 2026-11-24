@@ -146,8 +146,10 @@ class CompilePostfixApplicationTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { m = pick(i.n + 1)(i.n + 2) }
                 """);
-        Hir.FnDef def = souther.compiler.query.Compilation
-                .ofDocuments(byId, java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY)
+        souther.compiler.query.Compilation compilation = souther.compiler.query.Compilation
+                .ofDocuments(byId, java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.compiles(compilation);
+        Hir.FnDef def = compilation
                 .db().ask(new souther.compiler.query.Bodies.SettledFn("demo", "go")).value();
         assertEquals(1, occurrences(def.writtenBody(), "pick"), "the callee was worked out more than once");
     }

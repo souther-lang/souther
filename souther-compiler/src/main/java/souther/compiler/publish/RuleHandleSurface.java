@@ -1,5 +1,6 @@
 package souther.compiler.publish;
 
+import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
@@ -42,6 +43,14 @@ public enum RuleHandleSurface {
     NOT_READ_RULE("/$defs/partition/properties/notRead/items/properties/rule",
             "rule", Carries.THE_HANDLE_ALONE),
 
+    /** The rule whose line's cases were too many to be taken apart, beside what they were. */
+    CASE_EXPANSION_RULE("/$defs/partition/properties/caseExpansions/items/properties/rule",
+            "rule", Carries.THE_HANDLE_ALONE),
+
+    /** The rule whose line was read at a cost, beside the helper its cases choose among. */
+    COSTLY_READING_RULE("/$defs/partition/properties/costlyReadings/items/properties/rule",
+            "rule", Carries.THE_HANDLE_ALONE),
+
     /** The rule that drew the line a point is owed for. */
     OBLIGATION_RULE("/$defs/obligations/items/properties/rule",
             "rule", Carries.THE_HANDLE_ALONE),
@@ -63,6 +72,19 @@ public enum RuleHandleSurface {
      */
     SYNTHESIS_SHORTFALL_RULE("/$defs/decision/properties/obligations/items/properties"
             + "/synthesisShortfalls/items/properties/causes/items/properties/rule", "rule",
+            Carries.THE_HANDLE_ALONE),
+
+    /**
+     * The rule a run of a row stopped at: the invariant clause a construction was refused by, or
+     * the {@code ensures} the answer did not keep.
+     *
+     * <p>Written where the search the run was of is, beside the word it came back with — a search
+     * of a decision rule that composed nothing, or a search for a row the reading of a rule asked
+     * for — through the one definition both publish. The input that stopped the run is one the
+     * model has not decided about, and what an author takes to whoever decides it is which rule
+     * refused it.
+     */
+    RUN_STOPPED_RULE("/$defs/runsStopped/items/properties/rule", "rule",
             Carries.THE_HANDLE_ALONE);
 
     private final String schemaPath;
@@ -102,7 +124,8 @@ public enum RuleHandleSurface {
             throw new IllegalStateException(
                     "this field writes a sentence with a handle in it: " + this);
         }
-        into.node().put(here(into), RuleHandleSentence.said(handle, sources, sectionSource));
+        into.node().put(here(into), RuleHandleSentence.said(handle, sources, sectionSource,
+                Messages.BASE_LANGUAGE));
     }
 
     /**

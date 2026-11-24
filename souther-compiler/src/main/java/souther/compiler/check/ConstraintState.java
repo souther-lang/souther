@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.LinearForm;
@@ -131,6 +131,23 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *  a machine. */
     public boolean isBottom(StringMachineAnswers machines) {
         return shownByAnother() || admitted(machines).holdsNothing();
+    }
+
+    /**
+     * Whether no value of the types standing here satisfies this: nothing at all does, or nothing
+     * inside where the order of each number stops ({@link NumericDomain#leavesNoRow}).
+     *
+     * <p>Not {@link #isBottom}, which asks of the rules alone and stays the question for a reader
+     * that draws a model's lines. A path nothing reaches is asked here, since a value the type
+     * cannot hold is one the program never builds.
+     */
+    public boolean leavesNoRow() {
+        return leavesNoRow(StringMachineAnswers.NONE);
+    }
+
+    /** The same, borrowing what {@code machines} has already made. */
+    public boolean leavesNoRow(StringMachineAnswers machines) {
+        return shown || numbers.leavesNoRow() || facts.isBottom() || admitted(machines).holdsNothing();
     }
 
     /**
@@ -290,6 +307,33 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *  a machine. */
     public Optional<Emptiness> holdsNothing(SequencedMap<A, Emptiness.AtAField.Where> positions,
                                             StringMachineAnswers machines) {
+        return verdict(positions, machines).proof();
+    }
+
+    /**
+     * What {@link #holdsNothing} answers, and whether the readings it asked were settled.
+     *
+     * @param proof   the proof that nothing satisfies this state, where there is one
+     * @param settled whether the answer is one that saying more of the rules would not take back:
+     *                the numbers settled and composed every bound
+     *                ({@link NumericDomain#isSettledAndComposed}) and the pair of values and ranges
+     *                decided what it was asked rather than leaving it for later
+     *                ({@link souther.compiler.values.Emptiness#UNDECIDED}). Where there is a proof
+     *                it is, since a state shown to hold nothing is settled however it was shown.
+     *                Where there is none it separates a state the readings looked at to the end
+     *                from one they stopped short of. Only the first is one that no state with fewer
+     *                of its rules was shown empty of, and a reader leaning on that has to ask it.
+     */
+    public record Verdict(Optional<Emptiness> proof, boolean settled) {}
+
+    /** {@link #holdsNothing(SequencedMap)}, with whether it settles. */
+    public Verdict verdict(SequencedMap<A, Emptiness.AtAField.Where> positions) {
+        return verdict(positions, StringMachineAnswers.NONE);
+    }
+
+    /** The same, borrowing what {@code machines} has already made. */
+    public Verdict verdict(SequencedMap<A, Emptiness.AtAField.Where> positions,
+                           StringMachineAnswers machines) {
         Confinement.Admission<A> shown = admitted(machines);
         // What can be said whatever the readings show, which the nearer sentences are preferred to.
         Emptiness why = shownByAnother() || shown.holdsNothing()
@@ -297,7 +341,9 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // Which proof holds is what this state answers; what it is called in a value declaring
         // these positions is {@link ProofOfEmptiness}'s, and is about what a proof can say rather
         // than about the walk that reached this one.
-        return ProofOfEmptiness.named(shown, positions, why);
+        Optional<Emptiness> proof = ProofOfEmptiness.named(shown, positions, why);
+        return new Verdict(proof, proof.isPresent()
+                || (numbers.isSettledAndComposed() && shown.wasAskedToTheEnd()));
     }
 
     /**
@@ -375,9 +421,21 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                 confinement.renamed(naming::apply), shown);
     }
 
+    /** This, told what the types of {@code told} say ({@link NumericDomain#told}). Nothing it
+     *  leaves moves. */
+    public ConstraintState<A> told(Map<A, NumberSpace> told) {
+        NumericDomain<A> held = numbers.told(told);
+        return held == numbers ? this : new ConstraintState<>(held, facts, confinement, shown);
+    }
+
     /** This, with {@code f rel 0} taken as holding. */
-    public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
+    public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, NumberSpace> spaces) {
+        return withNumbers(numbers.assume(f, rel, spaces));
+    }
+
+    /** This, or the state with {@code taken} for its numbers where they are not the same. */
+    private ConstraintState<A> withNumbers(NumericDomain<A> taken) {
+        return taken == numbers ? this : new ConstraintState<>(taken, facts, confinement, shown);
     }
 
     /**
@@ -390,9 +448,8 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * word.
      */
     public ConstraintState<A> taking(A atom, NumericDomain.Bounds bounds,
-                                     Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assuming(atom, bounds, kinds), facts, confinement,
-                shown);
+                                     Map<A, NumberSpace> spaces) {
+        return withNumbers(numbers.assuming(atom, bounds, spaces));
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
@@ -446,13 +503,12 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *
      * <p>The one place a settling is stated, so that a reading made with one and a reading settled
      * after it was made say the same thing. Written twice, the second would be free to state it
-     * under a different spacing and answer a position differently while both stayed sound.
+     * under a different space and answer a position differently while both stayed sound.
      */
     static <A> ConstraintState<A> settling(ConstraintState<A> state, A atom,
                                            souther.compiler.numeric.Count at,
-                                           souther.compiler.numeric.Granularity spacing) {
-        return state.taking(
-                LinearForm.<A>atomMinusConstant(atom, at.exactly()),
-                Rel.EQ, java.util.Map.of(atom, spacing));
+                                           NumberSpace space) {
+        return state.taking(LinearForm.<A>atomMinusConstant(atom, at.exactly()), Rel.EQ,
+                Map.of(atom, space));
     }
 }

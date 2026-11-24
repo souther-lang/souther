@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.PointRole;
 
 import java.util.List;
@@ -120,9 +121,7 @@ class ANameBesideAnEndIsOwedToTheDifferenceItMadeTest {
 
     /** Who a report says owes one row of a module's account. */
     private static String ownersOf(String source, String module, PointRole role, String said) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders(module)).value();
         assertNotNull(account, "the model under test compiles");

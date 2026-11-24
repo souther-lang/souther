@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -74,7 +75,7 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
     private static boolean holds(OnTheWay asked, long wanted, long items) {
         return switch (asked) {
             case OnTheWay.TakenIn taken -> switch (taken.demand()) {
-                case RowDemand.Relational(TakenConstraint.Affine(var form, var rel)) -> {
+                case RowDemand.Relational(TakenConstraint.Affine(var form, var rel, var _)) -> {
                     BigInteger sum = whole(form.constant());
                     for (var term : form.coefs().entrySet()) {
                         long value = switch (term.getKey()) {
@@ -89,8 +90,8 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
                     yield rel.holds(sum.signum());
                 }
                 case RowDemand.Relational _, RowDemand.Exists _, RowDemand.ForAll _,
-                     RowDemand.ATruth _, RowDemand.SoMany _, RowDemand.OneValueAtBoth _,
-                     RowDemand.ForTheRun _ ->
+                     RowDemand.ATruth _, RowDemand.SoMany _, RowDemand.OnARemainder _,
+                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
                         throw new AssertionError("a size is asked as numbers are: " + asked);
             };
             case OnTheWay.OneOf one -> one.alternatives().stream()
@@ -129,14 +130,8 @@ class ASizeThatTurnsOnHowTheArgumentsStandIsReadInEachCaseTest {
                 reading, holding, WhatConditionsState.of(reading)).entries();
     }
 
-    private static final Compilation COMPILATION = compiled();
-
-    private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
-    }
+    private static final Compilation COMPILATION =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     private static String module() {
         return COMPILATION.modules().getFirst();

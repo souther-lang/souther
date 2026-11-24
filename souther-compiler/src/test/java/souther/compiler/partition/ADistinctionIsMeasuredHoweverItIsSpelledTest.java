@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -41,14 +43,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ADistinctionIsMeasuredHoweverItIsSpelledTest {
 
     private static Partitions.Partitioning partitioningOf(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return Partitions.of(behavior, InputDomain.of(sigs.get(behavior), context,
                         TypeCardinality.Counts.workedOutIn(context), Membership.none())
                 .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

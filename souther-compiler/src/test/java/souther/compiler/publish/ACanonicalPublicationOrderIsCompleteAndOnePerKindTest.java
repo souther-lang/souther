@@ -2,9 +2,11 @@ package souther.compiler.publish;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
 
@@ -224,10 +226,17 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
         }
         List<Object> out = new ArrayList<>();
         for (Object place : order.slots()) {
-            out.add(place instanceof Incompleteness.Code code ? anObservationOf(code) : place);
+            out.add(place instanceof Incompleteness.Code code ? anObservationOf(code)
+                    : place == ReadingGap.CasesNotWorkedOut.class ? CASES_NOT_WORKED_OUT : place);
         }
         return out;
     }
+
+    /** Cases nobody worked out, at a figure: the place is the kind, whatever figures it was met
+     *  at, as an observation's is its code. */
+    private static final ReadingGap CASES_NOT_WORKED_OUT = new ReadingGap.CasesNotWorkedOut(
+            List.of(new Figure.Budget(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared())));
 
     /** An observation of {@code code}, at a figure where a figure is what decides it. */
     private static ReadingGap anObservationOf(Incompleteness.Code code) {
@@ -285,6 +294,18 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
                 out.add(anObservationOf(code));
             }
             return out;
+        }
+        if (arm == ReadingGap.ReachNotRead.class) {
+            // One per word, whatever figure it was met at: the figure is where it was met.
+            List<Object> out = new ArrayList<>();
+            for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
+                out.add(new ReadingGap.ReachNotRead(why));
+            }
+            return out;
+        }
+        if (arm == ReadingGap.CasesNotWorkedOut.class) {
+            // One, whatever figures it was met at.
+            return List.of(CASES_NOT_WORKED_OUT);
         }
         RecordComponent[] held = arm.getRecordComponents();
         if (held == null) {

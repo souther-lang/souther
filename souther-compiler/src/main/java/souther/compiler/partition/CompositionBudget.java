@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+
 
 /**
  * A figure this compiler holds a piece of its own work to.
@@ -83,6 +86,41 @@ public enum CompositionBudget {
      *  built. */
     SHARES_A_COUNT_IS_TRIED_AT(4096),
 
+    /** How many choices of counts are looked at in finding the fewest that hold a relation among
+     *  the counts of one container's elements and how many it holds ({@link AggregateRelation}).
+     *  Each count is one of as many numbers as a container is composed with elements, so the
+     *  choices grow with every count a relation weighs, and a relation no whole number meets —
+     *  one that sums even numbers to an odd — is walked to its end. A search that reaches this
+     *  places no count, and says so: nothing is shown impossible by it. */
+    TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT(4096),
+
+    /** How many values of each run a total is tried at, where what an element answers turns on
+     *  the total of the container it is in and nothing asks the total to be any one number: the
+     *  runs are those between where the statements turn over on the total, inside what the region
+     *  leaves it, and the elements are moved to come to whichever is tried
+     *  ({@link ContainerAsAWhole}). A count no total tried meets is not shown to have none.
+     *
+     *  <p>The most, and not how many. The places the statements turn at are tried besides, so one
+     *  value of each run is every way a statement reading the total alone can answer; a statement
+     *  reading an element at so many times the total puts an element of whole numbers on its line
+     *  only at a total of one remainder by that many, so a run is tried at one total of each
+     *  ({@link AStatementAtARow#remaindersOf}), up to this. */
+    TOTALS_A_COUNT_IS_TRIED_AT(8),
+
+    /** How many runs of whole numbers are kept of what the elements drawn for a count can come
+     *  to at one place, while they are moved to come to a total fixed there
+     *  ({@link ContainerAsAWhole}). Each element adds the runs it may be moved in to what the ones
+     *  before it can come to, and runs that meet are one; past this the elements are not moved,
+     *  and the containers they would have made are not offered. */
+    RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO(256),
+
+    /** How many values an element drawn for a count is tried moved to, while the elements are
+     *  moved to come to a total ({@link ContainerAsAWhole}): the values of its run nearest where it
+     *  started that the region does not hold apart, and over all the elements of one container
+     *  this many for each and one more. Past it the containers they would have made are not
+     *  offered. */
+    VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED(64),
+
     /** How many combinations of how often each of several keys occurs are tried for the lists of
      *  an outer list. They multiply with the keys, and each is a container composed whole, so a
      *  walk over them is held to this and not to the containers it offers, which count only the
@@ -97,6 +135,12 @@ public enum CompositionBudget {
      *  refused. */
     VALUES_AN_ELEMENT_IS_CHOSEN_AMONG(256),
 
+    /** How many elements a container inside an element is listed holding where no statement reads
+     *  how many it holds: none up to this, which tell apart a statement over how many of its
+     *  elements meet something — none, one, several. A statement turning on a size past it is
+     *  read through the size it names, which is listed whatever this is. */
+    ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH(3),
+
     /** How many ways down to the number a total is read from are tried. Its own figure and not
      *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
      *  charging one to the other leaves a case never tried because an earlier one planned and built
@@ -109,12 +153,47 @@ public enum CompositionBudget {
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
 
+    /** How many cases a value is planned under where a rule of a value above names a field under
+     *  a sum and nobody asked which case the value is. Each is a row composed whole, and what
+     *  multiplies here is the cases of every such sum the parameter holds, counted across all of
+     *  them; past it the cases left are not planned under, and the search is carried out with the
+     *  figure. */
+    CASES_A_RULE_ABOVE_IS_PLANNED_UNDER(8),
+
     /** How many ways a search looks along where conditions on the way to a border came out one of
      *  several ways, each a row is composed along whole. Every way of taking their open
      *  alternatives together where they are no more than this; past it, each open alternative
      *  once beside the others' first ({@link OneOfEach}), and the way looked along whole after
      *  them, which narrows by none of them and is said to have been. */
     WAYS_A_WAY_IS_LOOKED_ALONG(16),
+
+    /**
+     * How many walks a way looked along whole past {@link #WAYS_A_WAY_IS_LOOKED_ALONG} is read
+     * again with, for one relation that reads it ({@link AWayReadForARelation}): each asks whether
+     * a value meets what the way asks apart from the relation, with the choices read as less so
+     * far, or whether no row takes a way of their alternatives.
+     *
+     * <p>Over the whole reading again and not a share per choice, because a choice is asked again
+     * each time another is kept as it stands, and a share per question would be a bound that grows
+     * with the choices on the way. Past it, the choices not yet shown to come to less are kept as
+     * they stand, which reads them exactly; where the way read again is still past the ways looked
+     * along, the relation is shown nothing of it and says this is one of the figures why.
+     */
+    WALKS_A_WAY_IS_READ_AGAIN_WITH(256),
+
+    /**
+     * How many pairs of a bound below a number and a bound above it are put together to eliminate
+     * the number, reading a way again for one relation ({@link AWayReadForARelation}): what the
+     * statements a way asks apart from the relation leave each number before it is given a value
+     * ({@link WholeValuesMeeting}).
+     *
+     * <p>Over the whole reading again, for the reason {@link #WALKS_A_WAY_IS_READ_AGAIN_WITH} is.
+     * Each pair is a bound, so the bounds may multiply with each number eliminated. Past it, the
+     * numbers the elimination did not reach are given values where the region and the statements
+     * of them alone put them, which may leave a later number no value; a choice whose way apart is
+     * then not shown to be met is kept as it stands, and this is one of the figures why.
+     */
+    PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH(4096),
 
     /** How many alternatives of those conditions are taken in, one beside another, to find the
      *  ways that are open. The walking beside the looking: an alternative that closes against what
@@ -207,9 +286,15 @@ public enum CompositionBudget {
      */
     TIMES_THE_RULES_ARE_ASKED_AGAIN(2_000),
 
-    /** How many values of one position on the way to a border are tried. Its outcome is not a
-     *  composing that stopped: the row is composed, and what was not composed against is one
-     *  condition on the way ({@link ReachabilityGap}). */
+    /**
+     * How many values of one position on the way to a border are tried. On the way its outcome is
+     * not a composing that stopped: the row is composed, and what was not composed against is one
+     * condition on the way ({@link ReachabilityGap}).
+     *
+     * <p>The same search places the numbers read beside the elements of a count, and there it is
+     * a search for the count's level that came back short of the values it did not try, said as
+     * any search cut short is ({@link Generator}).
+     */
     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(8),
 
     /**
@@ -249,6 +334,27 @@ public enum CompositionBudget {
     ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR(64),
 
     /**
+     * How many values the positions of one such walk are tried at together, counted over every
+     * position it fixes.
+     *
+     * <p>Its own figure for the reason the one above is: the values of one position are bounded,
+     * and the walk tries each of them under every value of the positions before it, so how many it
+     * tries grows as their product. Most of those never reach the composing the one above counts —
+     * the region refuses what the values fixed above leave, or a congruence leaves the last
+     * position no value inside its run — so a walk over many positions is held by neither of them.
+     * Spent over every congruence the walk is asked under, which is one question asked several
+     * ways.
+     *
+     * <p>The figure of one position ({@link #VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT}) to the
+     * third: what the last of three positions is tried at where each of them is tried at that
+     * figure under every value of the ones before it.
+     *
+     * <p>Its outcome is the outcome of the ones above: what was not tried is one condition on the
+     * way ({@link ReachabilityGap}).
+     */
+    VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT(512),
+
+    /**
      * How many values a point is tried with after a row composed for one of them does not stand
      * there.
      *
@@ -282,6 +388,17 @@ public enum CompositionBudget {
      */
     VALUES_A_POINT_IS_TRIED_WITH(8),
 
+    /**
+     * How many candidates beside the rows a point's candidates ran are made and checked for that
+     * point, and how many values are made of one type to put in a list: a list with another
+     * element put in it, an element changed for one a row of the module ran, a whole number one
+     * away ({@link Generator#rowsBeside}). A candidate the type's decoder refuses is counted and
+     * is not run, so the runs a point costs are at most this. One count for the point, whichever
+     * way it is looked along. A search that reaches it has stopped with candidates unmade, and is
+     * carried out with the figure.
+     */
+    ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT(1000),
+
     /** How many paths through one body a reading of its decision takes. What it had read is carried
      *  out with the figure ({@link DecisionReading.Enumeration.StoppedAtAFigure}), so the rules it
      *  did not reach are neither covered nor gaps. */
@@ -300,10 +417,12 @@ public enum CompositionBudget {
      *
      * <p>Over the whole reading and not each way, since what multiplies is how many ways are asked.
      *
-     * <p><b>Reaching it proves nothing and stops nothing.</b> Past it no condition is taken in and
-     * no way is asked, and a way not proved is a way kept: the rules past it are read as rules, and
-     * a rule no run takes among them is what the reading of reach says of it, as it would be with
-     * no proof at all.
+     * <p><b>Reaching it proves nothing.</b> Past it no condition is taken in and no way is asked,
+     * and a way not proved is a way kept: the rules past it are read as rules, and a rule no run
+     * takes among them is what the reading of reach says of it, as it would be with no proof at
+     * all. What it does stop is a proof being said of fewer constructions: a way no input gets past
+     * whose proof without a construction was left unanswered is said as a way the proof did not
+     * tell, with this figure ({@link DecisionReading.UndecidedAtAFigure}).
      */
     CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE(4096),
 
@@ -316,6 +435,13 @@ public enum CompositionBudget {
      * every application of every closure it is in and for every case of each side it compares, so
      * what multiplies is the nesting and what is counted is the product along one way down — and
      * so what one condition comes to does not turn on how many others beside it were read first.
+     *
+     * <p>What does not turn on an application is split once for all of them. A total over the
+     * elements a filter keeps, where nothing the filter or the elements read was handed to the
+     * closure, is the same total on every application, so the ways its elements are kept in are
+     * counted against the readings the comparison is one of apart from the applications. What each
+     * application adds is the comparison made in one of those ways, which splits nothing. A value
+     * that does turn on an application is another value on each, and is counted with all of them.
      *
      * <p>Not an {@code if} a comparison is read through. Its arms are read only where a run takes
      * them, so the ways down a chain of them are the ways a run can go, and one of those may pass
@@ -352,6 +478,13 @@ public enum CompositionBudget {
      * out as one nothing read, naming this as why
      * ({@link souther.compiler.meaning.WhyUnread.MoreTotalReadingsThanAreMade}). Counted before a
      * split is read, so a reading that stops here never built the readings it stopped short of.
+     *
+     * <p>Reaching it says what the reading could not do, and nothing of what the answer turns on:
+     * the parts of a proposition that stopped here are the parts it got to, which move with the
+     * length of a table the condition is read over. A reader that wants the parts an answer turns
+     * on asks whether it was read to the end first ({@link WhatAForkTests.PartsRead}); a lookup
+     * of a row against two averages runs out of this at every length of its table, and what is
+     * said of it must not depend on which length.
      */
     TOTAL_READINGS_OF_ONE_CONDITION(512),
 
@@ -375,6 +508,24 @@ public enum CompositionBudget {
      * what the step itself builds before it is counted is not bounded by this.
      */
     PARTS_A_DERIVATION_CONCLUDES(4096),
+
+    /**
+     * How many ways of keeping the elements of a container are written out to find what a
+     * statement over all of them comes to
+     * ({@link souther.compiler.meaning.Proposition.OfTheWays}).
+     *
+     * <p>Beside {@link #PARTS_A_DERIVATION_CONCLUDES} and not in place of it. That one bounds what
+     * the statement comes to, and ways that all state alike come to a few parts however many they
+     * are, so how many ways there are says nothing of how many parts. This bounds the work of
+     * writing them out, which is a way each: what is stated of the ways is held as it is read and
+     * written out only where a reader asks for the cases, and then only up to this many.
+     *
+     * <p><b>Reaching it gives the cases up and says so.</b> The reader is handed a part nothing
+     * read, naming this as why
+     * ({@link souther.compiler.meaning.WhyUnread.MoreWaysThanAreWrittenOut}), and the reading
+     * that held the statement over the ways is as it was.
+     */
+    WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER(1 << 14),
 
     /**
      * How many parts the choices of which of some statements hold come to written out, every count
@@ -443,46 +594,89 @@ public enum CompositionBudget {
      * line decides in any of them. What this bounds is the taking apart: each case is a way the
      * statement's other parts come out, and finding them walks every way the parts can come out
      * once for each case found. And how many of them are asked: cases kept as choices rather than
-     * written out are as many as the ways of choosing one, counted before any is asked, and past
-     * this figure none is.
+     * written out are as many as the ways of choosing one that no comparison chosen leaves a form
+     * no value of, or of those, that no comparison of a remainder leaves its dividend none of,
+     * counted before any is asked, and past this figure none is. Where those are not counted, they
+     * are every way as the choices stand.
+     *
+     * <p>Enough for a lookup in a table of fifty rows of grades taken through seven ways of keeping
+     * months, three hundred and fifty cases each a grade, and for the cases of two searches of
+     * eleven days for a business day, about five hundred: cases that are each what an author's
+     * statement means, and none of them a way no row takes.
      *
      * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
      * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.NotTakenApart}).
      * Where rows on both sides of the line reach the condition, which is all that says where the
      * cases hold, the line is not worked out in them
-     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}) — never owed
-     * rows where the statement may turn nothing, and never dropped for a proof nobody finished.
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), and never
+     * dropped for a proof nobody finished. Its points are still owed: the line is read under the
+     * condition, and a row standing at a point there is not told to be where the line decides
+     * ({@link ReadingGap.CasesNotWorkedOut}), since it may be in a case the statement turns
+     * nothing in. An author writes the rows at them, and which case each is in is what is open.
      */
-    CASES_A_LINE_IS_TAKEN_APART_INTO(256),
+    CASES_A_LINE_IS_TAKEN_APART_INTO(512),
 
     /**
      * How many steps the cases one case of where a line of a statement of several decides was said
      * for are taken through, asking whether a row stands on each side of the line in them: each
-     * alternative chosen and each part asked.
+     * alternative chosen and each part chosen.
      *
      * <p>Every step counted, and not the questions alone. A question is the way to the line with
-     * what one case has chosen so far taken in, and a case chosen part by part is asked after each
-     * part, so that a part leaving no row on one side settles every case chosen past it. Choosing
-     * among alternatives asks nothing of its own, and alternatives below alternatives are as many as
-     * the product of them; counted by the questions, a choosing that asks nothing — of cases nobody
-     * took apart, or past the last question allowed — would run as far as that product. Counted for
-     * each case said as one on its own, so what one of them spent decides nothing about another.
+     * what one case has chosen so far taken in, and a case chosen part by part is asked before
+     * each choice it goes more than one way at, so that a part leaving no row on one side settles
+     * every case chosen past it. Choosing among alternatives asks nothing of its own, and
+     * alternatives below alternatives are as many as the product of them; counted by the
+     * questions, a choosing that asks nothing — of cases nobody took apart, or past the last
+     * question allowed — would run as far as that product. Counted for each case said as one on
+     * its own, so what one of them spent decides nothing about another.
      *
      * <p><b>What the asking costs, and not how many cases there are.</b> How many cases are asked
      * is {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}'s, counted before any is. Which of them the line
      * decides in is asked, and not whether some one does, so where every case divides rows every
      * case is chosen to the end, and what that costs is a step for each alternative and each part
      * on the way to each case. Cases that share what they begin with, as the cases of a statement's
-     * parts do, take about four steps each, and this lets that many be asked of as many cases as
-     * are taken apart. Cases each chosen through more parts than that, sharing less, take more
-     * steps than that, and are where the line can come out not worked out at this figure.
+     * parts do, take about four steps each; cases of a search each chosen through some thirty
+     * parts, a candidate's comparisons and its membership one after another, take about eleven,
+     * and a choice whose other alternatives the numbers refute is a step for each of them as well.
+     * This lets sixteen be asked of each of as many cases as are taken apart. Cases each chosen
+     * through more parts than that, sharing less, take more steps than that, and are where the
+     * line can come out not worked out at this figure.
      *
      * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
      * turns in nor ones it turns nothing in, so they are where the line was not worked out
      * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), beside whatever
-     * the line's other cases showed.
+     * the line's other cases showed. The line's points are still owed there, as they are past
+     * {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}: it is read in the case as it was said, and a row
+     * there is not told to be where the line decides ({@link ReadingGap.CasesNotWorkedOut}).
      */
-    CASES_A_LINE_IS_ASKED_IN(1024),
+    CASES_A_LINE_IS_ASKED_IN(8192),
+
+    /**
+     * How many questions the cases where the lines of one statement of several decide are asked
+     * together: each the way to a line with what a case has chosen so far taken in, or what a case
+     * taken apart to the end comes to — a relation read again over the rows that arrive there.
+     *
+     * <p><b>The questions, and not the steps or the cases.</b> A question walks the whole way to
+     * the comparison, and is what asking costs; the steps between questions are counted for each
+     * case on its own ({@link #CASES_A_LINE_IS_ASKED_IN}), and how many cases a line is taken
+     * apart into before any is asked ({@link #CASES_A_LINE_IS_TAKEN_APART_INTO}). Neither bounds
+     * a statement whose lines are many: each line keeps within its own figures, and a statement
+     * read on each element a list starts with, for each arm of a search, is as many lines as
+     * those multiply to.
+     *
+     * <p>Enough for a statement over the first week of a list of days, each day moved to the first
+     * business day of three, for each rule a calendar may be due under: about six hundred and
+     * forty questions, asked in about a second. A search of eleven days for a business day, read
+     * so, asks past ten thousand, each walking the way the whole search builds.
+     *
+     * <p><b>Reaching it gives the statement up whole and says so.</b> What its lines were shown to
+     * come to before it ran out is put aside, and every line of it is where its cases were not
+     * worked out ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), so
+     * that what one line asked decides nothing about another's answer
+     * ({@link souther.compiler.meaning.CasesOfALineAsked.QuestionsOfAStatement}). The lines'
+     * points are still owed there, as they are past {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}.
+     */
+    QUESTIONS_A_STATEMENT_IS_ASKED(4096),
 
     /**
      * How deep a construction plan descends.
@@ -597,7 +791,53 @@ public enum CompositionBudget {
      * parameter multiplies. It stops the walk before a row that answers was found, so the point is
      * one this compiler stopped looking for a row at, and never one no row answers at.
      */
-    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64);
+    ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
+
+    /**
+     * How many pieces a string is put together of when a body parts it and builds a newtype of the
+     * pieces: how many it is seen in that a piece of it is changed at, and how many it is made of
+     * for the pieces to be ones the newtype admits.
+     *
+     * <p>The strings past it were never offered, so what a search came to is about the strings it
+     * tried — a string seen in more pieces than this is changed at none of them. The runs those
+     * strings are put to are counted where every candidate's are, and this stops only the making of
+     * them: a string of many pieces is as long as it has pieces, and so are the strings made of it.
+     */
+    PIECES_A_STRING_IS_PUT_TOGETHER_OF(8),
+
+    /**
+     * How many of the strings a row holds in its other inputs, each a string the newtype a body
+     * builds of the pieces of a string admits, a piece of that string is taken from.
+     *
+     * <p>Its own figure and not {@link #PIECES_A_STRING_IS_PUT_TOGETHER_OF}: that one counts the
+     * places of a string and this one the values a place is given, and a string of two pieces in a
+     * row of nine strings reaches this one and not that. The strings past it are never taken from,
+     * so what a search came to is about the strings it tried.
+     */
+    STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM(8),
+
+    /**
+     * How many elements one side of a list that balances against another has for the amounts of
+     * its elements to be searched among every number the amount's type admits.
+     *
+     * <p>Past it a side is made of one number repeated, which gives every total that number times
+     * the count comes to and no other: a balance that needs two different numbers on a side of
+     * more than this many is not found. Where it is the only number the type admits there is
+     * nothing a search would add, and the figure is not met. Met, a search that found no list says
+     * it was reduced to repeating a number, and not that the type admits none.
+     */
+    ELEMENTS_A_SIDE_IS_SEARCHED_OVER(8),
+
+    /**
+     * How many of the numbers the amount of a list's elements admits are offered to balance the
+     * sides from, the ones nearest the ends of the numbers it admits first.
+     *
+     * <p>Its own figure and not {@link #ELEMENTS_A_SIDE_IS_SEARCHED_OVER}: that one counts the
+     * elements a side is searched over and this one the numbers it is searched with, and a balance
+     * can be out of reach of either alone. A type that names every number it admits, and no more
+     * than this, is balanced from all of them and the figure is not met.
+     */
+    NUMBERS_A_SIDE_IS_BALANCED_FROM(12);
 
     private final int maximum;
 
@@ -605,14 +845,67 @@ public enum CompositionBudget {
         this.maximum = maximum;
     }
 
-    /** The figure itself. What is done on reaching it is the member's to say. */
+    /**
+     * The figure itself, as the compilation reading it holds it ({@link Allowances}); for a
+     * budget no compilation may hold to another figure, the one declared. What is done on
+     * reaching it is the member's to say.
+     */
     public int maximum() {
+        return Allowances.SETTABLE.contains(this) ? Allowances.inForce(this) : maximum;
+    }
+
+    /** The figure written down here, which a compilation holds this to where it says nothing
+     *  else. */
+    public int declared() {
         return maximum;
     }
 
-    /** This budget as a figure something stopped at. */
+    /**
+     * This budget as the figure it stands at where it is declared, whatever a compilation holds
+     * it to. For what says which kind of stop it was and is no stop that was made, such as the
+     * word for a reason; a stop that was made is {@link #reached}.
+     */
+    public Figure.Budget atDeclared() {
+        return new Figure.Budget(this, maximum);
+    }
+
+    /**
+     * This budget as the figure something stopped at, made where it stopped: the figure the
+     * compilation stopping there held it to. What carries the stop carries this.
+     */
+    public Figure.Budget reached() {
+        return reachedAShareOf(maximum());
+    }
+
+    /**
+     * This budget as the figure one of the questions it is shared out among stopped at: the share
+     * {@code share} that question was held to, which is the number it was compared against. Still
+     * this budget, because the share is worked out of its figure and raising it raises the share.
+     *
+     * @throws IllegalArgumentException where {@code share} is more than the figure it is a share of
+     */
+    public Figure.Budget reachedAShareOf(int share) {
+        if (share > maximum()) {
+            throw new IllegalArgumentException(this + " stands at " + maximum()
+                    + ", and a share of it at no more: " + share);
+        }
+        return new Figure.Budget(this, share);
+    }
+
+    /**
+     * This budget as a figure, made wherever it is asked: the one declared, which is the figure
+     * every compilation holds a budget to that none may hold to another.
+     *
+     * @throws IllegalStateException for a budget a compilation may hold to another figure
+     *         ({@link Allowances#SETTABLE}): which figure it stopped at is known only where it
+     *         stopped, and what stopped there carries it ({@link #reached})
+     */
     public Figure figure() {
-        return new Figure.Budget(this);
+        if (Allowances.SETTABLE.contains(this)) {
+            throw new IllegalStateException(this + " may be held to another figure than the one"
+                    + " declared, and what stopped at it carries the figure it stopped at");
+        }
+        return reached();
     }
 
     /**
@@ -623,93 +916,97 @@ public enum CompositionBudget {
      * budget added arrives here as a compile error rather than as a name nobody wrote a sentence
      * for.
      */
-    public String counts() {
+    public Message countsSaid() {
         return switch (this) {
-            case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
-            case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
-            case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
-            case ELEMENTS_A_TOTAL_IS_SPREAD_OVER -> "how many elements a total is spread over";
-            case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+            case ELEMENTS_A_PROPOSAL_HOLDS -> new SearchMessage.ElementsAProposalHolds();
+            case CHARACTERS_A_PROPOSAL_HOLDS -> new SearchMessage.CharactersAProposalHolds();
+            case PAIRINGS_BUILT_AT_ONCE -> new SearchMessage.PairingsBuiltAtOnce();
+            case ELEMENTS_A_TOTAL_IS_SPREAD_OVER -> new SearchMessage.ElementsATotalIsSpreadOver();
+            case SHAPES_OF_A_TOTAL_OFFERED -> new SearchMessage.ShapesOfATotalOffered();
             case ELEMENTS_A_COUNT_IS_COMPOSED_WITH ->
-                    "how many elements a container composed for a count holds";
-            case CONTAINERS_A_COUNT_IS_OFFERED -> "how many containers are offered for one count";
-            case SHARES_A_COUNT_IS_TRIED_AT ->
-                    "how many ways of sharing out a container's elements are tried for a count";
-            case COUNTS_OF_KEYS_TRIED ->
-                    "how many combinations of how often each key occurs are tried";
+                    new SearchMessage.ElementsACountIsComposedWith();
+            case CONTAINERS_A_COUNT_IS_OFFERED -> new SearchMessage.ContainersACountIsOffered();
+            case SHARES_A_COUNT_IS_TRIED_AT -> new SearchMessage.SharesACountIsTriedAt();
+            case TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT ->
+                    new SearchMessage.TuplesOfCountsARelationIsTriedAt();
+            case TOTALS_A_COUNT_IS_TRIED_AT -> new SearchMessage.TotalsACountIsTriedAt();
+            case RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO ->
+                    new SearchMessage.RunsACountsElementsCanComeTo();
+            case VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED ->
+                    new SearchMessage.ValuesAnElementIsMovedToTried();
+            case COUNTS_OF_KEYS_TRIED -> new SearchMessage.CountsOfKeysTried();
             case VALUES_AN_ELEMENT_IS_CHOSEN_AMONG ->
-                    "how many values of an element are read for a count";
-            case WAYS_DOWN_TO_A_TOTAL_TRIED -> "how many ways down to what a total adds up are tried";
-            case WAYS_UNDER_THE_CASES_TRIED ->
-                    "how many ways under the cases of a sum a container is written are tried";
-            case WAYS_A_WAY_IS_LOOKED_ALONG ->
-                    "how many ways a row is looked for along where conditions on the way are"
-                            + " one of several things";
-            case CHOICES_ON_A_WAY_LOOKED_AT ->
-                    "how many alternatives of conditions on the way are looked at to find the"
-                            + " ways a row may take";
+                    new SearchMessage.ValuesAnElementIsChosenAmong();
+            case ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH ->
+                    new SearchMessage.ElementsAnInnerContainerIsListedWith();
+            case WAYS_DOWN_TO_A_TOTAL_TRIED -> new SearchMessage.WaysDownToATotalTried();
+            case WAYS_UNDER_THE_CASES_TRIED -> new SearchMessage.WaysUnderTheCasesTried();
+            case CASES_A_RULE_ABOVE_IS_PLANNED_UNDER ->
+                    new SearchMessage.CasesARuleAboveIsPlannedUnder();
+            case WAYS_A_WAY_IS_LOOKED_ALONG -> new SearchMessage.WaysAWayIsLookedAlong();
+            case CHOICES_ON_A_WAY_LOOKED_AT -> new SearchMessage.ChoicesOnAWayLookedAt();
+            case WALKS_A_WAY_IS_READ_AGAIN_WITH -> new SearchMessage.WalksAWayIsReadAgainWith();
+            case PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH ->
+                    new SearchMessage.PairsOfBoundsAWayIsReadAgainWith();
             case CHOICES_OF_INPUT_NUMBERS_LOOKED_AT ->
-                    "how many choices of values for the input's numbers are looked at";
+                    new SearchMessage.ChoicesOfInputNumbersLookedAt();
             case PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED ->
-                    "how many values of the input's numbers are tried with an answer composed"
-                            + " for each";
-            case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
-            case PLACES_A_PAIR_IS_LOOKED_AT -> "how many places along a pair's line are looked at";
-            case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
-            case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
+                    new SearchMessage.PairsOfInputNumbersAndAnAnswerTried();
+            case PLACES_A_PAIR_IS_TRIED_AT -> new SearchMessage.PlacesAPairIsTriedAt();
+            case PLACES_A_PAIR_IS_LOOKED_AT -> new SearchMessage.PlacesAPairIsLookedAt();
+            case STEPS_A_SEARCH_MAY_TAKE -> new SearchMessage.StepsASearchMayTake();
+            case ASSIGNMENTS_A_SEARCH_COMPOSES -> new SearchMessage.AssignmentsASearchComposes();
             case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
-                    "how many values of an unbounded progression are tried";
-            case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
-            case DIVISORS_OF_A_PRODUCT_TRIED ->
-                    "how many numbers are tried as a divisor of a level of a product";
-            case DIVISORS_OF_A_REMAINDER_TRIED ->
-                    "how many values are tried as the divisor of a remainder an input leaves";
-            case REMAINDERS_A_SUM_IS_TRIED_AT ->
-                    "how many remainders are tried beside the numbers added to them";
-            case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
+                    new SearchMessage.ValuesOfAnUnboundedProgressionTried();
+            case LEVELS_A_SIDE_IS_ASKED_AT -> new SearchMessage.LevelsASideIsAskedAt();
+            case DIVISORS_OF_A_PRODUCT_TRIED -> new SearchMessage.DivisorsOfAProductTried();
+            case DIVISORS_OF_A_REMAINDER_TRIED -> new SearchMessage.DivisorsOfARemainderTried();
+            case REMAINDERS_A_SUM_IS_TRIED_AT -> new SearchMessage.RemaindersASumIsTriedAt();
+            case TIMES_THE_RULES_ARE_ASKED_AGAIN -> new SearchMessage.TimesTheRulesAreAskedAgain();
             case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
-                    "how many values a position on the way is tried at";
+                    new SearchMessage.ValuesAPositionOnTheWayIsTriedAt();
             case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
-                    "how many places of a position on the way are looked at";
+                    new SearchMessage.PlacesAPositionOnTheWayIsLookedAt();
             case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR ->
-                    "how many values of the numbers on the way a row is composed for";
-            case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
-            case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
-            case PATHS_OF_A_DECISION_READ -> "how many paths through one body a decision is read for";
+                    new SearchMessage.AssignmentsOnTheWayComposedFor();
+            case VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT ->
+                    new SearchMessage.ValuesThePositionsOnTheWayAreTriedAt();
+            case VALUES_A_POINT_IS_TRIED_WITH -> new SearchMessage.ValuesAPointIsTriedWith();
+            case ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT ->
+                    new SearchMessage.RowsBesideARunAreMadeForAPoint();
+            case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS ->
+                    new SearchMessage.DepthAConstructionPlanDescends();
+            case PATHS_OF_A_DECISION_READ -> new SearchMessage.PathsOfADecisionRead();
             case CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE ->
-                    "how many conditions are taken in asking whether some input takes a way through"
-                            + " one body";
-            case READINGS_OF_ONE_CONDITION ->
-                    "how many times one condition is read, once per value or case";
-            case TOTAL_READINGS_OF_ONE_CONDITION ->
-                    "how many times one condition is read in all, along every case and value";
-            case PARTS_A_DERIVATION_CONCLUDES ->
-                    "how many parts what one step of a reading states comes to, written out";
+                    new SearchMessage.ConditionsADecisionTakesInToProve();
+            case READINGS_OF_ONE_CONDITION -> new SearchMessage.ReadingsOfOneCondition();
+            case TOTAL_READINGS_OF_ONE_CONDITION -> new SearchMessage.TotalReadingsOfOneCondition();
+            case PARTS_A_DERIVATION_CONCLUDES -> new SearchMessage.PartsADerivationConcludes();
+            case WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER ->
+                    new SearchMessage.WaysAStatementIsWrittenOutOver();
             case PARTS_THE_CHOICES_OF_A_COUNT_COME_TO ->
-                    "how many parts the choices of which of some statements hold come to, written"
-                            + " out for a reader that takes a count of them apart";
-            case ALTERNATIVES_A_PATH_TRIES ->
-                    "how many parts of one of several things a path takes alone, to know which of"
-                            + " them it leaves";
-            case STEPS_A_STATEMENT_IS_READ_IN ->
-                    "how many steps a statement is read in, to say where each of its lines"
-                            + " decides";
-            case CASES_A_LINE_IS_TAKEN_APART_INTO ->
-                    "how many cases where a line of a statement decides are taken apart";
-            case CASES_A_LINE_IS_ASKED_IN ->
-                    "how many steps the cases where a line of a statement decides are taken"
-                            + " through, asking whether a row stands on each side of it";
-            case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
-            case COMBINATIONS_OF_TOTALS_TRIED ->
-                    "how many choices of a number for each of several totals of one container are"
-                            + " tried";
+                    new SearchMessage.PartsTheChoicesOfACountComeTo();
+            case ALTERNATIVES_A_PATH_TRIES -> new SearchMessage.AlternativesAPathTries();
+            case STEPS_A_STATEMENT_IS_READ_IN -> new SearchMessage.StepsAStatementIsReadIn();
+            case CASES_A_LINE_IS_TAKEN_APART_INTO -> new SearchMessage.CasesALineIsTakenApartInto();
+            case CASES_A_LINE_IS_ASKED_IN -> new SearchMessage.CasesALineIsAskedIn();
+            case QUESTIONS_A_STATEMENT_IS_ASKED -> new SearchMessage.QuestionsAStatementIsAsked();
+            case NUMBERS_OF_A_SET_TRIED -> new SearchMessage.NumbersOfASetTried();
+            case COMBINATIONS_OF_TOTALS_TRIED -> new SearchMessage.CombinationsOfTotalsTried();
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
-                    "how many code points of a class a string is searched for in full";
+                    new SearchMessage.CodePointsAStringIsSearchedInFull();
             case CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR ->
-                    "how many code points past a count a string is looked for";
-            case RUNS_REPAIRING_A_ROW -> "how many runs looking for a row that goes further may make";
+                    new SearchMessage.CodePointsBeyondACountAStringIsLookedFor();
+            case RUNS_REPAIRING_A_ROW -> new SearchMessage.RunsRepairingARow();
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
-                    "how many rows a walk composing a row for a point hands the choice of a row";
+                    new SearchMessage.RowsAWalkHandsTheChoiceOfARow();
+            case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
+                    new SearchMessage.PiecesAStringIsPutTogetherOf();
+            case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
+                    new SearchMessage.StringsOfTheRowAPieceIsTakenFrom();
+            case ELEMENTS_A_SIDE_IS_SEARCHED_OVER ->
+                    new SearchMessage.ElementsASideIsSearchedOver();
+            case NUMBERS_A_SIDE_IS_BALANCED_FROM -> new SearchMessage.NumbersASideIsBalancedFrom();
         };
     }
 
@@ -748,13 +1045,21 @@ public enum CompositionBudget {
             // And the composing of what that walk tries, which bounds the same walk from the other
             // end: the values it reaches, each composed for.
             case ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR -> VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
+            // And the product of the values each position is tried at, which bounds it across
+            // the positions.
+            case VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT ->
+                    VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
             case CHOICES_ON_A_WAY_LOOKED_AT -> WAYS_A_WAY_IS_LOOKED_ALONG;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
                  ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
-                 SHARES_A_COUNT_IS_TRIED_AT, COUNTS_OF_KEYS_TRIED,
-                 VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                 SHARES_A_COUNT_IS_TRIED_AT, TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT,
+                 TOTALS_A_COUNT_IS_TRIED_AT,
+                 RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO, VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,
+                 COUNTS_OF_KEYS_TRIED,
+                 VALUES_AN_ELEMENT_IS_CHOSEN_AMONG, ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
@@ -762,18 +1067,23 @@ public enum CompositionBudget {
                  DIVISORS_OF_A_REMAINDER_TRIED, REMAINDERS_A_SUM_IS_TRIED_AT,
                  TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
+                 ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT,
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
-                 PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
+                 WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER, PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
-                 WAYS_A_WAY_IS_LOOKED_ALONG,
-                 DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
+                 QUESTIONS_A_STATEMENT_IS_ASKED, WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,
+                 PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH, DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
-                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW -> null;
+                 RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                 PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                 STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
+                 ELEMENTS_A_SIDE_IS_SEARCHED_OVER,
+                 NUMBERS_A_SIDE_IS_BALANCED_FROM -> null;
         };
     }
 }

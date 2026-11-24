@@ -99,15 +99,19 @@ final class AdmissibleReading {
      * which is what an alternative holding it turns on.
      */
     private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** The rules about a container and a place beside it that the builders of the record keep. */
+    private final StatedByClauses.BuiltFor builtFor;
+
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                               Symbols symbols, SumCases sums,
-                              Allowance<FactSubject> allowed) {
+                              Allowance<FactSubject> allowed, StatedByClauses.BuiltFor builtFor) {
         this.terms = terms;
         this.byName = byName;
         this.chains = chains;
         this.symbols = symbols;
         this.sums = sums;
         this.allowed = allowed;
+        this.builtFor = builtFor;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of.
@@ -117,8 +121,8 @@ final class AdmissibleReading {
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
     static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                                 Symbols symbols, SumCases sums,
-                                Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed);
+                                Allowance<FactSubject> allowed, StatedByClauses.BuiltFor builtFor) {
+        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed, builtFor);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -278,6 +282,29 @@ final class AdmissibleReading {
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
+        // A rule about a container and a place beside it that the builders keep: it says how the
+        // container's entries or elements stand and leaves the values of the place beside it as
+        // they were, so the container alone is short of it. One they do not keep is a form this
+        // did not read, at every place it names.
+        EntryAt entry = entryHeldAt(part, at);
+        FactSubject sides = entry == null ? sidesBalancedAt(part, at) : null;
+        // One asking for an entry no map holds is false of every value, so no place it names has a
+        // value that leaves the rules true of it: a rule read, and read as leaving each of them
+        // nothing.
+        if (entry != null && builtFor.asksForNoEntry(entry.container())) {
+            PlannedValues<FactSubject> none = PlannedValues.at(entry.container(), AdmittedPlan.NONE);
+            for (FactSubject each : names(part.of(), at)) {
+                none = none.meet(PlannedValues.at(each, AdmittedPlan.NONE));
+            }
+            return none;
+        }
+        if (entry != null && builtFor.keepsAnEntry(entry.container(), entry.key())) {
+            return shortOf(part, Set.of(entry.container()),
+                    UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
+        }
+        if (sides != null && builtFor.balances(sides)) {
+            return shortOf(part, Set.of(sides), UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER);
+        }
         Core e = part.of();
         UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
                 : relatesTwoPositions(part, at) ? UnreadReason.RELATES_TWO_POSITIONS
@@ -287,11 +314,13 @@ final class AdmissibleReading {
 
     /**
      * Whether {@code part} states that no two elements of a position come to one answer of a
-     * closure this compiler reads ({@link ElementsApart#stated}), of a container the builders of
-     * that position are told about ({@link ElementsApart#readsAPlace}).
+     * closure this compiler reads, by a call or by a count of different values
+     * ({@link ElementsApart#stated(Core, boolean, DeclarationNewtypes)}), of a container the
+     * builders of that position are told about ({@link ElementsApart#readsAPlace}).
      *
-     * <p>Stated and not denied. Denied it says some two elements are alike, which nothing here
-     * builds for, and a closure this does not read is a form this did not read whatever it is
+     * <p>Not where it says some two elements are alike, which nothing here builds for — a call
+     * denied, or a count of different values held below the count of elements — and a closure
+     * this does not read is a form this did not read whatever it is
      * handed — so both stay {@link UnreadReason#FORM_NOT_READ}. So does a container written any
      * other way: a rule this calls one about how the elements stand is one a container composed
      * for the position keeps.
@@ -309,18 +338,64 @@ final class AdmissibleReading {
      * against what the builders of the position keep ({@link ReadingLanguage.Elements}).
      */
     KeptApart keptApartAt(ClauseExpr.Part part, Denotations at) {
-        if (!part.positive()
-                || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
-            return null;
-        }
-        ElementsApart.Stated stated = ElementsApart.stated(call);
+        // The run named as the builders name it, which is as a place of a value names its fields.
+        ElementsApart.Stated stated =
+                ElementsApart.stated(part.of(), part.positive(), terms.newtypes());
         FactSubject container = stated != null && ElementsApart.readsAPlace(stated.container())
                 ? positionIn(stated.container(), at) : null;
-        return container == null ? null : new KeptApart(container, stated.run());
+        return container == null ? null
+                : new KeptApart(container, stated.run(), stated.answersEverywhere());
     }
 
-    /** A leaf saying no two elements of {@code container} share what {@code run} reads off one. */
-    record KeptApart(FactSubject container, List<String> run) {}
+    /**
+     * A leaf saying no two elements of {@code container} share what {@code run} reads off one,
+     * where it answers.
+     *
+     * @param answersEverywhere whether the leaf is shown to answer for every container
+     *                          ({@link ElementsApart.Stated}): a reading saying every container
+     *                          composed apart keeps it has to know
+     */
+    record KeptApart(FactSubject container, List<String> run, boolean answersEverywhere) {}
+
+    /**
+     * The map and the key {@code part} asks the map for an entry under, or null where it asks no
+     * map for one ({@link EntryHeld}) or names a map or a key that is no position of this value.
+     *
+     * <p>The same recognition the builders of the map are told the rule by, so that a leaf this
+     * calls read is a rule they keep.
+     */
+    EntryAt entryHeldAt(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()) {
+            return null;
+        }
+        EntryHeld.Stated stated =
+                EntryHeld.read(part.of(), core -> followed(core, at), terms.newtypes());
+        FactSubject container = stated == null ? null : positionIn(stated.container(), at);
+        FactSubject key = stated == null ? null : positionIn(stated.key(), at);
+        return container == null || key == null ? null : new EntryAt(container, key);
+    }
+
+    /** A leaf asking {@code container} for an entry under the key at {@code key}. */
+    record EntryAt(FactSubject container, FactSubject key) {}
+
+    /**
+     * The list {@code part} says the sides of balance in, or null where it says nothing of the
+     * kind ({@link SidesBalanced}) or names a list that is no position of this value.
+     */
+    FactSubject sidesBalancedAt(ClauseExpr.Part part, Denotations at) {
+        SidesBalanced.Stated stated = SidesBalanced.read(part.of(), part.positive());
+        return stated == null ? null : positionIn(stated.list(), at);
+    }
+
+    /** What a name stands for where it was given a value, and the expression itself otherwise. */
+    private static Core followed(Core e, Denotations at) {
+        Core here = e;
+        while (Core.withoutStanding(here) instanceof Core.Read read
+                && at.givenTo(read.binding()) instanceof ValueStanding.ReadThrough<Denotations> given) {
+            here = given.value();
+        }
+        return here;
+    }
 
     /**
      * What {@code e} leaves the positions it names, said twice: to the places, and about the clause.
@@ -356,7 +431,7 @@ final class AdmissibleReading {
             // nothing — the split is at the conjunctions — so an author with two of them to rewrite
             // was shown one. Where a reader goes about it is another question and is the whole rule
             // either way ({@code RuleAccounting.Why}); this is what tells two of them apart.
-            ReadingShortfall one = new ReadingShortfall(part.at(), wroteIt(part.of()),
+            ReadingShortfall one = new ReadingShortfall(part.at(), wroteIt(part),
                     RuleShortfall.Kind.LEAF, StoppedReading.of(why), each);
             if (!mine.contains(one)) {
                 mine.add(one);
@@ -376,12 +451,12 @@ final class AdmissibleReading {
     private PlannedValues<FactSubject> asking(ClauseExpr.Part part, FactSubject position,
                                               AdmittedPlan.Pattern plan) {
         asked.computeIfAbsent(part.of(), _ -> new LinkedHashSet<>())
-                .add(new AskedAt(position, plan.plan(), part.at(), wroteIt(part.of())));
+                .add(new AskedAt(position, plan.plan(), part.at(), wroteIt(part)));
         return PlannedValues.at(position, plan);
     }
 
     /**
-     * What the author wrote at {@code e}, where they wrote anything.
+     * What the author wrote at {@code part}, where they wrote anything.
      *
      * <p>The construct and the copy an expansion made of it. What an author rewrites is the one they
      * wrote ({@link ConstructOccurrence#origin}), and rewriting it answers every copy; which copy
@@ -391,6 +466,13 @@ final class AdmissibleReading {
      * <p>Asked by every reader that files something about a part, so that two facts about one
      * copy of one part are told to be one.
      */
+    static ConstructOccurrence wroteIt(ClauseExpr.Part part) {
+        // The innermost of what the part is spelled as, which is what its author wrote there even
+        // where a reading takes it as something it composed ({@link ClauseExpr.Leaf#meant}).
+        return wroteIt(part.spelled().getLast());
+    }
+
+    /** {@link #wroteIt(ClauseExpr.Part)} of one node. */
     static ConstructOccurrence wroteIt(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary it -> it.occurrence();

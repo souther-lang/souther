@@ -184,6 +184,28 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             // answered as a value a run can be told.
             "method carriedAt(souther.compiler.core.Core,int) : int[]",
             "method replacements() : souther.compiler.coverage.ArmReplacements",
+            // Where each walk is entered, and which rewrites each can be run as: values like the
+            // sites, a walk site saying which fold it is and carrying no way into the tree. And
+            // the place of the walk a node is, asked by the emitter of a node it is holding.
+            "method walks() :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$WalkSite>",
+            "method walks(java.lang.String) :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$WalkSite>",
+            "method walkRewrites() : souther.compiler.coverage.WalkRewrites",
+            "method walkSiteOf(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.coverage.WalkProbe>",
+            // A table of sibling rewrites kept to the arm sites of one behavior: a value, made by the
+            // plan that holds the numbering the table's site numbers are places under.
+            "method keepingTheArmsOf(java.lang.String,"
+                    + "souther.compiler.coverage.ArmReplacements) :"
+                    + " souther.compiler.coverage.ArmReplacements",
+            // The walk the author wrote that a copy of it in the tree is: an origin, which is a
+            // name for a construct and no way into the tree.
+            "method walkOriginOf(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.types.SourceConstructOrigin>",
+            // Which argument of a walk's call is the list it goes over: a position, and nothing of
+            // the tree the call stands in.
+            "method walkedArgumentOf(souther.compiler.core.Core) : java.util.OptionalInt",
             // Where a body could answer other than one value, asked by its name and answered with
             // the places of the arms on each way.
             "method fromOneValue(java.lang.String) :"

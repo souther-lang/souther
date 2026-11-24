@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.Rewriting;
+import souther.compiler.coverage.RunRewrite;
 import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.AnswerChange;
@@ -39,6 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatARunCostsAndWhatAChoiceCountsTest {
 
+    /** The one rewrite the runs below are asked for: an arm at site 3 answering as part 1. */
+    private static final Rewriting REWRITE = Rewriting.ofArms(new TreeMap<>(Map.of(3, 1)));
+
     /** A run of the row and a run of it under a rewrite, each asked for twice. */
     @Test
     void aRunMadeBeforeIsNotSpentAgainForTheRowOrForItsRewrite() {
@@ -52,8 +58,8 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         };
 
         assertEquals(once.run(row, spend), once.run(row, spend), "the same run, answered twice");
-        assertEquals(once.runReplacing(row, Map.of(3, 1), spend),
-                once.runReplacing(row, Map.of(3, 1), spend), "and under the rewrite");
+        assertEquals(once.runReplacing(row, REWRITE, spend),
+                once.runReplacing(row, REWRITE, spend), "and under the rewrite");
 
         assertEquals(2, spent[0], "one run of the row and one under the rewrite were made");
         assertEquals(List.of("run 7", "rewritten 7"), trial.made);
@@ -65,10 +71,10 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         Generator.RunOnce once = Generator.runningOnce(new Counting(numbering(), _ -> 0));
         RowToRun row = row(7);
         assertNotNull(once.run(row));
-        assertNotNull(once.runReplacing(row, Map.of(3, 1)));
+        assertNotNull(once.runReplacing(row, REWRITE));
 
         assertNotNull(once.run(row, () -> false), "the row was run already");
-        assertNotNull(once.runReplacing(row, Map.of(3, 1), () -> false),
+        assertNotNull(once.runReplacing(row, REWRITE, () -> false),
                 "and so was it under the rewrite");
         assertNull(once.run(row(8), () -> false), "a row nobody ran needs a run");
     }
@@ -207,6 +213,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertEquals("3", text(choosing.taken()));
     }
 
+
     /** A walk that hands more rows than the choice may be handed is stopped, and says so. */
     @Test
     void aWalkHandingMoreRowsThanTheFigureIsStoppedAndSaysSo() {
@@ -229,6 +236,97 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertNull(choosing.taken());
     }
 
+    /** A row the judge refuses is no candidate: the walk goes on, and takes the one it accepts. */
+    @Test
+    void aRowTheJudgeRefusesIsPassedOverForOneItAccepts() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(
+                        row -> text(row.inputs()).equals("5")));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
+        assertEquals("0", text(choosing.taken()), "the row refused stands until one is accepted");
+        assertTrue(choosing.takenIsRefused());
+
+        assertEquals(Generator.Acceptance.TAKEN, taking.take(List.of(FixtureTemplate.integer(5))));
+        assertEquals("5", text(choosing.taken()));
+        assertFalse(choosing.takenIsRefused(), "and the row accepted is the one taken");
+    }
+
+    /** Where the judge accepts none and the walk is not stopped, the first row refused is taken. */
+    @Test
+    void theFirstRowRefusedIsTakenAndSaidSoWhereNoneIsAccepted() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(_ -> false));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        taking.take(List.of(FixtureTemplate.integer(3)));
+        taking.take(List.of(FixtureTemplate.integer(4)));
+
+        assertEquals("3", text(choosing.taken()));
+        assertTrue(choosing.takenIsRefused());
+        assertEquals(SearchShortfall.NONE, choosing.untried(), "nothing was left untried");
+    }
+
+    /**
+     * The figure on the rows ranked is a figure on candidates, and a row refused is none: more of
+     * them than that figure, and the row the judge accepts after them is still reached.
+     */
+    @Test
+    void rowsTheJudgeRefusesUseUpNoneOfTheRowsTheChoiceMayRank() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(
+                        row -> text(row.inputs()).equals("-1")));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        for (int i = 1; i <= Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS + 1; i++) {
+            assertEquals(Generator.Acceptance.PASSED,
+                    taking.take(List.of(FixtureTemplate.integer(i))));
+        }
+
+        taking.take(List.of(FixtureTemplate.integer(-1)));
+        assertEquals("-1", text(choosing.taken()));
+        assertFalse(choosing.takenIsRefused());
+    }
+
+    /**
+     * Stopped at its figure with every row refused, the walk takes nothing and says the figure: the
+     * rows past it were not looked at, and a row refused is no answer to whether one of them is
+     * accepted.
+     */
+    @Test
+    void aWalkStoppedAtItsFigureWithEveryRowRefusedTakesNothingAndSaysTheFigure() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> answer()), List.of(), Generator.RowJudge.preferring(_ -> false));
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+        int figure = CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW.maximum();
+
+        for (int i = 1; i <= figure; i++) {
+            assertEquals(Generator.Acceptance.PASSED,
+                    taking.take(List.of(FixtureTemplate.integer(i))));
+        }
+        assertEquals(Generator.Acceptance.STOPPED,
+                taking.take(List.of(FixtureTemplate.integer(figure + 1))));
+
+        assertNull(choosing.taken());
+        assertFalse(choosing.takenIsRefused());
+        assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                choosing.untried().met().figures());
+    }
+
+    /** A judge that refuses absolutely is never given its refused row back. */
+    @Test
+    void aJudgeThatRefusesAbsolutelyOffersNoRowItRefused() {
+        Generator.ReachingWhatIsJudged judging = new Generator.ReachingWhatIsJudged(
+                _ -> false, List.of(), _ -> Generator.ObservedRun.nothingRan());
+        Generator.RowTaking taking = judging.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(1))));
+
+        assertNull(judging.taken());
+        assertFalse(judging.takenIsRefused());
+    }
+
     private static AnswerObservation answer() {
         return new AnswerObservation.Answered(new ObservedValue.Integer(0));
     }
@@ -236,7 +334,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     /** Rows applied and not recorded, which answer as {@code answer} says of the row's value. */
     private static Generator.Trial answering(LongFunction<AnswerObservation> answer) {
         return row -> new Generator.ObservedRun(new Generator.Watched.NoAccount(),
-                answer.apply(Long.parseLong(text(row.inputs()))));
+                answer.apply(Long.parseLong(text(row.inputs()))), Optional.empty());
     }
 
     private static String text(List<FixtureTemplate> inputs) {
@@ -248,11 +346,11 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     }
 
     private static SiteNumbering numbering() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.one
                 behavior one : (n: Int) -> Int
                 let one (n) = if n > 0 then n else 0
-                """, "Main");
+                """);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().getFirst())).value();
         assertNotNull(checked);
@@ -288,12 +386,12 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         public Generator.ObservedRun run(RowToRun row) {
             made.add("run " + row.inputs().getFirst().text());
             return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(numbering)),
-                    running.apply(Long.parseLong(row.inputs().getFirst().text())));
+                    running.apply(Long.parseLong(row.inputs().getFirst().text())),
+                    Optional.empty());
         }
 
         @Override
-        public Optional<AnswerObservation> runReplacing(RowToRun row,
-                                                        Map<Integer, Integer> replacing) {
+        public Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
             made.add("rewritten " + row.inputs().getFirst().text());
             return Optional.of(new AnswerObservation.Answered(new ObservedValue.Integer(
                     answering.applyAsLong(Long.parseLong(row.inputs().getFirst().text())))));
@@ -305,7 +403,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         }
 
         @Override
-        public List<ArmReplacements.Rewrite> rewritesThrough(AlignedObservation ran) {
+        public List<RunRewrite> rewritesThrough(AlignedObservation ran) {
             return List.of(new ArmReplacements.Rewrite(SourceConstructOrigin.unwritten(), 0, 1,
                     new TreeMap<>(Map.of(3, 1))));
         }

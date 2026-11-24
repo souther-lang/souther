@@ -6,6 +6,7 @@ import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheCompilationsSources;
+import souther.compiler.partition.Allowances;
 import souther.compiler.revision.StoreWork;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.TypeKey;
@@ -262,6 +263,8 @@ public final class Db implements StoreWork {
      * left without a memo, which is what {@link #ask} does with a throw either way.
      */
     private Abandonment abandonment = Abandonment.NEVER;
+    /** Who is told which question is being worked out. */
+    private Answering told = Answering.UNTOLD;
     /** The keys being answered right now, outermost first — the chain a cycle is found on. */
     private final Set<Key<?>> inProgress = new LinkedHashSet<>();
     /** The reads of each in-progress key, innermost frame last. */
@@ -334,6 +337,41 @@ public final class Db implements StoreWork {
     }
 
     /**
+     * The figures this compilation's budgets are held to, in force for every question it answers.
+     *
+     * <p>Beside the memos and not in them, as {@link #execution} is: no answer records reading a
+     * figure, so a figure changed would leave every answer worked out under the old one standing.
+     * So they are said before anything is asked, and are the same for as long as the store lives.
+     */
+    private Allowances allowances = Allowances.DECLARED;
+
+    /** Whether some question has been asked of this store, after which its figures are what its
+     *  answers were worked out under. */
+    private boolean asked;
+
+    /**
+     * Holds this compilation's budgets to {@code allowances}, before anything is asked of it.
+     *
+     * @throws IllegalStateException where something has been asked already
+     */
+    public Db allowing(Allowances allowances) {
+        if (allowances == null) {
+            throw new IllegalArgumentException("a compilation holds its budgets to some figures");
+        }
+        if (asked && !allowances.equals(this.allowances)) {
+            throw new IllegalStateException("this store has answered questions under "
+                    + this.allowances + ", and would keep those answers under " + allowances);
+        }
+        this.allowances = allowances;
+        return this;
+    }
+
+    /** The figures this compilation's budgets are held to. */
+    public Allowances allowances() {
+        return allowances;
+    }
+
+    /**
      * Gives an input its value. An input set to what it already held changes nothing, so a caller
      * may hand over a whole workspace on every keystroke. Returns this store, so a compilation can
      * be set up in one expression.
@@ -384,10 +422,35 @@ public final class Db implements StoreWork {
         this.abandonment = abandonment;
     }
 
+    /** Says who is told which question this store is working out ({@link Answering}). */
+    public void tell(Answering told) {
+        this.told = told;
+    }
+
+    /**
+     * Does the part of the question in flight that is about {@code behavior} of {@code module},
+     * and tells whoever listens that it is that part being worked out.
+     *
+     * <p>For a question about a module that goes through its behaviors in turn: the working out
+     * is the module's question's, and which behavior it is on is what someone waiting is told.
+     * Nothing is kept or recorded for it — what the work reads is read by the question in flight.
+     */
+    public <T> T onOneBehavior(String module, String behavior, Supplier<T> work) {
+        told.startedOn(module, behavior);
+        try {
+            return work.get();
+        } finally {
+            told.finishedOn(module, behavior);
+        }
+    }
+
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
     @SuppressWarnings("unchecked")
     public <T> Answer<T> ask(Key<T> key) {
-        return (Answer<T>) answer(Filed.of(key));
+        asked = true;
+        Filed filed = Filed.of(key);
+        return (Answer<T>) (allowances.inForce() ? answer(filed)
+                : allowances.over(() -> answer(filed)));
     }
 
     private Answer<?> answer(Filed filed) {
@@ -424,13 +487,15 @@ public final class Db implements StoreWork {
         // of its inputs, so an answer that was reached is as good as any other. Only the key that
         // failed is unfinished.
         boolean reachedThroughCycle = false;
+        told.started(key);
         try {
             answer = key.compute(this);
         } finally {
+            told.finished(key);
             // In the order they were read, so a caller walking the graph for reports meets them in
             // the order the work happened. An unordered copy here makes the first error a module
             // reports depend on hash order.
-            read = Collections.unmodifiableSet(frames.pop());
+            read = Ordered.set(frames.pop());
             inProgress.remove(key);
             reachedThroughCycle = throughCycle.remove(key);
         }

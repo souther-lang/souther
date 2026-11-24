@@ -1,8 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.RuleSite;
 import souther.compiler.values.AdmissibleValues;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -65,6 +68,9 @@ final class ReadingEvidence {
      */
     private final Set<StatementAt> statementsTaken = new HashSet<>();
 
+    /** Which statements the reading of values adopted into the set it holds. */
+    private final Set<InvariantStatementId> adoptedByValues = new HashSet<>();
+
     /**
      * What stopped the reading of values at each position of each rule.
      *
@@ -110,9 +116,74 @@ final class ReadingEvidence {
      */
     private final Set<StatementAt> formStoppedAt = new HashSet<>();
 
+    /** The places each rule defines a number from and so leaves as free as they were. */
+    private final Map<RuleRef.Invariant, Set<FactSubject>> freed = new LinkedHashMap<>();
+
+    /** The places each rule defines as a number made of others. */
+    private final Map<RuleRef.Invariant, Set<FactSubject>> defined = new LinkedHashMap<>();
+
+    /** The rules that state or work out something besides what places are defined as. */
+    private final Set<RuleRef.Invariant> beyondTheirDefinitions = new HashSet<>();
+
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef.Invariant rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
+    }
+
+    /**
+     * The places {@code rule} defines a number from, which it leaves as free as they were.
+     *
+     * <p>Taken in all the same: a rule that restricts none of the positions it names has nothing
+     * left standing about them, and what the arithmetic could not say of it is not what stands
+     * between the rule and its positions.
+     */
+    void freedByDefinition(RuleRef.Invariant rule, Collection<FactSubject> positions) {
+        freed.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
+        positions.forEach(position -> record(rule, position));
+    }
+
+    /**
+     * {@code rule} defines {@code position} as a number made of other places, whether or not it is
+     * shown to leave those free.
+     *
+     * <p>What the bounds hold of such a place is the hull of what the number can come to, and the
+     * number is a function of the places it is made of: its values are the image of that function,
+     * which a range does not state ({@link #definitions}).
+     */
+    void defines(RuleRef.Invariant rule, FactSubject position) {
+        defined.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
+    }
+
+    /** Every place a rule defines as a number made of others, by the rule. */
+    Map<RuleRef.Invariant, Set<FactSubject>> definitions() {
+        return Collections.unmodifiableMap(defined);
+    }
+
+    /**
+     * {@code rule} states or works out something besides the numbers it defines places as: a
+     * statement that is no definition, a definition not shown to leave its places free, or the
+     * value of a binding some operator of which is not read.
+     */
+    void notOnlyDefinitions(RuleRef.Invariant rule) {
+        beyondTheirDefinitions.add(rule);
+    }
+
+    /**
+     * Whether {@code rule} states nothing but that places are defined as numbers made of places it
+     * leaves free ({@link #freedByDefinition}), and works nothing out but those numbers.
+     *
+     * <p>So an operator of {@code rule} that is not shown to answer is an operator of one of those
+     * numbers, which the definition holds inside the order it is worked out in.
+     */
+    boolean isOnlyDefining(RuleRef rule) {
+        return freed.containsKey(rule) && !beyondTheirDefinitions.contains(rule);
+    }
+
+    /** Whether {@code rule} leaves {@code position} as free as it was, being a place its
+     *  definition of another is made of ({@link #freedByDefinition}). */
+    boolean isFreedByDefinition(RuleRef.Invariant rule, FactSubject position) {
+        Set<FactSubject> here = freed.get(rule);
+        return here != null && here.contains(position);
     }
 
     /**
@@ -201,6 +272,32 @@ final class ReadingEvidence {
         return out;
     }
 
+    /** The reading of values adopted {@code statement} into the set it holds. */
+    void valuesAdopted(InvariantStatementId statement) {
+        adoptedByValues.add(statement);
+    }
+
+    /**
+     * Whether the set the reading of values holds states {@code statement} whole.
+     *
+     * <p>Asked of the statement, which is what a reading adopts or stops at, and not of the
+     * authored part holding it: a helper's body joins two rules into one part, and one of them
+     * stopping the reading says nothing of the other. Both halves of the answer are needed. A
+     * statement adopted is one the reading saw, and a statement it was stopped by is one it did
+     * not take whole however much of it was adopted; and what is neither was never seen, which no
+     * set states.
+     *
+     * <p>Whatever else took the statement in. The arithmetic having read a statement is no account
+     * of whether the set holds it.
+     */
+    boolean valuesHoldWhole(InvariantStatementId statement) {
+        if (!adoptedByValues.contains(statement)) {
+            return false;
+        }
+        Map<RuleShortfall, Set<InvariantStatementId>> here = stopped.get(statement.rule());
+        return here == null || here.values().stream().noneMatch(in -> in.contains(statement));
+    }
+
     /** The arithmetic stopped on {@code statement} of {@code rule}, which nothing took in. */
     void stoppedOnTheForm(RuleRef.Invariant rule, FormShortfall stoppedOn,
                           InvariantStatementId statement) {
@@ -252,6 +349,33 @@ final class ReadingEvidence {
         here.forEach(each -> {
             if (positions.contains(each.position())) {
                 out.add(each);
+            }
+        });
+        return out;
+    }
+
+    /**
+     * The calls the arithmetic stopped at, on a part of {@code rule}, at any of {@code positions},
+     * for the reason {@code why} — the places a reader is sent about that stop, each once.
+     *
+     * <p>A reason is a word and carries no place, and the place is what this keeps with the
+     * position and the word it was filed under. A question about the rule as a whole is sent to
+     * every part that stopped it. Empty where the arithmetic stopped at none, and for a reason the
+     * arithmetic did not give; the caller sends a reader to the rule.
+     */
+    Set<RuleSite> sentToWhereTheFormStopped(RuleRef.Invariant rule,
+                                            Collection<FactSubject> positions,
+                                            BlockReason.RuleReadingStopped why) {
+        Set<FormShortfall> here = formStopped.get(rule);
+        if (here == null) {
+            return Set.of();
+        }
+        Object word = BlockReason.factOf(why);
+        Set<RuleSite> out = new LinkedHashSet<>();
+        here.forEach(each -> {
+            if (positions.contains(each.position())
+                    && word.equals(BlockReason.factOf(each.why()))) {
+                out.add(each.sentTo());
             }
         });
         return out;

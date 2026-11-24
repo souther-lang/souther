@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
@@ -259,14 +260,8 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
         return built.row().inputs().stream().map(FixtureTemplate::text).toList();
     }
 
-    private static final Compilation COMPILATION = compiled();
-
-    private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
-    }
+    private static final Compilation COMPILATION =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     private static Bodies.Elaborated checked() {
         Bodies.Elaborated checked = COMPILATION.db().ask(new Bodies.Checked(module())).value();

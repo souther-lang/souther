@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -58,14 +60,13 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     private record Model(MeasuredInput subject, List<Axis> axes) {}
 
     private static Model model() {
-        Compilation compilation = Compilation.ofSource(QUERIES, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(QUERIES);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("read"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning =
@@ -96,7 +97,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
 
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         assertTrue(filled.rows().stream().map(Generator.GeneratedRow::labels)
-                        .anyMatch(each -> each.equals(List.of("query@GlobalQuery.tag=Some"))),
+                        .anyMatch(each -> each.equals(List.of("Some at query@GlobalQuery.tag"))),
                 () -> "no row for the optional under the case: "
                         + filled.rows().stream().map(Generator.GeneratedRow::labels).toList());
     }

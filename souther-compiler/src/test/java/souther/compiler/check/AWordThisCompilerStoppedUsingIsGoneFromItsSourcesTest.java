@@ -2,11 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,12 +49,12 @@ class AWordThisCompilerStoppedUsingIsGoneFromItsSourcesTest {
             "FieldDomains.THE_VALUE");
 
     @Test
-    void nothingIsWrittenInAVocabularyThisCompilerGaveUp() throws IOException {
+    void nothingIsWrittenInAVocabularyThisCompilerGaveUp() {
         List<Pattern> gone = GONE.stream().map(AWordThisCompilerStoppedUsingIsGoneFromItsSourcesTest::asAWord)
                 .toList();
         List<String> found = new ArrayList<>();
         for (Path source : REPOSITORY.mainJavaSources()) {
-            String written = Files.readString(source, StandardCharsets.UTF_8);
+            String written = RepositoryJavaSources.forThisFork().mainText(source);
             for (int at = 0; at < gone.size(); at++) {
                 // The pattern has to find its name's last segment, and asking for that as text is
                 // what most files are ruled out by; the pattern is for the ones that have it.

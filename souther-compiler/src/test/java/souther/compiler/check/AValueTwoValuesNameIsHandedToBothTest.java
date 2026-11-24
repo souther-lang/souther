@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -48,7 +50,8 @@ class AValueTwoValuesNameIsHandedToBothTest {
 
     @Test
     void everyValueOfADiamondChainIsBuiltOnce() {
-        Hir.Expr body = Compiler.compiled(diamonds(LINKS), "m").db()
+        Compilation compilation = ACompiledModel.compiles(Compiler.compiled(diamonds(LINKS), "m"));
+        Hir.Expr body = compilation.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
                 .value().value().definition().writtenBody();
 

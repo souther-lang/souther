@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -99,7 +100,7 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
         String tooMany = TWO_OF_EACH.replace(
                 "let place (id, other, findMember, logLookup)",
                 "let place (id, other, findMember, logLookup, stray)");
-        SpecImplementation.Implemented implemented = alignmentOf(tooMany, "place");
+        SpecImplementation.Implemented implemented = alignmentOf(tooMany, List.of("E1615"), "place");
 
         assertEquals("E1615",
                 assertThrows(CompileException.class, () -> Compiler.compile(tooMany)).code(),
@@ -125,7 +126,8 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
     @Test
     void aDefinitionShortOfThePositionsIsDividedAsFarAsItGoes() {
         SpecImplementation.Implemented implemented = alignmentOf(TWO_OF_EACH.replace(
-                "let place (id, other, findMember, logLookup)", "let place (id, other)"), "place");
+                "let place (id, other, findMember, logLookup)", "let place (id, other)"),
+                List.of("E1615"), "place");
 
         assertEquals(List.of("id", "other"), namesOf(implemented.inputs()));
         assertEquals(List.of(), injectedNamesOf(implemented),
@@ -146,7 +148,8 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
                         "depends on findMember, noSuchBehavior")
                         .replace("logLookup(other)", "findMember(other)")
                         .replace("let place (id, other, findMember, logLookup)",
-                                "let place (id, other, findMember, noSuchBehavior)"), "place");
+                                "let place (id, other, findMember, noSuchBehavior)"),
+                List.of("E1607"), "place");
 
         assertInstanceOf(SpecImplementation.ParameterBinding.Unanswered.class,
                 implemented.bindings().get(3),
@@ -166,7 +169,7 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
     @Test
     void aModuleIsDividedOnceAndABehaviorWithNoLetIsNotInIt() {
         Map<String, SpecImplementation.Implemented> implementations =
-                SpecImplementation.implementationsOf(moduleOf(TWO_OF_EACH));
+                SpecImplementation.implementationsOf(moduleOf(TWO_OF_EACH, List.of()));
 
         assertEquals(List.of("place"), List.copyOf(implementations.keySet()),
                 "`findMember` and `logLookup` are Java's to supply and have no `let` here");
@@ -211,8 +214,14 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
     }
 
     private static SpecImplementation.Implemented alignmentOf(String source, String behavior) {
+        return alignmentOf(source, List.of(), behavior);
+    }
+
+    /** As above, of a variation of the model that the compiler refuses with {@code refusals}. */
+    private static SpecImplementation.Implemented alignmentOf(
+            String source, List<String> refusals, String behavior) {
         SpecImplementation.Implemented implemented =
-                SpecImplementation.implementationsOf(moduleOf(source)).get(behavior);
+                SpecImplementation.implementationsOf(moduleOf(source, refusals)).get(behavior);
         assertNotNull(implemented, "`" + behavior + "` is implemented by a `let` of its name");
         return implemented;
     }
@@ -220,11 +229,13 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
     /**
      * The module as its names resolved, which is before anything refuses what is written in it.
      *
-     * <p>Where these are asked from. Half of what is asked here is about a definition the check
-     * would refuse, and a model read after the check would have none of them in it.
+     * <p>Half of what is asked here is about a definition the check would refuse, so the model is
+     * held to compile only as written, and every variation of it to be refused with
+     * {@code refusals}.
      */
-    private static Hir.Module moduleOf(String source) {
+    private static Hir.Module moduleOf(String source, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         Hir.Module resolved = compilation.db().ask(new Names.Resolved(module)).value();
         assertNotNull(resolved, "the source under test resolves");

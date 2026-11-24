@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.query.Adequacy;
@@ -54,9 +55,7 @@ class ARuleAboutWhatFlatMapAnsweredIsNamedWhereItsValuesCameFromTest {
             """;
 
     private static PartitionEvidence measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         PartitionEvidence scored = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("scored");
         assertNotNull(scored, "the model under test compiles");
@@ -70,12 +69,16 @@ class ARuleAboutWhatFlatMapAnsweredIsNamedWhereItsValuesCameFromTest {
                 .map(PartitionEvidence.NotRead::at).toList();
     }
 
+    /** A step that writes the one value of a position is that value: the rule is about it, and
+     *  is named at no derived value. */
     @Test
-    void theRuleIsNamedAtThePositionItsValuesCameFrom() {
+    void aValueTheStepWritesAloneIsTheValueOfItsPosition() {
         PartitionEvidence evidence = measured(BARE);
 
-        assertEquals(List.of("people[*]"), namedAsDerived(evidence),
-                () -> "said once, where the values came from: " + evidence.notRead());
+        assertEquals(List.of(), namedAsDerived(evidence),
+                () -> "the rule is about the age itself: " + evidence.notRead());
+        assertEquals(List.of("people[*].age"), evidence.axes().stream()
+                .map(PartitionEvidence.AxisCoverage::path).toList());
     }
 
     /** A value made from a position is not the position's value, however many it is made of. */

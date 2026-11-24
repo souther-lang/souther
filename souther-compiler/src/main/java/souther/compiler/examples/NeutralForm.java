@@ -7,8 +7,10 @@ import souther.compiler.check.Boundary;
 import souther.compiler.check.DeclarationFacts;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValuePlaces;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
@@ -55,8 +57,11 @@ final class NeutralForm {
      *  the same answer decides what a comparison reads at a place inside a value. */
     private final FieldTypes fields;
 
+    /** Whose classes a live value is of, which is what a member of it failing to be read means. */
+    private final ValueOwnership ownership;
+
     NeutralForm(Symbols symbols, SumCases sums, DeclarationKinds kinds,
-                FieldTypes fields) {
+                FieldTypes fields, ValueOwnership ownership) {
         if (fields == null) {
             throw new IllegalArgumentException("a value's parts are read against what its"
                     + " declaration was checked to hold");
@@ -65,6 +70,11 @@ final class NeutralForm {
         this.sums = sums;
         this.kinds = kinds;
         this.fields = fields;
+        this.ownership = ownership;
+    }
+
+    ValueOwnership ownership() {
+        return ownership;
     }
 
     // --- a live value, re-materialised -------------------------------------------------------------
@@ -114,7 +124,7 @@ final class NeutralForm {
                     ? Position.at(map.value()) : Position.UNREAD;
             Map<Object, Object> out = new LinkedHashMap<>();
             for (Map.Entry<?, ?> e : m.entrySet()) {
-                out.put(of(e.getKey(), key, what), of(e.getValue(), value, what));
+                out.put(asAMapKey(of(e.getKey(), key, what)), of(e.getValue(), value, what));
             }
             return out;
         }
@@ -175,11 +185,22 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowIfOverspent(e);
-            throw new FixtureException(what + " cannot be read back as a fixture: `"
-                    + simpleName(live) + "` has no `" + name + "` to read");
+        } catch (ReflectiveOperationException | LinkageError e) {
+            ownership.readFailed(live, e);
+            throw new FixtureException(what + " cannot be read back as a fixture: "
+                    + unreadable(live, name, e));
         }
+    }
+
+    /** Why a member of a live value could not be read: it is not there, or it was and ended in
+     *  a failure of its own. */
+    private static String unreadable(Object live, String name, Throwable failure) {
+        if (failure instanceof NoSuchMethodException) {
+            return "`" + simpleName(live) + "` has no `" + name + "` to read";
+        }
+        Throwable ended = failure instanceof java.lang.reflect.InvocationTargetException call
+                && call.getCause() != null ? call.getCause() : failure;
+        return "`" + name + "` of `" + simpleName(live) + "` could not be read: " + ended;
     }
 
     // --- the form itself, read by both directions -------------------------------------------------
@@ -280,7 +301,7 @@ final class NeutralForm {
                 // Both sides. A key is a position of the same kind as a value, so an inner
                 // collection written in key position is the neutral form of that collection
                 // and not the list of pairs it was written as.
-                m.put(shaped(pair.get(0), Position.at(map.key())),
+                m.put(asAMapKey(shaped(pair.get(0), Position.at(map.key()))),
                         shaped(pair.get(1), Position.at(map.value())));
             }
             return m;
@@ -361,6 +382,12 @@ final class NeutralForm {
      */
     static Position declaredBy(Type declared) {
         return declared == null ? Position.UNREAD : Position.at(declared);
+    }
+
+    /** Where the values of a position of {@code type} sit on the order of their number, which is
+     *  {@link ValuePlaces}' to answer: the names are the type's and the order the carrier's. */
+    ValuePlaces placesAt(Type type) {
+        return ValuePlaces.of(type, NewtypeInners.asWritten(symbols), symbols, kinds, sums);
     }
 
     /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:
@@ -472,7 +499,7 @@ final class NeutralForm {
 
     /** What a live optional holds. A `?` position takes the value itself as well as a `Some` around
      *  it, so anything that is not one is what it stands for. */
-    static Object heldBy(Object live) {
+    Object heldBy(Object live) {
         if (live == null || !simpleName(live).equals("Option$Some")) {
             return live;
         }
@@ -480,11 +507,21 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod("value");
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException e) {
-            EvaluationContext.rethrowIfOverspent(e);
-            throw new FixtureException("an optional's value cannot be read back: `"
-                    + simpleName(live) + "` has no `value` to read");
+        } catch (ReflectiveOperationException | LinkageError e) {
+            ownership.readFailed(live, e);
+            throw new FixtureException("an optional's value cannot be read back: "
+                    + unreadable(live, "value", e));
         }
+    }
+
+    /**
+     * The neutral form of a map's key, as the object the map decodes from has it: a key of a map is
+     * the text the key crosses as, and a temporal's neutral form elsewhere is the parsed value.
+     */
+    private static Object asAMapKey(Object neutral) {
+        return neutral instanceof java.time.LocalDate || neutral instanceof java.time.LocalTime
+                || neutral instanceof java.time.LocalDateTime || neutral instanceof java.time.Instant
+                ? neutral.toString() : neutral;
     }
 
     /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */

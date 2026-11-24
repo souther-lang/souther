@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -143,7 +144,8 @@ public final class AnAnswerComposed {
             if (!(each instanceof AnswerDemand.ACase(var _, var _, var steps, var to))) {
                 continue;
             }
-            if (!(required.merge(path(at, steps).refine(to).requirements())
+            TermPath asked = path(at, steps);
+            if (!asked.admits(to) || !(required.merge(asked.refine(to).requirements())
                     instanceof Requirements.Merge.Merged(var both))) {
                 // The way asks the answer to be two cases at once, which no value is. A fact about
                 // what was asked rather than about what was tried, and it comes back as nothing
@@ -178,10 +180,10 @@ public final class AnAnswerComposed {
                     subject.rules().inners(), subject.symbols(), pinned);
             // A count of statements in it whose choices are past a figure: nothing was composed
             // against it before that figure, which looking further would cure.
-            if (remade instanceof AnswerAsAnInput.Remade.PastAFigure(CompositionBudget figure)) {
+            if (remade instanceof AnswerAsAnInput.Remade.PastAFigure(Figure.Budget stoppedAt)) {
                 unaccounted.add(new DemandGap.Uncomposed(each,
                         DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
-                                List.of(figure))));
+                                List.of(stoppedAt.budget()))));
                 continue;
             }
             Proposition over = remade instanceof AnswerAsAnInput.Remade.Stated(Proposition stated)
@@ -451,7 +453,7 @@ public final class AnAnswerComposed {
      * and a value is not composed past it here.
      */
     private static CompositionBudget stoppedAt(WhyNotTaken why) {
-        return why.figure().orElse(null) instanceof Figure.Budget(CompositionBudget budget)
+        return why.figure().orElse(null) instanceof Figure.Budget(CompositionBudget budget, var _)
                 ? budget : null;
     }
 
@@ -513,7 +515,8 @@ public final class AnAnswerComposed {
                         asked.add(written);
                     }
                     ofStatements.add(new Taken(
-                            new OnTheWay.TakenIn(each.statement().anchor(), demand),
+                            new OnTheWay.TakenIn(each.statement().anchor(), demand,
+                                    NamedElements.NONE),
                             each.statement()));
                 }
                 case DemandReading.Read.Settled(boolean thisWay) -> {
@@ -568,7 +571,7 @@ public final class AnAnswerComposed {
                     region = taken;
                     cuts.add(new Taken(
                             new OnTheWay.TakenIn(anchor, new RowDemand.Relational(
-                                    new TakenConstraint.Affine(over, rel))),
+                                    new TakenConstraint.Affine(over, rel)), NamedElements.NONE),
                             each));
                 }
                 case SearchRegion.Assumption.Refused(var why) ->
@@ -580,7 +583,8 @@ public final class AnAnswerComposed {
                     unaccounted);
         }
         return composed(subject, cuts, new Reachability.Reaching(region, required, truths,
-                cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE, List.of()));
+                cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE, List.of(),
+                Optional.empty()));
     }
 
     /**
@@ -636,7 +640,7 @@ public final class AnAnswerComposed {
                 Generator.CandidateCheck.ANY);
         List<DemandGap> unaccounted =
                 notComposedAgainst(cuts, attempt.unrepresented().onTheWay());
-        if (attempt instanceof Generator.BoundaryAttempt.Built(var row, var _)
+        if (attempt instanceof Generator.BoundaryAttempt.Built(var row, var _, var _)
                 && row.inputs().size() == 1) {
             return new Attempt(new Outcome.Composed(row.inputs().getFirst()), unaccounted);
         }
@@ -701,7 +705,7 @@ public final class AnAnswerComposed {
 
     /** The place inside the answer, under the name the subject gives the whole of it. */
     private static TermPath path(String head, List<TermPath.Step> steps) {
-        return new TermPath(head, steps);
+        return TermPath.of(head, steps);
     }
 
     /**
@@ -725,7 +729,7 @@ public final class AnAnswerComposed {
                         taken.operation(), place, taken.arguments(), taken.at(),
                         subject.rules().inners(), subject.symbols());
                 case DecisionAtom.ComputedOverAnAnswer computed ->
-                        InputNumber.overWhatWasComputedByPosition(computed.operation(), place,
+                        InputNumber.overWhatWasComputed(computed.operation(), place,
                                 computed.computation(), computed.each(), computed.direction(),
                                 subject.rules().inners(), subject.symbols());
                 case DecisionAtom.OfTheInput _ -> throw new IllegalStateException(

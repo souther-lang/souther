@@ -57,7 +57,7 @@ record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
         }
         List<TermPath.Step> without = new ArrayList<>(steps.subList(0, narrowing));
         without.addAll(steps.subList(narrowing + 1, steps.size()));
-        return new TermPath(here.head(), without);
+        return TermPath.of(here.head(), without);
     }
 
     /**
@@ -116,6 +116,6 @@ record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
         List<TermPath.Step> under = new ArrayList<>(steps.subList(0, narrowing));
         under.add(new TermPath.Step.Refine(CasesLeft.of(branch)));
         under.addAll(steps.subList(narrowing, steps.size()));
-        return new TermPath(there.head(), under);
+        return TermPath.of(there.head(), under);
     }
 }

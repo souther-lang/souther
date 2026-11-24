@@ -50,11 +50,8 @@ class CompileExampleBoundaryTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static PartitionEvidence evidence(String source) {
@@ -94,7 +91,7 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
 
-        assertEquals(List.of("request.cost/100 < x"), names(cost(one).uncovered()));
+        assertEquals(List.of("request.cost: 100 < x"), names(cost(one).uncovered()));
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(cost(one).reached()));
 
         PartitionEvidence both = evidence(MODEL + """
@@ -209,7 +206,7 @@ class CompileExampleBoundaryTest {
      * and saying so is different from reporting nothing covered. */
     @Test
     void aPositionTheModelDoesNotDivideIsNamedRatherThanCounted() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.note
 
                 data Note = String
@@ -222,9 +219,7 @@ class CompileExampleBoundaryTest {
 
                 example keep
                     | (Note("x")) -> Kept { note = Note("x") }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all);

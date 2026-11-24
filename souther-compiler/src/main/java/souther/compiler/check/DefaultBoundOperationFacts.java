@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.core.TheWalk;
 import souther.compiler.proof.AppliedClosures;
+import souther.compiler.proof.Library;
 import souther.compiler.types.ValueName;
 
 /**
@@ -39,6 +41,23 @@ public final class DefaultBoundOperationFacts {
     /** The facts, held to the shipped library. */
     public static BoundOperationFacts get() {
         return Holder.INSTANCE;
+    }
+
+    /** The shipped library as what is settled of its facts says, for a reading of its bodies. */
+    private static final class Shipped {
+        private static final Library LIBRARY =
+                LibraryUnderProof.settledBy(DefaultStdlib.get(), get());
+    }
+
+    /** The shipped library as what is settled of its facts says, read once: a reader of the
+     *  library's bodies asks it what each operation is declared to do. */
+    static Library library() {
+        return Shipped.LIBRARY;
+    }
+
+    /** The walk the shipped library's folds are written as. */
+    public static TheWalk theWalk() {
+        return DefaultStdlib.get().walk();
     }
 
     /**

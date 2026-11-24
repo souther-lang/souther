@@ -167,10 +167,11 @@ class AnAllowanceSpentIsNotOneRulesDoingTest {
 
         handed.clear();
 
-        assertEquals(1, made.alsoShort().size(),
+        assertEquals(1, made.beside().shortOf().size(),
                 "the combination holds what it was made with, and the caller's map is the"
                         + " caller's");
-        assertThrows(UnsupportedOperationException.class, () -> made.alsoShort().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> made.beside().shortOf().clear());
     }
 
     /**

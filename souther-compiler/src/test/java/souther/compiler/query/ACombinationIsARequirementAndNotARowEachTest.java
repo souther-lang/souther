@@ -60,6 +60,10 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // border, and what a row shows at it is which of two lines the model draws rather
                 // than what two positions do at once.
                 "ALineTheRowsDoNotTellFromAnother",
+                // The weight of a position in a derived value one computation cuts at several
+                // places. Not a combination: what the rows fix is how one position weighs into
+                // the value, whatever the positions do together.
+                "ATiltOfADerivedValueNoRowShows",
                 // An arm and a row at it: what a row is owed at is the arm either way, and the
                 // second says the row is written and its answer is not.
                 "AnArmNoRowGoesThrough",
@@ -76,11 +80,13 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // the one kind here that is read off the source rather than measured.
                 "AnUnansweredRow",
                 "ARowAtAnArmAwaitsItsAnswer",
-                // A rule a run may stop in. Not a combination: it is one rule of the model, and
-                // what it says is a possibility beside whatever line it draws.
-                "ARuleWithoutALine", "ARuleThatMayStopARun", "ARuleNothingClassified",
+                "ARuleWithoutALine", "ARuleNothingClassified",
                 "AQuestionNothingAnswered", "ARuleWithoutALine", "ARuleNothingClassified",
                 "APositionThisCouldNotRead", "APositionNoLineDivides",
+                // A step a run is shown to stop at, and a step whether a run stops at is not
+                // resolved. Not a combination: each is one place of the body a run evaluates,
+                // whatever the positions do together.
+                "AStepThatMayStopARun", "AStepWhoseStopIsNotShown",
                 "APositionReadWiderThanItsRules",
                 "APositionWhoseRulesWereNotReached"), every,
                 "a kind of gap this compiler finds that this law says nothing about");
@@ -114,8 +120,14 @@ class ACombinationIsARequirementAndNotARowEachTest {
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfABorder", "OfAnArm", "OfARow", "OfAnOutputCase",
+                List.of("OfALine", "OfABorder",
+                        // The weight of one position in a total, which is the total's and not one
+                        // of its positions' combinations.
+                        "OfATiltAtAPosition", "OfAnArm", "OfARow", "OfAnOutputCase",
                         "OfADecisionRule",
+                        // A case inside a statement a rule consults: asked where the rows leave
+                        // one unseen, and raised by no finding.
+                        "OfACaseOfAStatement",
                         "OfACombinationOfDecisions", "OfAFallbackPairCell",
                         // A rewrite of the body no row tells apart. Not a combination: it is the
                         // body answering otherwise, whatever the positions do together.

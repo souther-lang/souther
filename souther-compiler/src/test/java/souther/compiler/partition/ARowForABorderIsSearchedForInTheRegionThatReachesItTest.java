@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -469,8 +470,7 @@ class ARowForABorderIsSearchedForInTheRegionThatReachesItTest {
      *  measure reads, which asks for what it reads. Each source measured once for the class. */
     private static List<BorderAssessment> lines(String source) {
         return LINES.computeIfAbsent(source, text -> {
-            Compilation compilation = Compilation.ofSource(text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
+            Compilation compilation = ACompiledModel.measured(text, Adequacy.Asked.fullReport());
             Map<String, List<BorderAssessment>> all =
                     Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
             assertNotNull(all, "the model under test compiles");

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -19,6 +20,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -97,7 +99,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                reasonFor(filled, List.of("member=Premium", "delivery=Express")),
+                reasonFor(filled, List.of("Premium at member", "Express at delivery")),
                 "a fourth set of values, and no run left to watch it at: " + filled.unresolved());
     }
 
@@ -113,7 +115,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                reasonFor(filled, List.of("member=Premium", "delivery=Express")),
+                reasonFor(filled, List.of("Premium at member", "Express at delivery")),
                 "one position left to choose, and both of its values were run: "
                         + filled.unresolved());
     }
@@ -121,7 +123,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /**
      * A run already watched at some values costs nothing, so a search that ends on them is complete.
      *
-     * <p>{@code member=Premium} leaves two positions to choose, which is four sets of values — more
+     * <p>{@code Premium at member} leaves two positions to choose, which is four sets of values — more
      * than the three a reading may be run for. By the time this combination is looked in, every one
      * of them is a set something has already been watched at, so the reading spends nothing and
      * reaches the end of its candidates.
@@ -135,7 +137,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                reasonFor(filled, List.of("member=Premium")),
+                reasonFor(filled, List.of("Premium at member")),
                 "more candidates than a reading may run for, and every one of them already run: "
                         + filled.unresolved());
     }
@@ -165,7 +167,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      *  any place at all and answer. */
     private static Generator.ObservedRun missed(Model model) {
         return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
-                new AnswerObservation.NotAnswered());
+                new AnswerObservation.NotAnswered(), Optional.empty());
     }
 
     /** What the search made of the one combination named by {@code classes}. */
@@ -190,8 +192,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         static Model of(String source, String behavior) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.answered(source);
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

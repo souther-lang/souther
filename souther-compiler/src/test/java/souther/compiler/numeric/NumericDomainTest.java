@@ -40,19 +40,19 @@ class NumericDomainTest {
         return LinearForm.weighing(a, ExactRatio.of(coefficient));
     }
 
-    private static Map<String, Granularity> spaced(Granularity g, String... atoms) {
-        Map<String, Granularity> out = new LinkedHashMap<>();
+    private static Map<String, NumberSpace> spaced(Granularity g, String... atoms) {
+        Map<String, NumberSpace> out = new LinkedHashMap<>();
         for (String each : atoms) {
-            out.put(each, g);
+            out.put(each, NumberSpace.spacedOnly(g));
         }
         return out;
     }
 
-    private static Map<String, Granularity> whole(String... atoms) {
+    private static Map<String, NumberSpace> whole(String... atoms) {
         return spaced(Granularity.DISCRETE, atoms);
     }
 
-    private static Map<String, Granularity> dense(String... atoms) {
+    private static Map<String, NumberSpace> dense(String... atoms) {
         return spaced(Granularity.DENSE, atoms);
     }
 
@@ -184,7 +184,7 @@ class NumericDomainTest {
      */
     @Test
     void aWholePositionStepsThroughEvenWhereTheDifferenceCannot() {
-        Map<String, Granularity> mixed = new LinkedHashMap<>(whole(A));
+        Map<String, NumberSpace> mixed = new LinkedHashMap<>(whole(A));
         mixed.putAll(dense(B));
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LT, mixed)

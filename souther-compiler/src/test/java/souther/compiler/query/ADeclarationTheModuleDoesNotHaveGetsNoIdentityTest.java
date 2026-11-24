@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.source.SourceId;
 
@@ -72,7 +73,13 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(refusedFor(source), c).db();
+    }
+
+    /** The one mistake each source makes: a name declared twice, or a built-in case name taken. */
+    private static List<String> refusedFor(String source) {
+        return source.equals(TWICE) ? List.of("E1011") : List.of("E1502");
     }
 
     /**

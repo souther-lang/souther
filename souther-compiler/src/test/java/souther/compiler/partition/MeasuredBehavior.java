@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -22,9 +23,7 @@ final class MeasuredBehavior {
     /** The classes and the unread reasons of {@code behavior}, as {@code [classes] unread
      *  [reasons]}. */
     static String reading(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         AdequacyReport.BehaviorReport read = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();

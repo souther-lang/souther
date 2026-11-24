@@ -67,11 +67,11 @@ class AnInputTheRulesLeaveEmptyMakesEachInputMeasureNotApplicableTest {
     private static Measured measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         JsonNode document = JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())));
         return new Measured(document.get("modules").get(0).get("behaviors").get(0),
-                report.human(SourceRendering.namedByIdentity(compilation.texts())));
+                report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     /** The measures of that input are not applicable, and say so for the one reason. */

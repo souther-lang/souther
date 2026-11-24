@@ -14,6 +14,8 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The conditions one reading of a body met, and the name each of them goes by.
@@ -86,6 +88,15 @@ final class ConditionNumbering {
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
+    /** What entering each arm of each fork states, by the fork under the names in force there and
+     *  which of its arms ({@link #walkedInto}, {@link #referredTo}). */
+    private final Map<Site, Map<Integer, Entered>> entered = new HashMap<>();
+
+    /**
+     * What entering one arm states, and whether the walk has entered it yet or only a way that
+     * refers to it has asked.
+     */
+    private record Entered(ReachingCuts.Stating stated, boolean walked) {}
     private final Map<ConditionOccurrence, Citation> metAt;
     /** The copies each entry this reading put on a way was read off, by the entry itself, shared
      *  with every place this reading reads. Two equal entries are two entries here, each read off
@@ -93,25 +104,29 @@ final class ConditionNumbering {
     private final Map<OnTheWay, ModelOccurrences> madeBy;
     /** How many names this reading has handed out, shared with every place it reads. */
     private final int[] next;
+    /** How many constructions this reading has named the getting past of, shared the same way and
+     *  counted apart from {@link #next}. */
+    private final int[] nextGotPast;
     /** What this reading names inside the body of each call of a recursive helper it reads, by the
      *  call, shared with every place it reads. */
     private final Map<CallContext, ConditionNumbering> within;
 
     ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
         this(module, behavior, reading, new LinkedHashMap<>(), new IdentityHashMap<>(),
-                new int[1], new HashMap<>());
+                new int[1], new int[1], new HashMap<>());
     }
 
     private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
                                Map<ConditionOccurrence, Citation> metAt,
                                Map<OnTheWay, ModelOccurrences> madeBy, int[] next,
-                               Map<CallContext, ConditionNumbering> within) {
+                               int[] nextGotPast, Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
         this.reading = reading;
         this.metAt = metAt;
         this.madeBy = madeBy;
         this.next = next;
+        this.nextGotPast = nextGotPast;
         this.within = within;
     }
 
@@ -127,7 +142,7 @@ final class ConditionNumbering {
         return context.equals(CallContext.OF_THE_BODY) ? this
                 : within.computeIfAbsent(context,
                         _ -> new ConditionNumbering(module, behavior, reading, metAt, madeBy,
-                                next, within));
+                                next, nextGotPast, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -144,6 +159,29 @@ final class ConditionNumbering {
     /** The name of the condition being recognised now, where no construct of the model is it. */
     ConditionOccurrence met() {
         return new ConditionOccurrence(behavior, reading, next[0]++);
+    }
+
+    /**
+     * The name getting past {@code construction} goes by: one of
+     * {@link ConditionOccurrence.Reading#GETTING_PAST}, counted apart from the conditions so that
+     * theirs are the numbers they are whatever the body builds. Refused where this reading has
+     * named it already, for the reason an arm is ({@link #metEntering}), and refused of any
+     * reading but the decision's, which is the one whose ways get past constructions.
+     */
+    ConditionOccurrence metGettingPast(Core.Construct construction) {
+        if (reading != ConditionOccurrence.Reading.DECIDING) {
+            throw new IllegalStateException("only the ways a body decides by get past a"
+                    + " construction, and this is the reading of " + reading);
+        }
+        Map<Integer, ConditionOccurrence> named =
+                arms.computeIfAbsent(construction, _ -> new LinkedHashMap<>());
+        ConditionOccurrence already = named.putIfAbsent(0, new ConditionOccurrence(behavior,
+                ConditionOccurrence.Reading.GETTING_PAST, nextGotPast[0]++));
+        if (already != null) {
+            throw new IllegalStateException(
+                    "this reading has already named getting past a construction: " + already);
+        }
+        return named.get(0);
     }
 
     /**
@@ -165,6 +203,51 @@ final class ConditionNumbering {
                     "this reading has already named arm " + part + " of a fork: " + already);
         }
         return named.get(part);
+    }
+
+    /**
+     * What the walk entering {@code part} of {@code fork} under {@code reads} states: made by
+     * {@code stating}, or what a way referring to that arm already made of it
+     * ({@link #referredTo}).
+     *
+     * <p>Refused where the walk has entered the arm under these names already, for the reason
+     * naming it twice is ({@link #metEntering}). Under other names {@code stating} names it again,
+     * and is refused there.
+     */
+    ReachingCuts.Stating walkedInto(Core fork, int part, InputReads reads,
+                                    Supplier<ReachingCuts.Stating> stating) {
+        Map<Integer, Entered> made =
+                entered.computeIfAbsent(new Site(fork, reads), _ -> new HashMap<>());
+        Entered already = made.get(part);
+        if (already != null && already.walked()) {
+            throw new IllegalStateException("this reading has already walked into arm " + part
+                    + " of a fork under the same names");
+        }
+        ReachingCuts.Stating stated = already != null ? already.stated() : stating.get();
+        made.put(part, new Entered(stated, true));
+        return stated;
+    }
+
+    /**
+     * What entering {@code part} of {@code fork} under {@code reads} states, for a way that is on
+     * that arm without the walk entering it there: made by {@code stating} where neither the walk
+     * nor another such way made it yet, and what they made otherwise.
+     *
+     * <p>An element one arm writes, handed to another closure, is on the way into that closure,
+     * and the arm it is on is the one the walk into the arm meets. Both are the one arm a row
+     * took, so it is named once ({@link #metEntering}), whichever of them asks first.
+     */
+    ReachingCuts.Stating referredTo(Core fork, int part, InputReads reads,
+                                    Supplier<ReachingCuts.Stating> stating) {
+        Map<Integer, Entered> made =
+                entered.computeIfAbsent(new Site(fork, reads), _ -> new HashMap<>());
+        Entered already = made.get(part);
+        if (already != null) {
+            return already.stated();
+        }
+        ReachingCuts.Stating stated = stating.get();
+        made.put(part, new Entered(stated, false));
+        return stated;
     }
 
     /**
@@ -226,22 +309,14 @@ final class ConditionNumbering {
         return stated.entries();
     }
 
+    /** What is filed of an entry is the same however many alternatives hold it. */
     private void file(List<OnTheWay> entries, SaidOnTheWay by) {
-        for (OnTheWay each : entries) {
+        OnTheWay.eachOnce(entries, each -> {
             ModelOccurrences copies = by.entries().get(each);
             if (copies != null && !copies.isEmpty()) {
                 madeBy.putIfAbsent(each, copies);
             }
-            if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> file(one, by));
-            }
-            if (each instanceof OnTheWay.Counted counted) {
-                counted.statements().forEach(one -> {
-                    file(one.holding(), by);
-                    file(one.failing(), by);
-                });
-            }
-        }
+        });
     }
 
     /**
@@ -251,28 +326,16 @@ final class ConditionNumbering {
      * and two equal entries on these ways made by two copies are told both.
      */
     SaidOnTheWay saidOnTheWay(List<List<OnTheWay>> ways) {
-        Map<OnTheWay, ModelOccurrences> entries = new LinkedHashMap<>();
+        SaidOnTheWay.Filing entries = new SaidOnTheWay.Filing();
+        Set<OnTheWay> told = Collections.newSetFromMap(new IdentityHashMap<>());
         for (List<OnTheWay> way : ways) {
-            told(way, entries);
+            OnTheWay.eachOnce(way, told, each -> {
+                ModelOccurrences made = madeBy.get(each);
+                if (made != null) {
+                    entries.alone(each, made);
+                }
+            });
         }
-        return new SaidOnTheWay(entries, Map.of(), Map.of());
-    }
-
-    private void told(List<OnTheWay> way, Map<OnTheWay, ModelOccurrences> into) {
-        for (OnTheWay each : way) {
-            ModelOccurrences made = madeBy.get(each);
-            if (made != null) {
-                SaidOnTheWay.filedAlone(each, made, into);
-            }
-            if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> told(one, into));
-            }
-            if (each instanceof OnTheWay.Counted counted) {
-                counted.statements().forEach(one -> {
-                    told(one.holding(), into);
-                    told(one.failing(), into);
-                });
-            }
-        }
+        return entries.said();
     }
 }

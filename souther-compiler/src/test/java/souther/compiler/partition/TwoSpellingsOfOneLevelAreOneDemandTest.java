@@ -6,7 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
@@ -21,14 +21,12 @@ import souther.compiler.types.TypeSymbols;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -176,15 +174,13 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         CutPosition line = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(3));
         CutPosition beside = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(6));
 
-        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
-            assertNotEquals(line.key(), beside.key(), "two lines, two names");
-            assertEquals(line.key(), new CutPosition(
-                            new Level.OfTheQuantity(aMillionth), ExactRatio.of(3)).key(),
-                    "and one line, one name");
-            assertTrue(line.digitsToTellApartFrom(beside).orNull() > 1_000_000,
-                    "a sixth of a millionth apart takes about that many places to name");
-        });
+        assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
+        assertNotEquals(line.key(), beside.key(), "two lines, two names");
+        assertEquals(line.key(), new CutPosition(
+                        new Level.OfTheQuantity(aMillionth), ExactRatio.of(3)).key(),
+                "and one line, one name");
+        assertTrue(line.digitsToTellApartFrom(beside).orNull() > 1_000_000,
+                "a sixth of a millionth apart takes about that many places to name");
     }
 
     /**
@@ -364,7 +360,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     /** One clause of one declaration, which is only an identity here. */
     private static AuthoredLine aLine() {
         return new AuthoredLine(
-                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(
                                         TypeSymbols.declared(

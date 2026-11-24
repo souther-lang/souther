@@ -6,9 +6,12 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.ElementGuarantee;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleRef;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
@@ -20,13 +23,17 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The value a position is inside: what it is called, and what its rules leave each position of it
@@ -94,6 +101,19 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /** The same, of a value narrowed out of another whose rules name some of the same positions. */
     static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
                           Reaching alsoReaching) {
+        return of(root, type, reading, alsoReaching, List.of());
+    }
+
+    /**
+     * The same, of a value that is one element of a container whose rules state something of every
+     * element it holds.
+     *
+     * <p>What the container states is read as rules of the value, beside its own where it wears a
+     * declaration. It is a reading of this element in this container: what the same declaration
+     * holds elsewhere is not changed by it.
+     */
+    static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
+                          Reaching alsoReaching, List<ElementGuarantee> inherited) {
         RuleReadingSource source = reading.source();
         TypeSymbol read = readAs(type, source.symbols(), source.kinds(), source.sums());
         // What this keeps of the world is the lender alone: the questions asked of these rules after
@@ -104,9 +124,25 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // of the value this was narrowed from — one answer, however many paths are asked about it.
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
-        return new PlacedRules(root, read, Rules.of(read, reading), alsoReaching,
+        Rules rules = inherited.isEmpty()
+                ? Rules.of(read, reading) : Rules.ofElement(read, type, inherited, reading);
+        return new PlacedRules(root, read, rules, alsoReaching,
                 reading.policy().allowanceForAdmittedValues(answersFor(read, machines).lending()),
                 machines);
+    }
+
+    /**
+     * These rules read again without the rules {@code parts} name, and the rules of the value above
+     * likewise.
+     *
+     * <p>Everything else is the same reading: the value, where it stands, what it may admit.
+     */
+    static PlacedRules leavingOut(PlacedRules placed, Set<PartId<RuleRef.Invariant>> parts) {
+        Reaching above = placed.alsoReaching;
+        return new PlacedRules(placed.root, placed.value, placed.rules.leavingOut(parts),
+                above == null ? null
+                        : new Reaching(leavingOut(above.outer(), parts), above.crossing()),
+                placed.sets, placed.machines);
     }
 
     /**
@@ -163,6 +199,26 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /** What the rules leave the numbers, ends and narrowings of this value. */
     FieldDomains bounds() {
         return rules.bounds();
+    }
+
+    /**
+     * What the rules of this value state of every element of the container at {@code container},
+     * with the part that states each.
+     *
+     * <p>What the value this was narrowed out of states of it as well, as every answer about a
+     * position asks it. Nothing for a position these rules call by no name, which is one under
+     * another value.
+     */
+    List<ElementGuarantee> guaranteedOfEveryElementAt(TermPath container) {
+        RuleKey where = keyOf(container);
+        List<ElementGuarantee> here = where == null ? List.of() : bounds().guaranteesAt(where);
+        TermPath above = alsoAt(container);
+        if (above == null) {
+            return here;
+        }
+        List<ElementGuarantee> both = new ArrayList<>(here);
+        both.addAll(alsoReaching.outer().guaranteedOfEveryElementAt(above));
+        return both;
     }
 
     /**
@@ -247,6 +303,40 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The values the position's number {@code kind} is left at {@code path}, as the runs they lie
+     * in, or null where no word was read of them. What {@link #leftAt} says of the ends, for a
+     * reader of values.
+     */
+    OrderedRuns runsLeftAt(TermPath path, NumberAt.OfWhatNumber kind) {
+        // What one value's rules say of a number is the owner's to say whole
+        // ({@link FieldDomains#runsLeftAt}), and what two values' say together is not: each system
+        // is proved apart, and met they are not proved ({@link #proofAt}). The runs are handed on
+        // only where the one system there is is the one they were proved of, so that the value
+        // that says them is the only one that says anything and there is nothing to meet them
+        // with: a value that states nothing has no runs to give.
+        if (proofAt(path).stating() > 1) {
+            return null;
+        }
+        RuleKey where = keyOf(path);
+        OrderedRuns here = where == null ? null : bounds().runsLeftAt(where, kind);
+        TermPath above = alsoAt(path);
+        return here != null || above == null ? here : alsoReaching.outer().runsLeftAt(above, kind);
+    }
+
+    /**
+     * What the order leaves the position at {@code path}, or null where no rule of it stops the
+     * position: this value's own, met with what it leaves the value this was narrowed out of, as
+     * {@link #admits} meets what each admits. Whatever shape the meet comes to — one run, runs
+     * apart, or none — is the answer.
+     */
+    OrderedRuns orderedRegionAt(TermPath path) {
+        OrderedRuns here = rules.orderedRegionAt(under(path));
+        TermPath above = alsoAt(path);
+        OrderedRuns outer = above == null ? null : alsoReaching.outer().orderedRegionAt(above);
+        return here == null ? outer : outer == null ? here : here.meet(outer);
+    }
+
+    /**
      * Which values the position at {@code path} may hold, and how much of its rules was read.
      *
      * <p>Asked at every path, the value's own included: what a name wraps is at no path of its own
@@ -307,10 +397,27 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Spent from this reading's allowance, which is what every position of it is met out of.
         souther.compiler.values.Allowance.Composed made = sets.meet(
                 souther.compiler.values.Sameness.Block.of(path), here.approximation(), leaves);
-        return new AdmissibleSet(made.set(), made.gaveUp()
-                ? alsoWidened(here.completeness(),
-                        new AdmissibleSet.Widening.ExactValuesTooCostly())
-                : here.completeness());
+        if (made.gaveUp()) {
+            return new AdmissibleSet(made.set(), alsoWidened(here.completeness(),
+                    new AdmissibleSet.Widening.ExactValuesTooCostly()));
+        }
+        return new AdmissibleSet(made.set(), isShortOnlyOfWhatTheCountHolds(here, path)
+                ? AdmissibleSet.READ_IN_FULL : here.completeness());
+    }
+
+    /**
+     * Whether {@code here} is short of the rules only by parts that the count the bounds leave
+     * states, and the set and that count are the rules between them.
+     *
+     * <p>Every reason the set is short is a rule that went unread, and not that the reading could
+     * not hold what the rules say together or could not build what they leave: a count does not
+     * make up for either.
+     */
+    private boolean isShortOnlyOfWhatTheCountHolds(AdmissibleSet here, TermPath path) {
+        return here.completeness() instanceof AdmissibleSet.Completeness.Wider wider
+                && wider.why().stream().allMatch(
+                        AdmissibleSet.Widening.RuleUnread.class::isInstance)
+                && rules.valuesAndCountAreTheRulesAt(under(path));
     }
 
     /** The same completeness, and one more thing standing between the set and the rules. */
@@ -407,8 +514,14 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         bounds().accounting().values().forEach(accounting ->
                 accounting.undetermined().stream()
                         .filter(each -> each.at().equals(where))
-                        .forEach(each ->
-                                out.add(new RuleUnclassifiedAt(accounting.cited(), each))));
+                        .forEach(each -> {
+                            Map<BlockReason.RuleReadingStopped, Set<RuleSite>> sentTo =
+                                    new LinkedHashMap<>();
+                            each.why().forEach(why -> sentTo.put(why, bounds()
+                                    .sentToWhereTheArithmeticStopped(accounting.cited().rule(),
+                                            each.at(), why)));
+                            out.add(new RuleUnclassifiedAt(accounting.cited(), each, sentTo));
+                        }));
         TermPath above = alsoAt(path);
         if (above != null) {
             out.addAll(alsoReaching.outer().unclassified(above));
@@ -418,7 +531,16 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
 
     /** How a reader finds the rule, which says which rule it is, and one place its classification
      *  did not come out. */
-    record RuleUnclassifiedAt(RuleCitation cited, Requirement.BoundaryUndetermined at) {}
+    record RuleUnclassifiedAt(RuleCitation cited, Requirement.BoundaryUndetermined at,
+                              Map<BlockReason.RuleReadingStopped, Set<RuleSite>> sentTo) {
+
+        /** Where a reader goes about {@code why}: each call the arithmetic stopped at for it, or
+         *  the rule itself where it stopped at none. */
+        Set<RuleSite> sentTo(BlockReason.RuleReadingStopped why) {
+            Set<RuleSite> calls = sentTo.getOrDefault(why, Set.of());
+            return calls.isEmpty() ? Set.of(RuleSite.theRuleItself()) : calls;
+        }
+    }
 
     /**
      * How much of what the rules say the bounds at {@code path} are able to state.
@@ -674,6 +796,13 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * which places no end and is nothing anyone has to lift, could not be passed along at all.
      */
     List<ClauseWithoutAnEnd> clausesWithoutAnEnd() {
+        // A value no declaration stands under reads what a container states of its elements, and a
+        // line is drawn by the declaration that wrote the rule — the container's, which is read at
+        // the container. Nothing is handed on from here, and what this reading could not place an
+        // end from is still said by what the position admits and by how much of it was read.
+        if (bounds().named() == null) {
+            return List.of();
+        }
         return bounds().withoutAnEnd().stream()
                 .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
                         each.root(),

@@ -1,16 +1,24 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.HeldClass;
+import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.values.ValueSet;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A region of one input's values, read off the same rules the input's quantities are read off.
@@ -23,6 +31,16 @@ import java.util.Optional;
  * this compiler.
  */
 record ReadRegion(ReadQuantities within) implements SearchRegion {
+
+    @Override
+    public NarrowingsKept narrowingsKept() {
+        return within.narrowingsKept();
+    }
+
+    @Override
+    public SearchRegion withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+        return parts.isEmpty() ? this : new ReadRegion(within.withoutTheRelationOf(parts));
+    }
 
     @Override
     public Assumption assuming(LinearForm<NumericTerm> form,
@@ -38,9 +56,21 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public List<LaterNumbersEliminated.Bound<NumericTerm>> boundsTakenIn() {
+        return within.boundsTakenIn();
+    }
+
+    @Override
     public SearchRegion assuming(NumericTerm.FromOnePosition term,
                                  souther.compiler.numeric.Place at, Rel rel) {
         ReadQuantities taken = within.assuming(term, at, rel);
+        return taken == within ? this : new ReadRegion(taken);
+    }
+
+    @Override
+    public SearchRegion assumingTheYearLeaves(NumericTerm.ValueOf date, int divisor,
+                                              Set<Integer> remainders) {
+        ReadQuantities taken = within.assumingTheYearLeaves(date, divisor, remainders);
         return taken == within ? this : new ReadRegion(taken);
     }
 
@@ -74,6 +104,16 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public NumericDomain.FormProjection projectionOfARow(NumericTerm term) {
+        return within.projectionOfARow(term);
+    }
+
+    @Override
+    public boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
+        return within.relates(these, those);
+    }
+
+    @Override
     public NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
         if (!apartAt(term).isEmpty()
                 || (term instanceof NumericTerm.ValueOf value
@@ -84,8 +124,29 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public NumericDomain.RunBesidesItsHoles wholeRunBesidesItsHolesOf(
+            NumericTerm.FromOnePosition term) {
+        if (term instanceof NumericTerm.ValueOf value
+                && !(classAt(value) instanceof HeldClass.None)) {
+            return null;
+        }
+        return within.wholeRunBesidesItsHolesOf(term);
+    }
+
+    @Override
     public HeldClass classAt(NumericTerm.ValueOf place) {
         return within.classAt(place);
+    }
+
+    @Override
+    public boolean isAnInt(NumericTerm term) {
+        return !(term instanceof NumericTerm.ProductOf) && within.answersFor(term)
+                && within.ordersOf(term).answered() instanceof Carrier.Whole;
+    }
+
+    @Override
+    public OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
+        return within.orderedRegionAt(place);
     }
 
     @Override
@@ -101,6 +162,47 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
         return within.readingsOfEach(terms);
+    }
+
+    @Override
+    public boolean emptinessIsSettled() {
+        return within.emptinessIsSettled();
+    }
+
+    /**
+     * A region of numbers read from rules and taken in or fixed on top of them: the run of a
+     * position is where the closure of everything said leaves it, and the closure of more said
+     * leaves it no wider. A class is the declarations' narrowed by the remainders pinned, and never
+     * widened.
+     *
+     * <p>For regions that are not shown empty, and held, not derived: over the regions a model
+     * reads — numbers of several classes, the cases of a sum, the elements and the size of a list,
+     * a remainder — with a number fixed, a relation taken in, one number taken against a value, or
+     * one held apart from a value, each said at random
+     * ({@code ARegionRunsNoWiderOnceMoreIsSaidTest}).
+     *
+     * <p>So only for the numbers that test makes: the value a position holds, a floor remainder of
+     * one, and the length of a list. What else is taken of a position — the sum of a list, a
+     * quotient, the parts of a date or a time, the length of a string, the size of a set — is a
+     * number it has not been held for, and a region asked about one of those says no.
+     */
+    @Override
+    public boolean runsOnlyNarrowWhenFixed(Collection<? extends NumericTerm> terms) {
+        return terms.stream().allMatch(ReadRegion::heldFor);
+    }
+
+    /** Whether {@link #runsOnlyNarrowWhenFixed} has been held for this kind of number. */
+    private static boolean heldFor(NumericTerm term) {
+        if (term instanceof NumericTerm.ValueOf) {
+            return true;
+        }
+        if (!(term instanceof NumericTerm.TakenOf taken)) {
+            return false;
+        }
+        return taken.takenAs() instanceof TakenAs.TheFloorRemainder
+                || (taken.takenAs() instanceof TakenAs.HowManyItHolds
+                        && NumericMeasures.counts(taken.operation())
+                        == NumericMeasures.Counts.LIST);
     }
 
     @Override

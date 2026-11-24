@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.query.Compilation;
@@ -125,10 +127,10 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
                 behavior take : (n: Subject) -> Ok
                 let take (n) = Ok
                 """.formatted(declaration);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
         return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                ReadAs.THE_COMPILATION_DOES)).bounds();
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY)).bounds();
     }
 }

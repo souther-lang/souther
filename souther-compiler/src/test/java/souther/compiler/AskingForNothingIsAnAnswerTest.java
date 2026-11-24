@@ -117,7 +117,7 @@ class AskingForNothingIsAnAnswerTest {
         AdequacyReport report = AdequacyReport.of(compiled(Adequacy.Level.OFF));
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertEquals(List.of(), report.findings(), "nothing was measured, so nothing was found");
     }
 
@@ -171,10 +171,7 @@ class AskingForNothingIsAnAnswerTest {
     }
 
     private static Compilation compiled(Adequacy.Level level) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.reportOnly(level));
     }
 
     /** The same model measured, so the check above is one something can fail. */

@@ -36,6 +36,26 @@ class AChoiceDependsOnWhatDecidedItAndIsMadeOfWhatItChoosesBetweenTest {
                                 new ValueOrigin.IsAPosition<>("b"))).positions()));
     }
 
+    /**
+     * The positions the values it may be are, or were made from, leave out what only decided which
+     * of them it is — and keep it where it is also one of the values.
+     */
+    @Test
+    void whatOnlyDecidedTheChoiceIsNoneOfThePositionsItsValuesAreFrom() {
+        assertEquals(List.of("a", "b"),
+                List.copyOf(choiceOn(new ValueOrigin.IsAPosition<>("flag"),
+                        List.of(new ValueOrigin.IsAPosition<>("a"),
+                                new ValueOrigin.IsAPosition<>("b"))).valuesFrom()));
+        assertEquals(List.of(),
+                List.copyOf(choiceOn(new ValueOrigin.IsAPosition<>("side"),
+                        List.of(new ValueOrigin.Written<>(),
+                                new ValueOrigin.Written<>())).valuesFrom()));
+        assertEquals(List.of("x"),
+                List.copyOf(choiceOn(new ValueOrigin.IsAPosition<>("x"),
+                        List.of(new ValueOrigin.IsAPosition<>("x"),
+                                new ValueOrigin.Written<>())).valuesFrom()));
+    }
+
     /** And it is not where the value came from, however the value it decided between was made. */
     @Test
     void whatDecidedTheChoiceIsNotWhereTheValueCameFrom() {

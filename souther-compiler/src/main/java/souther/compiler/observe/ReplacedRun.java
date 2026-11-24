@@ -1,42 +1,45 @@
 package souther.compiler.observe;
 
-import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.partition.Replacement;
 
 import java.util.List;
 import java.util.Objects;
 
 /**
- * One run of a row with one arm of the body answering with a sibling's expression instead.
+ * One run of a row with the body rewritten: an arm answering with a sibling's expression instead,
+ * or a walk run another way.
  *
- * <p>What a row is asked in order to find out whether the arm it went through decides its answer.
- * The row is run again exactly as written, with arm {@link #part} of {@link #fork} answering with
- * arm {@link #with}, and held to what it states as it was the first time. A row that would not
- * notice the arm being written as its sibling is not evidence for the arm, however surely it goes
- * through it.
+ * <p>What a row is asked in order to find out whether what it went through decides its answer. The
+ * row is run again exactly as written, under {@link #replaced}, and held to what it states as it was
+ * the first time. A row that would not notice the arm being written as its sibling, or the walk
+ * stopping after one step, is not evidence for the arm or the walk, however surely it goes through
+ * it.
  *
  * <p>Two findings and not one, because they answer different questions. {@link #answer} is what the
- * replaced program answered, which says whether the replacement changed anything at all; {@link
+ * rewritten program answered, which says whether the rewrite changed anything at all; {@link
  * #noticed} is whether the row's own statement told the difference, which a row naming only the
  * case cannot do for a value under it.
  *
- * @param fork   the fork whose arm was replaced, as the author wrote it
- * @param part   which of its arms
- * @param with   which sibling answered in its place
- * @param answer what the run answered
- * @param changed whether that is a different answer from the one the written program gave the
- *                row, which is what shows the replacement matters on this input whatever the row
- *                states
- * @param noticed whether what the row states told the replaced program from the written one
+ * @param replaced which rewrite the run was of: an arm's or a walk's, never the body answering one
+ *                 value, which is no program a run is made of
+ * @param answer   what the run answered
+ * @param changed  whether that is a different answer from the one the written program gave the
+ *                 row, which is what shows the rewrite matters on this input whatever the row
+ *                 states
+ * @param noticed  whether what the row states told the rewritten program from the written one
  * @param untoldAt where {@code noticed} could not tell, the figures of this compiler's that stopped
- *                 the replaced run, each as it stood where the run was compared against it; none
+ *                 the rewritten run, each as it stood where the run was compared against it; none
  *                 where nothing that stopped it was a figure, and none where it could tell
  */
-public record ReplacedRun(SourceConstructOrigin fork, int part, int with,
-                          AnswerObservation answer, AnswerChange changed, Noticed noticed,
-                          List<Figure> untoldAt) {
+public record ReplacedRun(Replacement replaced, AnswerObservation answer, AnswerChange changed,
+                          Noticed noticed, List<Figure> untoldAt) {
 
     public ReplacedRun {
-        Objects.requireNonNull(fork, "an arm is an arm of some fork");
+        Objects.requireNonNull(replaced, "a run is of some rewrite");
+        if (replaced instanceof Replacement.ByOneAnswer) {
+            throw new IllegalArgumentException("a body answering one value is no program a run is"
+                    + " made of: " + replaced);
+        }
         Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
         Objects.requireNonNull(changed, "a run says whether its answer changed, or that it cannot");
         Objects.requireNonNull(noticed, "a run says whether the row noticed, or why it cannot");
@@ -45,13 +48,9 @@ public record ReplacedRun(SourceConstructOrigin fork, int part, int with,
             throw new IllegalArgumentException("a figure stopped a run the row was told by: "
                     + untoldAt);
         }
-        if (part == with) {
-            throw new IllegalArgumentException("an arm replaced by itself is the arm: part " + part
-                    + " of " + fork);
-        }
     }
 
-    /** Whether the row told the replaced program from the written one. */
+    /** Whether the row told the rewritten program from the written one. */
     public enum Noticed {
         /** The row ended the other way: it holds of one of the two programs and fails of the
          *  other. */

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.LabeledRegion;
@@ -77,14 +79,14 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
     @Test
     void movingTheDeclarationMovesTheCaretUnderIt() {
         Compilation c = Compilation.ofDocuments(Map.of("empty.sou", EMPTY), Set.of(),
-                ModulePath.EMPTY);
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
         int before = whereItIsReported(c);
 
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("empty.sou", EMPTY.replace("data Impossible",
                 "// two lines written above it\n// which move it down the file\ndata Impossible"));
-        c.update(edited, Set.of());
+        c.update(edited, Set.of(), TestDay.DATE);
         c.answerEverything();
 
         assertNotEquals(before, whereItIsReported(c),
@@ -110,7 +112,8 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
      */
     @Test
     void aWarningAboutAnImportedRuleFollowsItWithoutCheckingTheBodyAgain() {
-        Compilation c = compiling(RULED);
+        Compilation c = workspace(RULED);
+        ACompiledModel.compiles(c);
         Answer<?> judged = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "make"));
         int primary = whereTheWarningIs(c);
         int secondary = whereTheRuleIsQuoted(c);
@@ -163,18 +166,15 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
         edited.put("cart.sou", BUILDING);
-        c.update(edited, Set.of());
-        c.answerEverything();
+        c.update(edited, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
     }
 
-    private static Compilation compiling(String prices) {
+    private static Compilation workspace(String prices) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
         byId.put("cart.sou", BUILDING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(List.of(), c.errors(), "this workspace is supposed to compile");
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
     }
 
     /** The line the one report about this workspace puts its caret on. */

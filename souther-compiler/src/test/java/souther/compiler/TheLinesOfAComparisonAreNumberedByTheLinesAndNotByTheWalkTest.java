@@ -1,0 +1,171 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.RuleRef;
+import souther.compiler.partition.AuthoredLine;
+import souther.compiler.partition.LineOrigin;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.BorderObligationPointAssessment;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.WhereTheReadingsDiffer;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The numbers a report gives the lines of a comparison come from the lines, and the order the
+ * readings were met in moves none of them.
+ *
+ * <p>The numbers are worked out from the points of the module ({@link WhereTheReadingsDiffer}), so
+ * the points of two walks that met the readings in two orders have to say the same words, and the
+ * two values have to be equal.
+ */
+class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
+
+    private static final String CLAMPED = """
+            module m
+
+            let clamp (n: Int): Int = if n > 50 then 50 else n
+
+            behavior full : (n: Int) -> Bool
+
+            let full (n) = clamp(n) == 50
+
+            example full
+                | (50) -> true
+                | (49) -> false
+                | (0) -> false
+            """;
+
+    /** Several arms of one comparison, and a value handed to both sides of one maximum. */
+    private static final String MANY_ARMS = """
+            module m
+
+            let pick (a: Int, b: Int): Int = if a > 50 then 50 else if b > 20 then 20 else b
+
+            behavior full : (a: Int, b: Int) -> Bool
+
+            let full (a, b) = pick(a, b) == 50
+
+            behavior capped : (p: Int) -> Bool
+
+            let capped (p) = Int.max(p, p) <= 50
+
+            example capped
+                | (49) -> true
+                | (50) -> true
+                | (51) -> false
+            """;
+
+    private static Map<String, List<BorderAssessment>> readingsOf(String source) {
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return Adequacy.readingsOf(compilation.db(), "m");
+    }
+
+    private static List<String> wordsOfEachPoint(List<BorderAssessment> readings) {
+        List<BorderObligationPointAssessment> points =
+                BorderObligationPointAssessment.across(readings, _ -> List.of());
+        WhereTheReadingsDiffer apart = WhereTheReadingsDiffer.of(points);
+        return points.stream()
+                .map(point -> point.point() + " = " + point.readingsSaid(apart).stream()
+                        .map(said -> said.at() + ": " + said.asks()).sorted()
+                        .collect(Collectors.toList()))
+                .sorted().toList();
+    }
+
+    /** The readings put in the order they came, turned round, and shuffled. */
+    @Test
+    void theWordsOfEveryPointAreTheSameWhateverOrderTheReadingsAreMetIn() {
+        for (String source : List.of(CLAMPED, MANY_ARMS)) {
+            Map<String, List<BorderAssessment>> readings = readingsOf(source);
+            readings.forEach((behavior, each) -> {
+                List<String> met = wordsOfEachPoint(each);
+                assertFalse(met.isEmpty(), behavior);
+                List<BorderAssessment> turned = new ArrayList<>(each);
+                Collections.reverse(turned);
+                assertEquals(met, wordsOfEachPoint(turned), behavior + " turned round");
+                for (long seed = 1; seed <= 5; seed++) {
+                    List<BorderAssessment> shuffled = new ArrayList<>(each);
+                    Collections.shuffle(shuffled, new Random(seed));
+                    assertEquals(met, wordsOfEachPoint(shuffled), behavior + " shuffled " + seed);
+                }
+            });
+        }
+    }
+
+    /** The place of a line is said where its words are shared, and the model has such a place. */
+    @Test
+    void theModelsUnderTestShareWordsSoTheOrderIsAskedOfSomething() {
+        List<String> words = wordsOfEachPoint(readingsOf(CLAMPED).get("full"));
+        assertTrue(words.stream().anyMatch(each -> each.contains("(line ")), words::toString);
+    }
+
+    /** What is held is compared by what it says: the same readings met in another order hold an
+     *  equal value, and a value that numbers lines differs from one that numbers none. */
+    @Test
+    void theValueIsEqualByWhatItHolds() {
+        List<BorderAssessment> readings = readingsOf(CLAMPED).get("full");
+        WhereTheReadingsDiffer met = WhereTheReadingsDiffer.of(
+                BorderObligationPointAssessment.across(readings, _ -> List.of()));
+        List<BorderAssessment> turned = new ArrayList<>(readings);
+        Collections.reverse(turned);
+        WhereTheReadingsDiffer other = WhereTheReadingsDiffer.of(
+                BorderObligationPointAssessment.across(turned, _ -> List.of()));
+
+        assertEquals(met, other);
+        assertEquals(met.hashCode(), other.hashCode());
+        assertNotEquals(WhereTheReadingsDiffer.NONE, met);
+        assertNotEquals(met, WhereTheReadingsDiffer.NONE);
+    }
+
+    /** Two lines of one comparison are never put together, and what puts one first puts the other
+     *  second. */
+    @Test
+    void theOrderOfTheLinesOfAComparisonIsTotalAndAntisymmetric() {
+        for (String source : List.of(CLAMPED, MANY_ARMS)) {
+            Map<RuleRef.Comparison, List<AuthoredLine>> linesOf = new LinkedHashMap<>();
+            readingsOf(source).values().forEach(readings -> readings.forEach(reading -> {
+                if (reading.border().origin() instanceof LineOrigin.ComparisonOrigin comparison) {
+                    linesOf.computeIfAbsent(comparison.rule(), _ -> new ArrayList<>())
+                            .add(reading.border().origin().authoredLine());
+                }
+            }));
+            linesOf.forEach((rule, lines) -> {
+                String comparison = rule.toString();
+                List<AuthoredLine> distinct = lines.stream().distinct().toList();
+                for (AuthoredLine one : distinct) {
+                    for (AuthoredLine other : distinct) {
+                        int order = AuthoredLine.inASteadyOrder().compare(one, other);
+                        assertEquals(one.equals(other), order == 0, comparison);
+                        assertEquals(Integer.signum(order),
+                                -Integer.signum(AuthoredLine.inASteadyOrder().compare(other, one)),
+                                comparison);
+                    }
+                }
+                List<AuthoredLine> sorted = distinct.stream()
+                        .sorted(AuthoredLine.inASteadyOrder()).toList();
+                for (long seed = 1; seed <= 5; seed++) {
+                    List<AuthoredLine> shuffled = new ArrayList<>(distinct);
+                    Collections.shuffle(shuffled, new Random(seed));
+                    assertEquals(sorted, shuffled.stream()
+                            .sorted(AuthoredLine.inASteadyOrder()).toList(), comparison);
+                }
+                if (distinct.size() > 1) {
+                    assertNotEquals(distinct.get(0), distinct.get(1), comparison);
+                }
+            });
+        }
+    }
+}

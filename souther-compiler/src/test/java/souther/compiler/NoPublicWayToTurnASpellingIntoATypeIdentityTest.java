@@ -12,11 +12,10 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
+import souther.test.RepositoryJavaSources;
 
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -199,10 +198,10 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
      * what a fixture is for.
      */
     @Test
-    void andTheOneExchangeIsHandedADeclarationRatherThanASpelling() throws IOException {
+    void andTheOneExchangeIsHandedADeclarationRatherThanASpelling() {
         Set<String> handed = new LinkedHashSet<>();
         for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
-            for (String argument : argumentsOf(Files.readString(source), "TypeSymbols.declared(")) {
+            for (String argument : argumentsOf(RepositoryJavaSources.forThisFork().mainText(source), "TypeSymbols.declared(")) {
                 handed.add(source.getFileName() + ": " + argument);
             }
         }

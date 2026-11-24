@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Prepared;
@@ -75,8 +76,9 @@ class ARowExpandsWhatItNamesAndTakesOnOnlyWhatItCannotTest {
      */
     private static Set<String> takenOnIsExactlyWhatRecurses(String rules, String imported,
                                                             String row) {
-        Db db = Compilation.ofDocuments(Map.of("rules.sou", rules, "app.sou", app(imported, row)),
-                Set.of(), ModulePath.EMPTY).db();
+        Db db = ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("rules.sou", rules, "app.sou", app(imported, row)),
+                Set.of(), ModulePath.EMPTY)).db();
         Answer<Prepared> answer = db.ask(new Shapes.Prepared("app"));
         assertTrue(answer.present(), "prepared of app: " + answer.reports());
         Prepared state = answer.value();

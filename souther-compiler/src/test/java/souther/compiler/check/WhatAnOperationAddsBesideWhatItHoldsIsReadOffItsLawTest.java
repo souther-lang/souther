@@ -9,6 +9,7 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.test.ClosedWorldContract;
 
@@ -19,6 +20,7 @@ import java.util.TreeMap;
 import java.util.function.BiFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Which operations a law of how many they answer says add to an argument what it does not hold
@@ -268,6 +270,19 @@ class WhatAnOperationAddsBesideWhatItHoldsIsReadOffItsLawTest {
         Map<LawNumber<DeclaredArgument>, ExactRatio> coefs = new LinkedHashMap<>(form.coefs());
         coefs.put(with, coefs.remove(part));
         return new LinearForm<>(form.constant(), coefs);
+    }
+
+    /** A set holds each element once and a map each key once; a list holds a value as often as
+     *  it was put there, and nothing else is a container this asks. */
+    @Test
+    void aSetHoldsEachElementOnceAndAMapEachKey() {
+        assertEquals(AddsWhatItDoesNotHold.Of.ELEMENTS,
+                AddsWhatItDoesNotHold.Of.heldOnceIn(new Type.SetOf(Type.INT)));
+        assertEquals(AddsWhatItDoesNotHold.Of.KEYS,
+                AddsWhatItDoesNotHold.Of.heldOnceIn(new Type.MapOf(Type.STRING, Type.INT)));
+        assertNull(AddsWhatItDoesNotHold.Of.heldOnceIn(new Type.ListOf(Type.INT)));
+        assertNull(AddsWhatItDoesNotHold.Of.heldOnceIn(Type.STRING));
+        assertNull(AddsWhatItDoesNotHold.Of.heldOnceIn(null));
     }
 
     private static String name(ValueName operation) {

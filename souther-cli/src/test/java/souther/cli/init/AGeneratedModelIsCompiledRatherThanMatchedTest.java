@@ -1,6 +1,7 @@
 package souther.cli.init;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
@@ -69,14 +70,14 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
                 .map(Templates.File::content)
                 .toList();
         List<Located> warnings = new ArrayList<>();
-        Compilation compiled = Compiler.analyzedModules(texts, ModulePath.EMPTY, warnings,
-                Adequacy.Asked.fullReport());
+        Compilation compiled = ACompiledModel.compiles(Compiler.analyzedModules(texts,
+                ModulePath.EMPTY, warnings, Adequacy.Asked.fullReport()));
         AdequacyReport report = AdequacyReport.of(compiled);
 
         assertEquals(List.of(), report.adequacyGaps().stream()
                         .map(each -> each.about().toString()).toList(),
                 () -> "the rows shipped with `--model full` leave something owed:\n"
-                        + report.human(souther.compiler.diag.SourceRendering.namedByIdentity(
+                        + report.humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(
                                 compiled.texts())));
     }
 }

@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -158,7 +160,7 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
     }
 
     private static PlacedRules read(String source, String parameter) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
@@ -168,6 +170,6 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
         }
         Type type = sigs.get("take").inputTypes().get(0);
         return PlacedRules.of(TermPath.of(parameter), type,
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

@@ -191,8 +191,8 @@ class ARowForAnArmOfSeveralCasesIsWrittenUnderOneOfThemTest {
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

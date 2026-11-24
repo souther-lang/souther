@@ -14,11 +14,13 @@ import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * The compiler pipeline facade: source → parse → derive → type check → ClassFile bytecode
@@ -255,6 +257,35 @@ public final class Compiler {
         return answered(sources.compilation(path), warningsOut, measure);
     }
 
+    /** As above, with the rows written on {@code writtenOn} rather than on the day the
+     *  compilation starts ({@link Compilation#writtenOn}). */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       LocalDate writtenOn) {
+        return answered(sources.compilation(path).writtenOn(writtenOn), warningsOut, measure);
+    }
+
+    /**
+     * As above, measuring only the behaviors {@code choice} names, and handing the compilation to
+     * {@code beforeTheMeasurement} once it is told what to measure and before anything is
+     * asked of it: what a caller can say of the model without the measurement is said before it
+     * waits for one.
+     */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       LocalDate writtenOn, Adequacy.Choice choice,
+                                       Consumer<Compilation> beforeTheMeasurement) {
+        Compilation compilation = sources.compilation(path).writtenOn(writtenOn);
+        compilation.choose(choice);
+        return driven(() -> {
+            compilation.measure(measure);
+            beforeTheMeasurement.accept(compilation);
+            compilation.answerEverything();
+            warningsOut.addAll(compilation.warnings());
+            return compilation;
+        });
+    }
+
     /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, measuring
      *  nothing of what the rows cover. */
     public static Compilation analyzed(CompilationSources sources, ModulePath path,
@@ -274,6 +305,14 @@ public final class Compiler {
     public static Compilation analyzedModules(List<String> sources, ModulePath path,
                                               List<Located> warningsOut, Adequacy.Asked measure) {
         return analyzed(CompilationSources.modules(sources), path, warningsOut, measure);
+    }
+
+    /** As above, with the rows written on {@code writtenOn}. */
+    public static Compilation analyzedModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure,
+                                              LocalDate writtenOn) {
+        return analyzed(CompilationSources.modules(sources), path, warningsOut, measure,
+                writtenOn);
     }
 
     /**

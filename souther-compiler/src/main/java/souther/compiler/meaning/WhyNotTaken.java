@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.LinkedHashSet;
@@ -37,12 +38,9 @@ public sealed interface WhyNotTaken {
     default Optional<Figure> figure() {
         return switch (this) {
             case MeaningUnread(WhyUnread why) -> why.figure();
-            case MoreWaysThanAreRead _ ->
-                    Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
-            case MoreAlternativesThanAreTried _ ->
-                    Optional.of(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.figure());
-            case MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
-                    Optional.of(figure.figure());
+            case MoreWaysThanAreRead(var stoppedAt) -> Optional.of(stoppedAt);
+            case MoreAlternativesThanAreTried(Figure stoppedAt) -> Optional.of(stoppedAt);
+            case MoreChoicesThanAreWrittenOut(var stoppedAt) -> Optional.of(stoppedAt);
             case OutsideDomain _ -> Optional.empty();
         };
     }
@@ -91,7 +89,18 @@ public sealed interface WhyNotTaken {
      * figure lifts it; nothing about the model or about either domain does, so neither of the
      * other two is said of it.
      */
-    record MoreWaysThanAreRead() implements WhyNotTaken {}
+    record MoreWaysThanAreRead(Figure.Budget stoppedAt) implements WhyNotTaken {
+
+        public MoreWaysThanAreRead {
+            Objects.requireNonNull(stoppedAt, "ways not read were past some figure");
+        }
+    }
+
+    /** More ways than are read, made where that is reached: it holds the figure the compilation
+     *  held the readings of one condition to. */
+    static WhyNotTaken pastTheWaysRead() {
+        return new MoreWaysThanAreRead(CompositionBudget.READINGS_OF_ONE_CONDITION.reached());
+    }
 
     /**
      * What the condition means was read and a path has words for it, and taking it into them
@@ -101,8 +110,20 @@ public sealed interface WhyNotTaken {
      * A part not taken may be the one that leaves nothing, so what the others came to is not
      * taken either. Raising the figure lifts it; the domain of what a path knows has the words,
      * so its limit is not said of it.
+     *
+     * @param stoppedAt the figure the parts were counted against, made where the count ran out:
+     *                  the parts one reading takes alone
+     *                  ({@link CompositionBudget#ALTERNATIVES_A_PATH_TRIES}), or the parts a path
+     *                  takes alone settling the choices it left undecided
+     *                  ({@link WorkFigure#PARTS_A_PATH_SETTLES}). Two counts of one walk, so the
+     *                  reason carries which one it was and nothing works it out of the kind.
      */
-    record MoreAlternativesThanAreTried() implements WhyNotTaken {}
+    record MoreAlternativesThanAreTried(Figure stoppedAt) implements WhyNotTaken {
+
+        public MoreAlternativesThanAreTried {
+            Objects.requireNonNull(stoppedAt, "parts not tried were past some figure");
+        }
+    }
 
     /**
      * What the condition means was read, and it holds a count of statements a reader takes by the
@@ -112,7 +133,7 @@ public sealed interface WhyNotTaken {
      *
      * @param stoppedAt which of the two the choices were past
      */
-    record MoreChoicesThanAreWrittenOut(CompositionBudget stoppedAt) implements WhyNotTaken {
+    record MoreChoicesThanAreWrittenOut(Figure.Budget stoppedAt) implements WhyNotTaken {
 
         public MoreChoicesThanAreWrittenOut {
             Objects.requireNonNull(stoppedAt, "choices not written out were past some figure");
@@ -162,6 +183,14 @@ public sealed interface WhyNotTaken {
         A_NODE_BELOW_WHAT_A_ROW_WRITES,
 
         /**
+         * A condition on an element of a container other than the one the rest of the way is about:
+         * what a way asks is placed at positions, and a position inside a container's elements is
+         * one element, so a condition read through another name for another element is a value the
+         * way has no place for beside the first.
+         */
+        ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS,
+
+        /**
          * A place the tree a path is walked over does not read: a position, an answer or a value
          * the body bound that no expression of the condition stands for there, so there is no
          * subject for a fact about it to be about.
@@ -177,6 +206,10 @@ public sealed interface WhyNotTaken {
 
         /** Two values being one, as what a path knows, which is no relation of numbers. */
         A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
+
+        /** One string standing inside another, as what a path knows, which is no relation of
+         *  numbers. */
+        A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER,
 
         /** A place on an order that is no number, where no range says it: a value other than a
          *  written place, which leaves a hole rather than a range, and a quantity that is no value
@@ -218,11 +251,11 @@ public sealed interface WhyNotTaken {
         public Domain domain() {
             return switch (this) {
                 case A_QUANTITY_ON_NO_ORDER, AN_ANSWER_A_ROW_STANDS_IN,
-                     A_NODE_BELOW_WHAT_A_ROW_WRITES ->
+                     A_NODE_BELOW_WHAT_A_ROW_WRITES, ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS ->
                         Domain.WHAT_A_ROW_IS_WRITTEN_IN;
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
                      A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
-                     A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
+                     A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER, A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
                      A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS, A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN,
                      A_NUMBER_THE_PATH_CANNOT_HOLD ->
                         Domain.WHAT_A_PATH_KNOWS;

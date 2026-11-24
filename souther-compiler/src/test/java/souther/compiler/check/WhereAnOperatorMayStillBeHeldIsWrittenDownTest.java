@@ -102,6 +102,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
      * <p>Written {@code owner#field} and {@code owner.method}.
      */
     private static final List<Held> HANDED_IN = List.of(
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated#operator",
+                    "the arithmetic a clause writes a number with, as it is evaluated over the"
+                            + " ranges or the numbers its places are at"),
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated.<init>",
+                    "makes the arithmetic a clause writes a number with"),
             new Held("souther.compiler.ast.Hir.Binary#op",
                     "the resolved tree, which is where an operator is written down"),
             new Held("souther.compiler.core.Core.Binary#op",
@@ -123,6 +128,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the one reading of an operator for what it places"),
             new Held("souther.compiler.semantics.ConditionJoin.of",
                     "the one reading of an operator for what a connective composes"),
+            new Held("souther.compiler.semantics.ConditionJoin.operator",
+                    "the operator that composes a way, asked of the same table and so named nowhere"),
 
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "which operands an operator takes and what it answers, which is a question"
@@ -137,13 +144,34 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.abort.AbortSites.ofAnOperatorOfAnyType",
                     "the same, of the sites every typing the operator is admitted at is written"
                             + " as, for a tree whose operands carry no type"),
-            new Held("souther.compiler.check.LibraryEndings.Reading.operator",
+            new Held("souther.compiler.abort.AbortSites.ofAnOperatorAnswering",
+                    "the same, at the type the operator answers, for a tree whose operators are"
+                            + " read to answer a type and whose operands are not"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.operator",
                     "hands the operator a library operation's body writes to AbortSites, which"
-                            + " answers what it ends a run for"),
+                            + " answers what it ends a run for and where it answers, and names"
+                            + " the whole-number arithmetic among them as a site the library's"
+                            + " proofs are asked of"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.OfTheBody.itself",
+                    "takes the operator a library operation's body writes, and its operands, off"
+                            + " the term, to hand on"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.ofTheBody",
+                    "asks WhereAnOperatorAnswers where an Int sum answers, for the whole numbers"
+                            + " a library operation's body works out"),
+            new Held("souther.compiler.abort.AbortSites.completionOfAnOperator",
+                    "which operator answers where the collection it answers fits, and of which"
+                            + " operands: the join of two lists"),
+            new Held("souther.compiler.check.WhatARunMayEndFor"
+                    + ".completionApartFromTheClosuresWrittenAtIt",
+                    "hands an operator the analysis reads to AbortSites, which answers where it"
+                            + " answers"),
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),
-            new Held("souther.compiler.check.PathCompletion.operated",
+            new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofATotal",
+                    "names the addition a total the library adds up exactly is held to its type"
+                            + " as, for every reader of where such a total answers"),
+            new Held("souther.compiler.check.PathCompletion.whereItAnswers",
                     "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
                             + " answers a value, once for every question asked of the evaluation"),
             new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
@@ -152,12 +180,39 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.PathCompletion.operationAt",
                     "whether the operator is one a recipe is recorded against, which a product and"
                             + " a quotient are and a sum and a difference are not"),
-            new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
-                    "hands each operator a closure's body was worked out through to"
-                            + " WhereAnOperatorAnswers, for where an application of it answers"),
+            new Held("souther.compiler.check.PathCompletion.workedOut",
+                    "which side of a connective inside an operand a run works out whenever the part"
+                            + " is: the left, and not the right"),
             new Held("souther.compiler.partition.Pullback.operatorsIn",
                     "which operators a body works out, which a sum, a difference and a product"
                             + " are and a comparison is not"),
+            new Held("souther.compiler.partition.Pullback.isAnOperator",
+                    "which operators a run works out over the numbers of its operands and answers"
+                            + " where the number it comes to is held: a sum, a difference and a"
+                            + " product, and not a quotient or a comparison"),
+            new Held("souther.compiler.partition.FormRange.combined",
+                    "what a sum, a difference and a product come to of two runs of numbers, each"
+                            + " its own arithmetic of the ends"),
+            new Held("souther.compiler.partition.FormRange.asWorkedOut",
+                    "a product of two forms is what its factors come to multiplied, and not the"
+                            + " ends of the type it is answered in"),
+            new Held("souther.compiler.partition.Pullback.exactRangeOf",
+                    "hands the operator a run works out to the arithmetic of the runs of its"
+                            + " operands, where no form says what it comes to"),
+            new Held("souther.compiler.partition.Pullback.productOfWrittenOut",
+                    "multiplies the runs of the elements of a list written out, which is the"
+                            + " number a product the library multiplies out exactly comes to"),
+            new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAProduct",
+                    "names the multiplication a product the library multiplies out exactly is"
+                            + " held to its type as, for every reader of where such a product"
+                            + " answers"),
+            new Held("souther.compiler.partition.Pullback.theDivisorItAloneStopsOn",
+                    "which operand of a quotient it stops a run on, the one it divides by and not"
+                            + " the one it divides, where the operator's account says its divisor"
+                            + " alone"),
+            new Held("souther.compiler.partition.Pullback.comparisonHolding",
+                    "which comparison a read of a step stands in, whose arithmetic is the"
+                            + " relation it states and not something the step works out beside it"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
@@ -169,6 +224,40 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
             new Held("souther.compiler.semantics.Arithmetic.TheOperator#op",
                     "a library operation declared to compute what an operator computes"),
+            new Held("souther.compiler.semantics.OperationFact.IsTheOperator#operator",
+                    "a library operation declared to be what an operator comes to over two values"
+                            + " of one type"),
+            new Held("souther.compiler.semantics.OperationFact.IsTheOperator.<init>",
+                    "makes the declaration that a library operation is an operator"),
+            new Held("souther.compiler.semantics.OperationFact.IsTheOperator.operator",
+                    "hands back the operator a library operation is declared to be"),
+            new Held("souther.compiler.check.BoundOperationFact.IsTheOperator#operator",
+                    "the operator a library operation was bound as, held to its signature"),
+            new Held("souther.compiler.check.BoundOperationFact.IsTheOperator.<init>",
+                    "makes the operator a library operation was bound as"),
+            new Held("souther.compiler.check.BoundOperationFact.IsTheOperator.operator",
+                    "hands back the operator a library operation was bound as"),
+            new Held("souther.compiler.check.BoundOperationFacts.operatorOf",
+                    "which operator a library operation is, as it was declared"),
+            new Held("souther.compiler.check.BoundOperationFacts.operandOf",
+                    "the type a library operation takes two of where it is an operator"),
+            new Held("souther.compiler.check.BoundOperationFacts.operationFor",
+                    "which library operation an operator is over the type it is written over"),
+            new Held("souther.compiler.check.BoundOperationFacts.operatorComputedBy",
+                    "which operator a library operation computes the arithmetic of, as it was"
+                            + " declared"),
+            new Held("souther.compiler.check.BoundOperationFacts.putsListsEndToEnd",
+                    "whether a library operation is the operator that puts two values end to end,"
+                            + " over a list"),
+            new Held("souther.compiler.check.OperationFactBinder.bind",
+                    "reads the operator a library operation is declared to be and holds it to"
+                            + " the operation's signature"),
+            new Held("souther.compiler.check.ProvingTheLibrary.proves",
+                    "hands the operator a library body is declared to be to the proof that its"
+                            + " body answers it"),
+            new Held("souther.compiler.proof.LibraryProver.isTheOperator",
+                    "whether a library body answers the operator over its two arguments on every"
+                            + " run"),
             new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen#op",
                     "a library fact stating the case an operation answers something else in, as a"
                             + " comparison against a number: an operator standing for what it"
@@ -212,6 +301,23 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
     /** What fetches an operator: answered by a call, read out of a field, or named as a constant. */
     private static final List<Held> FETCHED = List.of(
+            new Held("souther.compiler.check.SidesBalanced.caseOf",
+                    "asks whether a condition on an element compares a field of it for equality"
+                            + " with a case"),
+            new Held("souther.compiler.check.SidesBalanced.side",
+                    "asks the operations that add, by the operator the library says each"
+                            + " computes, for the number a walk adds to its total"),
+            new Held("souther.compiler.check.ContainerCounts.number",
+                    "keeps the three operators that are exact arithmetic over counts, and leaves"
+                            + " a number written with any other unread"),
+            new Held("souther.compiler.check.ComputedNumber.operated",
+                    "keeps the three operators that are exact arithmetic over places, and leaves"
+                            + " a number written with any other unread"),
+            new Held("souther.compiler.check.ComputedNumber.bounded",
+                    "does what each of those three does to the range its operands lie in, a"
+                            + " single number being the range of one"),
+            new Held("souther.compiler.check.ComputedNumber.Expr.Operated.operator",
+                    "hands back the operator the arithmetic was written with"),
             // Recognising a comparison, which is what carries the claim to everything below.
             new Held("souther.compiler.check.Comparison.of",
                     "asks what the operator places, for a binary of a checked body"),
@@ -238,8 +344,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " of its own"),
             new Held("souther.compiler.check.HelperInliner.rename",
                     "the same, under a renaming of what the body bound"),
-            new Held("souther.compiler.check.NewtypeDesugar.go",
-                    "copies it into the node a newtype's rule becomes"),
             new Held("souther.compiler.check.BinaryElaborator.arithmetic",
                     "writes it into the checked node, and into the one inside a construction where"
                             + " the answer is a newtype"),
@@ -262,9 +366,19 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "does the sum, the difference or the product of two written whole numbers, so"
                             + " that a divisor is read as the number it comes to and not as it was"
                             + " spelled"),
+            new Held("souther.compiler.check.Term.formOfWhatIsHanded",
+                    "keeps the sum, the difference and the product by a written number, the three"
+                            + " that leave what a closure makes of an element a form of its"
+                            + " fields, so that a rule's total of it is the term a body's is"),
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
             new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),
+            new Held("souther.compiler.check.WhatATotalIsMadeOf.multiplicationsAmong",
+                    "asks whether a written value is a multiplication, which a total over what"
+                            + " several totals walk between them is equal to, however it was"
+                            + " grouped"),
+            new Held("souther.compiler.check.WhatATotalIsMadeOf.multipliedOf",
+                    "the same, for each factor of one"),
             new Held("souther.compiler.check.Terms.recipeFor", "the same, for the recipe it names"),
             new Held("souther.compiler.check.NumericMeanings.of",
                     "keys an arithmetic meaning by the operator a library operation computes"),
@@ -281,7 +395,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "what a comparison or an arithmetic does, written into what a reader copied of"
                             + " another module's definition: a copy that computes another way is"
                             + " another copy, and a reader built from the first answers otherwise"),
-            new Held("souther.compiler.report.ArmVocabulary.label",
+            new Held("souther.compiler.coverage.ArmWord.of",
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
                     "gathers the operands one operator reaches, which is what it is asked about"),
@@ -316,6 +430,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.joined",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
+            new Held("souther.compiler.partition.AnEmptinessCheck.addedUp",
+                    "names the addition, the one way of putting sizes together that is nought"
+                            + " exactly where each is and one or more exactly where one is"),
             new Held("souther.compiler.check.RemainderOfAShiftedValue.SumOrDifference.of",
                     "asks whether a value is a sum or a difference, as written or as the library's"
                             + " operation that computes the same, so a place moved by a number is"
@@ -331,6 +448,13 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.productAt",
                     "asks whether the expression the arithmetic stopped at is the product it"
                             + " stopped for, so the two numbers multiplied are read as one"),
+            new Held("souther.compiler.partition.Pullback.isTheSideAsWritten",
+                    "asks whether the operator the arithmetic stopped at is the whole of the side,"
+                            + " as the side or as the library's call it was read as, so a product"
+                            + " is one line however it was written"),
+            new Held("souther.compiler.partition.AffineReading.1.composedAsAProduct",
+                    "tells the multiplication of two whole numbers the run works out as it was"
+                            + " written, so that a row where it stops is not taken as computed"),
             new Held("souther.compiler.check.QuotientByAValue.operated",
                     "writes the number times the divisor as the source would, through the rule"
                             + " for the operator, so that the comparison is read where any"
@@ -347,9 +471,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.aWholeNumberOfAQuotient",
                     "asks whether what a narrowing to a whole number rounds is a quotient, which"
                             + " is then a quotient rounded to the scale nought"),
-            new Held("souther.compiler.partition.ClauseStatements.walk",
-                    "walks into both halves, and stops where the connective composes either of"
-                            + " them because what such a rule states is neither of its sides"),
 
             // Which operand runs when, asked of the operator itself rather than of what it
             // composes: the two are answered by the same two operators and are not one question.
@@ -370,7 +491,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // Which operand runs when, which is the enum's own answer.
             new Held("souther.compiler.core.Evaluated.inOrder",
                     "asks the enum which way the left has to come out for the right to run"),
-            new Held("souther.compiler.flow.ValueArrivals.reading",
+            new Held("souther.compiler.check.DataChecker.collectConstructions",
+                    "asks the enum whether the right operand runs on every run, for which"
+                            + " constructions building a value runs"),
+            new Held("souther.compiler.flow.ValueArrivals.meant",
                     "asks the enum whether the right operand runs on every run"),
             new Held("souther.compiler.flow.ValueArrivals.through", "and which way it runs under"),
             new Held("souther.compiler.reading.CoverageRead.descend",
@@ -381,6 +505,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.reading.Meetings.at",
                     "asks the enum whether the operator compares, which is what a count handed to"
                             + " it is made into a statement by"),
+            new Held("souther.compiler.reading.WaysOfACount.of",
+                    "asks the enum whether the operator compares, which is what a count set"
+                            + " against a number the body writes is made into the ways it comes"
+                            + " out by"),
             new Held("souther.compiler.reading.ValueChoices.of",
                     "asks the enum whether the operator stops early, which a conjunction does and"
                             + " a comparison does not: what an if decides by is one comparison only"
@@ -401,6 +529,82 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // What the operator computes, is typed as, or is emitted as.
             new Held("souther.compiler.check.AffineForms.composed",
                     "which arithmetic an expression composes into a form"),
+            new Held("souther.compiler.check.AffineForms.quotientTold",
+                    "asks the operator's own account whether a quotient it composed can still"
+                            + " stop a run, so that a reading says it did not tell of every"
+                            + " operation"),
+            new Held("souther.compiler.check.AffineForms.whereAFormItIsHandedAnswers",
+                    "asks whether a library call computes what an operator does, so that it is"
+                            + " held to where the answer has a place as the operator is"),
+            new Held("souther.compiler.check.AffineForms.whereItAnswers",
+                    "asks the operator's own account where an operation a walk composed answers,"
+                            + " for every reading that asks a row to get past what it is told"),
+            new Held("souther.compiler.partition.NumbersOnTheWayToATotal.noMoreThanItAnswers",
+                    "asks whether every operation a closure applied to each element works out is"
+                            + " an addition or a product by a written number, whose numbers then"
+                            + " lie between nought and what the closure answers"),
+            new Held("souther.compiler.partition.AffineReading.isAQuotientByAValue",
+                    "asks whether the stopped expression is a quotient and where the operator's"
+                            + " own account says it answers, so that its operands are told with"
+                            + " the rest and its own stop is the quotient's"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Reader.partOf",
+                    "reads what a step or a closure works out of each element as the tree of"
+                            + " operations it is written as: an operation not written is one no"
+                            + " run can stop at, and one written is one a run works out"),
+            new Held("souther.compiler.partition.AddedOfEachElement.movesOneWay",
+                    "asks whether a step is the answer so far with one part of the element added or"
+                            + " taken away, so that every answer on the way lies between the seed"
+                            + " and the answer"),
+            new Held("souther.compiler.partition.AddedOfEachElement.nameThatIsTheTotal",
+                    "asks whether the answer is a name added to the answer so far from nought,"
+                            + " whose value is then the total on a row of one element"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Worked#op",
+                    "the operation a step works out of two parts of an element, held in the"
+                            + " order it is written"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Worked.<init>",
+                    "refuses an operation of an element's part that is no sum, difference or"
+                            + " product"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Worked.op",
+                    "hands out the operation a step works out of two parts"),
+            new Held("souther.compiler.partition.AddedOfEachElement.ofAJoin",
+                    "makes what the walk joining two maps works out of each entry: the answer so"
+                            + " far plus a product"),
+            new Held("souther.compiler.partition.AddedOfEachElement.addsTo",
+                    "asks whether the answer so far is added along sums and differences from"
+                            + " the top, and taken from nothing"),
+            new Held("souther.compiler.partition.AddedOfEachElement.heldOverEveryStep",
+                    "works out where the answer so far lies after the most steps there are: what a"
+                            + " step moves it by, times how many steps, added to the seed"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.whatATotalComesTo",
+                    "works out where a total lies: what each element comes to times the most"
+                            + " elements there are"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.originNotYetAsked",
+                    "asks whether a value is a quotient by a whole number, which lies where what"
+                            + " it divides does divided by what it divides by"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.answersOfAChoice",
+                    "asks the enum whether the operator compares, and what relation it states,"
+                            + " which is what a step of a walk that chooses by a comparison of"
+                            + " the element and what it carried answers of them where that holds"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.whatItComesTo",
+                    "hands the operator a run works out to the arithmetic of the numbers its"
+                            + " operands come to, for whether it passes its type"),
+            new Held("souther.compiler.partition.AddedOfEachElement.Checker.checked",
+                    "works out what each operation of an element's part comes to from what its"
+                            + " operands do, and asks whether a sum with the answer so far from"
+                            + " nought is the total"),
+            new Held("souther.compiler.inputs.WrittenOperation.operandsOf",
+                    "asks whether an expression is one sum, difference or product of whole numbers"
+                            + " or decimals, by the operator or the library's operation"),
+            new Held("souther.compiler.partition.AffineReading.1.addsAWrittenWholeNumber",
+                    "asks whether a walk's step is the answer so far plus a written whole number,"
+                            + " so that every answer so far lies between the seed and the answer"),
+            new Held("souther.compiler.inputs.InputNumber.lookedUpBy",
+                    "asks whether a walk's step adds the entry's value times the lookup of the"
+                            + " entry's key in another map, with a written nought where it holds"
+                            + " none, as it is written"),
+            new Held("souther.compiler.partition.Pullback.divisionBy",
+                    "finds the quotient by the divisor a quotient's analysis read, among the"
+                            + " expressions the comparison was written with"),
             new Held("souther.compiler.check.BinaryElaborator.elaborateBinary",
                     "what the operator makes of its operands' types"),
             new Held("souther.compiler.check.BinaryElaborator.operand",
@@ -467,6 +671,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands back the operator a library fact states its other case by"),
             new Held("souther.compiler.check.DischargeRules.operator",
                     "reads the operator a library operation is declared to compute"),
+            new Held("souther.compiler.check.AnOperationApplied.theOperatorItComputes",
+                    "hands a reader of an application the operator its operation is declared to"
+                            + " compute, so none of them names a kernel to know it"),
             new Held("souther.compiler.semantics.Arithmetic.writtenAs",
                     "answers with the operator the language writes an arithmetic as, which is none"
                             + " for an arithmetic it writes no operator for"),
@@ -491,7 +698,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " until somebody says what it means here"),
             new Held("souther.compiler.check.Conditions.asSizeComparison",
                     "writes the equality an emptiness check means: a size stood against nought"),
-            new Held("souther.compiler.check.ClauseExpr.againstATruthValue",
+            new Held("souther.compiler.check.TruthRestatement.of",
                     "asks whether the operator is the equality or the disequality, for a comparison"
                             + " one side of which is a written truth value: which of the two it is"
                             + " and which value was written are together what says whether such a"
@@ -507,6 +714,22 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " nothing the source holds, because a statement stands nowhere"),
             new Held("souther.compiler.check.Term.Interner.AsTerms.below",
                     "the one order a term is written in, which the claim exchanged the sides for"),
+            new Held("souther.compiler.check.Term.Interner.closureAnswering",
+                    "writes the statement that holds of a set of whole numbers the one way, as the"
+                            + " order of a value below a whole number and the equality: above 2 and"
+                            + " at least 3 are one statement of whole numbers"),
+            new Held("souther.compiler.check.Term.Interner.closureAnsweringBoth",
+                    "writes both of two statements of one element or one entry as the operator"
+                            + " that joins them is written, so a filter of a filter and the two"
+                            + " statements written together are one term"),
+            new Held("souther.compiler.check.Terms.additiveLeaves",
+                    "takes an expression through sums and differences to the values it is made of,"
+                            + " which are the ones a form over it is written over: a walk among"
+                            + " them says what the path puts on its answer of the container it"
+                            + " walked"),
+            new Held("souther.compiler.check.Term.runsOfAStatement",
+                    "reads which whole numbers a statement holds of, from the order of a value"
+                            + " below a whole number, the equality, and what joins and denies them"),
             new Held("souther.compiler.check.Terms.repeating",
                     "writes the multiplication a repeated accumulation comes to"),
             new Held("souther.compiler.semantics.OperationFacts.declared",
@@ -524,15 +747,20 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands out the operator a number a body computes was written with"),
             new Held("souther.compiler.proof.Value.Arithmetic.<init>",
                     "takes the operator a number a body computes was written with"),
-            new Held("souther.compiler.proof.Reading.cases",
+            new Held("souther.compiler.proof.Reading.casesOf",
                     "reads an operator a library body writes into what it computes or states"),
+            new Held("souther.compiler.proof.LibraryTerm.forEachPart",
+                    "hands on the two operands an operator of a library body is made of"),
+            new Held("souther.compiler.proof.LibraryProver.typeOf",
+                    "reads the type a number a library body computes is of off the operator and"
+                            + " its operands: a quotient is a Rational"),
+            new Held("souther.compiler.proof.LibraryProver.ofTheSameType",
+                    "takes the number a negation negates, to read the type of what it answers"),
             new Held("souther.compiler.proof.Reading.operated",
                     "what an operator a library body writes comes to over the two values it was"
                             + " handed: a number computed, or a statement of how they stand"),
             new Held("souther.compiler.proof.Reading.negated",
                     "names the subtraction from nought a negation is"),
-            new Held("souther.compiler.proof.Reading.relationOf",
-                    "the order or equality each comparing operator states"),
             new Held("souther.compiler.proof.Reading.number",
                     "names the addition and the subtraction a number of a proof is a sum of"),
             new Held("souther.compiler.proof.Collect.visit",
@@ -540,6 +768,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " operator it is"),
             new Held("souther.compiler.proof.LibraryProver.walksIn",
                     "the same, looking for a walk among the operands"),
+            new Held("souther.compiler.proof.LibraryProver.divisorOf",
+                    "takes the divisor of a quotient a library body computes, to ask whether it"
+                            + " is ever nought where the quotient is worked out"),
             new Held("souther.compiler.proof.Substituted.value",
                     "puts one value in place of another in both operands of a number a body"
                             + " computes, keeping the operator it was written with"),
@@ -567,7 +798,38 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"
-                            + " placed"));
+                            + " placed"),
+            new Held("souther.compiler.check.ConstantAlgebra.computed",
+                    "names the sum, the difference and the product a decimal operation of the"
+                            + " library computes, which the fold gives the arithmetic the"
+                            + " operators have"),
+            new Held("souther.compiler.check.WhatAClauseNeeds.workJoined",
+                    "asks what an operator joining two conditions joins them by, which is how a"
+                            + " false part carries on to the whole clause; any other operator says"
+                            + " nothing of the lookup or of the elements being apart"),
+            new Held("souther.compiler.coverage.DecisionSources.Rules.isTheirVerdict",
+                    "names the conjunction and the disjunction, the two forms that join the"
+                            + " answers of the rules a declaration was handed into one truth;"
+                            + " any other operator reads something the declaration holds itself"),
+            new Held("souther.compiler.check.ElementStatements.both",
+                    "asks the join of two conditions for its operator, which puts two statements a"
+                            + " container makes of its elements together as its author joined"
+                            + " them"),
+            new Held("souther.compiler.partition.LineDownATree.Reading.holdsTheValue",
+                    "names the equality, the one comparison that is whether a field of a node is"
+                            + " the value handed beside it; an order, an inequality or a"
+                            + " connective is another search"),
+            new Held("souther.compiler.partition.StopPastTheRepresentation.nameOf",
+                    "names the join of two texts as it is written, the one operator that ends a"
+                            + " run only past what a String holds; which operators do is asked of"
+                            + " the owner of where a run ends, and this only says the one found"),
+            new Held("souther.compiler.partition.StopsOfABody.ownOperation",
+                    "reads a step's own sum, difference or product by a number written as its"
+                            + " operator over what each operand comes to, which is the operation"
+                            + " whose ends a run at the step may go past"),
+            new Held("souther.compiler.partition.StopsOfABody.keeping",
+                    "adds what each element of a list written out comes to, the sum being what"
+                            + " the total over the list works out"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {

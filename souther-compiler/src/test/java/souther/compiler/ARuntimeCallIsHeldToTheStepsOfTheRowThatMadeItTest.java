@@ -11,7 +11,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.source.SourceId;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,13 +54,25 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
     private static final String SEARCHES_NONE = row("String.startsWith(\"b\", %s)", false);
 
     private static EvaluationPolicy holdingTo(long steps) {
-        return EvaluationPolicy.of(steps).withCompilerTimeout(Duration.ofSeconds(30));
+        return EvaluationPolicy.of(steps);
     }
 
     private static RowOutcome onlyRowOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
+        return onlyRowOf(compilation);
+    }
+
+    /** The one row of a model whose row is stopped by its steps, which the model is told of. */
+    private static RowOutcome onlyRowStoppedOf(String source, EvaluationPolicy policy) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.withEvaluationPolicy(policy);
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
+        return onlyRowOf(compilation);
+    }
+
+    private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("example.calling").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.calling", sourceId, ArmObservation.OMIT)).value().rows();
@@ -103,7 +114,7 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
         long building = spentWithRoom(MATCHES_NONE);
         EvaluationPolicy between = holdingTo(building + LONG / 2);
 
-        RowOutcome stopped = onlyRowOf(MATCHES_ALL, between);
+        RowOutcome stopped = onlyRowStoppedOf(MATCHES_ALL, between);
         assertEquals(Disposition.INCOMPLETE, stopped.disposition(), stopped.toString());
         assertEquals(FailurePhase.STEP_LIMIT, stopped.failurePhase());
         assertEquals(Disposition.HELD, onlyRowOf(MATCHES_NONE, between).disposition());
@@ -114,7 +125,7 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
         long building = spentWithRoom(SEARCHES_NONE);
         EvaluationPolicy between = holdingTo(building + LONG / 2);
 
-        RowOutcome stopped = onlyRowOf(SEARCHES_ALL, between);
+        RowOutcome stopped = onlyRowStoppedOf(SEARCHES_ALL, between);
         assertEquals(Disposition.INCOMPLETE, stopped.disposition(), stopped.toString());
         assertEquals(FailurePhase.STEP_LIMIT, stopped.failurePhase());
         assertEquals(Disposition.HELD, onlyRowOf(SEARCHES_NONE, between).disposition());

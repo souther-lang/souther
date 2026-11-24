@@ -1,6 +1,7 @@
 # ADR-0121: A row is evidence for an arm where a rewrite of it changes how the row comes out
 
 Status: Accepted. Extends ADR-0089 with one measure; the measures it lists keep their meaning.
+Extended by ADR-0126, which adds the rewrites of a walk.
 
 ## Context
 
@@ -32,15 +33,25 @@ ADR-0089 requires of every measure: it does not replace branch or class coverage
 no body is not measured by it.
 
 There are two rewrites and no others. An arm a row stating its answer goes through is rewritten as
-each sibling of its fork, run in the same environment. A body with no such arm is rewritten as each
-value the rows were seen to answer, one rewrite per value: answering one value and answering
-another are two programs, and a row telling one of them apart says nothing of the other. Only there:
-a body whose rows go through a fork is asked about the fork arm by arm. Both rewrites are edits of
-the source an author could make, so a finding reads against what was written; neither moves an
-input. A sibling reading the name its own arm gives a value is no program the body could be written
-as, and two siblings that do the same thing are one rewrite. The arms are the ones the branch
-measure counts, so a helper is rewritten wherever it is declared, as it is measured wherever it is
-declared. An arm no row reaches is already owed under its own code and is not rewritten.
+each sibling of its fork, run in the same environment. A body with no arm that it owes a row
+through and that has a rewrite which is another program is rewritten as each value the rows were
+seen to answer, one rewrite per value: answering one value and answering another are two programs,
+and a row telling one of them apart says nothing of the other. A body with such an arm is asked
+about the fork arm by arm and not about the values. An arm in a copy of the language's own
+operation is not one the body owes a row through, so a body whose only arms are those is asked
+about the values as well as about those arms. Both rewrites are edits of the source an author could
+make, so a finding reads against what was written; neither moves an
+input. Where the arm is in the language's own operation the author has no source of it to edit, and
+the finding is shown at the behavior, which is the call the program the model could have been
+differs at. A sibling reading the name its own arm gives a value is no program the body could be written
+as, and two siblings that do the same thing are one rewrite. The arms are the ones the plan
+numbers, so a helper is rewritten wherever it is declared, as it is measured wherever it is
+declared. That includes a fork inside a copy of the language's own operation, though the branch
+measure owes no row through it: no row is owed for how `List.drop` happens to loop, and a rewrite of
+its arm is still another program the model could have been, one that keeps the piece the call was
+there to drop. A row that comes out the same under it leaves the model's call unchecked. An arm no
+row reaches is already owed under its own code, where the branch measure owes it, and is not
+rewritten.
 
 A row tells a rewrite apart where it comes out the other way under it: it holds of one of the two
 bodies and fails of the other. A row that fails of both tells neither apart, which is what keeps a

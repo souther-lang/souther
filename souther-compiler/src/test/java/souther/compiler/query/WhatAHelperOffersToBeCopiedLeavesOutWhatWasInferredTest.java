@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InliningPolicy;
@@ -95,7 +96,7 @@ class WhatAHelperOffersToBeCopiedLeavesOutWhatWasInferredTest {
     }
 
     private static final Compilation COMPILED =
-            Compilation.ofSources(List.of(B), ModulePath.of(Map.of()));
+            ACompiledModel.compiles(Compilation.ofSources(List.of(B), ModulePath.of(Map.of())));
 
     /** {@code name} as `lib.b` hands it to a reader. */
     private static Hir.FnDef closed(String name) {

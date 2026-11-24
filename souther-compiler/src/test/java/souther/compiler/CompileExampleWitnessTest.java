@@ -13,7 +13,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a behavior's rows establish about the cases in its signature.
@@ -48,14 +47,23 @@ class CompileExampleWitnessTest {
             """;
 
     private static Map<String, Adequacy.SignatureEvidence> evidence(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Asked for, because a measure nobody asks for is not made: what this reads is what a
         // report of this model would hold.
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.SignatureEvidence> out = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
         assertNotNull(out, "the witnesses of a module that compiled");
+        return out;
+    }
+
+    /** The same, for a model whose rows state an answer the behavior does not give. */
+    private static Map<String, Adequacy.SignatureEvidence> evidenceOfADisagreeingRow(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
+        Map<String, Adequacy.SignatureEvidence> out = compilation.db()
+                .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
+        assertNotNull(out, "the witnesses of a module whose row disagrees");
         return out;
     }
 
@@ -66,7 +74,7 @@ class CompileExampleWitnessTest {
     /** A row that disagreed is no evidence for what it expected and is evidence for what it saw. */
     @Test
     void whatARowExpectsAndWhatItSawAreCountedApart() {
-        Adequacy.SignatureEvidence lookup = evidence(BASE + """
+        Adequacy.SignatureEvidence lookup = evidenceOfADisagreeingRow(BASE + """
 
                 example lookup
                     | "active"    : (MemberId("m-1"), Active)    -> Found { id = MemberId("m-1") }
@@ -135,11 +143,11 @@ class CompileExampleWitnessTest {
     }
 
     /**
-     * An expectation the text does not name a case for — a helper's answer — leaves the row
-     * unclassified rather than uncounted, and while there is one a missing case is undecided.
+     * An expectation the text names no case for — a helper's answer — is the value it builds to,
+     * and that value is of one case.
      */
     @Test
-    void aRowWhoseCaseCannotBeReadMakesTheMeasurementPartial() {
+    void aRowExpectingAHelpersAnswerExpectsTheCaseThatAnswerIs() {
         Adequacy.SignatureEvidence lookup = evidence(BASE + """
 
                 let asFound (id: MemberId) = Found { id = id }
@@ -148,11 +156,69 @@ class CompileExampleWitnessTest {
                     | (MemberId("m-1"), Active) -> asFound(MemberId("m-1"))
                 """).get("lookup");
 
-        assertEquals(1, lookup.output().seen().unclassifiedRows());
-        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(lookup.output().cases()));
-        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(lookup.counted()));
-        assertTrue(lookup.output().seen().verified().isEmpty()
-                        || names(lookup.output().seen().verified()).equals(List.of("Found")),
-                "whatever the row confirmed, it did not confirm a case the text names");
+        assertEquals(0, lookup.output().seen().unclassifiedRows());
+        assertEquals(List.of("Found"), names(lookup.output().seen().specified()));
+        assertEquals(List.of("Found"), names(lookup.output().seen().verified()));
+    }
+
+    /**
+     * What a row expects is read off the expectation and never off the answer: a row expecting a
+     * helper's {@code Found} that sees {@code Missing} expects {@code Found}, and confirms nothing.
+     */
+    @Test
+    void theCaseOfAComputedExpectationIsNotTheCaseTheBehaviorAnswered() {
+        Adequacy.SignatureEvidence lookup = evidenceOfADisagreeingRow(BASE + """
+
+                let asFound (id: MemberId) = Found { id = id }
+
+                example lookup
+                    | (MemberId("m-1"), Suspended) -> asFound(MemberId("m-1"))
+                """).get("lookup");
+
+        assertEquals(List.of("Found"), names(lookup.output().seen().specified()));
+        assertEquals(List.of("Missing"), names(lookup.output().seen().observed()));
+        assertEquals(List.of(), names(lookup.output().seen().verified()));
+    }
+
+    private static final String DEADLINE = """
+            module example.filing
+            import Date ( addDays )
+
+            data Kind = Prompt | Later | Never
+            data Prompt
+            data Later
+            data Never
+            data NoDeadline
+
+            behavior deadlineFor : (kind: Kind, on: Date) -> Date | NoDeadline
+
+            let deadlineFor (kind, on) =
+                match kind with
+                    | Prompt -> addDays(5, on)
+                    | Later  -> addDays(9, addDays(1, on))
+                    | Never  -> NoDeadline
+            """;
+
+    /**
+     * A date written as {@code Date("…")} constructs no data, and is a value of the {@code Date}
+     * case all the same. Beside it, the row naming {@code NoDeadline} is the control that was read
+     * before.
+     */
+    @Test
+    void aRowExpectingAWrittenDateExpectsTheDateCase() {
+        Adequacy.SignatureEvidence deadline = evidence(DEADLINE + """
+
+                example deadlineFor
+                    | (Prompt, Date("2026-04-01")) -> Date("2026-04-06")
+                    | (Later, Date("2026-04-01"))  -> Date("2026-04-11")
+                    | (Never, Date("2026-04-01"))  -> NoDeadline
+                """).get("deadlineFor");
+
+        assertEquals(0, deadline.output().seen().unclassifiedRows());
+        assertEquals(List.of("Date", "NoDeadline"), names(deadline.output().seen().specified()));
+        assertEquals(List.of("Date", "NoDeadline"), names(deadline.output().seen().observed()));
+        assertEquals(List.of("Date", "NoDeadline"), names(deadline.output().seen().verified()));
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.statusOf(deadline.output().cases()));
     }
 }

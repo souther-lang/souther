@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.ValueName;
 
@@ -155,6 +156,11 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
             values.add(whole(each));
         }
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

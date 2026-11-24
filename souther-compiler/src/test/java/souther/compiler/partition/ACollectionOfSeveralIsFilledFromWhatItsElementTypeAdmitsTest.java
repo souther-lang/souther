@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.OfferedAtTheLines;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -64,15 +66,23 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
     }
 
     private static FillResult filled(String source) {
+        return filled(ACompiledModel.answered(source));
+    }
+
+    /** As {@link #filled(String)}, of a model the compile refuses with {@code refusedWith}. */
+    private static FillResult filled(String source, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        return filled(ACompiledModel.refusedWith(refusedWith, compilation));
+    }
+
+    private static FillResult filled(Compilation compilation) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain =
                 InputDomain.of(sigs.get("countThem"), context,
                         TypeCardinality.Counts.workedOutIn(context), Membership.none());
@@ -218,7 +228,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
      */
     @Test
     void aRowIsOfferedWhereTheValuesExist() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module ex.offered
 
                 data ContactId = String
@@ -239,9 +249,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
                 example decide
                     | (Opportunity { makers = DecisionMakers([ContactId("003000000000000")]) })
                         -> Decided { makers = DecisionMakers([ContactId("003000000000000")]) }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model under test is a program that can be written");
@@ -268,14 +276,14 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
         List<String> admitted(String type, int many) {
             Type named = new Type.Ref(TypeSymbols.declared(new TypeKey(module, type)));
             return Partitions.admittedStrings(named,
-                            RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), many)
+                            RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                                    TestDay.TODAY), many)
                     .stream().map(FixtureTemplate::text).toList();
         }
     }
 
     private static Model modelOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
@@ -306,7 +314,8 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
      */
     @Test
     void aTypeOfTooFewValuesIsNotFilledOutToTheCountAsked() {
-        FillResult filled = filled(model("Set<Bool>", "Set.size(xs) >= 3", "Set.size(h.xs)"));
+        FillResult filled = filled(model("Set<Bool>", "Set.size(xs) >= 3", "Set.size(h.xs)"),
+                List.of("E1013"));
 
         assertEquals(List.of(), filled.rows(), "no row holds a set of three booleans");
         assertTrue(!filled.unresolved().isEmpty(), "and the combinations are said to be unresolved");

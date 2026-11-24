@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.types.ValueName;
+
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a row takes to stand its target's dependencies in with, or why nothing does.
@@ -25,11 +28,25 @@ public sealed interface AnswersStoodIn {
      */
     AnswersStoodIn REQUIRING_NOTHING = new Stood(List.of());
 
-    /** Every dependency answered, in the order they are required. */
-    record Stood(List<StoodInAnswer> answers) implements AnswersStoodIn {
+    /**
+     * Every dependency answered, in the order they are required.
+     *
+     * @param answers   what each is stood in with
+     * @param answering for each dependency whose answer is one value of a type a position stands
+     *                  at, that position: where a search can put an answer of its own in the place
+     *                  of what a dependency answers, as it puts a value in the place of an input
+     */
+    record Stood(List<StoodInAnswer> answers, Map<ValueName.Behavior, MeasuredInput> answering)
+            implements AnswersStoodIn {
 
         public Stood {
             answers = List.copyOf(answers);
+            answering = Map.copyOf(answering);
+        }
+
+        /** Every dependency answered, with no position to move an answer at. */
+        public Stood(List<StoodInAnswer> answers) {
+            this(answers, Map.of());
         }
     }
 

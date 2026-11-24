@@ -3,11 +3,15 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeNumberRuns;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -30,6 +34,92 @@ import java.util.Set;
  * beside what the model admits.
  */
 public sealed interface Standing {
+
+    /**
+     * This, where {@code way} asks of the numbers it is at what the search for a row chooses
+     * among: a row composed at what the way turns away is one no row along it is. Itself where
+     * the way asks nothing such of it.
+     */
+    default Standing alongTheWay(Reachability.Reaching way) {
+        return this;
+    }
+
+    /**
+     * This, where a row is a witness of the item only inside {@code decides}, the case the line
+     * decides in: what the case says of the item's own quantity narrows where a row is composed.
+     * Never narrower than what every row meeting the case is at.
+     */
+    default Standing inTheCase(TheCaseALineDecidesIn decides) {
+        return this;
+    }
+
+    /**
+     * The narrower points this one is every row of, each a way a row stands at it that what a
+     * row at it makes of a statement may differ between: what a question about the point asks of
+     * each. Together they stand for every row at this one, so a question none of them leaves a row
+     * for leaves none here. This one alone where nothing here tells its rows apart.
+     */
+    default List<Standing> eachWayItStands() {
+        return List.of(this);
+    }
+
+    /**
+     * What every row at this point makes of {@code part}, one statement of no conjunction or
+     * alternative: whether it holds there, where that is shown of every row that stands here, and
+     * nothing where it is not.
+     *
+     * <p>Read off what the point holds the line's own quantity to and nothing else: a truth said
+     * here follows from standing at the point, whatever the way to it and whatever else the row
+     * holds, and a statement about anything the point does not fix is left unsaid.
+     */
+    default Optional<Boolean> makesOf(Proposition part) {
+        return Optional.empty();
+    }
+
+    /** The most remainders a point at some of them is told apart at one remainder at a time:
+     *  past them a point is asked as the remainders it stands at together. */
+    int REMAINDERS_TOLD_APART = 64;
+
+    /**
+     * What every row leaving {@code remainders} of {@code dividend} by {@code divisor} makes of
+     * {@code part}: that it fails where no such remainder is one it may hold at, and that it holds
+     * where none is one its denial may hold at ({@link ResiduesAStatementLeaves}, which reads
+     * either as holding wherever it does not read it exactly). The second only of a part whose
+     * denial holds wherever it fails ({@link Proposition#deniedWhereverItFails}): a statement read
+     * where an operation answers holds on no row it answers nothing on, and neither does its
+     * denial, so that its denial holds nowhere here says nothing of whether it holds.
+     */
+    private static Optional<Boolean> madeAtTheRemainders(Proposition part,
+                                                         LinearForm<NumericTerm> dividend,
+                                                         BigInteger divisor,
+                                                         WholeNumberRuns remainders) {
+        if (remainders.and(ResiduesAStatementLeaves.of(part, dividend, divisor)).runs()
+                .isEmpty()) {
+            return Optional.of(false);
+        }
+        if (Proposition.deniedWhereverItFails(part)
+                && remainders.and(ResiduesAStatementLeaves.of(part.denied(), dividend, divisor))
+                .runs().isEmpty()) {
+            return Optional.of(true);
+        }
+        return Optional.empty();
+    }
+
+    /** Each remainder of {@code remainders} below {@code divisor}, where they are few enough to
+     *  be asked one at a time; none where they are not. */
+    private static List<WholeNumberRuns> eachRemainder(BigInteger divisor,
+                                                       WholeNumberRuns remainders) {
+        if (divisor.compareTo(BigInteger.valueOf(REMAINDERS_TOLD_APART)) > 0) {
+            return List.of();
+        }
+        List<WholeNumberRuns> out = new ArrayList<>();
+        for (BigInteger r = BigInteger.ZERO; r.compareTo(divisor) < 0; r = r.add(BigInteger.ONE)) {
+            if (remainders.holds(r)) {
+                out.add(WholeNumberRuns.one(r, r));
+            }
+        }
+        return out;
+    }
 
     /**
      * What one whole number of a row leaves of another divided by it, at a remainder or in a run of
@@ -162,6 +252,13 @@ public sealed interface Standing {
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
             }
+            // The levels are the form's own, so a constant belongs to them and not to the form:
+            // the walk puts the coefficients at a level, and a constant left here would be one it
+            // never adds, placing positions at a level the form does not come to.
+            if (form.constant().signum() != 0) {
+                throw new IllegalArgumentException("a form carries no constant; it belongs to the"
+                        + " levels: " + form);
+            }
         }
     }
 
@@ -174,24 +271,80 @@ public sealed interface Standing {
      * leave the form room for. The remainders are the item and the values of the form are how a row
      * gets to one of them, so two rows at one remainder by two values of the form are one item.
      *
-     * @param dividend the form the division is of, with the constant it is moved by
-     * @param on       the order each number of the form stands on
-     * @param levels   the remainders it can leave, which is what the criterion is about
-     * @param divisor  the number it is divided by, above nought
+     * @param dividend   the form the division is of, with the constant it is moved by
+     * @param on         the order each number of the form stands on
+     * @param levels     the remainders it can leave, which is what the criterion is about
+     * @param divisor    the number it is divided by, above nought
+     * @param remainders the remainders a row is composed at: every one, or those a way to the
+     *                   item leaves ({@link #alongTheWay})
      */
     record OfARemainder(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
-                        LevelSpace levels, BigInteger divisor, Criterion where)
-            implements Standing {
+                        LevelSpace levels, BigInteger divisor, WholeNumberRuns remainders,
+                        Criterion where) implements Standing {
 
         public OfARemainder {
             on = Map.copyOf(on);
             if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
-                    || divisor.signum() <= 0) {
+                    || divisor.signum() <= 0 || remainders == null) {
                 throw new IllegalArgumentException("a remainder is of a form over the numbers it"
                         + " names, each on one order, and by a divisor above nought: " + dividend
                         + " against " + on.keySet() + " by " + divisor);
             }
         }
+
+        /** At every remainder the divisor leaves. */
+        public OfARemainder(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
+                            LevelSpace levels, BigInteger divisor, Criterion where) {
+            this(dividend, on, levels, divisor, OfARemainderAndAForm.every(divisor), where);
+        }
+
+        /**
+         * At the remainders {@code way} leaves this remainder as well, as
+         * {@link OfARemainderAndAForm#alongTheWay} narrows its own: a row composed at another is one
+         * the way turns away.
+         *
+         * <p>Which statements of the way are of this remainder, and what each leaves of it, is
+         * {@link ARemainderMoved#leftAlong}. One by another divisor, or of another form, says
+         * nothing of this remainder alone and is left for the row to be read against.
+         */
+        @Override
+        public Standing alongTheWay(Reachability.Reaching way) {
+            WholeNumberRuns left = ARemainderMoved.of(dividend, divisor)
+                    .flatMap(own -> own.leftAlong(way)).map(remainders::and).orElse(remainders);
+            return left.equals(remainders) ? this
+                    : new OfARemainder(dividend, on, levels, divisor, left, where);
+        }
+
+        /**
+         * At the remainders the case the line decides in may hold at as well
+         * ({@link ResiduesAStatementLeaves}): a row at another is one the line decides nothing
+         * at, which a point of it asks for no row of.
+         */
+        @Override
+        public Standing inTheCase(TheCaseALineDecidesIn decides) {
+            WholeNumberRuns left = remainders.and(decides.remaindersOf(dividend, divisor));
+            return left.equals(remainders) ? this
+                    : new OfARemainder(dividend, on, levels, divisor, left, where);
+        }
+
+        /** At one remainder at a time: what a row makes of a statement of this remainder turns on
+         *  which one it is at. */
+        @Override
+        public List<Standing> eachWayItStands() {
+            List<WholeNumberRuns> each = eachRemainder(divisor, remainders);
+            return each.isEmpty() ? List.of(this) : each.stream()
+                    .<Standing>map(one -> new OfARemainder(dividend, on, levels, divisor, one,
+                            where))
+                    .toList();
+        }
+
+        /** A statement of this remainder, moved by a constant, at the remainders a row here is
+         *  at. */
+        @Override
+        public Optional<Boolean> makesOf(Proposition part) {
+            return madeAtTheRemainders(part, dividend, divisor, remainders);
+        }
+
     }
 
     /**
@@ -203,23 +356,25 @@ public sealed interface Standing {
      * alone. The two forms name no position in common, so the remainder is chosen and the added
      * numbers are met against what it leaves.
      *
-     * @param dividend the form the division is of, with the constant it is moved by
-     * @param on       the order each number of the dividend stands on
-     * @param divisor  the number it is divided by, above nought
-     * @param added    what is added to the remainder, with no constant
-     * @param addedOn  the order each number added stands on
-     * @param levels   the levels the sum takes
+     * @param dividend   the form the division is of, with the constant it is moved by
+     * @param on         the order each number of the dividend stands on
+     * @param divisor    the number it is divided by, above nought
+     * @param remainders the remainders a row is composed at: every one, or those a way to the
+     *                   item leaves ({@link #alongTheWay})
+     * @param added      what is added to the remainder, with no constant
+     * @param addedOn    the order each number added stands on
+     * @param levels     the levels the sum takes
      */
     record OfARemainderAndAForm(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
-                                BigInteger divisor, LinearForm<NumericTerm> added,
-                                Map<NumericTerm, Carrier> addedOn, LevelSpace levels,
-                                Criterion where) implements Standing {
+                                BigInteger divisor, WholeNumberRuns remainders,
+                                LinearForm<NumericTerm> added, Map<NumericTerm, Carrier> addedOn,
+                                LevelSpace levels, Criterion where) implements Standing {
 
         public OfARemainderAndAForm {
             on = Map.copyOf(on);
             addedOn = Map.copyOf(addedOn);
             if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
-                    || divisor.signum() <= 0 || added.coefs().isEmpty()
+                    || divisor.signum() <= 0 || remainders == null || added.coefs().isEmpty()
                     || !addedOn.keySet().equals(added.coefs().keySet())
                     || added.coefs().keySet().stream().anyMatch(number -> dividend.coefs()
                             .keySet().stream().anyMatch(number::sharesAPlaceWith))) {
@@ -227,6 +382,42 @@ public sealed interface Standing {
                         + " numbers than its own, each on one order, and divided by a divisor"
                         + " above nought: " + dividend + " by " + divisor + " plus " + added);
             }
+        }
+
+        /** Every remainder {@code divisor} leaves. */
+        static WholeNumberRuns every(BigInteger divisor) {
+            return WholeNumberRuns.one(BigInteger.ZERO, divisor.subtract(BigInteger.ONE));
+        }
+
+        /**
+         * At the remainders {@code way} leaves this remainder as well: a row composed at another
+         * is one the way turns away, so a remainder the item may be at and the way may not is one
+         * no row along it is at. Which statements are of this remainder is
+         * {@link ARemainderMoved#leftAlong}, as for {@link OfARemainder#alongTheWay}.
+         */
+        @Override
+        public Standing alongTheWay(Reachability.Reaching way) {
+            WholeNumberRuns left = ARemainderMoved.of(dividend, divisor)
+                    .flatMap(own -> own.leftAlong(way)).map(remainders::and).orElse(remainders);
+            return left.equals(remainders) ? this : new OfARemainderAndAForm(dividend, on, divisor,
+                    left, added, addedOn, levels, where);
+        }
+
+        /** At one remainder at a time, as {@link OfARemainder#eachWayItStands}. */
+        @Override
+        public List<Standing> eachWayItStands() {
+            List<WholeNumberRuns> each = eachRemainder(divisor, remainders);
+            return each.isEmpty() ? List.of(this) : each.stream()
+                    .<Standing>map(one -> new OfARemainderAndAForm(dividend, on, divisor, one,
+                            added, addedOn, levels, where))
+                    .toList();
+        }
+
+        /** A statement of the remainder, as {@link OfARemainder#makesOf}: what the numbers added
+         *  come to says nothing of it. */
+        @Override
+        public Optional<Boolean> makesOf(Proposition part) {
+            return madeAtTheRemainders(part, dividend, divisor, remainders);
         }
     }
 

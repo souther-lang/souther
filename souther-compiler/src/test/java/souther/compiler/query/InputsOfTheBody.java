@@ -23,6 +23,12 @@ final class InputsOfTheBody {
                 new AnswerObservation.Answered(new ObservedValue.Bool(true)));
     }
 
+    /** A row of no inputs as its run read it back, which nothing watched and nothing answered. */
+    static ObservedInputs aRowOfNoInputsReadBack() {
+        return new ObservedInputs(List.of(), new Generator.Watched.NotRun(),
+                new AnswerObservation.NotAnswered());
+    }
+
     static BehaviorInputs of(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         RuleReadingSource source = Shapes.ruleReading(compilation.db(), module).value();

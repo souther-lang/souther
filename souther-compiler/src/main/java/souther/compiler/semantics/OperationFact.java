@@ -119,6 +119,35 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the date {@code months} calendar months on from the one at
+     * {@code date}. A date stands at the months from year nought to its own — twelve times what
+     * {@code year} answers of it, and what {@code month} answers less one — and the move lands in
+     * the month that count plus {@code months} stands at: the month is what {@code remainder}, the
+     * library's floor remainder, leaves of it by twelve, plus one.
+     *
+     * <p>Exactly, and not through a measure as a shift is: the year is that count floored by
+     * twelve, the day is the date's own or the last day of the month it lands in where that is
+     * shorter, and where that month is past the calendar the operation stops
+     * ({@code numeric.CalendarMonths}). How many days it moves a date by turns on the date, so
+     * nothing here is a count of days, and two moves are not the move by their sum.
+     */
+    record MovesADateByMonths(ArgumentRef months, ArgumentRef date,
+                              ValueName.Stdlib.Operation year, ValueName.Stdlib.Operation month,
+                              ValueName.Stdlib.Operation day,
+                              ValueName.Stdlib.Operation remainder)
+            implements OperationFact {
+
+        public MovesADateByMonths {
+            Objects.requireNonNull(months, "a move by months moves by some months");
+            Objects.requireNonNull(date, "and moves a date");
+            Objects.requireNonNull(year, "counted by the year it falls in");
+            Objects.requireNonNull(month, "and the month");
+            Objects.requireNonNull(day, "and the day of it, which a shorter month lands on its last");
+            Objects.requireNonNull(remainder, "and lands in the month a remainder says");
+        }
+    }
+
+    /**
      * The operation answers how many whole units lie between its two arguments, counting forward
      * from {@code from} to {@code to}, where one unit is {@code perUnit} steps of the order the
      * arguments are counted on.
@@ -145,19 +174,51 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers the number at {@code value} rounded to a whole one, the way the rounding
-     * policy at {@code mode} says.
+     * The operation answers the whole units of {@code of}: the value counted in a coarser order,
+     * where one step of that order is {@code perUnit} steps of the order {@code of} is counted on,
+     * and the answer is the step the value falls in, rounded toward the earlier one.
+     *
+     * <p>{@code DateTime.toDate} is this at {@code 86400}: a date counts days and a date-time counts
+     * seconds, and the day a second falls in is the second divided by a day's worth, floored. The
+     * flooring is toward the earlier step for a count below nought as well, so the second before the
+     * epoch is in the day before it, where {@link CountsWholeUnitsBetween} truncates toward zero.
+     *
+     * <p>The answer is no form of {@code of}, and what is stated of it is stated through what it
+     * falls in. With {@code k} for {@code perUnit}, the answer is at most {@code m} exactly where
+     * {@code of} is at most {@code k * m + k - 1}, and at least {@code m} exactly where {@code of} is
+     * at least {@code k * m}.
+     */
+    record CountsTheWholeUnitsOf(ArgumentRef of, long perUnit) implements OperationFact {
+
+        public CountsTheWholeUnitsOf {
+            Objects.requireNonNull(of, "a count of whole units is a count of something");
+            if (perUnit < 2) {
+                throw new IllegalArgumentException(
+                        "a unit is more than one step of the order, or the answer is the value and"
+                                + " states a form instead: " + perUnit);
+            }
+        }
+    }
+
+    /**
+     * The operation answers the number at {@code value} rounded to a whole multiple of ten to the
+     * minus {@code scale}, the way the rounding policy at {@code mode} says; with no scale, to a
+     * whole number.
      *
      * <p>A rounded number is a step of what was rounded, so the answer is no form of it. What a
-     * comparison of the answer with a whole number states is exact all the same: each policy puts
-     * the least number rounding to at least {@code k} at {@code k}, at {@code k - 1} or at
-     * {@code k - 1/2}, and says whether that number is itself one of them. Which of these a policy
-     * does is the compiler's to know, and this says only which argument is the policy and which the
-     * number.
+     * comparison of the answer with a step states is exact all the same: each policy puts the least
+     * number rounding to at least {@code k} steps at {@code k}, at {@code k - 1} or at
+     * {@code k - 1/2} of them, and says whether that number is itself one of them. Which of these a
+     * policy does is the compiler's to know, and this says only which argument is the scale, which
+     * the policy and which the number.
+     *
+     * @param scale the argument the scale is at, or null where the operation rounds to a whole
+     *              number and takes none
      */
-    record RoundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) implements OperationFact {
+    record RoundsToAStep(ArgumentRef scale, ArgumentRef mode, ArgumentRef value)
+            implements OperationFact {
 
-        public RoundsToAWholeNumber {
+        public RoundsToAStep {
             Objects.requireNonNull(mode, "a number is rounded some way");
             Objects.requireNonNull(value, "and a number is rounded");
         }
@@ -173,6 +234,135 @@ public sealed interface OperationFact {
 
         public BoundsItsResult {
             Objects.requireNonNull(bound, "this one states a bound");
+        }
+    }
+
+    /**
+     * Something that holds of every element the operation answers, wherever it is called:
+     * {@code List.rangeInclusive(from, to)} holds only numbers from {@code from} up and to {@code to}
+     * down.
+     *
+     * <p>One fact per bound, as {@link BoundsItsResult} is, and the same bound: the number each
+     * element is stands where the bound says. The bound is the operation's own and holds under no
+     * condition, so it is a line against an argument and nothing the representation keeps.
+     */
+    record BoundsEachElementOfItsResult(ResultBound<ArgumentRef> bound) implements OperationFact {
+
+        public BoundsEachElementOfItsResult {
+            Objects.requireNonNull(bound, "this one states a bound");
+            if (bound.against() == null
+                    || !(bound.provided() instanceof ResultBound.Provided.Always<ArgumentRef>)
+                    || !(bound.origin() instanceof ResultBound.Origin.OfTheOperation)) {
+                throw new IllegalArgumentException("a bound on each element is a line of the"
+                        + " operation against an argument it is handed, under no condition: " + bound);
+            }
+        }
+    }
+
+    /**
+     * The operation answers every whole number from {@code from} up to {@code to}, each once and in
+     * that order, and nothing where {@code to} is below {@code from}: {@code List.rangeInclusive(3,
+     * k)} holds {@code 3}, then {@code 4}, and so on to {@code k}.
+     *
+     * <p>So the element at position {@code i} is {@code from + i}, for every {@code i} from nought
+     * to {@code to - from}. Which value a walk over the answer hands its step is read off that, and
+     * not off where the element stands: the two are one number only where {@code from} is nought.
+     * That a run makes the list at all is the operation's to say where it stops, and nothing here
+     * says it.
+     */
+    record HoldsEachWholeNumberInTurn(ArgumentRef from, ArgumentRef to) implements OperationFact {
+
+        public HoldsEachWholeNumberInTurn {
+            Objects.requireNonNull(from, "the numbers start somewhere");
+            Objects.requireNonNull(to, "and end somewhere");
+        }
+    }
+
+    /**
+     * What the operation answers holds, where it holds a value, an element of {@code source}:
+     * {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of {@code xs}, so whatever holds
+     * of every element of {@code xs} holds of it.
+     *
+     * <p>About the value the answer holds and not about whether it holds one, which is a law of its
+     * own: that the container holds something says when the answer is {@code Some}, and says nothing
+     * of which element it is {@code Some} of.
+     */
+    record AnswersAnElementOf(ArgumentRef source) implements OperationFact {
+
+        public AnswersAnElementOf {
+            Objects.requireNonNull(source, "an element is one of some container's");
+        }
+    }
+
+    /**
+     * What the operation answers holds, where it holds a value, the greatest or the least element
+     * of {@code source}: {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of
+     * {@code xs} that no element of {@code xs} is above.
+     *
+     * <p>The stronger of two statements, and the weaker is stated from it and never beside it
+     * ({@link AnswersAnElementOf}): written twice, the two could be changed apart.
+     */
+    record AnswersAnExtremeElementOf(ArgumentRef source, End end) implements OperationFact {
+
+        public AnswersAnExtremeElementOf {
+            Objects.requireNonNull(source, "an extreme is one of some container's elements");
+            Objects.requireNonNull(end, "which end of the elements it is");
+        }
+
+        /** Which end of the elements the answer is. */
+        public enum End {
+            GREATEST,
+            LEAST
+        }
+    }
+
+    /**
+     * What the operation answers holds a value exactly where {@code container} files one under the
+     * value of {@code key}, and it is that value: {@code Map.get(k, m)} is {@code Some(v)} where
+     * {@code m} holds {@code v} under {@code k}, and nothing where it holds nothing under it.
+     *
+     * <p>Where an operation's key and container are, which a reader of a lookup asks of the
+     * operation and never spells out as a name and a place. An element of the container is what is
+     * answered, so {@link AnswersAnElementOf} is derived from this and not stated beside it.
+     */
+    record AnswersTheValueFiledUnder(ArgumentRef key, ArgumentRef container)
+            implements OperationFact {
+
+        public AnswersTheValueFiledUnder {
+            Objects.requireNonNull(key, "a value is filed under some key");
+            Objects.requireNonNull(container, "by some container");
+        }
+    }
+
+    /**
+     * What the operation answers holds a value exactly where {@code list} holds an element at the
+     * whole number {@code index} names, and it is that element: {@code List.get(i, xs)} is
+     * {@code Some(x)} where {@code xs} has an {@code i}th element and nothing where it has not.
+     *
+     * <p>Where an operation's index and list are, which a reader of a pick asks of the operation
+     * and never spells out as a name and a place. An element of the list is what is answered, so
+     * {@link AnswersAnElementOf} is derived from this and not stated beside it.
+     */
+    record AnswersTheElementAt(ArgumentRef index, ArgumentRef list) implements OperationFact {
+
+        public AnswersTheElementAt {
+            Objects.requireNonNull(index, "an element is picked at some place");
+            Objects.requireNonNull(list, "of some list");
+        }
+    }
+
+    /**
+     * What the operation answers holds, where it holds a value, an element of {@code source} that
+     * the closure it is handed answers true on: {@code List.find(p, xs)} is {@code Some(x)} only for
+     * an {@code x} of {@code xs} with {@code p(x)}.
+     *
+     * <p>The stronger of two statements, and the weaker is stated from it and never beside it
+     * ({@link AnswersAnElementOf}): written twice, the two could be changed apart.
+     */
+    record AnswersAnElementWhereTheClosureHolds(ArgumentRef source) implements OperationFact {
+
+        public AnswersAnElementWhereTheClosureHolds {
+            Objects.requireNonNull(source, "an element is one of some container's");
         }
     }
 
@@ -252,6 +442,23 @@ public sealed interface OperationFact {
         public AssemblesPieces {
             Objects.requireNonNull(source, "pieces are made of the elements of something");
             Objects.requireNonNull(piece, "and of each element some piece is made");
+        }
+    }
+
+    /**
+     * The operation's answer holds the elements of {@code source} where its closure holds of them,
+     * and no other: of each element of the source, it is in the answer where the closure answers
+     * true of it and is not where it answers false.
+     *
+     * <p>Said of the elements as a collection and not of their order, so a list kept in the order
+     * of its source and a set or a map kept by what it holds both state it. What a reader asks of
+     * the elements that were kept — how many of them meet another statement, whether any does — is
+     * asked of the source's elements where both statements hold.
+     */
+    record KeepsTheElementsWhereItHolds(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheElementsWhereItHolds {
+            Objects.requireNonNull(source, "what is kept is kept of the elements of something");
         }
     }
 
@@ -436,14 +643,39 @@ public sealed interface OperationFact {
      * with the value under that key replaced. Both are this statement, which says what each element
      * of the answer was and nothing about which of {@code into}'s it gave up.
      *
+     * <p>Where {@code under} is present, the container files what it holds under keys, and the
+     * answer holds {@code value} filed under that argument's value: the key it is put under is
+     * stated, so a reader that needs the entry put in, and not only the value, reads it here.
+     *
      * <p>An axiom of a kernel, read by the proofs of what the library's written operations build out
      * of what they are handed, and by nothing a reader of a condition is handed.
      */
-    record PutsAValueIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
+    record PutsAValueIn(ArgumentRef value, ArgumentRef into, Optional<ArgumentRef> under)
+            implements OperationFact {
 
         public PutsAValueIn {
             Objects.requireNonNull(value, "this one names the value put in");
             Objects.requireNonNull(into, "and what it is put in");
+            Objects.requireNonNull(under, "and whether a key says where it is filed");
+        }
+    }
+
+    /**
+     * The operation answers the entries of {@code source} where its closure holds of them, and no
+     * other: of each entry of the source, the answer holds that key with that value where the
+     * closure answers true of the key and the value, and holds nothing under that key where it
+     * answers false.
+     *
+     * <p>Said of the entries and not of the values. What a container's elements are is its values,
+     * and the closure of a map's filter is handed the key beside the value, so which entries are
+     * kept is not a statement of which values are: two entries of one value are kept apart by their
+     * keys. What a reader asks of the entries that were kept — how many meet another statement of a
+     * key and a value — is asked of the source's entries where both statements hold.
+     */
+    record KeepsTheEntriesWhereItHolds(ArgumentRef source) implements OperationFact {
+
+        public KeepsTheEntriesWhereItHolds {
+            Objects.requireNonNull(source, "what is kept is kept of the entries of a map");
         }
     }
 
@@ -681,6 +913,44 @@ public sealed interface OperationFact {
         }
     }
 
+    /**
+     * The operation is what {@code operator} comes to over two values of the type it takes, and
+     * answers a value of that type: {@code a ++ b} over lists is {@code List.append(a, b)}, and
+     * over strings {@code String.append(a, b)}.
+     *
+     * <p>Said of the operation so that a reader meeting the operator asks which operation it is
+     * for the type it is written over, and a reader meeting the operation asks whether it is the
+     * operator, rather than each holding the pair as two names of its own.
+     */
+    record IsTheOperator(souther.compiler.types.BinOp operator) implements OperationFact {
+
+        public IsTheOperator {
+            Objects.requireNonNull(operator, "this one names the operator it is");
+        }
+    }
+
+    /**
+     * Where the operation is handed the string {@code text} at {@code position}, it answers what
+     * {@code other} answers on the arguments that remain, in their order.
+     *
+     * <p>Not what the operation does but what a call of it says: {@code String.join("", xs)} and
+     * {@code String.concat(xs)} are one statement, so what is said of either is said of both.
+     * Without it a reader that knows what one says leaves the other unrelated to it, which is an
+     * accident of which one the author reached for.
+     */
+    record AgreesWithAnotherWhereItIsGivenText(souther.compiler.types.ValueName other,
+                                               int position, String text)
+            implements OperationFact {
+
+        public AgreesWithAnotherWhereItIsGivenText {
+            Objects.requireNonNull(other, "this one names the operation it agrees with");
+            Objects.requireNonNull(text, "this one names the string it is given");
+            if (position < 0) {
+                throw new IllegalArgumentException("an argument is at a place from nought");
+            }
+        }
+    }
+
     /** The operation computes a number, and this says which arithmetic and where it answers it. */
     record ComputesANumber(NumericResult<ArgumentRef> result) implements OperationFact {
 
@@ -766,17 +1036,4 @@ public sealed interface OperationFact {
      * building.
      */
     record EveryAnswerItCanGiveHasASourceValue() implements OperationFact {}
-
-    /**
-     * The least and the greatest number the operation answers are where what it is read out of
-     * stops, not where a part of it does.
-     *
-     * <p>The year of a date ends where a date can be written, so a comparison that a year at one
-     * of its ends settles is a comparison the representation settles and not one the model draws.
-     * A month ends at twelve whatever the date is, and a length at nought: those ends are lines
-     * of the operation, and a value at one settles a comparison for a reason of its own. So only
-     * an operation whose ends are the first kind declares this, and a reading that passes over
-     * the ends of the values it compares asks for it.
-     */
-    record EndsAreWhereTheRepresentationStops() implements OperationFact {}
 }

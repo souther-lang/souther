@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -67,10 +68,8 @@ class AComparisonNoRunReachesIsNotARuleWithoutALineTest {
     private static final String STOPPED = "n * n >= 100000";
 
     private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**

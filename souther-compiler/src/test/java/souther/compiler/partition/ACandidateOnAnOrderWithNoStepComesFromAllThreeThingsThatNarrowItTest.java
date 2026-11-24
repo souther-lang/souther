@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Emptiness;
 import souther.compiler.inputs.EmptyInput;
@@ -114,7 +115,7 @@ class ACandidateOnAnOrderWithNoStepComesFromAllThreeThingsThatNarrowItTest {
         return assertInstanceOf(NumericWitness.Standing.Found.class,
                 NumericWitness.of(within, List.of(NAME), _ -> Carrier.TEXT,
                         new WitnessSearch(_ -> new AdmittedValues.Admitted.Values(admits),
-                                PatternPlan.Budget.OF_A_WITNESS::meter)),
+                                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY)),
                 "the region leaves the position somewhere to stand");
     }
 

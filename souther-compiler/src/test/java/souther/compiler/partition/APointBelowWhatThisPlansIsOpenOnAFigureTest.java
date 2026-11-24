@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -297,13 +298,6 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream)
-                        .map(each -> each.diagnostic().code()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 }

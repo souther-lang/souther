@@ -54,8 +54,8 @@ class WhoMayComposeAFixtureReferenceTest {
     /**
      * Every class that makes a minter or numbers a reference, with what it names.
      *
-     * <p>The generator makes the one minter its run hands round, and the minter is the only thing
-     * that numbers a reference. A row naming the origin's constructor from anywhere else is a
+     * <p>The generator makes the one minter its run hands round, as a search for a witness of a
+     * count does for its own run, and the minter is the only thing that numbers a reference. A row naming the origin's constructor from anywhere else is a
      * second numbering, and one naming the minter's is a second run inside a run.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
@@ -66,8 +66,18 @@ class WhoMayComposeAFixtureReferenceTest {
             // The reference a module's entry for a value is made of. It is the only reference in
             // that definition, so it is not told apart from another by a number.
             "souther/compiler/check/ValueEntries -> " + ORIGIN + "#<init>(I)V",
+            // The minter that builds nothing, which hands its own arguments on to the one that
+            // is given what the templates of a run mean.
+            "souther/compiler/partition/FixtureReferences -> " + MINTER + "#<init>("
+                    + "Ljava/lang/String;Ljava/lang/String;Lsouther/compiler/partition/WrittenOut;)V",
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
-            "souther/compiler/partition/Generator -> " + MINTER
+            "souther/compiler/partition/Generator -> " + MINTER + "#<init>("
+                    + "Ljava/lang/String;Ljava/lang/String;Lsouther/compiler/partition/WrittenOut;)V",
+            // A search for a row a witness is found on — showing a count reaches every value beside
+            // its container's size, or a run getting to a comparison — is a run of its own: it
+            // composes rows to try and offers none, and the values a module states that it names
+            // are numbered within that one search.
+            "souther/compiler/query/Adequacy$ASearchForARow -> " + MINTER
                     + "#<init>(Ljava/lang/String;Ljava/lang/String;)V");
 
     /**

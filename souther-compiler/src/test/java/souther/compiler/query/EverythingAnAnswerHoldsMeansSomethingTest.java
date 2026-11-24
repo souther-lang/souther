@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
@@ -16,6 +17,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Everything a store holds means something by {@code equals}, and what does not is written down.
@@ -71,12 +73,12 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
     private static List<Db> storesOf(AnswerClosure.Scenario scenario) {
         List<Db> out = new ArrayList<>();
         switch (scenario) {
-            case THE_CORPORA -> ConformanceCorpus.all()
-                    .forEach(corpus -> out.add(corpus.analyse().compilation().db()));
+            case THE_CORPORA -> ConformanceCorpus.all().forEach(corpus -> {
+                out.add(corpus.analyse().answered().db());
+            });
             case A_MODULE_SPOKEN_ABOUT -> {
-                Compilation compilation = Compilation.ofSource(SPOKEN_ABOUT, "Main");
-                compilation.measure(Adequacy.Asked.fullReport());
-                compilation.answerEverything();
+                Compilation compilation = ACompiledModel.measured(SPOKEN_ABOUT,
+                        Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
                 out.add(compilation.db());
             }
@@ -219,6 +221,30 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                 "somewhere a search of the answers fell short of what it was asked to cover");
         assertEquals(Map.of(), met.differentThings(),
                 "one input compiled twice answered two different things, which no equality can fix");
+    }
+
+    /**
+     * And what the walk passed over is among what is written down as passed over.
+     *
+     * <p>A field the rest decides is not gone into, so whatever it holds is never asked whether it
+     * means something. That is a claim about the field, read where it is written down; the walk of
+     * the declarations holds the list to exactly what is declared
+     * ({@link EveryAnswerThisCompilerDeclaresIsSettledTest}), and a store holds no field nothing
+     * declares, so one passed over here and missing there is a walk of the declarations that did
+     * not reach what a store holds.
+     */
+    @Test
+    void whatTheWalkPassesOverIsWrittenDown() {
+        Set<String> passedOver = new TreeSet<>();
+        for (AnswerClosure.Scenario scenario : AnswerClosure.Scenario.values()) {
+            for (AnswerWalk.Walked walked : walkedStoresOf(scenario)) {
+                passedOver.addAll(walked.passedOver());
+            }
+        }
+        Set<String> unwritten = new TreeSet<>(passedOver);
+        unwritten.removeAll(AnswerClosure.passedOver());
+        assertEquals(Set.of(), unwritten);
+        assertFalse(passedOver.isEmpty(), "the control: a store holds propositions keeping denials");
     }
 
     /**

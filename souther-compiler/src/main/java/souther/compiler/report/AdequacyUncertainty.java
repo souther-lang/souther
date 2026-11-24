@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.query.EstablishmentGap;
@@ -54,6 +55,14 @@ public sealed interface AdequacyUncertainty {
      * something is told it only where one is here.
      */
     List<Figure> figures();
+
+    /**
+     * Where the runs of rows tried for what holds this open stopped without answering, as what
+     * stopped carried them; none where no row was tried. No figure: a wider run stops there too.
+     */
+    default List<WhereARunStopped> runsStopped() {
+        return this instanceof ByWeakening(Weakening cause) ? cause.runsStopped() : List.of();
+    }
 
     /**
      * What this is about, as a reader is sent back to it.

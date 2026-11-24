@@ -655,8 +655,10 @@ enum Question {
     FORM("what it answers, counted, in what its arguments are counted as") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return Carrier.countsToANumber(signature.result())
-                    && signature.params().stream().anyMatch(Carrier::countsToANumber);
+            return (Carrier.countsToANumber(signature.result())
+                    || BinaryElaborator.exactlyReadable(signature.result()))
+                    && signature.params().stream().anyMatch(each ->
+                    Carrier.countsToANumber(each) || BinaryElaborator.exactlyReadable(each));
         }
 
         @Override
@@ -705,7 +707,12 @@ enum Question {
                     op("Date", "addYears"), op("DateTime", "minutesBetween"), op("Date", "year"),
                     op("Date", "month"), op("Date", "day"), op("Time", "hour"),
                     op("Time", "minute"), op("Time", "second"), op("DateTime", "toDate"),
-                    op("DateTime", "toTime"), op("Rational", "toDecimal"));
+                    op("DateTime", "toTime"), op("Rational", "toDecimal"),
+                    // Taken as arithmetic over a Rational, which is on no carrier. A product and a
+                    // quotient are forms of neither argument, as `Int.multiply` is none; the others
+                    // answer a number of their own.
+                    op("Rational", "multiply"), op("Rational", "divide"),
+                    op("Rational", "toInt"), op("Rational", "compare"));
         }
     },
 
@@ -724,7 +731,7 @@ enum Question {
     NUMERIC_RESULT("what number it computes, and where it answers it") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            Type number = NumericAnswers.in(signature.result());
+            Type number = ArithmeticAnswers.in(signature.result());
             return number != null && signature.params().size() >= 2
                     && number.equals(signature.params().get(0))
                     && number.equals(signature.params().get(1));
@@ -769,6 +776,10 @@ enum Question {
      * anything. {@code String.toInt} answers a number and is asked which representation reads it,
      * and the answer is that none does.
      *
+     * <p>A number is one a statement of arithmetic can be about ({@link ArithmeticAnswers}), which
+     * is wider than one a term can stand for: {@code Rational.fromInt} answers a number on no
+     * carrier, is read as a form of its argument, and is in range for that reason.
+     *
      * <p>Wider than what may be declared. A term is held to a result that is a bare number
      * (held by {@link OperationFactBinder}), because what stands at the path a term names is the
      * union and which case it is in is not something such an account has room for. The two ranges
@@ -785,7 +796,7 @@ enum Question {
             // declared to answer a string is asked which representation reads the number it
             // answers, and the range picks up operations the subject is not about.
             return signature.params().size() == 1
-                    && (NumericAnswers.in(signature.result()) != null
+                    && (ArithmeticAnswers.in(signature.result()) != null
                             || (DischargeRules.resultIsElementOf(signature, 0)
                                     && NumericAnswers.answerIsLeftToTheCall(signature.result())));
         }

@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.CompilationSources;
@@ -29,6 +30,10 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ConditionsReadThroughTooManyChoices;
+import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
+import souther.compiler.query.WhatToDeclare;
+import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.Offering;
 import souther.compiler.report.GeneratedRows;
@@ -110,7 +115,7 @@ public final class Main {
     static int guarded(PrintStream err, IntSupplier command) {
         try {
             return command.getAsInt();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | GeneratedClassDefect e) {
             String said = internalFailure(e);
             if (said == null) {
                 throw e;
@@ -426,7 +431,7 @@ public final class Main {
      * that is not theirs. What is left — the exception's name and what it said — is what a report of
      * it would be filed with, and is the only part of it they can pass on.
      */
-    static String internalFailure(RuntimeException e) {
+    static String internalFailure(Throwable e) {
         if (e instanceof CompileException) {
             return null;
         }
@@ -565,6 +570,7 @@ public final class Main {
         String behavior = null;
         boolean strict = false;
         boolean generate = false;
+        boolean toTheEnd = false;
         // The report is this command's whole output, so everything is measured and nothing is said
         // twice: what the warnings would say, the report says in one place. Neither half of what a
         // compile asks for is a choice here — the measurement is the command, and what the report
@@ -581,6 +587,7 @@ public final class Main {
                 case "--behavior" -> behavior = CanonicalNames.name(args[++i]);   // a name from outside
                 case "--generate" -> generate = true;
                 case "--strict" -> strict = true;
+                case "--to-the-end" -> toTheEnd = true;
                 default -> sources.add(environment.path(args[i]));
             }
         }
@@ -598,14 +605,35 @@ public final class Main {
         }
         SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
-        try {
+        // Open until the command has answered: the report and the rows offered ask the measurement
+        // for what the compile did not, so the wait an author is told about ends with them.
+        try (ToldWhileMeasuring told = new ToldWhileMeasuring(err, render.locale())) {
             ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
                     : ModulePath.ofClassPath(classPath);
             // The analysing entry point, not the compiling one. What the rows cover is a question
             // this command answers from whatever was observed, and taking the compilation from an
             // entry point that raises the first error made every failure the report describes the
             // one thing that stopped it being written.
-            Compilation compilation = Compiler.analyzed(read, path, warnings, measure);
+            // The helper notice is asked of the model as it stands, before the measurement the
+            // compile makes: what it says is what the author can change to make that cheaper, and
+            // it costs nothing of the measurement. Said once, which is why it is not said below.
+            String chosenModule = module;
+            String chosenBehavior = behavior;
+            boolean leaving = !toTheEnd;
+            Compilation compilation = Compiler.analyzed(read, path, warnings, measure,
+                    environment.today(), new Adequacy.Choice(module, behavior),
+                    early -> {
+                        // A behavior whose author is told what to change, and which is dear to
+                        // measure as it is written, is left for the change: whoever reads the
+                        // notice below acts on it and measures again.
+                        if (leaving) {
+                            early.leaveWhatIsToBeChanged();
+                        }
+                        // Before the notice, whose own walk of the bodies an author waits for too.
+                        told.begin(early);
+                        toldBeforeTheMeasurement(early, chosenModule, chosenBehavior,
+                                render.locale());
+                    });
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
             List<Located> errors = compilation.errors();
@@ -637,9 +665,11 @@ public final class Main {
             if (assessable) {
                 SourceRendering rendering =
                         new SourceRendering(read.names(), compilation.texts());
+                // The page in the language the reader named, and the document in the one a
+                // consumer parses whatever was named.
                 String rendered = render.json()
                         ? report.json(rendering) + System.lineSeparator()
-                        : report.human(rendering);
+                        : report.human(rendering, render.locale());
                 out.print(rendered);
                 // After the report, because the rows are what to do about what the report just said.
                 // Beside it rather than in it where the report is JSON: the rows are source, and
@@ -649,9 +679,17 @@ public final class Main {
                     // command's compile has because the report it writes is measured over them. A
                     // row is offered for a meeting of the body's decisions no row makes, and
                     // nothing can say a meeting was missed of a run that recorded nothing.
-                    String rows = GeneratedRows.of(compilation, rendering, offered).text();
+                    String rows = GeneratedRows.of(compilation, rendering, offered)
+                            .text(render.locale());
                     (render.json() ? err : out).print(rows);
                 }
+            }
+            // Beside the document and not in it, since how this command measures them all the same
+            // is a fact about the command.
+            List<String> left = report.leftToBeChanged();
+            if (!left.isEmpty()) {
+                err.println(Messages.get("cli.examples.left", render.locale(),
+                        "`" + String.join("`, `", left) + "`"));
             }
             // The report is written either way; whether the command succeeded is a separate answer,
             // and an error is an error whatever could still be said about the rows.
@@ -673,11 +711,70 @@ public final class Main {
                         render.locale(), report.adequacyGaps().size()));
                 return 1;
             }
+            // And what nobody looked at. A behavior left to be changed may be one whose rows this
+            // would refuse over, so leaving it is no way past the refusal.
+            if (strict && !left.isEmpty()) {
+                err.println(Messages.get("cli.examples.strict.left", render.locale(),
+                        left.size()));
+                return 1;
+            }
             return 0;
         } catch (CompileException e) {
             reportCompileError(e, contexts, render);
             return 1;
         }
+    }
+
+    /**
+     * Each helper of the behaviors {@code module} and {@code behavior} select whose comparisons
+     * a function applied outside it reads again on each element, one line for each helper, said
+     * on the error stream so that a document on the output stays one document.
+     *
+     * <p>Where anything is said, so is that none of it waits on the measurement: whoever reads it
+     * has what to change while the run is still measuring the model as it stands.
+     */
+    private void toldBeforeTheMeasurement(Compilation compilation, String module, String behavior,
+                                          Locale locale) {
+        List<HelpersReadOnApplicationsAroundThem.Said> helpers =
+                HelpersReadOnApplicationsAroundThem.toldOf(compilation, module, behavior);
+        List<ConditionsReadThroughTooManyChoices.Said> choices =
+                ConditionsReadThroughTooManyChoices.toldOf(compilation);
+        for (HelpersReadOnApplicationsAroundThem.Said said : helpers) {
+            List<String> readBy = new ArrayList<>();
+            said.applicationsAtMost().forEach((reader, times) -> readBy.add(
+                    Messages.get("cli.examples.helper.ahead.read", locale, reader, times)));
+            err.println(Messages.get("cli.examples.helper.ahead", locale, said.helper().name(),
+                    String.join(", ", readBy), calledInside(said.calledInside(), locale)));
+        }
+        choices.forEach(said -> toldOfChoices(said, locale));
+        if (!helpers.isEmpty() || !choices.isEmpty()) {
+            err.println(Messages.get("cli.examples.ahead.change.first", locale));
+        }
+    }
+
+    /** The conditions of one behavior whose values are made through more choices than one
+     *  condition is read on, and what to declare as a behavior so that they are not. */
+    private void toldOfChoices(ConditionsReadThroughTooManyChoices.Said said, Locale locale) {
+        WhatToDeclare told = said.told();
+        StringBuilder suggested = new StringBuilder();
+        told.helpers().forEach(each -> suggested.append(Messages.get(
+                "cli.examples.choices.ahead.declare", locale, each.helper().name(),
+                each.conditions(), calledInside(each.calledInside(), locale))));
+        if (told.inABehavior() > 0) {
+            suggested.append(Messages.get("cli.examples.choices.ahead.beside", locale,
+                    told.inABehavior()));
+        }
+        err.println(Messages.get("cli.examples.choices.ahead", locale,
+                said.module() + "." + said.behavior(), told.conditions(),
+                ConditionsReadThroughTooManyChoices.most(), suggested));
+    }
+
+    /** That the calls of a helper are written inside {@code inside}, which they move out of. */
+    private static String calledInside(List<ValueName.Helper> inside, Locale locale) {
+        return inside.isEmpty() ? ""
+                : Messages.get("cli.examples.helper.ahead.inside", locale,
+                        String.join(", ", inside.stream()
+                                .map(each -> "`" + each.name() + "`").toList()));
     }
 
     /**

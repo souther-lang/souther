@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -109,7 +111,7 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
 
     /** Every location the body of {@code popular} names, read the way its demand is read. */
     private static List<TermPath> namedByTheBodyOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -136,13 +138,13 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
     private record Read(InputDomain inputs, RuleReadingSource rules, DeclaredSig sig) {}
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSource(A_MAP_BESIDE_A_FIELD, "Main");
+        Compilation compilation = ACompiledModel.answered(A_MAP_BESIDE_A_FIELD);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get("take"), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()), rules,

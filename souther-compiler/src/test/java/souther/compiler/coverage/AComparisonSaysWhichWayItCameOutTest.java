@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
@@ -160,9 +161,7 @@ class AComparisonSaysWhichWayItCameOutTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(MODEL);
     }
 
     /** The numbering of the bodies the classes below were generated from, asked of the check the

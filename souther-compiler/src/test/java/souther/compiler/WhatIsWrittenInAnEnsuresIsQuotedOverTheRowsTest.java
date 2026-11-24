@@ -60,14 +60,11 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
     private static String block(String source) {
         Compilation compilation = compiled(source);
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /**
@@ -90,13 +87,13 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 //     ensures asked = NotFound -> id.value <= 0
 
                 example findTodo
-                // fills id=0 <= x <= 0
+                // fills id: 0 <= x <= 0 at id
                 // fills a decision rule (the comparison at 16:33 does not hold)
                 // fills value = 0
                 // fills ON point of ensures findTodo (asked)
                 // fills OFF point of comparison@0:16:33
                     | (TodoId(0)) -> <?>
-                // fills id=0 < x
+                // fills id: 0 < x at id
                 // fills a decision rule (the comparison at 16:33 holds)
                 // fills value in 0 < value
                 // fills OFF point of ensures findTodo (asked)
@@ -164,7 +161,6 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 behavior findTodo : (id: TodoId) -> Todo | NotFound
                 \tconstructs Todo
-                \tconstructs NotFound
                 \tensures both = Todo -> value.id.value == id.value
                 \t\t| NotFound -> id.value > 0
 
@@ -211,7 +207,9 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 let wrong (n, k) = if n.value > 5 then Todo { id = n } else NotFound
                 """;
-        Compilation compilation = compiled(source);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(List.of("E1619"), compilation);
 
         // The arm names a data that is no case of the answer, so the reading of the contract is
         // refused and the behavior is not among them.
@@ -220,7 +218,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 "the checker could not read this behavior's clause");
 
         String block = GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(block.contains("""
                 // `ensures` written for `wrong`:
                 //     ensures nope = Other -> n.value > 0
@@ -280,7 +278,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                         souther.compiler.query.OfferingRequest.overTheModule("example.todo"),
                         Map.of("findTodo", nothingOffered()), null)),
                 Map.of("findTodo", List.of("ensures asked = NotFound -> id.value > 0")),
-                SourceRendering.namedByIdentity(SourceLayouts.NONE), compiled(TODO).db()).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE), compiled(TODO).db()).textInEnglish();
 
         assertEquals("", block);
     }
@@ -290,7 +288,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         souther.compiler.partition.MeasuredInput subject =
                 souther.compiler.partition.MeasuredInput.of("findTodo",
                         InputDomain.of(List.of(), reading,
@@ -305,6 +303,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                                 List.of(), List.of(), List.of())),
                 souther.compiler.partition.Generator.GenerationResult.NONE,
                 Adequacy.Generated.RowsForRules.NOTHING,
-                                List.of());
+                Adequacy.Generated.RowsForCases.NOTHING,
+                                List.of(), List.of());
     }
 }

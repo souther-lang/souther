@@ -6,9 +6,12 @@ import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,12 +63,19 @@ final class TermOrdering {
         Carrier answered = switch (term) {
             // The end of a key's values is one of the values, so it is measured where they are;
             // and what a key's numbers come to is measured on what each of them stands as.
-            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> observed;
+            case NumericTerm.ValueOf _, NumericTerm.GatheredUnderItsKey _,
+                 NumericTerm.GatheredUnderAKey _ -> observed;
+            // Unless it is the end of the steps the values fall in, which are counted on the order
+            // of the steps and not of the values.
+            case NumericTerm.ExtremeOfItsKey extreme -> extreme.through() == null ? observed
+                    : answeredOn(term, positionType, symbols, declarations);
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                 NumericTerm.WholeUnitsOf _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.TakenOver _ -> answeredOn(term, positionType, symbols, declarations);
+            case NumericTerm.ProductOf _ -> throw new IllegalArgumentException(
+                    term + " is made of the orders of its factors (ofAProduct)");
         };
         Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
         fieldTypes.forEach((field, type) -> {
@@ -82,6 +92,39 @@ final class TermOrdering {
             }
         }
         return new TermOrders(term, observed, answered, fields, worn);
+    }
+
+    /** What a reading answers of one number: the orders it stands on, or null. */
+    interface OfTheNumbers {
+        TermOrders of(NumericTerm number);
+    }
+
+    /**
+     * The orders of a product of two forms, which is counted on decimals where any of its numbers
+     * is and on whole numbers where all are, and on no order where one is counted on another: a
+     * product of a date and a count is the product of nothing.
+     *
+     * @param reading the orders of a number either form is of
+     */
+    static TermOrders ofAProduct(NumericTerm.ProductOf term, OfTheNumbers reading) {
+        Carrier on = null;
+        List<TermOrders> factors = new ArrayList<>();
+        for (LinearForm<NumericTerm> form : term.factors()) {
+            for (NumericTerm number : form.coefs().keySet()) {
+                TermOrders each = reading.of(number);
+                if (each == null || !(each.answered() instanceof Carrier.Whole
+                        || each.answered() instanceof Carrier.Dense)) {
+                    return new TermOrders(term, null, null);
+                }
+                // A whole number beside a decimal is multiplied as decimals are.
+                if (on == null || each.answered() instanceof Carrier.Dense) {
+                    on = each.answered();
+                }
+                factors.add(each);
+            }
+        }
+        return on == null ? new TermOrders(term, null, null)
+                : new TermOrders(term, on, on, Map.of(), Map.of(), factors);
     }
 
     /**
@@ -111,10 +154,14 @@ final class TermOrdering {
                                       DeclarationAccess declarations) {
         NewtypeInners inners = declarations.inners();
         return switch (term) {
-            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ ->
+            case NumericTerm.ValueOf _, NumericTerm.GatheredUnderItsKey _,
+                 NumericTerm.GatheredUnderAKey _ ->
                     positionType == null ? null
                     : Carrier.ofValue(positionType, declarations);
+            case NumericTerm.ExtremeOfItsKey extreme -> extreme.through() != null
+                    ? Carrier.ofValue(DefaultBoundOperationFacts.get()
+                            .wholeUnitsAnswered(extreme.through()), declarations)
+                    : positionType == null ? null : Carrier.ofValue(positionType, declarations);
             case NumericTerm.TakenOf taken -> {
                 Type answers =
                         NumericAnswers.typeOf(taken.operation(), positionType, inners, symbols);
@@ -125,6 +172,13 @@ final class TermOrdering {
             case NumericTerm.CodePointClassCount _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // What the code points come to is the whole number the list of them adds up to.
             case NumericTerm.CodePointValueSum _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // A code point is the whole number `String.codePoints` lists it as.
+            case NumericTerm.CodePointAt _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // The step of the order the operation answers on, which is not the order of the value
+            // it is the step of: a date counts days where the date-time it falls on counts seconds.
+            case NumericTerm.WholeUnitsOf units -> Carrier.ofValue(
+                    DefaultBoundOperationFacts.get().wholeUnitsAnswered(units.operation()),
+                    declarations);
             // How often a value occurs is a whole number whatever the value is.
             case NumericTerm.Multiplicity _, NumericTerm.OccurrencesOfItsValue _,
                  NumericTerm.OccurrencesOfAKey _ -> Carrier.ofValue(Type.Prim.INT, declarations);
@@ -139,6 +193,8 @@ final class TermOrdering {
                         over.operation(), new Type.ListOf(positionType), inners, symbols);
                 yield answers == null ? null : Carrier.ofValue(answers, declarations);
             }
+            // Counted on the order its factors are ({@link #ofAProduct}), not on a type.
+            case NumericTerm.ProductOf _ -> null;
         };
     }
 

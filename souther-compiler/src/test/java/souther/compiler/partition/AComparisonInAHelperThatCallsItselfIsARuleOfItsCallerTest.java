@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -73,7 +74,7 @@ class AComparisonInAHelperThatCallsItselfIsARuleOfItsCallerTest {
     void anElementIsComparedOnlyWhereNoElementBeforeItEndedTheWalk() {
         assertFalse(hitAt(ONE_LIST, GO, "List.length(go(xs)) >= 1", "([1, 0])", "0"),
                 "the walk ends at the first element, and the second is never compared");
-        assertTrue(hitAt(ONE_LIST, GO, "List.length(go(xs)) >= 1", "([-1, 0])", "0"),
+        assertTrue(hitAt(ONE_LIST, GO, "List.length(go(xs)) >= 1", "([-1, 0])", "Low", "0"),
                 "the first does not end it, so the second is compared");
     }
 
@@ -124,7 +125,7 @@ class AComparisonInAHelperThatCallsItselfIsARuleOfItsCallerTest {
                 + " else List.length(go(List.reverse(b))) >= 1";
         assertFalse(hitAt(model, GO, guard, "(false, [0], [1])", "0"),
                 "go(a) is never called; the run recorded is the other call's");
-        assertTrue(hitAt(model, GO, guard, "(true, [0], [1])", "0"),
+        assertTrue(hitAt(model, GO, guard, "(true, [0], [1])", "Low", "0"),
                 "go(a) is called and compares its element");
     }
 
@@ -145,7 +146,7 @@ class AComparisonInAHelperThatCallsItselfIsARuleOfItsCallerTest {
                 let pick (s, xs) = if GUARD then High else Low
                 """;
         assertTrue(hitAt(model, GO, "String.startsWith(\"a\", s) && List.length(go(xs)) >= 1",
-                        "(\"ab\", [0])", "0"),
+                        "(\"ab\", [0])", "Low", "0"),
                 "the one call ran and compared its element");
     }
 
@@ -173,16 +174,23 @@ class AComparisonInAHelperThatCallsItselfIsARuleOfItsCallerTest {
                 """;
         // The first element is compared either way, so a run is recorded through the comparison
         // on every row here: what tells them apart is which elements it was made on.
-        assertFalse(hitAt(model, "", "", "([Go { v = -1 }, Stop, Go { v = 0 }])", "0"),
+        assertFalse(hitAt(model, "", "", "([Go { v = -1 }, Stop, Go { v = 0 }])", "Low", "0"),
                 "the second element stops the walk, and the third is never compared");
-        assertTrue(hitAt(model, "", "", "([Go { v = -1 }, Go { v = -2 }, Go { v = 0 }])", "0"),
+        assertTrue(hitAt(model, "", "", "([Go { v = -1 }, Go { v = -2 }, Go { v = 0 }])", "Low",
+                        "0"),
                 "nothing stops it, so the third is compared");
     }
 
     private static boolean hitAt(String model, String helpers, String guard, String row,
                                  String against) {
+        return hitAt(model, helpers, guard, row, "High", against);
+    }
+
+    /** As above, for a row whose guard is false and so answers {@code answer}. */
+    private static boolean hitAt(String model, String helpers, String guard, String row,
+                                 String answer, String against) {
         Map<String, JsonNode> readings = new LinkedHashMap<>();
-        JsonNode report = report(model, helpers, guard, row);
+        JsonNode report = report(model, helpers, guard, row, answer);
         collect(report, readings);
         JsonNode reading = readings.get(against);
         assertTrue(reading != null, () -> "a line has a point at " + against + ": " + readings);
@@ -212,14 +220,17 @@ class AComparisonInAHelperThatCallsItselfIsARuleOfItsCallerTest {
     }
 
     private static JsonNode report(String model, String helpers, String guard, String row) {
-        Compilation compilation = Compilation.ofSource(model.replace("HELPERS", helpers)
+        return report(model, helpers, guard, row, "High");
+    }
+
+    private static JsonNode report(String model, String helpers, String guard, String row,
+                                   String answer) {
+        Compilation compilation = ACompiledModel.measured(model.replace("HELPERS", helpers)
                 .replace("GUARD", guard) + """
 
                 example pick
-                    | "the row" : %s -> High
-                """.formatted(row), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                    | "the row" : %s -> %s
+                """.formatted(row, answer), Adequacy.Asked.fullReport());
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

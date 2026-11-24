@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
@@ -61,9 +62,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
 
     /** What the model divides, which is where the classes below come from. */
     private static Partitions.Partitioning divided() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "gate")).value();
     }
@@ -333,9 +332,7 @@ class AnAxisHoldsOnlyClassesOfTheNumberItMeasuresTest {
      */
     @Test
     void aClassIsOfTheNumberAndNotOfTheObjectThatNamesIt() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
         Partitions.Partitioning read = compilation.db()
                 .ask(new Adequacy.Divided(module, "gate")).value();

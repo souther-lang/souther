@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.CompileException;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -144,11 +144,9 @@ class AWalkOverSpreadsComesBackOnAGraphTheLanguageRefusesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        try {
-            c.answerEverything();
-        } catch (CompileException _) {
-            // What a ring is refused with is another test's. This one asks the walks directly.
-        }
+        // What a ring is refused with is another test's. This one asks the walks directly.
+        List<String> refusedWith = source.equals(A_RING) ? List.of("E1027") : List.of();
+        ACompiledModel.refusedWith(refusedWith, c);
         return c.db();
     }
 }

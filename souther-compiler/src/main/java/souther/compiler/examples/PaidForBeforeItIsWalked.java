@@ -29,7 +29,7 @@ final class PaidForBeforeItIsWalked {
     private PaidForBeforeItIsWalked() {}
 
     /** Counts every node of {@code value}, throwing where the evaluation cannot afford them. */
-    static void payFor(Object value) {
+    static void payFor(Object value, ValueOwnership ownership) {
         Deque<Object> pending = new ArrayDeque<>();
         pending.push(value == null ? NOTHING : value);
         while (!pending.isEmpty()) {
@@ -47,8 +47,8 @@ final class PaidForBeforeItIsWalked {
                     }
                 }
                 case Record r -> {
-                    for (RecordComponent component : r.getClass().getRecordComponents()) {
-                        pending.push(held(component(r, component.getAccessor())));
+                    for (RecordComponent component : components(r, ownership)) {
+                        pending.push(held(component(r, component.getAccessor(), ownership)));
                     }
                 }
                 default -> { }
@@ -65,13 +65,25 @@ final class PaidForBeforeItIsWalked {
 
     /** A component of a record, read through its accessor, which a generated class may not have
      *  made public; one that cannot be read is a node holding nothing. */
-    private static Object component(Record r, Method accessor) {
+    private static Object component(Record r, Method accessor, ValueOwnership ownership) {
         try {
             accessor.setAccessible(true);
             return accessor.invoke(r);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            EvaluationContext.rethrowIfOverspent(e);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            // A node of a value that may be a supplied implementation's, as in ObservedValues.read.
+            ownership.readFailed(r, e);
             return NOTHING;
+        }
+    }
+
+    /** The components of a record, which resolving can fail to give for the classes they name. A
+     *  record whose components cannot be had is a node holding nothing. */
+    private static RecordComponent[] components(Record r, ValueOwnership ownership) {
+        try {
+            return r.getClass().getRecordComponents();
+        } catch (LinkageError e) {
+            ownership.readFailed(r, e);
+            return new RecordComponent[0];
         }
     }
 }

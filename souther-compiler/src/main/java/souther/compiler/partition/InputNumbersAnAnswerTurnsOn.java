@@ -216,7 +216,8 @@ public final class InputNumbersAnAnswerTurnsOn {
             for (DemandReading.Read read : reads) {
                 switch (read) {
                     case DemandReading.Read.Demands(var demand) ->
-                            held.add(new OnTheWay.TakenIn(statement.anchor(), demand));
+                            held.add(new OnTheWay.TakenIn(statement.anchor(), demand,
+                                    NamedElements.NONE));
                     case DemandReading.Read.Settled(var thisWay) -> {
                         if (!thisWay) {
                             return null;
@@ -251,7 +252,7 @@ public final class InputNumbersAnAnswerTurnsOn {
         cuts.addAll(held);
         return new InputNumbersAnAnswerTurnsOn(values, new Reachability.Reaching(region,
                 reaching.requirements(), reaching.truths(), cuts, reaching.ways(),
-                reaching.declined()));
+                reaching.declined(), Optional.empty()));
     }
 
     /**
@@ -316,7 +317,7 @@ public final class InputNumbersAnAnswerTurnsOn {
             List<ExactRatio> weights = new ArrayList<>();
             boolean solvable = true;
             for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm other))
+                if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm other, var _))
                         || other.equals(term)) {
                     continue;
                 }
@@ -349,7 +350,7 @@ public final class InputNumbersAnAnswerTurnsOn {
 
     private static ExactRatio coefficientOf(LinearForm<Quantity> form, NumericTerm term) {
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm one)
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm one, var _)
                     && one.equals(term)) {
                 return each.getValue();
             }
@@ -393,11 +394,15 @@ public final class InputNumbersAnAnswerTurnsOn {
                 stoppedBy.add(lookedFigure);
                 return false;
             }
-            ExactRatio rest = constant;
-            for (int at = 0; at < choice.size() && rest != null; at++) {
-                ExactRatio weighed = weights.get(at).times(choice.get(at)).orNull();
-                rest = weighed == null ? null : rest.plus(weighed).orNull();
+            // Every product first and then one sum of them: a run of additions asks every partial
+            // sum to be held, and which partial sums there are is the order the places are in, which
+            // is the names' and not anything the weights and ends say.
+            List<ExactRatio> weighed = new ArrayList<>(choice.size() + 1);
+            weighed.add(constant);
+            for (int at = 0; at < choice.size(); at++) {
+                weighed.add(weights.get(at).times(choice.get(at)).orNull());
             }
+            ExactRatio rest = weighed.contains(null) ? null : ExactRatio.sum(weighed).orNull();
             ExactRatio solved = rest == null ? null : rest.negated().dividedBy(by).orNull();
             if (solved != null) {
                 out.add(solved);

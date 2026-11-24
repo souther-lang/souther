@@ -2,18 +2,20 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.UnheldNumber;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -43,17 +45,43 @@ import java.util.Set;
  * @param handedOn         what another container is asked about an element meeting
  *                         {@code meeting}, where that is all it is: the one demand an element
  *                         meets by what that container holds ({@link ACountHandedOn})
+ * @param differentAt      where the value each element holds stands — one place, or the place its
+ *                         case chooses — where what is counted is how many different values the
+ *                         elements meeting {@code meeting} hold there rather than how many of
+ *                         them there are ({@link Quantity.HowManyDifferentMeet})
+ * @param across           the container inside each element of which a container at
+ *                         {@code container} stands, where the values counted are those of every
+ *                         element of all of them put end to end and not of the one a reading
+ *                         chose ({@link Quantity.HowManyDifferentMeet#across})
  */
 record CountedElements(String behavior, TermPath container, Proposition meeting,
                        AStatementAtARow perElement, Map<NumericTerm, Carrier> on,
                        Optional<List<TakenConstraint>> anElementMeeting,
-                       Optional<RowDemand.WithinIt> handedOn) {
+                       Optional<RowDemand.WithinIt> handedOn,
+                       Optional<Quantity.TheValue> differentAt, Optional<TermPath> across) {
 
     CountedElements {
         if (behavior == null || container == null || meeting == null || perElement == null
-                || anElementMeeting == null || handedOn == null) {
+                || anElementMeeting == null || handedOn == null || differentAt == null
+                || across == null) {
             throw new IllegalArgumentException("a count is a behavior's count of the elements of"
                     + " some container meeting something");
+        }
+        if (differentAt.isPresent() && !(differentAt.get().where()
+                instanceof DecisionSubject.AnInput(TermPath where, var _)
+                && where.isAtOrUnder(container.element()))) {
+            throw new IllegalArgumentException("the values counted are of the elements of "
+                    + container + ", and " + differentAt.get() + " is none of theirs");
+        }
+        // Where it counts values, the container is where the values are of, and the places they
+        // stand at are inside its elements: it is the container the values are counted in. Where
+        // it counts elements, it is the container whose elements are counted. Either way it is one
+        // container inside each element of the one across.
+        if (across.isPresent() && (!container.isAtOrUnder(across.get().element())
+                || container.containersHoldingIt().size()
+                        != across.get().containersHoldingIt().size() + 1)) {
+            throw new IllegalArgumentException("every element of the containers at " + container
+                    + " is counted, one inside each element of " + across.get());
         }
         on = Map.copyOf(on);
         anElementMeeting = anElementMeeting.map(List::copyOf);
@@ -61,7 +89,10 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
 
     /**
      * How many elements of {@code count}'s container meet its statement, as {@code behavior} reads
-     * it, for a statement {@link AStatementAtARow#askable} says a row can be asked.
+     * it, for a statement {@link AStatementAtARow#askable} says a row can be asked — or, where
+     * {@code count} is how many different values those hold ({@link
+     * Quantity.HowManyDifferentMeet}), the count of those elements with each value counted once.
+     * {@code count} is one {@link AStatementAtARow#countIn} answers.
      *
      * <p>The one way one of these is made, wherever the count is met: a line drawn on it and a
      * condition on the way to another are the same count where they count the same thing.
@@ -69,20 +100,41 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * @param anElementMeeting what an element meeting the statement asks, as the reading of a
      *                         condition that some element meets it comes to
      */
-    static CountedElements of(String behavior, Quantity.HowManyMeet count, Quantities quantities,
+    static CountedElements of(String behavior, Quantity count, Quantities quantities,
                               AnElementMeeting anElementMeeting) {
+        Identity identity = identityOf(behavior, count);
         AStatementAtARow perElement =
-                AStatementAtARow.of(count.ofTheElement(), behavior, quantities);
+                AStatementAtARow.of(identity.meeting(), identity.behavior(), quantities);
         Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
         for (NumericTerm each : perElement.numbers()) {
             TermOrders orders = quantities.ordersOf(each);
-            if (orders != null && orders.observed() != null && orders.answered() != null) {
+            if (orders != null && orders.answered() != null) {
                 on.put(each, orders.answered());
             }
         }
-        Identity identity = identityOf(behavior, count);
-        return new CountedElements(behavior, identity.container(), identity.meeting(), perElement,
-                on, anElementMeeting.heldTo(), anElementMeeting.handedOn());
+        return new CountedElements(identity.behavior(), identity.container(), identity.meeting(),
+                perElement, on, anElementMeeting.heldTo(), anElementMeeting.handedOn(),
+                identity.differentAt(), identity.across());
+    }
+
+    /**
+     * What this counts at {@code row}: how many elements meet the statement, or how many
+     * different values those elements hold where that is what is counted.
+     *
+     * @return null where the walk could not reach the container
+     */
+    AStatementAtARow.HowManyAtARow at(BorderQuantity.Observation row) {
+        return perElement.howManyIn(container, differentAt, across, row);
+    }
+
+    /** Asks {@code row} for the containers this counts the elements of, as the walk finding
+     *  which containers a row chooses an element of asks. */
+    void lookAt(BorderQuantity.Observation row) {
+        AStatementAtARow.lookAtTheElementsIn(row, container, across);
+        Set<TermPath> together = new LinkedHashSet<>();
+        together.add(container);
+        across.ifPresent(together::add);
+        perElement.lookAt(row, together);
     }
 
     /** Every number of a row the statement reads, the element's own among them. */
@@ -102,17 +154,29 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      * element meeting it is held to and another does not — and they are still one count. What a
      * row is asked of a count is gathered by this, and never by what a reading made of it.
      */
-    record Identity(String behavior, TermPath container, Proposition meeting) {}
+    record Identity(String behavior, TermPath container, Proposition meeting,
+                    Optional<Quantity.TheValue> differentAt, Optional<TermPath> across) {}
 
     /** Which count this is ({@link Identity}). */
     Identity identity() {
-        return new Identity(behavior, container, meeting);
+        return new Identity(behavior, container, meeting, differentAt, across);
     }
 
-    /** Which count {@code count} read in {@code behavior} is, with nothing about it worked out —
-     *  the identity {@link #of} would give it. */
-    static Identity identityOf(String behavior, Quantity.HowManyMeet count) {
-        return new Identity(behavior, count.container().inputPosition(), count.ofTheElement());
+    /**
+     * Which count {@code count}, one {@link AStatementAtARow#countIn} answers, read in
+     * {@code behavior} is, with nothing about it worked out — the identity {@link #of} would give
+     * it.
+     *
+     * <p>Of how many different values the elements meeting a statement hold whatever the statement
+     * was asked of. One asked of what the elements holding a value come to answers alike for each
+     * of them, so a value is counted where some element holding it meets it, which is the count of
+     * it asked of each element.
+     */
+    static Identity identityOf(String behavior, Quantity count) {
+        Quantity.HowManyMeet elements = AStatementAtARow.elementsOf(count);
+        return new Identity(behavior, elements.container().inputPosition(),
+                elements.ofTheElement(), AStatementAtARow.differentAt(count),
+                AStatementAtARow.acrossOf(count));
     }
 
     /**
@@ -140,7 +204,7 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         // One statement handed on is one demand however it was read; a reading that found it is
         // the one kept.
         return new CountedElements(behavior, container, meeting, perElement, on, both,
-                handedOn.isPresent() ? handedOn : other.handedOn);
+                handedOn.isPresent() ? handedOn : other.handedOn, differentAt, across);
     }
 
     /**
@@ -194,6 +258,18 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         record NotWorkedOut(UnheldNumber why) implements Least {}
     }
 
+    /** Whether {@code term} stands beside every element of the counted container alike
+     *  ({@link NumbersOfTheWhole#standsBeside}). */
+    boolean standsBeside(NumericTerm term) {
+        return NumbersOfTheWhole.standsBeside(term, container);
+    }
+
+    /** The numbers the statement reads that stand beside every element alike ({@link
+     *  #standsBeside}). */
+    List<NumericTerm> numbersBeside() {
+        return numbers().stream().filter(this::standsBeside).toList();
+    }
+
     /**
      * Places for every number the statement reads beside an element, chosen together, and where
      * {@code oneMeets}, together with an element that meets the statement.
@@ -212,28 +288,54 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
      */
     NumericWitness.Standing placesBeside(SearchRegion within, boolean oneMeets,
                                          WitnessSearch looking) {
-        List<NumericTerm.FromOnePosition> placed = new ArrayList<>();
-        for (NumericTerm term : numbers()) {
-            if (!term.subjectPath().insideAContainer() && term.atOnePosition() != null) {
-                placed.add(term.atOnePosition());
-            }
-        }
+        // A number of the counted container as a whole — how many it holds, what its elements come
+        // to — is no number beside an element: it is what the elements chosen make it, and the
+        // composing fixes it before it chooses them ({@link ContainerAsAWhole}).
+        Set<NumericTerm> beside = new LinkedHashSet<>(numbersBeside());
         SearchRegion region = within;
         if (oneMeets && anElementMeeting.isPresent()) {
             for (TakenConstraint each : anElementMeeting.get()) {
                 region = each.narrowing(region);
+                // The number of the element meeting it, and those beside it; none of the counted
+                // container as a whole.
                 for (NumericTerm term : each.terms()) {
-                    if (term.atOnePosition() != null && !placed.contains(term.atOnePosition())) {
-                        placed.add(term.atOnePosition());
+                    if (!NumbersOfTheWhole.ofTheWhole(term, container)
+                            && (term.atOnePosition() != null
+                                    || NumbersOfTheWhole.oneNumberOfTheRow(term))) {
+                        beside.add(term);
                     }
                 }
             }
         }
-        return NumericWitness.of(region, placed, on::get, looking);
+        // In the one order of the terms: the search tries so many values and no more, so which
+        // number it places first is part of its answer, and a form holds its terms in no order
+        // that means anything.
+        return NumericWitness.of(region, NumericTerms.inOrder(beside), on::get, looking);
+    }
+
+    /**
+     * A count as it is written: {@code #container [statement]}, and, where it is how many
+     * different values stand at {@code differentAt} over the elements meeting the statement,
+     * {@code #different container [place] where [statement]} — the container being the one whose
+     * elements hold the containers, where the values are of every element of those
+     * ({@code across}), as the quantity is written. The statement is a {@link Spelling}, held as
+     * itself, or any other text.
+     */
+    static Spelling spelled(TermPath container, Optional<Quantity.TheValue> differentAt,
+                            Optional<TermPath> across, Object statement) {
+        return Spelling.of(differentAt.map(at -> "#different " + across.orElse(container) + " ["
+                        + at.spelled() + "] where ")
+                .orElse("#" + container + " ") + "[", statement, "]");
+    }
+
+    /** This count as it is written ({@link #spelled}), with the statement held as its own
+     *  spelling. */
+    public Spelling spelling() {
+        return spelled(container, differentAt, across, meeting.spelling());
     }
 
     @Override
     public String toString() {
-        return "#" + container + " [" + meeting.key() + "]";
+        return spelling().toString();
     }
 }

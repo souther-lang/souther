@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.partition.RuleEvidenceOrigin;
 
@@ -94,9 +95,7 @@ class TheRuleThatDividesAPositionIsAmongWhatItsMeasureReadTest {
     }
 
     private static PartitionEvidence measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         PartitionEvidence f = compilation.db()
                 .ask(new Adequacy.Coverage(MODULE)).value().get("f");
         assertNotNull(f, "the model under test compiles");

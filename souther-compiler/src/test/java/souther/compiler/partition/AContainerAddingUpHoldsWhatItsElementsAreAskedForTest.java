@@ -2,12 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
+import souther.compiler.diag.Messages;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -27,6 +29,7 @@ import souther.compiler.values.AsACompilationAllows;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -170,7 +173,7 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
                 "no element is both a card and cash");
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, none.why());
         assertEquals("what each element is asked to hold puts `ns[*].method` both at Cash and at"
-                        + " Card", none.detail(),
+                        + " Card", Messages.render(none.detail(), Locale.ENGLISH),
                 "said of what was asked, which contradicts itself before any way down is tried");
     }
 
@@ -192,9 +195,33 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
                         "the share and the value cannot both stand at one position").why());
     }
 
+    /**
+     * A list of none comes to nought, and holds no element to ask anything of: where what is asked
+     * inside cannot be one element, it is still written for a total of nought, and for no other.
+     */
+    @Test
+    void whereNoElementCanHoldWhatIsAskedTheListOfNoneComesToNought() {
+        RuleReadingSource rules = RuleReadings.ofSource(MODEL);
+        DemandsInside inside = new DemandsInside(
+                Map.of(ELEMENT.then("method").refine(toLeaf("Card")).then("issuer"),
+                        List.of(FixtureTemplate.string("x"))),
+                Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
+        assertEquals(List.of("[]"), assertInstanceOf(TermRealizations.Realization.Built.class,
+                realizing(rules, inside, Count.of(0)), "a list of none comes to nought")
+                .values().stream().map(FixtureTemplate::text).toList());
+        assertInstanceOf(TermRealizations.Realization.None.class,
+                realizing(rules, inside, Count.of(1)), "and to nothing else");
+    }
+
     /** What filling the entries to a total of one came to, with {@code inside} asked of each. */
     private static TermRealizations.Realization realizing(RuleReadingSource rules,
                                                           DemandsInside inside) {
+        return realizing(rules, inside, Count.of(1));
+    }
+
+    /** What filling the entries to {@code answer} came to, with {@code inside} asked of each. */
+    private static TermRealizations.Realization realizing(RuleReadingSource rules,
+                                                          DemandsInside inside, Count answer) {
         Symbols symbols = rules.symbols();
         NumericTerm.TakenOver total = NumericTerm.TakenOver.of(
                 ValueName.Stdlib.operation("List", "sum"),
@@ -204,9 +231,9 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
         TermOrders orders = TermOrdersFixtures.at(total, named("Amount"), symbols);
         assertNotNull(orders.answered(), "and the order it answers on is the amounts'");
 
-        return ContainersAddingUp.to(Count.of(1), new Type.ListOf(named("Entry")), List.of(),
-                orders, NothingTheRulesSay.REGION, RuleReadingContext.unshared(rules, POLICY),
-                inside);
+        return ContainersAddingUp.to(answer, new Type.ListOf(named("Entry")), List.of(),
+                orders, NothingTheRulesSay.REGION,
+                RuleReadingContext.unshared(rules, POLICY, TestDay.TODAY), inside);
     }
 
     /** An entry of the case and payer asked for, holding {@code amount}. */

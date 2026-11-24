@@ -25,7 +25,13 @@ import java.lang.annotation.Target;
  *
  * <p>A lazily worked-out answer says the same thing by being {@code volatile}, and a record says it
  * by having no identity written apart from its components. This is for the third way: a final field
- * settled where the state is made, beside the ones that decide it.
+ * settled where the state is made, beside the ones that decide it — or a cell settled there that
+ * keeps what is later worked out from them, as a proposition keeps its denial.
+ *
+ * <p>And what a walk of an answer leaves out of what a thing is made of. A walk asking whether an
+ * answer means something by {@code equals} asks it of what the answer's identity reads, and a field
+ * this marks is not that. Being {@code volatile} says nothing there: it is how a field is seen
+ * across threads, and a field holding a run's state is {@code volatile} for that reason alone.
  *
  * <p>Its own package because the states the store compares are written in more than one, and a word
  * all of them can say belongs somewhere none of them owns.

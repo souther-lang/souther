@@ -26,9 +26,10 @@ final class RuleChoice {
     private RuleChoice() {}
 
     /**
-     * The first of {@code rules}, tried in order, whose derivation concludes something with no part
-     * left unread; or, where none does, the first that took the expression at all; or null where
-     * none did. A rule answers null where it does not take the expression.
+     * The first of {@code rules}, tried in order, whose derivation states the most of the
+     * expression ({@link HowMuchItStates}); or null where none took it. A rule answers null where
+     * it does not take the expression, and none is tried past one that reads all of it over the
+     * input.
      *
      * <p>What a candidate states is asked of {@code trying}, one concluding for every choice of one
      * reading. A candidate holds the steps of the parts under it, which were concluded when the
@@ -42,22 +43,59 @@ final class RuleChoice {
     static <M> Derivation firstThatReadsIt(List<Supplier<Derivation>> rules, List<M> met,
                                            Conclusion trying) {
         int before = met.size();
-        Derivation first = null;
+        Derivation kept = null;
+        HowMuchItStates keptStates = null;
         for (Supplier<Derivation> rule : rules) {
             int start = met.size();
             Derivation tried = rule.get();
-            if (tried != null && !stopsAnywhere(trying.of(tried))) {
-                // What the first rule kept met stands between this one's and what came before.
-                met.subList(before, start).clear();
-                return tried;
+            if (tried == null) {
+                met.subList(start, met.size()).clear();
+                continue;
             }
-            if (tried != null && first == null) {
-                first = tried;
+            HowMuchItStates states = HowMuchItStates.of(trying.of(tried));
+            if (kept == null || states.compareTo(keptStates) < 0) {
+                // What the rule kept so far met stands between this one's and what came before.
+                met.subList(before, start).clear();
+                kept = tried;
+                keptStates = states;
             } else {
                 met.subList(start, met.size()).clear();
             }
+            if (keptStates == HowMuchItStates.ALL_OF_IT_OVER_THE_INPUT) {
+                return kept;
+            }
         }
-        return first;
+        return kept;
+    }
+
+    /**
+     * How much a rule's conclusion states of the expression, most first. Two rules that state as
+     * much are as good as each other, and the first tried is kept.
+     */
+    private enum HowMuchItStates {
+
+        /** Every part read, and each over the input: where the input has to stand is said. */
+        ALL_OF_IT_OVER_THE_INPUT,
+
+        /** Every part read, some of it over a number only a run works out
+         *  ({@link Proposition#isOverWhatARunWorksOut}): the runs place it, and where the input
+         *  has to stand for it is not said. */
+        ALL_OF_IT_ON_THE_RUNS,
+
+        /** Some part unread, and which is said: it is made of parts, as a statement taken apart
+         *  by its cases with every case unread still says which cases there are. */
+        WHERE_IT_IS_UNREAD,
+
+        /** One part nothing read. */
+        NOTHING;
+
+        static HowMuchItStates of(Proposition stated) {
+            if (stopsAnywhere(stated)) {
+                return stated instanceof Proposition.Unread ? NOTHING : WHERE_IT_IS_UNREAD;
+            }
+            return Proposition.isOverWhatARunWorksOut(stated) ? ALL_OF_IT_ON_THE_RUNS
+                    : ALL_OF_IT_OVER_THE_INPUT;
+        }
     }
 
     /** Whether some part of {@code stated} is one nothing read. */

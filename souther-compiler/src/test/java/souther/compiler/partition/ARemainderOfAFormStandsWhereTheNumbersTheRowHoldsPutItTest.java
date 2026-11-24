@@ -9,6 +9,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.math.BigInteger;
@@ -97,6 +98,11 @@ class ARemainderOfAFormStandsWhereTheNumbersTheRowHoldsPutItTest {
         return new AnObservationOfAForm() {
 
             @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
+
+            @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
                 long value = A.equals(path) ? a : D.equals(path) ? d : e;
                 return WalkResult.reached(new ObservationAtPoint.Value(
@@ -132,6 +138,11 @@ class ARemainderOfAFormStandsWhereTheNumbersTheRowHoldsPutItTest {
 
     private static BorderQuantity.Observation row(long a, long d) {
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

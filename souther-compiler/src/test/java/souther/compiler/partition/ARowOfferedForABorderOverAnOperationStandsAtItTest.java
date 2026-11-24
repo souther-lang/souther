@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -242,7 +243,9 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         Map<String, String> rows = new LinkedHashMap<>();
         for (BorderAssessment border : lines) {
             border.items().forEach((role, item) -> {
-                if (item instanceof ItemAssessment.Owed owed
+                // A point a row there would say nothing owed about is not searched, and offers
+                // nothing.
+                if (item instanceof ItemAssessment.Owed owed && owed.searches().ran()
                         && owed.searches().only() instanceof ItemAssessment.Attempt.Built built) {
                     rows.put(border.label() + " " + border.border().named(role),
                             as.apply(built.row()));
@@ -279,9 +282,7 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
 
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<BorderAssessment> lines(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(read, () -> "the model under test compiles: " + source);

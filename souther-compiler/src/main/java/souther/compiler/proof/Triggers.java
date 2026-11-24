@@ -58,6 +58,11 @@ final class Triggers {
                 in(one, which, out);
                 in(other, which, out);
             }
+            case LawProposition.Inside<Slot>(LawSubject<Slot> inner, LawSubject<Slot> outer, var _,
+                                             var _) -> {
+                in(inner, which, out);
+                in(outer, which, out);
+            }
         }
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -139,17 +140,86 @@ class WhatOrderedRulesLeaveEachPositionTest {
     }
 
     /**
-     * A choice between two rules is the ends around both.
+     * A choice between two rules is the two runs, and its ends are the ends around both.
      *
-     * <p>The hull and not the union: a pair of ends cannot say "5 to 9 or 20 to 30", and the ends
-     * around both admit everything either does. Wide is the direction this must err in.
+     * <p>A pair of ends cannot say "5 to 9 or 20 to 30", and a reader of ends is handed the ends
+     * around both, which admit everything either does. The runs are what a reader choosing a value
+     * is handed, and a value between them is one neither rule admits.
      */
     @Test
-    void aChoiceBetweenTwoRulesLeavesTheEndsAroundBoth() {
+    void aChoiceBetweenTwoRulesLeavesBothRunsInsideTheEndsAroundThem() {
         OrderedIntervals<String> either = OrderedIntervals.at(A, from(5, 9))
                 .joinLive(OrderedIntervals.at(A, from(20, 30)));
 
         assertEquals(from(5, 30), either.statedAt(A));
+        assertEquals(List.of(from(5, 9), from(20, 30)), either.runsAt(A).runs());
+    }
+
+    /** And a rule met with them leaves what it holds of each, which may be none of either. */
+    @Test
+    void aRuleMetWithTwoRunsLeavesWhatItHoldsOfEach() {
+        OrderedIntervals<String> either = OrderedIntervals.at(A, from(5, 9))
+                .joinLive(OrderedIntervals.at(A, from(20, 30)));
+
+        assertEquals(List.of(from(8, 9), from(20, 25)),
+                either.meet(OrderedIntervals.at(A, from(8, 25))).runsAt(A).runs());
+        assertEquals(List.of(from(20, 25)),
+                either.meet(OrderedIntervals.at(A, from(12, 25))).runsAt(A).runs(),
+                "one run is left, and is the position's range");
+        assertEquals(from(20, 25), either.meet(OrderedIntervals.at(A, from(12, 25))).statedAt(A));
+        assertTrue(either.meet(OrderedIntervals.at(A, from(12, 15))).isBottom(),
+                "a rule inside the gap leaves the position nothing, though the ends around the"
+                        + " runs hold it");
+        assertEquals(Set.of(A),
+                either.meet(OrderedIntervals.at(A, from(12, 15))).holdingNothing());
+    }
+
+    /**
+     * A meet of runs apart with a range is whatever it comes to — two runs, one, or none — and each
+     * is said as itself.
+     */
+    @Test
+    void runsApartMetWithARangeComeToTwoRunsOneOrNone() {
+        OrderedRuns apart = OrderedRuns.of(List.of(below(-1), above(101)));
+
+        assertEquals(List.of(from(-10, -1), from(101, 110)),
+                apart.meet(OrderedRuns.of(from(-10, 110))).runs());
+        assertEquals(List.of(from(101, 150)), apart.meet(OrderedRuns.of(from(0, 150))).runs(),
+                "one run, which is not the ends around both met with the range");
+        assertTrue(apart.meet(OrderedRuns.of(from(0, 100))).holdsNothing(),
+                "and none, which is not the range");
+        assertEquals(List.of(), apart.partsOf(new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(100)))));
+        assertTrue(apart.meet(OrderedRuns.of(from(0, 100))).hull().holdsNothing(),
+                "the ends around nothing are an interval holding nothing");
+        assertEquals(apart.meet(OrderedRuns.of(from(0, 100))),
+                apart.meet(OrderedRuns.of(from(20, 30))), "nothing is nothing however it was reached");
+    }
+
+    /**
+     * Runs that overlap or touch are one run, and a choice is the same runs whichever way round it
+     * was written and however it was grouped.
+     */
+    @Test
+    void theRunsOfAChoiceAreTheValuesAndNotHowTheyWereWritten() {
+        OrderedInterval toFour = from(0, 4);
+        OrderedInterval pastFour = new OrderedInterval(Endpoint.exclusive(Count.of(4)),
+                Endpoint.inclusive(Count.of(9)));
+        OrderedInterval shortOfFour = new OrderedInterval(Endpoint.inclusive(Count.of(0)),
+                Endpoint.exclusive(Count.of(4)));
+
+        assertEquals(List.of(from(0, 9)), OrderedRuns.of(List.of(toFour, pastFour)).runs(),
+                "four is held by the first, so nothing lies between them");
+        assertEquals(2, OrderedRuns.of(List.of(shortOfFour, pastFour)).runs().size(),
+                "four is held by neither");
+        assertEquals(List.of(from(0, 12)),
+                OrderedRuns.of(List.of(from(5, 12), from(0, 6))).runs());
+
+        OrderedIntervals<String> one = OrderedIntervals.at(A, from(0, 1));
+        OrderedIntervals<String> two = OrderedIntervals.at(A, from(5, 6));
+        OrderedIntervals<String> three = OrderedIntervals.at(A, from(10, 11));
+        assertEquals(one.joinLive(two).joinLive(three), three.joinLive(one.joinLive(two)));
+        assertEquals(one.joinLive(two).joinLive(three), two.joinLive(three).joinLive(one));
     }
 
     /**

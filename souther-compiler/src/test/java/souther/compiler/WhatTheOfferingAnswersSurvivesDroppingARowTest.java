@@ -143,10 +143,10 @@ class WhatTheOfferingAnswersSurvivesDroppingARowTest {
     private static Settlements table() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.shipping");
-        assertNotNull(generated, "the model under test compiles: " + compilation.errors());
+        assertNotNull(generated, "the model under test is offered rows");
         Composition composed = Composition.composed(
                 OfferingRequest.overTheModule("example.shipping"), generated,
                 Adequacy.accountFor(compilation.db(), "example.shipping",

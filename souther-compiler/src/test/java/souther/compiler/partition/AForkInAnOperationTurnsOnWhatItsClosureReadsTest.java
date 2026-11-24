@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -163,10 +164,7 @@ class AForkInAnOperationTurnsOnWhatItsClosureReadsTest {
 
     private static Map<String, PartitionEvidence> measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return compilation.db().ask(new Adequacy.Coverage("kept")).value();
     }
 }

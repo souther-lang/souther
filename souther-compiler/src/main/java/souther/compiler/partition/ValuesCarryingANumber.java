@@ -109,7 +109,7 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
         }
         Partitions.FieldsChosen rest = Partitions.fieldsOf(record,
                 Partitions.rulesOver(built.worn(), record, reading.source()), reading, Set.of(),
-                composed);
+                composed, Partitions.RulesAround.NONE);
         return new Partitions.FieldsChosen(rest.fields(), met.and(rest.met()));
     }
 
@@ -118,7 +118,8 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
      * and hand no container a value.
      */
     @Override
-    public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
+    public ContainerContents contentsOf(TermPath container, PlanComposer.Under under,
+                                        PlanComposer.Writing writing) {
         throw new IllegalStateException("a plan composed around one number hands `" + container
                 + "` no value, so nothing is asked what it holds");
     }

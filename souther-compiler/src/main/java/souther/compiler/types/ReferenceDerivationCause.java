@@ -83,4 +83,20 @@ public sealed interface ReferenceDerivationCause extends RecordOfTheBuilding {
             }
         }
     }
+
+    /**
+     * A number of the date a move by months is made from, named to state the cases the move is
+     * read in.
+     *
+     * <p>The operation that answers the month, the year or the day is a name this compiler wrote,
+     * so it is a reference of its own, derived from the one the author's move reached.
+     */
+    record NumberOfADateMovedReference(ReferenceOrigin from) implements ReferenceDerivationCause {
+
+        public NumberOfADateMovedReference {
+            if (from == null) {
+                throw new IllegalArgumentException("a number of a date moved is of some move");
+            }
+        }
+    }
 }

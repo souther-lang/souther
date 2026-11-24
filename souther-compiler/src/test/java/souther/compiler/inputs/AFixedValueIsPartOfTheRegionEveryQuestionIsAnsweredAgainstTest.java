@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -173,6 +175,36 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 "x held apart from 5 holds x = 6");
     }
 
+    /**
+     * What the conditions taken in pin a position to is pinned whatever else is fixed: {@code x}
+     * held apart from 1 where {@code x = y} and {@code y = 1} are taken in is refused with
+     * {@code z} fixed as without.
+     */
+    @Test
+    void aPinTheConditionsMakeIsRefusedWhateverElseIsFixed() {
+        Count one = Count.of(BigDecimal.ONE);
+        SearchRegion pinned = region().apartFrom(term("x"), one)
+                .assuming(minus("x", "y"), Rel.EQ).taken()
+                .assuming(LinearForm.<NumericTerm>atomMinusConstant(term("y"), ExactRatio.ONE),
+                        Rel.EQ).taken();
+        assertTrue(pinned.emptiness().isPresent());
+        assertTrue(pinned.given(term("z"), Count.of(BigDecimal.TEN)).emptiness().isPresent());
+    }
+
+    /**
+     * A row is no witness where it puts a position on its hole, however the position got there:
+     * {@code x} held apart from 1 with {@code x = y} taken in, and the row fixing {@code y} and
+     * {@code x} at 1, is refused in either order the two are fixed in.
+     */
+    @Test
+    void aRowPuttingAPositionOnItsHoleIsRefusedInEitherOrder() {
+        Count one = Count.of(BigDecimal.ONE);
+        SearchRegion held = region().apartFrom(term("x"), one)
+                .assuming(minus("x", "y"), Rel.EQ).taken();
+        assertTrue(held.given(term("y"), one).given(term("x"), one).emptiness().isPresent());
+        assertTrue(held.given(term("x"), one).given(term("y"), one).emptiness().isPresent());
+    }
+
     /** And a fixing beside the hole is not. */
     @Test
     void andAFixingBesideTheHoleIsNot() {
@@ -180,6 +212,34 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                         .given(term("x"), Count.of(BigDecimal.valueOf(6)))
                         .emptiness().isPresent(),
                 "x held apart from 5 holds 6");
+    }
+
+    /**
+     * Where the fixed numbers stand is the numbers' and not the values': a search fixing the same
+     * term at one value after another asks it once, and terms that are not the same are not mixed.
+     */
+    @Test
+    void regionsFixingTheSameTermsAtOtherValuesAreAskedWhereTheyStandOnce() {
+        SearchRegion base = region();
+        long before = ReadQuantities.standingsWorkedOut();
+
+        for (int value = 0; value < 5; value++) {
+            base.given(term("x"), Count.of(BigDecimal.valueOf(value))).emptiness();
+        }
+        assertEquals(1, ReadQuantities.standingsWorkedOut() - before,
+                "the same term at five values was worked out more than once");
+
+        for (int value = 0; value < 5; value++) {
+            base.given(term("x"), Count.of(BigDecimal.valueOf(value)))
+                    .given(term("y"), Count.of(BigDecimal.valueOf(value))).emptiness();
+        }
+        assertEquals(2, ReadQuantities.standingsWorkedOut() - before,
+                "two terms were taken for the one that was asked before, or asked more than once");
+
+        base.given(term("y"), Count.of(BigDecimal.ONE))
+                .given(term("x"), Count.of(BigDecimal.ONE)).emptiness();
+        assertEquals(3, ReadQuantities.standingsWorkedOut() - before,
+                "the terms listed in the other order were taken for the same list");
     }
 
     /** Where the term runs, of a region that holds something — which every region here does. */
@@ -238,14 +298,14 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
     }
 
     private static Read read() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get("read"), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none()), rules);

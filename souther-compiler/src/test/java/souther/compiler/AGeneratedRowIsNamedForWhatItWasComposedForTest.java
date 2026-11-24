@@ -83,12 +83,12 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
     private static String block(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule(compilation.modules().get(0))),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
     }
 
     /** Two minimum edges of one behavior, which compose one row between them. */
@@ -111,7 +111,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
             let fee (days, policy) = {
                 let accrued = days * policy.rate.value
 
-                if accrued > policy.cap.value then policy.cap.value else accrued
+                if accrued >= policy.cap.value then policy.cap.value else accrued
             }
 
             example fee
@@ -163,8 +163,8 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
 
         RowsOfABlock.Row was = RowsOfABlock.at(before, SILVER);
         RowsOfABlock.Row is = RowsOfABlock.at(after, SILVER);
-        assertEquals(Optional.of("request.tier=Silver"), was.name(), before);
-        assertEquals(Optional.of("request.tier=Silver"), is.name(),
+        assertEquals(Optional.of("Silver at request.tier"), was.name(), before);
+        assertEquals(Optional.of("Silver at request.tier"), is.name(),
                 "and the same name once a row meets the line it stood at: " + after);
 
         assertTrue(was.fills().contains("value = 0"),
@@ -185,7 +185,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String before = block(LIMIT);
         String after = block(AND_A_ROW);
 
-        String over = "request.cost=100 < x";
+        String over = "request.cost: 100 < x at request.cost";
         RowsOfABlock.Row was = RowsOfABlock.forThe(before, over);
         RowsOfABlock.Row is = RowsOfABlock.forThe(after, over);
         assertEquals(Optional.empty(), was.name(),
@@ -206,9 +206,9 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         String before = block(LIMIT);
         String after = block(AND_A_ROW);
 
-        assertTrue(RowsOfABlock.of(before).stream().anyMatch(row -> row.isFor("request.tier=Silver")),
+        assertTrue(RowsOfABlock.of(before).stream().anyMatch(row -> row.isFor("Silver at request.tier")),
                 "the class the row was written for was owed: " + before);
-        assertTrue(RowsOfABlock.of(after).stream().noneMatch(row -> row.isFor("request.tier=Silver")),
+        assertTrue(RowsOfABlock.of(after).stream().noneMatch(row -> row.isFor("Silver at request.tier")),
                 "and is not owed once a row sits in it: " + after);
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ModulePath;
@@ -49,7 +50,7 @@ class AForkThatAnswersAFunctionIsCountedLikeAnyOtherTest {
             """;
 
     private final Compilation compilation =
-            Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
+            ACompiledModel.compiles(Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY));
 
     private Bodies.Elaborated checked() {
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(MODULE)).value();

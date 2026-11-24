@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import souther.compiler.cst.SourceSpace;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
@@ -151,7 +152,7 @@ final class Rewrites {
         SyntaxToken arrow = lambda.token(SyntaxKind.ARROW).orElseThrow();
         int from = lambda.token(SyntaxKind.LPAREN).map(SyntaxToken::start).orElseGet(
                 () -> firstParameter(lambda).start());
-        String params = text(lambda, from, arrow.start()).strip();
+        String params = SourceSpace.strip(text(lambda, from, arrow.start()));
         return new Site(Kind.A_DEFINITIONS_PARAMETERS, assign.start(), arrow.end(),
                 (params.startsWith("(") ? params : "(" + params + ")") + " =",
                 text(definition, assign.start(), arrow.end()));

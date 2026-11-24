@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.PointRole;
 
 import java.util.List;
@@ -46,9 +47,7 @@ class ASearchIsAskedForAndAMeasurementIsNotTest {
             """;
 
     private static Compilation measured(Adequacy.Level level) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.reportOnly(level));
         // What a report reads, which is what puts the questions this is about. A compile answers it
         // when something asks for the report, and nothing here is printing one.
         assertNotNull(compilation.db().ask(new Adequacy.Coverage(MODULE)).value(),
@@ -148,9 +147,8 @@ class ASearchIsAskedForAndAMeasurementIsNotTest {
      */
     @Test
     void generatingForOneBehaviorSearchesNoOther() {
-        Compilation compilation = Compilation.ofSource(TWO, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(TWO, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.db().ask(new Adequacy.Generated("example.two", "first"));
 
         Map<Key<?>, Answer<?>> answered = compilation.db().everyAnswer();

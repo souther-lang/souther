@@ -8,6 +8,7 @@ import souther.compiler.observe.WrittenStatements.Unread;
 import souther.compiler.observe.WrittenStatements.UnreadFake;
 import souther.compiler.source.SourceId;
 
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.ast.Hir;
@@ -222,9 +223,63 @@ public final class ExampleStatements {
      * <p>Off the same reading the dispatch falls through by, so the two cannot come apart: a reader
      * told a table answers everything and a dispatch that then refuses a call would be two answers
      * to one question, and the reader's is the one somebody acted on.
+     *
+     * <p>A table with no {@code _} row answers every call too where its rows state every value its
+     * parameters can take. That is shown by counting and not by listing: when the rows state as
+     * many different argument lists as the parameters' types have values at most, there is no
+     * argument list left for a call to ask about that a row does not state. A row counts only
+     * where each argument is written as a value that is only itself — a literal, or a unit data
+     * named — since two other expressions may be one value and be counted twice.
+     *
+     * @param mostValues how many values each parameter takes at most, in order, -1 where nothing
+     *                   bounds them
      */
-    public static boolean answersEveryCall(Hir.Fake table) {
-        return fallenThroughTo(table) != null;
+    public static boolean answersEveryCall(Hir.Fake table, List<Long> mostValues) {
+        if (fallenThroughTo(table) != null) {
+            return true;
+        }
+        long calls = 1;
+        for (long most : mostValues) {
+            if (most < 0) {
+                return false;
+            }
+            try {
+                calls = Math.multiplyExact(calls, most);
+            } catch (ArithmeticException tooMany) {
+                return false;
+            }
+        }
+        Set<List<Object>> stated = new LinkedHashSet<>();
+        for (Hir.FakeRow row : table.rows()) {
+            if (row.matched() instanceof Hir.Matched.Arguments(List<Hir.Expr> inputs)
+                    && inputs.size() == mostValues.size()) {
+                List<Object> values = new ArrayList<>(inputs.size());
+                for (Hir.Expr input : inputs) {
+                    Object only = onlyItself(input);
+                    if (only == null) {
+                        break;
+                    }
+                    values.add(only);
+                }
+                if (values.size() == inputs.size()) {
+                    stated.add(values);
+                }
+            }
+        }
+        return stated.size() >= calls;
+    }
+
+    /** What {@code written} is, where it is a value no other expression can be written as the same
+     *  of, and null where it may be one. */
+    private static Object onlyItself(Hir.Expr written) {
+        return switch (written) {
+            case Hir.IntLit lit -> lit.value();
+            case Hir.StringLit lit -> lit.value();
+            case Hir.BoolLit lit -> lit.value();
+            case Hir.Var.Denoting var when var.denotes() instanceof ValueName.OfType unit ->
+                    unit.type();
+            default -> null;
+        };
     }
 
     /** What the author wrote for a fake's target, for a message that quotes the source. */
@@ -327,10 +382,8 @@ public final class ExampleStatements {
             // without it, so the reading gets as far as the comparison. What ends it is not about any
             // fake — every one in every module would say the same thing — and it is recorded once,
             // where the rows are evaluated, as `within` answers for a build that could not start.
-            if (runtimeAbsent(e)) {
-                return Readings.NONE;
-            }
-            throw e;
+            EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
+            return Readings.NONE;
         }
     }
 
@@ -520,14 +573,12 @@ public final class ExampleStatements {
         // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
         // late worker can still write to is that reader, and the statement after it gets another.
         FixtureReader reader = readers.get();
-        switch (deadline.given(what, () -> counted(() -> read.apply(reader)))) {
-            case Deadline.Outcome.Finished(T value) -> {
-                return new Read.Got<>(value);
-            }
+        return switch (deadline.given(what, () -> counted(() -> read.apply(reader)))) {
+            case Deadline.Outcome.Finished(T value) -> new Read.Got<>(value);
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Nothing here was going to read how far it got, so it is given up on at once.
                 abandon.run();
-                return new Read.Unanswered<>(deadline.timeout());
+                yield new Read.Unanswered<>(deadline.timeout());
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The reading spent what the policy allows. That is an answer about the statements —
@@ -537,10 +588,10 @@ public final class ExampleStatements {
                 // wrapped (EvaluationContext.overspent).
                 RuntimeException stop = EvaluationContext.overspent(cause);
                 if (stop instanceof StepLimitExceeded) {
-                    return new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
+                    yield new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
                 }
                 if (stop instanceof DepthLimitExceeded) {
-                    return new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
+                    yield new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
                             policy.recursionDepthLimit());
                 }
                 // The stack ran out. Said here for the reason the two above are: everything the
@@ -553,13 +604,13 @@ public final class ExampleStatements {
                     // anywhere else arrives raw. Recognising only the raw one left the named one to
                     // the rethrow below, where a `RuntimeException` leaves the compilation as a
                     // failure of the compiler rather than as a report about the table.
-                    return new Read.StackRanOut<>(policy.recursionDepthLimit());
+                    yield new Read.StackRanOut<>(policy.recursionDepthLimit());
                 }
                 // One thing ends a reading without the model or this code being at fault: a host with
                 // no runtime to build a value against, since the runtime is `provided` (as it is for
                 // CTFE).
-                if (runtimeAbsent(cause)) {
-                    return new Read.RuntimeAbsent<>();
+                if (GeneratedLinkage.runtimeAbsent(cause)) {
+                    yield new Read.RuntimeAbsent<>();
                 }
                 // Anything else is this code being wrong. An empty reading says the statements agree,
                 // so answering with one would leave a broken compiler reporting every model
@@ -572,7 +623,7 @@ public final class ExampleStatements {
                 }
                 throw new IllegalStateException(cause);
             }
-        }
+        };
     }
 
     /**
@@ -590,21 +641,6 @@ public final class ExampleStatements {
         } finally {
             EvaluationContext.end();
         }
-    }
-
-    /**
-     * Whether {@code cause} is this host having no runtime rather than anything being wrong.
-     *
-     * <p>The runtime is {@code provided}, so a build that compiles Souther without it on the class
-     * path can generate the classes and not load them. That is the one {@link LinkageError} that says
-     * nothing about the model or about this code — the rest of the family says a class was generated
-     * or loaded wrong ({@code VerifyError}, {@code ClassFormatError}, {@code NoSuchMethodError}), and
-     * reading those as "no runtime" would let a broken back end report every model consistent.
-     */
-    private static boolean runtimeAbsent(Throwable cause) {
-        return cause instanceof NoClassDefFoundError missing
-                && missing.getMessage() != null
-                && missing.getMessage().replace('/', '.').startsWith("souther.runtime.");
     }
 
     /**

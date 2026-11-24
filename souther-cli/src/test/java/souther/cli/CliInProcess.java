@@ -1,6 +1,7 @@
 package souther.cli;
 
 import souther.cli.CliProcess.Ran;
+import souther.test.WrittenOn;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -64,7 +65,7 @@ final class CliInProcess {
         given.putAll(properties);
         return new Environment(variables, given, workingDirectory, in,
                 new PrintStream(out, true, StandardCharsets.UTF_8),
-                new PrintStream(err, true, StandardCharsets.UTF_8), false);
+                new PrintStream(err, true, StandardCharsets.UTF_8), false, WrittenOn.DAY);
     }
 
     /** Run in {@code scratch}, with these variables, no property of its own and no input. */

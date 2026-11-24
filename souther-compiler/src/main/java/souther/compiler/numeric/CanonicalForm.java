@@ -48,9 +48,15 @@ import java.util.function.Function;
  * them rendering alike are not one position ({@link souther.compiler.check.Term}) — so an order
  * taken off the renderings would weigh one of such a pair twice and the other never.
  */
-public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
+public final class CanonicalForm<A> {
 
-    public CanonicalForm {
+    private final Map<A, ExactRatio> coefs;
+
+    /** Worked out on the first question and kept; zero until then, and a form whose hash is zero
+     *  works it out again, which is no wrong answer. */
+    private int hash;
+
+    public CanonicalForm(Map<A, ExactRatio> coefs) {
         if (coefs == null || coefs.isEmpty()) {
             throw new IllegalArgumentException("a form names at least one position");
         }
@@ -71,7 +77,33 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
         // Held in no order at all, which is what this says it is. Every walk of these positions
         // asks for one ({@link #entriesIn}) and nothing takes them as they come, which is a rule
         // rather than a habit — AFormIsWalkedThroughTheOrderItsPositionsDecideTest.
-        coefs = Map.copyOf(coefs);
+        this.coefs = Map.copyOf(coefs);
+    }
+
+    public Map<A, ExactRatio> coefs() {
+        return coefs;
+    }
+
+    /**
+     * Forms that weigh the same positions the same are one form. The hash is asked first, since a
+     * rule is compared with every rule read before it and almost all of them are another form: it is
+     * held, and settles those without reading the positions of either.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return this == other
+                || (other instanceof CanonicalForm<?> it && hashCode() == it.hashCode()
+                        && coefs.equals(it.coefs));
+    }
+
+    @Override
+    public int hashCode() {
+        int held = hash;
+        if (held == 0) {
+            held = coefs.hashCode();
+            hash = held;
+        }
+        return held;
     }
 
     /**
@@ -88,22 +120,26 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      *         form that exists and that this cannot write, and is not a form with no terms
      */
     public static <A> Normalized<A> of(Map<A, ExactRatio> coefs) {
-        // The mapping being built, in no order — what a form holds is in none, and one kept here
-        // would be one a reader could start taking again on the way in.
-        Map<A, ExactRatio> weighed = new HashMap<>();
-        coefs.forEach((atom, coef) -> {
-            if (!coef.isZero()) {
-                weighed.put(atom, coef);
-            }
-        });
-        if (weighed.isEmpty()) {
+        // What every weight shares, which is a question about the weights and not about which of
+        // them comes first — see AdditiveImage#divisorOf, where the fold is commutative. A weight
+        // of nought divides nothing and is divided by everything, so the positions the form does
+        // not name leave it as it is.
+        ExactRatio shared = AdditiveImage.divisorOf(coefs.values());
+        if (shared.isZero()) {
             return new NoTerms<>();
         }
-        // What every weight shares, which is a question about the weights and not about which of
-        // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
-        ExactRatio shared = AdditiveImage.divisorOf(weighed.values());
+        // Already in lowest terms and naming only positions it weighs, which is nearly every form
+        // here: it is its own canonical form, and nothing is built on the way to it.
+        if (shared.equals(ExactRatio.ONE) && !coefs.containsValue(ExactRatio.ZERO)) {
+            return new Scaled<>(new CanonicalForm<>(coefs), shared);
+        }
+        // The mapping being built, in no order — what a form holds is in none, and one kept here
+        // would be one a reader could start taking again on the way in.
         Map<A, ExactRatio> primitive = new HashMap<>();
-        for (Map.Entry<A, ExactRatio> each : weighed.entrySet()) {
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (each.getValue().isZero()) {
+                continue;
+            }
             switch (each.getValue().dividedBy(shared)) {
                 case ExactAnswer.Held<ExactRatio> held -> primitive.put(each.getKey(), held.value());
                 case ExactAnswer.Unheld<ExactRatio> unheld -> {
@@ -146,7 +182,12 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      *         typed — so the pair is named rather than chosen between
      */
     public List<Map.Entry<A, ExactRatio>> entriesIn(CanonicalOrder<A> order) {
-        return order.walking(coefs.entrySet(), Map.Entry::getKey);
+        return order.walkOf(this, () -> order.walking(coefs.entrySet(), Map.Entry::getKey));
+    }
+
+    /** Whether every position this form names is one of {@code positions}. */
+    boolean namesOnly(Set<A> positions) {
+        return positions.containsAll(coefs.keySet());
     }
 
     /** The positions this form weighs, in the one order {@code order} puts them in — see
@@ -189,6 +230,23 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
         Map<B, ExactRatio> out = new HashMap<>();
         coefs.forEach((atom, coef) -> out.put(naming.of(atom), coef));
         return new CanonicalForm<>(out);
+    }
+
+    /**
+     * Whether this is {@code other} with every coefficient turned around, asked without building
+     * that form ({@code equals(other.negated())} builds and checks one).
+     */
+    public boolean isNegationOf(CanonicalForm<?> other) {
+        if (coefs.size() != other.coefs().size()) {
+            return false;
+        }
+        for (Map.Entry<?, ExactRatio> each : other.coefs().entrySet()) {
+            ExactRatio mine = coefs.get(each.getKey());
+            if (mine == null || !mine.equals(each.getValue().negated())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** This form with every coefficient turned around, which is what reading a comparison the other

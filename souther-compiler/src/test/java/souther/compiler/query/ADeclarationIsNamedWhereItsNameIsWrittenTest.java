@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
@@ -43,7 +44,7 @@ class ADeclarationIsNamedWhereItsNameIsWrittenTest {
     private static TypeSymbol under(int line, int column) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db()
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)).db()
                 .ask(new Names.TypeAt(caret(SOURCE, line, column))).value();
     }
 

@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
@@ -54,8 +56,7 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
     private static String chain(String module, String imports, String bottom, String rule,
                                 int links, String shape) {
         String name = module.equals("chain") ? "T" : "L";
-        StringBuilder src = new StringBuilder("module " + module + " exposing ( " + name + links
-                + " )\n\n").append(imports).append("data ").append(name).append("1 = ")
+        StringBuilder src = new StringBuilder("module " + module + "\n\n").append(imports).append("data ").append(name).append("1 = ")
                 .append(bottom).append('\n').append(rule);
         for (int i = 2; i <= links; i++) {
             src.append("data ").append(name).append(i).append(" = ")
@@ -70,9 +71,8 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
 
     private static Compilation compiled(Map<String, String> byId) {
         Compilation c = Compilation.ofDocuments(new LinkedHashMap<>(byId), Set.of(),
-                ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+                ModulePath.EMPTY).writtenOn(TestDay.DATE);
+        return ACompiledModel.compiles(c);
     }
 
     private static Compilation compiled(String source) {
@@ -104,9 +104,8 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
         List<String> afresh = onASmallStack(() -> said(compiled(chain(BOUNDED))));
         List<String> edited = onASmallStack(() -> {
             Compilation c = compiled(chain(UNBOUNDED));
-            c.answerEverything();
-            c.update(Map.of(ID, chain(BOUNDED)), Set.of());
-            c.answerEverything();
+            c.update(Map.of(ID, chain(BOUNDED)), Set.of(), TestDay.DATE);
+            ACompiledModel.compiles(c);
             return said(c);
         });
 
@@ -180,7 +179,7 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
      */
     @Test
     void eachCountReadsTheLinkItWrapsAndTheModuleReadsEachLinkOnce() {
-        Compilation c = onASmallStack(() -> compiled(chain(BOUNDED)));
+        Compilation c = ACompiledModel.compiles(onASmallStack(() -> compiled(chain(BOUNDED))));
         said(c);
 
         assertEquals(List.of(), countsRead(c.db(), link(1)), "the bottom link read a count");

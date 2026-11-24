@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.PathReachability;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPlace;
@@ -214,8 +215,6 @@ class AProofAboutAMatchArmSaysNothingAboutWhatIsAnsweredWithTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(model);
     }
 }

@@ -3,7 +3,7 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.diag.Severity;
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -206,14 +206,7 @@ class WhatTheExistingWayInReadingSaysTest {
 
     /** What the reading says about each arm the plan numbered. */
     private static List<PathAccess> accessOf(String behavior, String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream)
-                        .filter(said -> said.diagnostic().severity() == Severity.ERROR)
-                        .map(said -> said.diagnostic().code() + " " + said.diagnostic().titleKey())
-                        .toList(),
-                "a model that did not compile answers every question with nothing");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         InputDomain inputs =

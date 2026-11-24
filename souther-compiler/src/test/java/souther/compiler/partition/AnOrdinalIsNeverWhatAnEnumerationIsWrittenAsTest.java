@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.Count;
@@ -98,7 +99,7 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
     @Test
     void aPositionDeclaredAsOneCaseIsNotOnTheEnumerationsOrder() {
         souther.compiler.query.Compilation compilation =
-                souther.compiler.query.Compilation.ofSource("""
+                ACompiledModel.answered("""
                         module example.onecase
 
                         data Prospecting
@@ -113,7 +114,7 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                         behavior f : (s: Qualified) -> Verdict
                         let f (s) = { guard s < Won else Ok
                             No }
-                        """, "Main");
+                        """);
 
         assertNull(Carrier.ofValue(
                 Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Qualified"))),

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -60,7 +61,7 @@ class ALineOfAClauseIsNamedWithinThePartThatDrewItTest {
 
     /** The lines one behavior's clauses draw, through the readings a report is built from. */
     private static EnsuresThresholds.Clauses drawn(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

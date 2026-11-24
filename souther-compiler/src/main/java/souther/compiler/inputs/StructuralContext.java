@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,8 +17,13 @@ import java.util.Set;
  * question naming positions is a question asked of the rows that meet those conditions, and which
  * rules reach it is settled by that and by nothing else ({@link #holds}).
  *
+ * <p>And a container may be asked of holding none: what a walk over its elements comes to is a
+ * number of the container of none as well, so a question about one where nothing says whether the
+ * container holds something is asked of it holding something and of it holding none, as a sum is
+ * asked of each of its cases ({@link #holdingNothing}).
+ *
  * <p><b>Structural and nothing else.</b> It records the refinements selected and the containers
- * required to hold an element. It holds no numeric constraint, no fixed value and no
+ * required to hold an element or none. It holds no numeric constraint, no fixed value and no
  * assumption: <em>those are interpreted under this context, not made part of it.</em> Which is what
  * the name is for. Called a context outright it would be where the next reader files a fixed value —
  * a fixed value being part of the context of a question in every sense but this one — and the line
@@ -29,10 +36,12 @@ import java.util.Set;
  * per question instead, each reader would look at a path and decide for itself that a case was
  * wanted, and the readers would come apart one at a time.
  */
-record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContainers) {
+record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContainers,
+                         Set<TermPath> emptyContainers) {
 
     /** A question that assumes nothing: the parameters, and whatever stands under no condition. */
-    static final StructuralContext NONE = new StructuralContext(Requirements.NONE, Set.of());
+    static final StructuralContext NONE =
+            new StructuralContext(Requirements.NONE, Set.of(), Set.of());
 
     /**
      * One thing a question assumes about the row it is asked of.
@@ -52,6 +61,10 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
         /** The container at {@code container} holds an element, or the position named inside it
          *  stands nowhere. */
         record HoldingSomething(TermPath container) implements Assumption {}
+
+        /** The container at {@code container} holds no element: how many it holds is none, and
+         *  what a walk over its elements comes to is what the walk starts from. */
+        record HoldingNothing(TermPath container) implements Assumption {}
     }
 
     /**
@@ -65,11 +78,27 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
         List<Assumption> out = new ArrayList<>();
         refinements.refinements().forEach((at, is) -> out.add(new Assumption.TheCaseAt(at, is)));
         nonEmptyContainers.forEach(each -> out.add(new Assumption.HoldingSomething(each)));
+        emptyContainers.forEach(each -> out.add(new Assumption.HoldingNothing(each)));
         return List.copyOf(out);
     }
 
+    /**
+     * The containers held as a copy that says its hash without walking it, since a context is
+     * what every table of readings under one is keyed by.
+     *
+     * <p>No container both: a context saying one holds something and holds none describes no row,
+     * and none is made — a container is asked of holding none only where nothing has said it holds
+     * something ({@link #holdingNothing}).
+     */
     StructuralContext {
-        nonEmptyContainers = Set.copyOf(nonEmptyContainers);
+        nonEmptyContainers = InTheOrderGiven.set(nonEmptyContainers);
+        emptyContainers = InTheOrderGiven.set(emptyContainers);
+        for (TermPath each : emptyContainers) {
+            if (nonEmptyContainers.contains(each)) {
+                throw new IllegalArgumentException("`" + each + "` is said to hold something and"
+                        + " to hold none");
+            }
+        }
     }
 
     /**
@@ -83,7 +112,7 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
      */
     static StructuralContext of(TermPath path) {
         return new StructuralContext(path.requirements(),
-                new LinkedHashSet<>(path.containersHoldingIt()));
+                new LinkedHashSet<>(path.containersHoldingIt()), Set.of());
     }
 
     /**
@@ -92,7 +121,8 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
      * <p>Refinements are compared by {@link Requirements#merge} and by nothing written here: whether
      * two narrowings hold of one value is that type's question, asked by everything that decides
      * whether two positions can be in one row. Containers only accumulate — needing one to hold an
-     * element and needing another to hold one are never at odds.
+     * element and needing another to hold one are never at odds. A container held to none is
+     * asked of under a context nothing is merged into ({@link #holdingNothing}).
      */
     Merge merge(StructuralContext other) {
         return switch (refinements.merge(other.refinements)) {
@@ -100,7 +130,9 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
             case Requirements.Merge.Merged it -> {
                 Set<TermPath> both = new LinkedHashSet<>(nonEmptyContainers);
                 both.addAll(other.nonEmptyContainers);
-                yield new Merge.Together(new StructuralContext(it.requirements(), both));
+                Set<TermPath> none = new LinkedHashSet<>(emptyContainers);
+                none.addAll(other.emptyContainers);
+                yield new Merge.Together(new StructuralContext(it.requirements(), both, none));
             }
         };
     }
@@ -129,7 +161,8 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
      * position, which is a caller asking about a case it has already ruled out.
      */
     StructuralContext and(TermPath at, Refinement branch) {
-        return new StructuralContext(refinements.and(at, branch), nonEmptyContainers);
+        return new StructuralContext(refinements.and(at, branch), nonEmptyContainers,
+                emptyContainers);
     }
 
     /**
@@ -142,7 +175,26 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
     StructuralContext holding(TermPath container) {
         Set<TermPath> more = new LinkedHashSet<>(nonEmptyContainers);
         more.add(container);
-        return new StructuralContext(refinements, more);
+        return new StructuralContext(refinements, more, emptyContainers);
+    }
+
+    /**
+     * The same, with {@code container} holding no element.
+     *
+     * <p>What a question about a walk over a container's elements is asked of beside the container
+     * holding something, where nothing here says which: a sum of them is nought over none, and a
+     * question asked of the container holding something alone leaves out every row where it holds
+     * none. Never asked where this already says it holds something.
+     */
+    StructuralContext holdingNothing(TermPath container) {
+        Set<TermPath> more = new LinkedHashSet<>(emptyContainers);
+        more.add(container);
+        return new StructuralContext(refinements, nonEmptyContainers, more);
+    }
+
+    /** Whether this says whether {@code container} holds something, one way or the other. */
+    boolean says(TermPath container) {
+        return nonEmptyContainers.contains(container) || emptyContainers.contains(container);
     }
 
     /**
@@ -162,7 +214,8 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
                 return false;
             }
         }
-        return nonEmptyContainers.containsAll(other.nonEmptyContainers);
+        return nonEmptyContainers.containsAll(other.nonEmptyContainers)
+                && emptyContainers.containsAll(other.emptyContainers);
     }
 
     /**
@@ -181,11 +234,13 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
     boolean holds(RootOpening opening) {
         return switch (opening) {
             case RootOpening.Taken _ -> true;
-            case RootOpening.Refined it -> assumptions().contains(
-                    new Assumption.TheCaseAt(it.crossing().sum(),
-                            CasesLeft.of(it.crossing().branch())));
-            case RootOpening.Inside it ->
-                    assumptions().contains(new Assumption.HoldingSomething(it.container()));
+            // Asked of what is kept rather than of every assumption made anew: a reading asks this
+            // for each root it stands under, and one sum has one case taken in at most.
+            case RootOpening.Refined it -> {
+                CasesLeft kept = refinements.refinements().get(it.crossing().sum());
+                yield kept != null && kept.isExactly(it.crossing().branch());
+            }
+            case RootOpening.Inside it -> nonEmptyContainers.contains(it.container());
         };
     }
 }

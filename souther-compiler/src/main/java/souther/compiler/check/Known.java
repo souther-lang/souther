@@ -4,11 +4,12 @@ import souther.compiler.collect.AppendOnly;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ClosedStates;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.values.Allowance;
 
@@ -103,7 +104,9 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
          * choice kept so far, and a count kept per reading would have the path pay the whole of it
          * at each. Where it runs out the choices left stay undecided as they were when kept, and
          * what the path rules out then turns on the order the conditions were written in; nothing
-         * is ruled out that is not.
+         * is ruled out that is not. A part taken in short of it is said to have stopped at it
+         * ({@link WorkFigure#PARTS_A_PATH_SETTLES}), at this figure and
+         * not at what was left of it.
          */
         static final int PARTS_A_PATH_SETTLES = 4096;
 
@@ -202,8 +205,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * clauses are read at all, and both readings are asked about the same clauses. */
     record Unguarded(ConstraintState<FactSubject> constraints) {
 
-        Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
-            return new Unguarded(constraints.taking(f, rel, kinds));
+        Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, NumberSpace> spaces) {
+            return new Unguarded(constraints.taking(f, rel, spaces));
         }
 
         Unguarded taking(FactSubject key, boolean positive) {
@@ -246,7 +249,18 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * agreement — which is the shape this question already came apart along once.
      */
     boolean reachesNothing() {
-        return constraints.isBottom();
+        return constraints.leavesNoRow();
+    }
+
+    /**
+     * What is known of the values wherever they are named, with nothing a condition on the path
+     * said: the numbers and predicates {@link Unguarded} holds, and none of what a path adds beside
+     * them — the quantifiers a guard stated, the terms a guard spoke of, the cases it narrowed, the
+     * choices it held. A question asked of this one that comes out refuted is refuted by the values.
+     */
+    Known ofTheValuesAlone() {
+        return new Known(unguarded.constraints(), List.of(), AppendOnly.empty(), unguarded,
+                Map.of(), Choices.NONE);
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
@@ -275,9 +289,9 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
-    Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
-        return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases,
+    Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, NumberSpace> spaces) {
+        return new Known(constraints.taking(f, rel, spaces), quantified, spoken,
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, spaces) : unguarded, cases,
                 oneOf);
     }
 

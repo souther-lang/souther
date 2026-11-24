@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -159,7 +160,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
         for (HeldOutcome each : held) {
             entries.addAll(each.way().choosing(chosen).onTheWay());
         }
-        return Reachability.of(new WayToTheBorder(List.copyOf(entries)), declarations);
+        return Reachability.of(WayToTheBorder.forArrival(List.copyOf(entries)), declarations);
     }
 
     /**
@@ -175,14 +176,31 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
      * comparison or an application comes out a way, or for a truth no construct of its own
      * records, the arm a fork on it takes.
      */
-    @FunctionalInterface
-    public interface Of {
-
-        /** What brings a run to {@code place}, or why nothing does. */
-        Bringing at(ControlPlace place);
+    public record Of(Function<ControlPlace, Bringing> atAPoint,
+                     Function<ControlPlace, Bringing> onTheSide) {
 
         /** Nothing holds any condition — what a caller with no borders to read uses. */
-        Of NOTHING = _ -> new Bringing.NothingFound();
+        public static final Of NOTHING = new Of(_ -> new Bringing.NothingFound(),
+                _ -> new Bringing.NothingFound());
+
+        /**
+         * What brings a run to {@code place}, or why nothing does, as a row stepping past a guard
+         * is held: at the point of the comparison's border that is composed first, which is the
+         * row that is nearest to the guard.
+         */
+        public Bringing at(ControlPlace place) {
+            return atAPoint.apply(place);
+        }
+
+        /**
+         * The same, as a row making a combination of decisions is held: on the side the comparison
+         * comes out on, wherever on it. Which point of the side is not what a combination asks, and
+         * a point asked for it is one that another decision's demand may rule out while the side
+         * leaves values.
+         */
+        public Bringing onTheSideAt(ControlPlace place) {
+            return onTheSide.apply(place);
+        }
     }
 
     /**

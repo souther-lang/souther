@@ -6,11 +6,12 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.WrittenOwner;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -34,9 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Empty is an answer here. A comparison behind an abort is one the emitter numbers nothing for,
  * and what the index says of it is that — not that no run answers through it, and not that its
  * arrival could not be projected.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class WhereARunThroughAConstructOfTheModelIsRecordedTest {
 
     /** One helper called twice: two constructs of the model, and two places a run is recorded. */
@@ -133,7 +138,8 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
      */
     private static List<Compiled> everyModule() {
         List<Compiled> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (RepositoryModels.Model carried : RepositoryModels.all()) {
+            Compilation compilation = carried.answered();
             int before = out.size();
             modulesOf(compilation, out);
             assertTrue(out.size() > before,
@@ -145,8 +151,8 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
     }
 
     private static List<Compiled> compiled(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         List<Compiled> out = new ArrayList<>();
         modulesOf(compilation, out);
         assertTrue(!out.isEmpty(),

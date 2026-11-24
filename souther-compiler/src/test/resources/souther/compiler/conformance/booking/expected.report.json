@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 24,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "partial",
   "weakening" : [ "body_not_in_evaluation", "rule_unread" ],
@@ -1686,7 +1686,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -2600,7 +2601,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "voucher/= spring", "voucher//= spring" ],
+          "classes" : [ "voucher: = spring", "voucher: /= spring" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -2612,7 +2613,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "classes" : [ "party: 1 <= x <= 4", "party: 4 < x <= 8" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -3578,7 +3579,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -4551,7 +4553,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "ticket/String.startsWith(\"w-\", x)", "ticket/not String.startsWith(\"w-\", x)" ],
+          "classes" : [ "ticket: String.startsWith(\"w-\", x)", "ticket: not String.startsWith(\"w-\", x)" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -4563,7 +4565,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "party/1 <= x <= 4", "party/4 < x <= 8" ],
+          "classes" : [ "party: 1 <= x <= 4", "party: 4 < x <= 8" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -5223,8 +5225,8 @@
             "other" : "seat/party",
             "total" : 4,
             "kept" : [ {
-              "one" : "ticket/String.startsWith(\"w-\", x)",
-              "other" : "party/1 <= x <= 4",
+              "one" : "ticket: String.startsWith(\"w-\", x)",
+              "other" : "party: 1 <= x <= 4",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5232,8 +5234,8 @@
                 "position" : "seat/ticket"
               } ]
             }, {
-              "one" : "ticket/String.startsWith(\"w-\", x)",
-              "other" : "party/4 < x <= 8",
+              "one" : "ticket: String.startsWith(\"w-\", x)",
+              "other" : "party: 4 < x <= 8",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5241,8 +5243,8 @@
                 "position" : "seat/ticket"
               } ]
             }, {
-              "one" : "ticket/not String.startsWith(\"w-\", x)",
-              "other" : "party/1 <= x <= 4",
+              "one" : "ticket: not String.startsWith(\"w-\", x)",
+              "other" : "party: 1 <= x <= 4",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5250,8 +5252,8 @@
                 "position" : "seat/ticket"
               } ]
             }, {
-              "one" : "ticket/not String.startsWith(\"w-\", x)",
-              "other" : "party/4 < x <= 8",
+              "one" : "ticket: not String.startsWith(\"w-\", x)",
+              "other" : "party: 4 < x <= 8",
               "by" : [ {
                 "reason" : "a_decision_nothing_names"
               }, {
@@ -5264,7 +5266,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -5287,7 +5290,7 @@
               "outcome" : "held",
               "notRead" : [ {
                 "kind" : "meaning_unread",
-                "reason" : "no_words_for_what_it_comes_to"
+                "reason" : "string_at_no_position"
               } ]
             } ]
           },
@@ -5307,7 +5310,7 @@
               "outcome" : "held",
               "notRead" : [ {
                 "kind" : "meaning_unread",
-                "reason" : "no_words_for_what_it_comes_to"
+                "reason" : "string_at_no_position"
               } ]
             } ]
           },
@@ -5323,7 +5326,7 @@
               "outcome" : "denied",
               "notRead" : [ {
                 "kind" : "meaning_unread",
-                "reason" : "no_words_for_what_it_comes_to"
+                "reason" : "string_at_no_position"
               } ]
             } ]
           },
@@ -5347,7 +5350,7 @@
             "outcome" : "denied",
             "notRead" : [ {
               "kind" : "meaning_unread",
-              "reason" : "no_words_for_what_it_comes_to"
+              "reason" : "string_at_no_position"
             } ]
           } ]
         },
@@ -5361,7 +5364,7 @@
     "incompleteness" : [ ],
     "declarations" : [ ],
     "behaviors" : [ {
-      "name" : "hold",
+      "name" : "placeHold",
       "implementation" : "implemented",
       "rows" : 0,
       "pending" : 0,
@@ -5402,7 +5405,8 @@
         "boundaries" : [ ],
         "obligations" : [ ],
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -5521,6 +5525,18 @@
             "ordinal" : 2,
             "lowered" : 0
           }
+        } ],
+        "caseExpansions" : [ ],
+        "stopsPastTheRepresentation" : [ {
+          "operation" : "String.uppercase",
+          "at" : {
+            "sourceId" : "5",
+            "line" : 15,
+            "column" : 32,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          }
         } ]
       },
       "branch" : {
@@ -5540,7 +5556,7 @@
               "outcome" : "held",
               "notRead" : [ {
                 "kind" : "meaning_unread",
-                "reason" : "no_words_for_what_it_comes_to"
+                "reason" : "string_at_no_position"
               } ]
             } ]
           },
@@ -5556,7 +5572,7 @@
               "outcome" : "denied",
               "notRead" : [ {
                 "kind" : "meaning_unread",
-                "reason" : "no_words_for_what_it_comes_to"
+                "reason" : "string_at_no_position"
               } ]
             } ]
           },
@@ -5607,7 +5623,7 @@
             "outcome" : "denied",
             "notRead" : [ {
               "kind" : "meaning_unread",
-              "reason" : "no_words_for_what_it_comes_to"
+              "reason" : "string_at_no_position"
             } ]
           } ]
         },
@@ -6808,7 +6824,8 @@
             "declaredOn" : "Stay",
             "clause" : 0
           }
-        } ]
+        } ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -6874,11 +6891,2264 @@
         "code" : "E1935"
       } ]
     } ]
+  }, {
+    "module" : "conformance.allowances",
+    "status" : "partial",
+    "weakening" : [ "rule_unread" ],
+    "incompleteness" : [ ],
+    "declarations" : [ {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.allowances",
+        "name" : "Nights"
+      } ],
+      "name" : "Nights",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.allowances",
+                "declaredOn" : "Nights",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Nights #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.allowances",
+          "declaredOn" : "Nights",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "draw",
+          "axis" : "draw/a",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "draw",
+          "axis" : "draw/b",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "draw",
+          "axis" : "draw/c",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "draw",
+          "axis" : "draw/used",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.allowances",
+                "declaredOn" : "Nights",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_order_end",
+            "towards" : "above"
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Nights #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.allowances",
+          "declaredOn" : "Nights",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 < value",
+        "knownWritable" : true,
+        "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "draw",
+          "axis" : "draw/a",
+          "relation" : "in",
+          "against" : "0 < a",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "draw",
+          "axis" : "draw/b",
+          "relation" : "in",
+          "against" : "0 < b",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "draw",
+          "axis" : "draw/c",
+          "relation" : "in",
+          "against" : "0 < c",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "draw",
+          "axis" : "draw/used",
+          "relation" : "in",
+          "against" : "0 < used",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      } ],
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.allowances",
+                "declaredOn" : "Nights",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.allowances",
+          "declaredOn" : "Nights",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.allowances",
+                "declaredOn" : "Nights",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.allowances",
+          "declaredOn" : "Nights",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.allowances",
+                "declaredOn" : "Nights",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.allowances",
+          "declaredOn" : "Nights",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
+    } ],
+    "behaviors" : [ {
+      "name" : "draw",
+      "implementation" : "implemented",
+      "rows" : 0,
+      "pending" : 0,
+      "rowObligations" : [ ],
+      "rowsThatDoNotHold" : [ ],
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
+      "signature" : {
+        "status" : "unavailable",
+        "reason" : "not_a_sum",
+        "output" : {
+          "declared" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        }, {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        }, {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        }, {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
+        },
+        "boundariesMeasure" : {
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
+        },
+        "axes" : [ {
+          "axis" : "draw/used",
+          "path" : "used",
+          "read" : {
+            "extent" : "partial"
+          },
+          "classes" : [ "used: 0 <= x <= 0", "used: 0 < x" ],
+          "use" : "read",
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ],
+        "unanswered" : [ {
+          "at" : "a",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "a",
+            "measure" : "a"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "b",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "b",
+            "measure" : "b"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "used",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "used",
+            "measure" : "used"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "c",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "c",
+            "measure" : "c"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "used"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.allowances",
+                  "declaredOn" : "Nights",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "draw/used",
+          "origin" : "invariant Nights #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < used",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "used"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "no_place_of_the_line"
+            }
+          },
+          "axis" : "draw/used",
+          "origin" : "comparison@7:23:19",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "a_count",
+                "at" : "0"
+              },
+              "per" : "1",
+              "inclusive" : true
+            } ]
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < used",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "a"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.allowances",
+                  "declaredOn" : "Nights",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "draw/a",
+          "origin" : "invariant Nights #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < a",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "b"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.allowances",
+                  "declaredOn" : "Nights",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "draw/b",
+          "origin" : "invariant Nights #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < b",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "c"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.allowances",
+                  "declaredOn" : "Nights",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "draw/c",
+          "origin" : "invariant Nights #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < c",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "between_positions",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "a"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "used"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
+            }
+          },
+          "axis" : "draw/used",
+          "origin" : "comparison@7:23:19",
+          "kind" : "between_positions",
+          "value" : "a",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "a",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "relation" : "=",
+            "against" : "a + 1",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "used < a",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "a + 1 < used",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "over_a_form",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "a"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "b"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "used"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
+            }
+          },
+          "axis" : "draw/-a - b + used",
+          "origin" : "comparison@7:23:19",
+          "kind" : "over_a_form",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "-a - b + used < 0",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < -a - b + used",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "draw",
+              "quantity" : {
+                "shape" : "over_a_form",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "a"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "b"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "c"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "used"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
+            }
+          },
+          "axis" : "draw/-a - b - c + used",
+          "origin" : "comparison@7:23:19",
+          "kind" : "over_a_form",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "-a - b - c + used < 0",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < -a - b - c + used",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        } ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "disposition" : "undecided",
+          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "readings" : [ {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b + used",
+            "relation" : "=",
+            "against" : "0",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b - c + used",
+            "relation" : "=",
+            "against" : "0",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/used",
+            "relation" : "=",
+            "against" : "a",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            }
+          },
+          "point" : "off",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "disposition" : "undecided",
+          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "readings" : [ {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b + used",
+            "relation" : "=",
+            "against" : "1",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b - c + used",
+            "relation" : "=",
+            "against" : "1",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/used",
+            "relation" : "=",
+            "against" : "a + 1",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "disposition" : "undecided",
+          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "readings" : [ {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b + used",
+            "relation" : "in",
+            "against" : "-a - b + used < 0",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b - c + used",
+            "relation" : "in",
+            "against" : "-a - b - c + used < 0",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/used",
+            "relation" : "in",
+            "against" : "used < a",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.allowances",
+                  "definition" : "take",
+                  "behavior" : "draw",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_value_was_built" ],
+          "status" : "unavailable",
+          "reason" : "no_rows",
+          "disposition" : "undecided",
+          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "readings" : [ {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b + used",
+            "relation" : "in",
+            "against" : "1 < -a - b + used",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/-a - b - c + used",
+            "relation" : "in",
+            "against" : "1 < -a - b - c + used",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "behavior" : "draw",
+            "axis" : "draw/used",
+            "relation" : "in",
+            "against" : "a + 1 < used",
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          } ]
+        } ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ ],
+        "notRead" : [ {
+          "position" : "a",
+          "reason" : "rule_relating_two_values",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "a",
+          "reason" : "rule_never_turns_on_this_line",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "used",
+          "reason" : "rule_never_turns_on_this_line",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "b",
+          "reason" : "rule_never_turns_on_this_line",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "c",
+          "reason" : "rule_never_turns_on_this_line",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "a",
+          "reason" : "relation_not_shown_to_reach_every_value",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "b",
+          "reason" : "relation_not_shown_to_reach_every_value",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "used",
+          "reason" : "relation_not_shown_to_reach_every_value",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "c",
+          "reason" : "relation_not_shown_to_reach_every_value",
+          "rule" : "comparison@7:23:19",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.allowances",
+            "definition" : "take",
+            "behavior" : "draw",
+            "ordinal" : 1,
+            "lowered" : 0
+          }
+        } ],
+        "caseExpansions" : [ ]
+      },
+      "branch" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+              "outcome" : "held"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+              "outcome" : "denied"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "required"
+        }, {
+          "obligationId" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+              "outcome" : "denied"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+              "outcome" : "denied"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "required"
+        }, {
+          "obligationId" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+              "outcome" : "denied"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+              "outcome" : "held"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "required"
+        }, {
+          "obligationId" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+              "outcome" : "denied"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+              "outcome" : "held"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+              "outcome" : "held"
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "required"
+        } ],
+        "waysNoInputTakes" : [ {
+          "way" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+              "outcome" : "held"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+              "outcome" : "held"
+            } ]
+          },
+          "because" : "the_numbers_on_the_way_leave_none"
+        }, {
+          "way" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+              "outcome" : "held"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+              "outcome" : "held"
+            } ]
+          },
+          "because" : "the_numbers_on_the_way_leave_none"
+        }, {
+          "way" : {
+            "behavior" : "draw",
+            "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+              "outcome" : "denied"
+            }, {
+              "kind" : "statement",
+              "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+              "outcome" : "held"
+            } ]
+          },
+          "because" : "the_numbers_on_the_way_leave_none"
+        } ]
+      },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
+      "findings" : [ {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "a",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "rule_relating_two_values"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "a",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "rule_never_turns_on_this_line"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "used",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "rule_never_turns_on_this_line"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "b",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "rule_never_turns_on_this_line"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "c",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "rule_never_turns_on_this_line"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "a",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "b",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "used",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "c",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        },
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "step_stop_not_shown",
+        "disposition" : "reported",
+        "subject" : "conformance.allowances.Nights",
+        "asks" : [ {
+          "construction" : "conformance.allowances.Nights",
+          "at" : {
+            "sourceId" : "7",
+            "line" : 24,
+            "column" : 16,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "reason" : "asks_not_read"
+        } ],
+        "at" : {
+          "sourceId" : "7",
+          "line" : 24,
+          "column" : 16,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@7:23:19 — what this rule states about a",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@7:23:19 — what this rule states about b",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@7:23:19 — what this rule states about used",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@7:23:19 — what this rule states about c",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.allowances",
+          "definition" : "take",
+          "behavior" : "draw",
+          "ordinal" : 1,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "draw",
+        "obligationId" : {
+          "behavior" : "draw",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+            "outcome" : "held"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+            "outcome" : "denied"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "draw",
+        "obligationId" : {
+          "behavior" : "draw",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+            "outcome" : "denied"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+            "outcome" : "denied"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "draw",
+        "obligationId" : {
+          "behavior" : "draw",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+            "outcome" : "denied"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+            "outcome" : "held"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "draw",
+        "obligationId" : {
+          "behavior" : "draw",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=0, coefs={a=1, used=-1}]",
+            "outcome" : "denied"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE]]]",
+            "outcome" : "held"
+          }, {
+            "kind" : "statement",
+            "condition" : "any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[all[!Affine[form=LinearForm[constant=0, coefs={a=1, b=1, c=1, used=-1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]], all[!Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE], Affine[form=LinearForm[constant=0, coefs={a=1, b=1, used=-1}], proposition=GE]]]], all[Affine[form=LinearForm[constant=0, coefs={a=1, used=-1}], proposition=GE], any[!Affine[form=LinearForm[constant=0, coefs={b=1}], proposition=GE], !Affine[form=LinearForm[constant=0, coefs={c=1}], proposition=GE]]]]",
+            "outcome" : "held"
+          } ]
+        },
+        "code" : "E1935"
+      } ]
+    } ]
   } ],
   "sources" : {
     "0" : "booking.sou",
     "1" : "vouchers.sou",
     "2" : "waitlist.sou",
-    "5" : "codes.sou"
+    "5" : "codes.sou",
+    "7" : "allowances.sou"
   }
 }

@@ -17,6 +17,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.jvm.ClassFileImage;
@@ -300,7 +301,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
 
     private static Observations evaluated(String source, Answering answering,
                                                           Supplier<PublishedClasses> declared) {
-        Compilation c = Compilation.ofSource(source, "Main");
+        Compilation c = ACompiledModel.answered(source);
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         EvaluationArtifact artifact = c.db()
@@ -331,7 +332,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
 
     /** The classes one build of {@code source} emits, read for what they were stamped with. */
     private static PublishedClasses declarationsOf(String source) {
-        Compilation compiled = Compilation.ofSource(source, "Main");
+        Compilation compiled = ACompiledModel.answered(source);
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         return ModulePath.of(classes).declarations();
     }

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
@@ -139,14 +141,14 @@ class AContradictionTakenIntoARegionReachesTheSearchAsAProofTest {
     private record Read(InputDomain input, RuleReadingSource rules) {}
 
     private static Read read() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return new Read(InputDomain.of(sigs.get("read"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none()), rules);
     }

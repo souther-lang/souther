@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -48,7 +49,7 @@ class AGuardsArmsAreNotItsThresholdTest {
     /** Whether each arm of the second guard is one nothing reaches, in the order the walk made
      *  them: the arm taken when the condition holds, then the arm taken when it does not. */
     private static List<Boolean> armsOfTheSecondGuard(String guard) {
-        Compilation c = Compilation.ofSource(MODEL.formatted(guard), "demo");
+        Compilation c = ACompiledModel.compiles(Compilation.ofSource(MODEL.formatted(guard), "demo"));
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("demo")).value();
         // In the order the emitter numbered them, which is the order the walk made them: every arm

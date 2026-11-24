@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -100,7 +101,7 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             let emptyDenied (o) = Bool.not(List.isEmpty(o.lines))
 
             behavior wordAsked : (o: Order, s: String) -> Bool
-            let wordAsked (o, s) = String.contains("x", s)
+            let wordAsked (o, s) = String.matches("x+", s)
             """;
 
     /** Either way it comes out, an emptiness check asks what the size against nought asks. */
@@ -135,9 +136,9 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     only("wordAsked", holding));
             assertEquals(List.of(new WhyNotTaken.MeaningUnread(new WhyUnread.NoWordsFor(
-                    new ValueName.Stdlib.Operation("String", "contains"),
+                    new ValueName.Stdlib.Operation("String", "matches"),
                     OperationLaw.Observed.TRUTH,
-                    Unsayable.A_STRING_INSIDE_ANOTHER))),
+                    Unsayable.A_STRING_MATCHING_A_PATTERN))),
                     declined.whys());
         }
     }
@@ -278,9 +279,11 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     private static List<Core> partsOf(String behavior) {
         Read read = readingOf(behavior);
-        return WhatAForkTests.partsOfTheAnswer(read.body(),
-                WhatNamesStandFor.in(read.reads(), read.read())).stream()
-                .map(Denotation::value).toList();
+        WhatAForkTests.PartsRead.Complete parts = assertInstanceOf(
+                WhatAForkTests.PartsRead.Complete.class, WhatAForkTests.partsRead(read.body(),
+                        WhatNamesStandFor.in(read.reads(), read.read())),
+                () -> behavior + " is read to the end");
+        return parts.parts().stream().map(Denotation::value).toList();
     }
 
     /** Everything the body's single condition asks of a row, coming out {@code holding}. */
@@ -319,7 +322,7 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     private static Read readingOf(String behavior) {
         return READINGS.computeIfAbsent(behavior, name -> {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            Compilation compilation = ACompiledModel.answered(MODEL);
             String module = compilation.modules().getFirst();
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");

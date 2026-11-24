@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -46,9 +48,8 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
 
             data Line = { product: Code, net: Amount }
 
-            data Tangled = { product: Code, alt: Code }
-                invariant String.matches("[a-z]+", product.value)
-                    || String.matches("[0-9]+", alt.value)
+            data Tangled = { product: Code, n: Int }
+                invariant n * n == 2401
 
             data Lines = List<Line>
                 invariant nonEmpty = List.length(value) >= 1
@@ -66,7 +67,26 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
                 invariant nonEmpty = List.length(value) >= 1
                 invariant priced = List.all(l -> Decimal.compare(l.net.value, 5.0m) > 0, value)
 
+            data JoinedLines = List<Line>
+                invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
+
+            data JoinedPairs = List<Line>
+                invariant List.length(value) >= 2 && List.allDistinctBy(.product, value)
+
+            data RepeatedLines = List<Line>
+                invariant List.length(value) >= 1
+                    && Bool.not(List.allDistinctBy(.product, value))
+
             data Quote = { lines: Lines, subtotal: Amount, total: Amount }
+                invariant Decimal.compare(total.value, subtotal.value) <= 0
+
+            data JoinedQuote = { lines: JoinedLines, subtotal: Amount, total: Amount }
+                invariant Decimal.compare(total.value, subtotal.value) <= 0
+
+            data JoinedPairsQuote = { lines: JoinedPairs, subtotal: Amount, total: Amount }
+                invariant Decimal.compare(total.value, subtotal.value) <= 0
+
+            data RepeatedQuote = { lines: RepeatedLines, subtotal: Amount, total: Amount }
                 invariant Decimal.compare(total.value, subtotal.value) <= 0
 
             data PairsQuote = { lines: Pairs, subtotal: Amount, total: Amount }
@@ -94,6 +114,23 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
                 "so the relation over the amounts is read at every value they take");
     }
 
+    /**
+     * The same two rules written as the two parts of one clause are the same rules.
+     *
+     * <p>Which of them is a bound on the size and which a call whose law is asked is said of each
+     * part, and the clause is asked with the other part holding. Asked of the rule, the bound was
+     * taken for a call because the call beside it is one the bounds do not hold.
+     */
+    @Test
+    void theTwoRulesWrittenAsOneClauseAreTheSameRules() {
+        assertTrue(readingOf("JoinedQuote").projectionAt(RuleKey.of("total")).isCertified(),
+                () -> readingOf("JoinedQuote").projectionAt(RuleKey.of("total")).toString());
+        assertFalse(readingOf("JoinedPairsQuote").projectionAt(RuleKey.of("total")).isCertified(),
+                "two lines may still share a key");
+        assertFalse(readingOf("RepeatedQuote").projectionAt(RuleKey.of("total")).isCertified(),
+                "a list of one line holds no line twice, which the denied call asks for");
+    }
+
     @Test
     void aLengthRuleLeavingNoListOfOneShowsNothing() {
         assertFalse(readingOf("PairsQuote").projectionAt(RuleKey.of("total")).isCertified(),
@@ -103,8 +140,8 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
     @Test
     void anElementNoValueOfWhichIsShownShowsNoListOfIt() {
         assertFalse(readingOf("TangledQuote").projectionAt(RuleKey.of("total")).isCertified(),
-                "a list of one needs one element, and `Tangled`'s choice over two fields is not"
-                        + " shown to leave one");
+                "a list of one needs one element, and a number whose square is 2401 is none of"
+                        + " the values written down for `Tangled`");
     }
 
     @Test
@@ -120,13 +157,13 @@ class AListOfOneElementIsShownToBeAValueByTheLawOfItsRuleTest {
     }
 
     private static FieldDomains readingOf(String type) {
-        Compilation compilation = Compilation.ofSource(DECLARED, "Main");
+        Compilation compilation = ACompiledModel.answered(DECLARED);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model under test compiles");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(
-                RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES));
+                RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 }

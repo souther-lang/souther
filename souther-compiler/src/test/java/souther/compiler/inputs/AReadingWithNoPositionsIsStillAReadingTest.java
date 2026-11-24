@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -36,12 +38,12 @@ class AReadingWithNoPositionsIsStillAReadingTest {
 
             data Size = Int
 
-            behavior size : (n: Size) -> Size
-            let size (n) = n
+            behavior keep : (n: Size) -> Size
+            let keep (n) = n
             """;
 
     private static RuleReadingSource rules() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
@@ -49,7 +51,7 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void aWalkOverNoParametersIsAReadingOfAnInputWithNoPositions() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy, TestDay.TODAY);
         InputDomain read = InputDomain.of(List.of(), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());
@@ -71,7 +73,7 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void andItSaysHowItsNamesAreRead() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules(), policy, TestDay.TODAY);
 
         assertSame(policy,
                 InputDomain.of(List.of(), reading, TypeCardinality.Counts.workedOutIn(reading),

@@ -2,9 +2,8 @@ package souther.compiler.diag;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import souther.test.RepositoryJavaSources;
+
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -50,13 +49,13 @@ class TheDiagnosticLanguageIsNeverDerivedFromTheMachineTest {
             "\"LC_MESSAGES\"");
 
     @Test
-    void diagnosticLanguageIsNeverDerivedFromTheMachineLocale() throws IOException {
+    void diagnosticLanguageIsNeverDerivedFromTheMachineLocale() {
         List<Path> sources = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources();
         assertFalse(sources.isEmpty(), "found no sources at all — the scan missed the tree");
 
         Set<String> reading = new TreeSet<>();
         for (Path source : sources) {
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             for (String ambient : AMBIENT) {
                 if (text.contains(ambient)) {
                     reading.add(source.toString().replace('\\', '/')

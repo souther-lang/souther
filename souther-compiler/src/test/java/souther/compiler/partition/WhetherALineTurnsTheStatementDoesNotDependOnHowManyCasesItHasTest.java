@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -67,7 +68,7 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
                 example draw
                     | (MB(0), Held { h0 = MB(0), h1 = MB(1), h2 = MB(0), h3 = MB(0) }) -> MB(0)
                 """);
-        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         String border = human.lines()
                 .dropWhile(line -> !line.strip().startsWith("border"))
                 .takeWhile(line -> line.strip().startsWith("border") || line.startsWith("      "))
@@ -198,8 +199,7 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
     private static AdequacyReport measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation);
     }
 

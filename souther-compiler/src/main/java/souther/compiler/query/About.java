@@ -5,10 +5,14 @@ import souther.compiler.check.RuleCitations;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.StepWhereARunMayStop;
+import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.DerivedValue;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
@@ -17,6 +21,8 @@ import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -350,6 +356,46 @@ public sealed interface About {
     }
 
     /**
+     * A position of a value a computation derives from several positions and cuts at several
+     * places, whose weight no row fixes.
+     *
+     * <p>A value looked up in a table is computed once and cut at every row of it, so a position
+     * weighed wrongly or left out moves every border the same way. What fixes a weight is the rows
+     * on the borders ({@link TiltOfADerivedValue}), and a row there fixes it for every border of
+     * the table: owed once for the computation and once for each position, and never once for each
+     * threshold.
+     *
+     * @param value    the computation, which is one comparison as one call of it reads it
+     * @param position the position whose weight is owed
+     * @param into     the weighing of the positions the weight is said to be a weight in: the
+     *                 widest of the ones the position is in, which is the one it is least a part
+     *                 of
+     * @param cited    the rule the weight is owed under
+     */
+    record ATiltOfADerivedValueNoRowShows(DerivedValue value, NumericTerm position,
+                                          LinearQuantity into, List<RuleCitation> cited)
+            implements OfAnObligation, RuleCitations {
+
+        public ATiltOfADerivedValueNoRowShows {
+            Objects.requireNonNull(value, "a weight is a weight in some computation");
+            Objects.requireNonNull(position, "a weight is a weight of some position");
+            Objects.requireNonNull(into, "in some weighing of the positions");
+            cited = List.copyOf(cited);
+        }
+
+        /** Keyed on the computation and the position, which no row written moves. */
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfATiltAtAPosition(value, position);
+        }
+
+        @Override
+        public Set<RuleCitation> ruleCitations() {
+            return new LinkedHashSet<>(cited);
+        }
+    }
+
+    /**
      * A point of a line a declaration drew, that no row anywhere in the module stands at.
      *
      * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is whose
@@ -464,34 +510,34 @@ public sealed interface About {
     }
 
     /**
-     * A rule of the model that a run reaching it may stop in: an operation it is read through ends
-     * the run on some of the ways it is worked out, such as a division by nought, and the ways
-     * before the rule do not rule such a run out.
+     * A step of a behavior some run is shown to stop at: an operation that works a number out past
+     * its type or divides by nought, or a construction refusing what it is handed
+     * ({@link StepWhereARunMayStop}).
      *
-     * <p>A possibility and not a run shown to exist. The conditions on the way are asked whether
-     * they leave a row for the stop, and a stop is dropped only where they are shown to leave none;
-     * where that is not shown, the stop stays, as every other fact read off the way does.
+     * <p>A run shown to exist and not a possibility. Where neither that one stops nor that none
+     * does is shown, that is {@link AStepWhoseStopIsNotShown}, which may be said of the same step.
      *
-     * <p>Said of the rule whatever else is said of it, and independent of the line it draws: a
-     * rule that draws a line on the runs that do not stop, one that comes out the same for every
-     * row where a run gets past it, and one whose reading stopped may each have a run that stops
-     * in it. A rule every run stops in is not this, and has its own reason beside
-     * {@link ARuleWithoutALine}.
+     * <p>Said of the step where it is written, whether or not a rule comes after it: a run that
+     * stops there gets to no rule after it, and what it leaves a rule's border is said of the rule
+     * apart.
      */
-    record ARuleThatMayStopARun(souther.compiler.inputs.RuleWhereARunMayStop finding)
-            implements OfARule {
-        public ARuleThatMayStopARun {
-            java.util.Objects.requireNonNull(finding, "a finding is about something");
+    record AStepThatMayStopARun(StepWhereARunMayStop finding) implements About {
+        public AStepThatMayStopARun {
+            Objects.requireNonNull(finding, "a finding is about something");
         }
+    }
 
-        @Override
-        public souther.compiler.check.RuleRef rule() {
-            return finding.rule();
-        }
-
-        @Override
-        public Set<RuleCitation> cited() {
-            return finding.cited();
+    /**
+     * A step of a behavior where whether a run stops is not resolved: neither that one does nor
+     * that none does is shown, of an operation it works out or of what it asks, where it is a
+     * construction ({@link StepWhereAStopIsNotShown}).
+     *
+     * <p>Not a stop and not that there is none. Said of the step where it is written, and beside a
+     * stop shown at the same step.
+     */
+    record AStepWhoseStopIsNotShown(StepWhereAStopIsNotShown finding) implements About {
+        public AStepWhoseStopIsNotShown {
+            Objects.requireNonNull(finding, "a finding is about something");
         }
     }
 

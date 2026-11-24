@@ -123,6 +123,9 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         OVER_A_FORM,
         /** How many elements of a container meet a statement, at a number of them. */
         COUNT_OF_ELEMENTS,
+        /** How many different values the elements of a container meeting a statement hold at one
+         *  place of each, at a number of them. */
+        COUNT_OF_DIFFERENT_VALUES,
         /** What a division by a written number leaves of a form of several positions, at one of the
          *  remainders it can leave; or, where a rule holds it against another number of the
          *  input, that remainder with a form of those numbers added to it, at a value of the sum.
@@ -133,6 +136,9 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
          *  position, at one of the remainders it can leave. */
         REMAINDER_BY_AN_INPUT,
         /** What two numbers of two positions come to multiplied, at a value of the product. */
-        PRODUCT_OF_TWO
+        PRODUCT_OF_TWO,
+        /** How far apart the two sides of one comparison came out on a run, the left less the
+         *  right, at a value of that difference: a number only a run works out. */
+        COMPARED_ON_A_RUN
     }
 }

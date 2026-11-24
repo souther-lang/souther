@@ -98,6 +98,29 @@ public final class WeakeningSet {
         return folded(causes, other.causes);
     }
 
+    /**
+     * Every one of {@code sets}, as one: what {@link #union} of them, first to last, comes to,
+     * folded once. A union taken set by set folds the whole of what it has so far again for each
+     * one it is given, and a fact is put together with its other evidence in the same order
+     * either way.
+     */
+    public static WeakeningSet unionOf(Iterable<WeakeningSet> sets) {
+        List<WeakeningSet> told = new ArrayList<>();
+        for (WeakeningSet each : sets) {
+            if (each != null && !each.causes.isEmpty()) {
+                told.add(each);
+            }
+        }
+        if (told.size() < 2) {
+            return told.isEmpty() ? NONE : told.getFirst();
+        }
+        Map<Object, Weakening> byFact = new HashMap<>();
+        for (WeakeningSet each : told) {
+            each.causes.forEach(one -> byFact.merge(factOf(one), one, WeakeningSet::merged));
+        }
+        return new WeakeningSet(Set.copyOf(byFact.values()));
+    }
+
     public boolean isEmpty() {
         return causes.isEmpty();
     }
@@ -181,14 +204,16 @@ public final class WeakeningSet {
             // figures each reason was met at are what evidenced them.
             case Weakening.RewriteUndecided it ->
                     new StoppedAtALimit(Weakening.RewriteUndecided.class,
-                            List.of(it.behavior(), it.replacement(), it.why().reasons()));
+                            List.of(it.module(), it.behavior(), it.replacement(),
+                                    it.why().reasons()));
             // The rest are their own fact: every value they hold is what a reader is told, and two
             // of them that are equal are one thing that went wrong. A decision's reading among
             // them: one reading is made of a body, and it stops at one figure.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
-                 Weakening.BodyNotInEvaluation _,
+                 Weakening.AWeightNotDecided _,
+                 Weakening.BodyNotInEvaluation _, Weakening.BehaviorToBeChangedFirst _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
@@ -196,7 +221,7 @@ public final class WeakeningSet {
                  Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
                  Weakening.KeyedOverwriteCasesUnmeasured _,
                  Weakening.ReachableNodeCasesUnmeasured _,
-                 Weakening.MeetingsNotPlaced _, Weakening.MeetingsNotJoined _ -> one;
+                 Weakening.MeetingsNotJoined _ -> one;
         };
     }
 
@@ -230,13 +255,14 @@ public final class WeakeningSet {
                             alsoA(Weakening.MeetingsNotWalked.class, also).limits()));
             // One rewrite left open for the same reasons, each met at every figure either met it.
             case Weakening.RewriteUndecided it -> new Weakening.RewriteUndecided(
-                    it.behavior(), it.replacement(),
+                    it.module(), it.behavior(), it.replacement(),
                     it.why().together(alsoA(Weakening.RewriteUndecided.class, also).why()));
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
                  Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
-                 Weakening.BodyNotInEvaluation _,
+                 Weakening.AWeightNotDecided _,
+                 Weakening.BodyNotInEvaluation _, Weakening.BehaviorToBeChangedFirst _,
                  Weakening.BoundaryNotDerived _, Weakening.InputNotRead _,
                  Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
@@ -244,7 +270,7 @@ public final class WeakeningSet {
                  Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
                  Weakening.KeyedOverwriteCasesUnmeasured _,
                  Weakening.ReachableNodeCasesUnmeasured _,
-                 Weakening.MeetingsNotPlaced _, Weakening.MeetingsNotJoined _ -> had;
+                 Weakening.MeetingsNotJoined _ -> had;
         };
     }
 

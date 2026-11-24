@@ -276,14 +276,15 @@ class ATotalOfTheElementsKeptByAnIndexIsReadByWhereEachStandsTest {
 
     /**
      * Not read by where the elements stand: kept of a sorted list, whose order nothing declares;
-     * by a count that is no number written out; before a walk, which numbers what it is handed from
-     * nought again; or of a walk whose answers nothing puts in the order it was handed the elements.
+     * by a count that is no number written out; before a walk that reads the position, which
+     * numbers what it is handed from nought again; or of a walk whose answers nothing puts in the
+     * order it was handed the elements.
      */
     @Test
     void aKeepingWhoseOrderIsNotShownIsNotRead() {
         readEach(List.of("List.sum(List.take(2, List.sort(xs)))",
                 "List.sum(List.take(k, xs))",
-                "List.sum(List.map(x -> 2 * x, List.take(2, xs)))",
+                "List.sum(List.mapIndexed((i, x) -> i * x, List.take(2, xs)))",
                 "List.sum(List.take(2, List.mapIndexed((i, x) -> i * x, xs)))"))
                 .forEach((total, human) -> {
                     assertTrue(human.contains("not read: comparison"), total + "\n" + human);
@@ -291,11 +292,17 @@ class ATotalOfTheElementsKeptByAnIndexIsReadByWhereEachStandsTest {
                 });
     }
 
+    /** Before a walk that reads no position, the walk answers each element kept as it would any
+     *  other, so the total is what it answers of the elements before the count. */
+    @Test
+    void aKeepingBeforeAWalkReadingNoPositionIsReadByWhereEachStands() {
+        String human = report(model("List.sum(List.map(x -> 2 * x, List.take(2, xs)))", ""));
+        assertTrue(human.contains(FIRST_TWO.replace("1·the element", "2·the element")), human);
+    }
+
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

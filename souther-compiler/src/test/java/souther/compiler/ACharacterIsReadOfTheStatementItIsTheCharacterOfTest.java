@@ -7,9 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,10 +23,9 @@ class ACharacterIsReadOfTheStatementItIsTheCharacterOfTest {
     private static String measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**
@@ -46,7 +42,7 @@ class ACharacterIsReadOfTheStatementItIsTheCharacterOfTest {
                         String.characters(a)) then 1 else 0
                 """;
         String ofTheOuter = measured(nested.formatted("c"));
-        assertTrue(ofTheOuter.contains("not read"), ofTheOuter);
+        assertTrue(NotRead.in(ofTheOuter), ofTheOuter);
         assertFalse(ofTheOuter.contains("(b): "), ofTheOuter);
         String ofTheInner = measured(nested.formatted("d"));
         assertTrue(ofTheInner.contains("read as f/#(one of {0078})(b): = 1"), ofTheInner);

@@ -2,8 +2,11 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -49,15 +52,31 @@ class CoverageSitesTest {
     /** The bodies a source compiles to, under the name the source declares them in. The name comes
      *  with them: a body's own parameters belong to the behavior the module declares, so a plan
      *  built under some other module's name is a plan of bodies whose names it cannot place. */
-    private record Checked(String module, Map<String, Core> bodies) {}
+    private record Checked(String module, Map<String, Core> bodies,
+                           DeclarationNewtypes newtypes) {}
 
     private static Checked bodiesOf(String source) {
+        return bodiesOf(ACompiledModel.answered(source));
+    }
+
+    /** The same, of a source whose abort stands at a case the model admits, which it is told of. */
+    private static Checked bodiesOfWhatAbortsWhereItIsAdmitted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(List.of("E1326"), compilation);
+        return bodiesOf(compilation);
+    }
+
+    private static CoverageSites.Plan planOfWhatAbortsWhereItIsAdmitted(String source) {
+        return planOf(bodiesOfWhatAbortsWhereItIsAdmitted(source));
+    }
+
+    private static Checked bodiesOf(Compilation compilation) {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        return new Checked(module, checked.behaviorBodies());
+        return new Checked(module, checked.behaviorBodies(),
+                souther.compiler.query.Shapes.declarationNewtypes(compilation.db()));
     }
 
     private static CoverageSites.Plan planOf(String source) {
@@ -67,8 +86,8 @@ class CoverageSitesTest {
     private static CoverageSites.Plan planOf(Checked checked) {
         return CoverageSites.of(
                 HandBuiltBodies.ofBehaviors(checked.module(), checked.bodies()),
-                souther.compiler.coverage.DecisionSources.NONE,
-                souther.compiler.coverage.SuppliedRules.NONE);
+                DecisionSources.NONE, SuppliedRules.NONE, checked.newtypes(),
+                DefaultStdlib.get().walk());
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
@@ -77,7 +96,7 @@ class CoverageSitesTest {
 
     @Test
     void everyArmOfEveryForkIsASiteAndNothingElseIs() {
-        CoverageSites.Plan plan = planOf(MODEL);
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL);
 
         assertEquals(List.of("case UnderThirty", "then", "else"), labels(plan));
         assertEquals(List.of(OutcomeName.CASE, OutcomeName.THEN, OutcomeName.ELSE),
@@ -94,7 +113,7 @@ class CoverageSitesTest {
      */
     @Test
     void anArmThatAnswersNothingIsNotAnArm() {
-        CoverageSites.Plan plan = planOf(MODEL);
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL);
 
         assertFalse(labels(plan).contains("case ThirtyOrOver"),
                 "the arm answers `unreachable`, so no row can be in it");
@@ -105,7 +124,7 @@ class CoverageSitesTest {
      * a bare {@code unreachable}, however many forks stand between. */
     @Test
     void anArmWhoseEveryPathAbortsIsNotAnArmEither() {
-        CoverageSites.Plan plan = planOf("""
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted("""
                 module example.nested
 
                 data Yes
@@ -141,7 +160,7 @@ class CoverageSitesTest {
      */
     @Test
     void aForkBelowSomethingThatAbortsIsNotAForkToCover() {
-        CoverageSites.Plan plan = planOf("""
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted("""
                 module example.dead
 
                 data Yes
@@ -177,7 +196,7 @@ class CoverageSitesTest {
      */
     @Test
     void aForkNothingReachesIsPlannedWithNoArms() {
-        Checked checked = bodiesOf("""
+        Checked checked = bodiesOfWhatAbortsWhereItIsAdmitted("""
                 module example.dead
 
                 data Yes
@@ -337,7 +356,7 @@ class CoverageSitesTest {
      */
     @Test
     void anArmWithoutAProbeKeepsItsPlaceInTheArray() {
-        Checked checked = bodiesOf("""
+        Checked checked = bodiesOfWhatAbortsWhereItIsAdmitted("""
                 module example.order
 
                 data Yes
@@ -363,7 +382,7 @@ class CoverageSitesTest {
 
     @Test
     void aGuardKeepsBothOfItsArmsTogether() {
-        CoverageSites.Plan plan = planOf(MODEL);
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL);
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
@@ -385,7 +404,7 @@ class CoverageSitesTest {
      * a row can be at. */
     @Test
     void aGuardWithOneArmLeftIsStillAGuard() {
-        CoverageSites.Plan plan = planOf(MODEL.replace("if senior then Days(120) else Days(90)",
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL.replace("if senior then Days(120) else Days(90)",
                 "if senior then unreachable \"no senior is under thirty\" else Days(90)"));
 
         assertEquals(1, plan.guards().size());
@@ -403,7 +422,7 @@ class CoverageSitesTest {
      */
     @Test
     void anIfWithNoArmsLeftIsNotAGuard() {
-        CoverageSites.Plan plan = planOf("""
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted("""
                 module example.leave
 
                 data UnderThirty
@@ -431,7 +450,7 @@ class CoverageSitesTest {
 
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
-        Checked checked = bodiesOf(MODEL);
+        Checked checked = bodiesOfWhatAbortsWhereItIsAdmitted(MODEL);
         CoverageSites.Plan plan = planOf(checked);
 
         Core body = checked.bodies().get("daysFor");
@@ -452,8 +471,8 @@ class CoverageSitesTest {
     /** A body's arms are its own. Rows do not move them, and neither does anything above them. */
     @Test
     void theNumberingDependsOnTheBodyAndNothingElse() {
-        List<String> without = labels(planOf(MODEL));
-        List<String> withRows = labels(planOf(MODEL + """
+        List<String> without = labels(planOfWhatAbortsWhereItIsAdmitted(MODEL));
+        List<String> withRows = labels(planOfWhatAbortsWhereItIsAdmitted(MODEL + """
 
                 example daysFor
                     | (UnderThirty, true)  -> Days(120)
@@ -461,7 +480,7 @@ class CoverageSitesTest {
                 """));
 
         assertEquals(without, withRows);
-        assertEquals(labels(planOf(MODEL)), without, "and it is the same on a second walk");
+        assertEquals(labels(planOfWhatAbortsWhereItIsAdmitted(MODEL)), without, "and it is the same on a second walk");
     }
 
     /**
@@ -516,6 +535,62 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, planOf(new Checked("example.empty", Map.of())).hasNoProbes());
+        assertSame(true, planOf(new Checked("example.empty", Map.of(),
+                DeclarationNewtypes.NONE)).hasNoProbes());
+    }
+
+    private static String walkingOver(String declarations, String parameter, String walked) {
+        return """
+                module repro.walked
+
+                %s
+
+                behavior total : (%s) -> Int
+
+                let total (%s) = List.fold((acc, x) -> acc + x, 0, %s)
+                """.formatted(declarations, parameter, parameter.substring(0,
+                        parameter.indexOf(':')), walked);
+    }
+
+    private static List<List<String>> listsWalkedBy(String source) {
+        return planOf(source).walks("total").stream()
+                .map(site -> site.over().orElse(List.of("(none)"))).toList();
+    }
+
+    /**
+     * The list a walk goes over is the position the input holds it at, and a newtype's own value
+     * is the value under it and no step: the same location as the newtype itself, as every other
+     * reader of a location takes it. A field called {@code value} of a record is a step.
+     */
+    @Test
+    void aWalkOverTheValueOfANewtypeIsOverTheLocationOfTheNewtype() {
+        assertEquals(List.of(List.of("numbers")), listsWalkedBy(walkingOver(
+                "data Numbers = List<Int>", "numbers: Numbers", "numbers.value")));
+        assertEquals(List.of(List.of("hand", "numbers")), listsWalkedBy(walkingOver(
+                "data Numbers = List<Int>\ndata Hand = { numbers: Numbers }",
+                "hand: Hand", "hand.numbers.value")));
+        assertEquals(List.of(List.of("box", "value")), listsWalkedBy(walkingOver(
+                "data Box = { value: List<Int> }", "box: Box", "box.value")));
+        assertEquals(List.of(List.of("xs")), listsWalkedBy(walkingOver("", "xs: List<Int>", "xs")));
+    }
+
+    /** A name bound to the input is the input, and a list the body makes is no location of it. */
+    @Test
+    void aWalkOverAListTheBodyMadeIsOverNoLocationOfTheInput() {
+        assertEquals(List.of(List.of("numbers")), listsWalkedBy("""
+                module repro.bound
+
+                data Numbers = List<Int>
+
+                behavior total : (numbers: Numbers) -> Int
+
+                let total (numbers) = {
+                    let xs = numbers.value
+                    List.fold((acc, x) -> acc + x, 0, xs)
+                }
+                """));
+        // The filter goes over the input; the fold goes over what the filter kept.
+        assertEquals(List.of(List.of("xs"), List.of("(none)")), listsWalkedBy(walkingOver("",
+                "xs: List<Int>", "List.filter(x -> x > 0, xs)")));
     }
 }

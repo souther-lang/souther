@@ -99,29 +99,54 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                     DeclaredArgument amount, BigDecimal per)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the date {@code months} calendar months on from {@code date}: a date
+     *  stands at twelve times what {@code year} answers of it and what {@code month} answers less
+     *  one, and the move lands in the month the floor remainder {@code remainder} leaves of that
+     *  count plus {@code months} by twelve ({@code numeric.CalendarMonths}). */
+    record MovesADateByMonths(DeclaredOperation operation, DeclaredArgument months,
+                              DeclaredArgument date, DeclaredOperation year,
+                              DeclaredOperation month, DeclaredOperation day,
+                              DeclaredOperation remainder)
+            implements OneAboutAnOperation {}
+
     /** The operation answers how many whole units, of {@code perUnit} steps each, lie from
      *  {@code from} to {@code to}, truncated toward zero. */
     record CountsWholeUnitsBetween(DeclaredOperation operation, DeclaredArgument from,
                                    DeclaredArgument to, long perUnit)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the step of a coarser order that {@code of} falls in, where one step of
+     *  that order is {@code perUnit} steps of the order {@code of} is counted on, floored toward
+     *  the earlier step. */
+    record CountsTheWholeUnitsOf(DeclaredOperation operation, DeclaredArgument of, Type answers,
+                                 long perUnit)
+            implements OneAboutAnOperation {}
+
     /**
-     * The operation answers {@code value} rounded to a whole number the way {@code mode} says, and
+     * The operation answers {@code value} rounded to a whole multiple of ten to the minus
+     * {@code scale} the way {@code mode} says — to a whole number where it takes no scale — and
      * {@code ways} is what each case of the policy at {@code mode} does.
      *
      * <p>Keyed by the case's declaration, which is what a written mode is once it is read: the cases
      * were matched to the ways of rounding once, here, against what the library declares.
+     *
+     * @param scale the scale's argument, an {@code Int}, or null where the operation takes none
      */
-    record RoundsToAWholeNumber(DeclaredOperation operation, DeclaredArgument mode,
-                                DeclaredArgument value, Map<TypeSymbol, WholeRounding> ways)
+    record RoundsToAStep(DeclaredOperation operation, DeclaredArgument scale,
+                         DeclaredArgument mode, DeclaredArgument value,
+                         Map<TypeSymbol, WholeRounding> ways)
             implements OneAboutAnOperation {
 
-        public RoundsToAWholeNumber {
+        public RoundsToAStep {
             ways = Map.copyOf(ways);
         }
 
+        /** Whether this rounds to a whole number, taking no scale. */
+        public boolean toAWholeNumber() {
+            return scale == null;
+        }
         /** The way {@code written} rounds, where it is a case of the policy, and null otherwise. */
-        WholeRounding wayOf(Core written) {
+        public WholeRounding wayOf(Core written) {
             return Core.withoutStanding(written) instanceof Core.UnitValue unit
                     ? ways.get(unit.data()) : null;
         }
@@ -250,6 +275,30 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                            DeclaredArgument closure, PieceOfAnElement piece)
             implements OneAboutAnOperation {}
 
+    /** {@code operation} is what {@code operator} comes to over two values of the type
+     *  {@code operand} stands as, and answers one. */
+    record IsTheOperator(DeclaredOperation operation, souther.compiler.types.BinOp operator,
+                         DeclaredArgument operand)
+            implements OneAboutAnOperation {}
+
+    /** Where {@code operation} is handed {@code text} at {@code position}, it answers what
+     *  {@code other} answers on the arguments that remain, in their order. */
+    record AgreesWithAnotherWhereItIsGivenText(DeclaredOperation operation,
+                                               DeclaredOperation other, int position, String text)
+            implements OneAboutAnOperation {}
+
+    /** The operation's answer holds the elements of {@code source} where {@code closure} holds of
+     *  them, and no other. */
+    record KeepsTheElementsWhereItHolds(DeclaredOperation operation, DeclaredArgument source,
+                                        DeclaredArgument closure)
+            implements OneAboutAnOperation {}
+
+    /** The operation's answer holds the entries of {@code source} where {@code closure} holds of
+     *  the key and the value, and no other. */
+    record KeepsTheEntriesWhereItHolds(DeclaredOperation operation, DeclaredArgument source,
+                                       DeclaredArgument closure)
+            implements OneAboutAnOperation {}
+
     /** The operation answers the elements of {@code list} whose index stands to the number
      *  {@code count} names as {@code kept} says, before it or from it on, in their order, each once
      *  and nothing else. */
@@ -259,7 +308,8 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
 
     /** The operation answers what {@code into} holds with {@code value} put in: at most one element
      *  more, each element one of {@code into}'s or {@code value}. */
-    record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
+    record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into,
+                        Optional<DeclaredArgument> under)
             implements OneAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */
@@ -398,14 +448,50 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record EveryAnswerItCanGiveHasASourceValue(DeclaredOperation operation)
             implements OneAboutAnOperation {}
 
-    /** The ends of the numbers the operation answers are where what it is read out of stops. */
-    record EndsAreWhereTheRepresentationStops(DeclaredOperation operation)
-            implements OneAboutAnOperation {}
-
     /** Something that holds of the number the operation answers, wherever it is called. One per
      *  bound: an operation with two ends states two of these. */
     record BoundsItsResult(DeclaredOperation operation, ResultBound<DeclaredArgument> bound)
             implements SeveralAboutAnOperation {}
+
+    /** Something that holds of every number in the list the operation answers, wherever it is
+     *  called. One per bound: an operation with two ends states two of these. */
+    record BoundsEachElementOfItsResult(DeclaredOperation operation,
+                                        ResultBound<DeclaredArgument> bound)
+            implements SeveralAboutAnOperation {}
+
+    /** The operation answers every whole number from {@code from} up to {@code to}, each once and
+     *  in that order, and nothing where {@code to} is below {@code from}. */
+    record HoldsEachWholeNumberInTurn(DeclaredOperation operation, DeclaredArgument from,
+                                      DeclaredArgument to)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds a value exactly where {@code list} holds an element at the
+     *  whole number {@code index} names, and it is that element. */
+    record AnswersTheElementAt(DeclaredOperation operation, DeclaredArgument index,
+                               DeclaredArgument list)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds a value exactly where {@code container} files one under
+     *  the value of {@code key}, and it is that value. */
+    record AnswersTheValueFiledUnder(DeclaredOperation operation, DeclaredArgument key,
+                                     DeclaredArgument container)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds, where it holds a value, an element of {@code source}. */
+    record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds, where it holds a value, the greatest or the least element
+     *  of {@code source}. */
+    record AnswersAnExtremeElementOf(DeclaredOperation operation, DeclaredArgument source,
+                                     BoundOperationFacts.End end)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds, where it holds a value, an element of {@code source} that
+     *  {@code closure} answers true on. */
+    record AnswersAnElementWhereTheClosureHolds(DeclaredOperation operation,
+                                                DeclaredArgument source, DeclaredArgument closure)
+            implements OneAboutAnOperation {}
 
     /** The operation's result is never smaller than what {@code container} holds. One per
      *  container: {@code a ++ b} is as long as either half. */

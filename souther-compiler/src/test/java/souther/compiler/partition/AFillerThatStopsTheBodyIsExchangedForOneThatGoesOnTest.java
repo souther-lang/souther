@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -79,25 +80,75 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
             }
             """;
 
-    @Test
-    void aRowAboutAnotherPositionGoesOnPastAGuardOnAComparisonAndATruth() {
-        Map<String, String> rows = rowsOf(A_COMPARISON_AND_A_TRUTH);
-        assertEquals("Plain, 1, true", rows.get("kind=Plain"));
-        assertEquals("Express, 1, true", rows.get("kind=Express"));
+    /**
+     * Whether the model answers {@code Refused} to the row, which is the model run and not a
+     * spelling of what the row holds: an example that says {@code Refused} is refused where the row
+     * stops at the guard and is a failing example where it goes on.
+     */
+    private static boolean modelRefuses(String model, String row) {
+        Compilation compilation = Compilation.ofSource(
+                model + "\nexample settle\n    | (" + row + ") -> Refused\n", "Main");
+        ACompiledModel.refusedOnlyWith(Set.of("E1905"), compilation);
+        return compilation.diagnostics().values().stream().flatMap(List::stream).findAny().isEmpty();
     }
 
-    /** The rows about {@code kind} are past the guard. */
-    @Test
-    void aRowAboutAnotherPositionGoesOnPastTheGuard() {
-        Map<String, String> rows = rowsOf(MODEL);
-        assertEquals("Plain, 1", rows.get("kind=Plain"));
-        assertEquals("Express, 1", rows.get("kind=Express"));
+    /** What a row is held to: whether the body goes on past the guard it was composed for, and what
+     *  the row must say beyond that, where the value it holds is what the row is about. */
+    private record HeldTo(String name, String model, String label, boolean goesOn, String mustSay) {
+
+        static HeldTo goesOn(String name, String model, String label) {
+            return new HeldTo(name, model, label, true, "");
+        }
+
+        static HeldTo stops(String name, String model, String label) {
+            return new HeldTo(name, model, label, false, "");
+        }
     }
 
-    /** The row about the class the guard refuses still stops there. */
+    /**
+     * A row about a position other than the guarded one is past the guard, and the row about the
+     * class the guard refuses stops there. The value composed at the guarded position is the
+     * generator's choice and is not what is asked: the model is run.
+     *
+     * <p>A guard on a comparison and a truth the body was handed, which no comparison answers: the
+     * way past is the comparison holding and the run going down the arm that goes on, so the row is
+     * composed with both. A guard on a total, which no position holds and the amount of an element
+     * is not one anything divides: a demand on the list as a whole, composed to meet it with what
+     * the row's classes ask of each element held in it. Both sides of an {@code &&} at once, since
+     * a row that stops at the first is not past the guard once the first holds. A guard that lets
+     * the body go on where its comparison comes out false, which a repair taking every guard's
+     * comparison to be one that has to hold could not ask for.
+     */
     @Test
-    void aRowAboutTheClassTheGuardRefusesKeepsIt() {
-        assertEquals("Plain, 0", rowsOf(MODEL).get("amount=x <= 0"));
+    void aRowIsPastTheGuardOnlyWhereItIsNotTheRowThatGuardRefuses() {
+        String both = A_TOTAL
+                .replace("(kind: Kind, items: List<Item>)", "(kind: Kind, a: Int, items: List<Item>)")
+                .replace("let settle (kind, items)", "let settle (kind, a, items)")
+                .replace("guard total(items) > 0", "guard a > 0 && total(items) > 0");
+        String negated = MODEL.replace("guard amount > 0", "guard Bool.not(amount <= 0)");
+        List<HeldTo> rows = List.of(
+                HeldTo.goesOn("a comparison and a truth, Plain", A_COMPARISON_AND_A_TRUTH, "Plain at kind"),
+                HeldTo.goesOn("a comparison and a truth, Express", A_COMPARISON_AND_A_TRUTH, "Express at kind"),
+                HeldTo.goesOn("a comparison, Plain", MODEL, "Plain at kind"),
+                HeldTo.goesOn("a comparison, Express", MODEL, "Express at kind"),
+                HeldTo.stops("a comparison, the class it refuses", MODEL, "amount: x <= 0 at amount"),
+                HeldTo.goesOn("a total", A_TOTAL, "Plain at kind"),
+                new HeldTo("a total, a class of the elements", A_TOTAL, "Company at items[*].payer",
+                        true, "payer = Company"),
+                HeldTo.goesOn("both sides of an and", both, "Plain at kind"),
+                HeldTo.goesOn("a comparison that has to come out false", negated, "Plain at kind"),
+                HeldTo.stops("a comparison that has to come out false, the class it refuses", negated,
+                        "amount: x <= 0 at amount"));
+        Map<String, Map<String, String>> composed = new LinkedHashMap<>();
+        for (HeldTo each : rows) {
+            String row = composed.computeIfAbsent(each.model(), AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest::rowsOf)
+                    .get(each.label());
+            assertNotNull(row, each.name() + ": a row is written for " + each.label());
+            assertEquals(!each.goesOn(), modelRefuses(each.model(), row),
+                    each.name() + ": " + row + (each.goesOn()
+                            ? " is past the guard" : " stops at the guard"));
+            assertTrue(row.contains(each.mustSay()), each.name() + ": " + row);
+        }
     }
 
     /**
@@ -140,23 +191,6 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
             }
             """;
 
-    /** The rows about {@code kind} hold a list whose amounts come to more than nothing. */
-    @Test
-    void aRowAboutAnotherPositionGoesOnPastAGuardOnATotal() {
-        Map<String, String> rows = rowsOf(A_TOTAL);
-        assertEquals("Plain, [Item { amount = Amount(1), payer = Self }]", rows.get("kind=Plain"));
-    }
-
-    /**
-     * And a row about a class of the elements keeps that class in every element while the list is
-     * composed to the total.
-     */
-    @Test
-    void aRowAboutAClassOfTheElementsKeepsItWhileTheListComesToTheTotal() {
-        assertEquals("Plain, [Item { amount = Amount(1), payer = Company }]",
-                rowsOf(A_TOTAL).get("items[*].payer=Company"));
-    }
-
     /**
      * A fork above the guard, which the row goes through the false way and goes on from.
      *
@@ -191,22 +225,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
      *  the fork above it as it did. */
     @Test
     void aRowIsHeldToTheGuardThatStoppedItAndNotToAForkAboveIt() {
-        assertEquals("Plain, 0, 1", rowsOf(A_FORK_ABOVE).get("kind=Plain"));
-    }
-
-    /**
-     * A guard that lets the body go on where its comparison comes out false.
-     *
-     * <p>{@code amount = 0} makes {@code amount <= 0} hold and the guard refuse. What gets a row
-     * past is the comparison failing, which a repair that took every guard's comparison to be one
-     * that has to hold could not ask for.
-     */
-    @Test
-    void aRowIsHeldToTheWayTheGuardsComparisonHasToComeOut() {
-        Map<String, String> rows =
-                rowsOf(MODEL.replace("guard amount > 0", "guard Bool.not(amount <= 0)"));
-        assertEquals("Plain, 1", rows.get("kind=Plain"));
-        assertEquals("Plain, 0", rows.get("amount=x <= 0"), "the row about the refused class");
+        assertEquals("Plain, 0, 1", rowsOf(A_FORK_ABOVE).get("Plain at kind"));
     }
 
     private static final String TWO_AMOUNTS = """
@@ -230,28 +249,11 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
             }
             """;
 
-    /**
-     * Both sides of an {@code &&} at once. A row that stops at the first is not past the guard
-     * once the first holds — the second refuses it then — so what is asked for is the way whole.
-     *
-     * <p>The second side on a total, which no class of a position gives a row the way to: held to
-     * the first side alone, the search finds nothing past the guard however it walks the classes.
-     */
-    @Test
-    void aWayPastAGuardIsEveryComparisonItTakesAtOnce() {
-        String both = A_TOTAL
-                .replace("(kind: Kind, items: List<Item>)", "(kind: Kind, a: Int, items: List<Item>)")
-                .replace("let settle (kind, items)", "let settle (kind, a, items)")
-                .replace("guard total(items) > 0", "guard a > 0 && total(items) > 0");
-        assertEquals("Plain, 1, [Item { amount = Amount(1), payer = Self }]",
-                rowsOf(both).get("kind=Plain"));
-    }
-
     /** Either side of an {@code ||}, and one is enough: the row is moved at one position. */
     @Test
     void aGuardWithTwoWaysPastIsPassedByOne() {
         assertEquals("Plain, 1, 0",
-                rowsOf(TWO_AMOUNTS.replace("CONDITION", "a > 0 || b > 0")).get("kind=Plain"));
+                rowsOf(TWO_AMOUNTS.replace("CONDITION", "a > 0 || b > 0")).get("Plain at kind"));
     }
 
     /**
@@ -267,7 +269,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
 
                 let noAmount: Int = 0
                 """;
-        assertEquals("Plain, noAmount", rowsOf(stating).get("kind=Plain"));
+        assertEquals("Plain, noAmount", rowsOf(stating).get("Plain at kind"));
     }
 
     /**
@@ -301,7 +303,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 let unpaid: Claim = Claim { kind = Plain, amount = 0 }
                 """;
         assertEquals("Claim { ...unpaid, kind = Express }",
-                rowsOf(stating).get("claim.kind=Express"));
+                rowsOf(stating).get("Express at claim.kind"));
     }
 
     /**
@@ -356,8 +358,8 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     void aParameterTheRowComposesBesideAStatedValueIsHeldPastTheGuard() {
         Map<String, String> rows = rowsOf(STATED_BESIDE_COMPOSED);
         assertEquals("Plain, [Item { cost = Meal { amount = Amount(1), people = People(1) } }]",
-                rows.get("items[*].cost=Meal"));
-        assertEquals("Express, trip", rows.get("kind=Express"),
+                rows.get("Meal at items[*].cost"));
+        assertEquals("Express, trip", rows.get("Express at kind"),
                 "the row that writes the stated list keeps it");
     }
 
@@ -366,7 +368,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     void aRowTakenPastTheGuardSaysNothingOfIt() {
         Map<String, RepairShortfall> stops = stopsOf(MODEL);
         assertEquals(List.of(), stops.keySet().stream()
-                        .filter(label -> label.startsWith("kind=")).toList(),
+                        .filter(label -> label.endsWith(" at kind")).toList(),
                 () -> "the rows about the kind went on: " + stops);
     }
 
@@ -377,7 +379,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     @Test
     void aRowAboutTheClassTheGuardRefusesSaysWhatTheWayPastCameTo() {
         assertEquals(List.of("searched: ONE_POSITION_CANNOT_BE_BOTH"),
-                waysOf(stopsOf(MODEL).get("amount=x <= 0")));
+                waysOf(stopsOf(MODEL).get("amount: x <= 0 at amount")));
     }
 
     /**
@@ -391,7 +393,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 let noAmount: Int = 0
                 """;
         assertEquals(List.of("not searchable: IT_WOULD_REWRITE_A_STATED_VALUE"),
-                waysOf(stopsOf(stating).get("kind=Plain")));
+                waysOf(stopsOf(stating).get("Plain at kind")));
     }
 
     /**
@@ -428,11 +430,11 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         assertEquals(List.of("searched: ONE_POSITION_CANNOT_BE_BOTH",
                         "searched: NO_VALUE_CAN_STAND_THERE"),
                 waysOf(stopsOf(TWO_WAYS.replace("CONDITION", "a > 0 || b.value > 20"))
-                        .get("a=x <= 0")));
+                        .get("a: x <= 0 at a")));
         assertEquals(List.of("searched: NO_VALUE_CAN_STAND_THERE",
                         "searched: ONE_POSITION_CANNOT_BE_BOTH"),
                 waysOf(stopsOf(TWO_WAYS.replace("CONDITION", "b.value > 20 || a > 0"))
-                        .get("a=x <= 0")));
+                        .get("a: x <= 0 at a")));
     }
 
     /**
@@ -446,7 +448,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         // the choice, which is one of several things and no list of ways.
         RepairShortfall stop = stopsOf(MODEL.replace("guard amount > 0",
                 "guard (if amount > 0 then amount else 0 - amount) > 4"))
-                .get("amount=0 < x <= 4");
+                .get("amount: 0 < x <= 4 at amount");
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.WaysNotRead,
                 () -> "the ways past the guard were not read, which is what is said: " + stop);
     }
@@ -454,11 +456,11 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     /** A stop says which requirement the looking was done for, which is the class its row is. */
     @Test
     void aStopSaysWhichRequirementItWasLookedFor() {
-        RepairShortfall stop = stopsOf(MODEL).get("amount=x <= 0");
+        RepairShortfall stop = stopsOf(MODEL).get("amount: x <= 0 at amount");
         assertNotNull(stop, "the row about the refused class stops at the guard");
         List<String> labels = new ArrayList<>();
         stop.soughtFor().forEach(purpose -> labels.addAll(purpose.labels()));
-        assertEquals(List.of("amount=x <= 0"), labels);
+        assertEquals(List.of("amount: x <= 0 at amount"), labels);
     }
 
     /**
@@ -490,14 +492,14 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     @Test
     void aRowGoesOnPastACountOfWhatAFilterKeepsAgainstNought() {
         assertEquals("[1], [], 0",
-                rowsOf(COUNTED.replace("CONDITION", SOME_X + " >= 1")).get("n=x <= 0"));
+                rowsOf(COUNTED.replace("CONDITION", SOME_X + " >= 1")).get("n: x <= 0 at n"));
     }
 
     /** The same with the count named first, which says nothing different. */
     @Test
     void aRowGoesOnPastACountNamedFirst() {
         assertEquals("[1], [], 0", rowsOf(COUNTED.replace("guard CONDITION",
-                "let c = " + SOME_X + "\n    guard c >= 1")).get("n=x <= 0"));
+                "let c = " + SOME_X + "\n    guard c >= 1")).get("n: x <= 0 at n"));
     }
 
     /**
@@ -509,14 +511,14 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     @Test
     void aRowGoesOnPastWhatAFilterKeepsNotBeingEmpty() {
         assertEquals("[1], [], 0", rowsOf(COUNTED.replace("CONDITION",
-                "Bool.not(List.isEmpty(List.filter(x -> x > 0, xs)))")).get("n=x <= 0"));
+                "Bool.not(List.isEmpty(List.filter(x -> x > 0, xs)))")).get("n: x <= 0 at n"));
     }
 
     /** Either count, written as two comparisons: each is a way past of its own. */
     @Test
     void aRowGoesOnPastEitherOfTwoCounts() {
         assertEquals("[1], [0], 0", rowsOf(COUNTED.replace("CONDITION",
-                SOME_X + " >= 1 || " + SOME_Y + " >= 1")).get("n=x <= 0"));
+                SOME_X + " >= 1 || " + SOME_Y + " >= 1")).get("n: x <= 0 at n"));
     }
 
     /**
@@ -527,9 +529,9 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     void aRowGoesOnPastASumOfCountsAlongOneOfItsWays() {
         Map<String, String> rows = rowsOf(COUNTED.replace("CONDITION",
                 SOME_X + " + " + SOME_Y + " >= 1"));
-        assertEquals("[1], [0], 0", rows.get("n=x <= 0"));
+        assertEquals("[1], [0], 0", rows.get("n: x <= 0 at n"));
         // A row about the elements of `ys` that are not above nought is held to the other way.
-        assertEquals("[1], [0], 1", rows.get("ys[*]=x <= 0"));
+        assertEquals("[1], [0], 1", rows.get("ys[*]: x <= 0 at ys[*]"));
     }
 
     /**
@@ -552,7 +554,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                     true
                 }
                 """.replace("SUM", SOME_X + " + " + SOME_Y);
-        assertEquals("[1], [0], 1, 0", rowsOf(source).get("m=x <= 0"));
+        assertEquals("[1], [0], 1, 0", rowsOf(source).get("m: x <= 0 at m"));
     }
 
     /**
@@ -568,7 +570,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 .replace("let settle (xs, ys, n) = {", "let none: List<Int> = [0]\n\n"
                         + "let settle (xs, ys, n) = {");
         // The row keeps the list the module states for `xs`, and goes past along `ys`.
-        assertEquals("none, [Count(1)], 0", rowsOf(source).get("n=x <= 0"));
+        assertEquals("none, [Count(1)], 0", rowsOf(source).get("n: x <= 0 at n"));
     }
 
     /**
@@ -598,9 +600,9 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     @Test
     void aRowGoesOnPastAGuardOnWhichCaseAValueIs() {
         assertEquals("Express, [], 0",
-                rowsOf(CASED.replace("CONDITION", "kind == Express")).get("n=x <= 0"));
+                rowsOf(CASED.replace("CONDITION", "kind == Express")).get("n: x <= 0 at n"));
         assertEquals("Express, [1], 0", rowsOf(CASED.replace("CONDITION",
-                "kind == Express && List.any(x -> x > 0, xs)")).get("n=x <= 0"));
+                "kind == Express && List.any(x -> x > 0, xs)")).get("n: x <= 0 at n"));
     }
 
     /** What each way past the guard came to, in a word apiece. */
@@ -649,9 +651,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     }
 
     private static FillResult generated(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "example.settle");
         assertNotNull(all, "the model under test compiles");
         return all.get("settle").composed();

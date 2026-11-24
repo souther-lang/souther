@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.partition.Axis;
@@ -63,7 +64,7 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
         for (PartitionClass each : axis.classes()) {
             Recognition.OfASet is = assertInstanceOf(Recognition.OfASet.class, each.recognises(),
                     "a class such a rule makes is the values in it");
-            assertTrue(!is.values().isEmpty(), "and it holds some of them");
+            assertTrue(!is.values().shownToHoldNone(), "and it holds some of them");
         }
     }
 
@@ -245,7 +246,7 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
 
                 behavior route : (code: Code, p: String) -> Where
                 let route (code, p) = {
-                    guard String.startsWith(p, code.value) else Abroad
+                    guard String.startsWith(String.append(p, "x"), code.value) else Abroad
                     Home
                 }
                 """);
@@ -363,11 +364,7 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
 
                 """ + behavior;
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Partitions.Partitioning divided = compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "route")).value();
         assertNotNull(divided, "the behavior was divided");

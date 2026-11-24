@@ -14,7 +14,6 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -68,8 +67,8 @@ class CompileExampleGenerateTest {
      * reads of them, and no test here reads the rest.
      */
     private static Compilation compiledOf(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+        return SHARED.compiles(source, () -> {
+            Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             // What `souther examples` asks for. A line a `guard` drew is only decidable where the
             // arms were measured, so below this the generator has nothing to say about one.
             compilation.measure(Adequacy.Asked.fullReport());
@@ -77,13 +76,13 @@ class CompileExampleGenerateTest {
         });
     }
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     /**
@@ -98,7 +97,7 @@ class CompileExampleGenerateTest {
                 OfferingRequest.overTheModule(module));
         assertNotNull(offering, "the model under test compiles");
         return GeneratedRows.of(offering, Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static Map<String, Adequacy.Filling> generated(String source) {
@@ -190,7 +189,7 @@ class CompileExampleGenerateTest {
         for (CameToNothing left : filled.unresolved()) {
             assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                     left.why().reason());
-            assertTrue(left.why().classes().contains("request.lo=100 < x"),
+            assertTrue(left.why().classes().contains("request.lo: 100 < x at request.lo"),
                     left.why().classes().toString());
         }
         // And the class beside it is not left unwritten with it. A row for `request.hi = 50 < x`
@@ -337,7 +336,7 @@ class CompileExampleGenerateTest {
                 "the class nothing covers, with an id and a prefecture the rules accept");
     }
 
-    /** And a date, which a row writes as its ISO form. */
+    /** And a date, which a row writes as its ISO form, on the day the rows are written. */
     @Test
     void aDateGetsAValueTheModelAccepts() {
         String dated = """
@@ -362,7 +361,7 @@ class CompileExampleGenerateTest {
                     | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
                 """;
 
-        assertEquals(List.of("Request { on = Date(\"1970-01-01\"), flag = No }"),
+        assertEquals(List.of("Request { on = Date(\"" + TestDay.DATE + "\"), flag = No }"),
                 inputs(generated(dated).get("take").composed()));
     }
 
@@ -408,8 +407,7 @@ class CompileExampleGenerateTest {
         String pasted = tabbed + sourceOf(blockOf(tabbed, "example.tabbed"))
                 .replace("<?>", "Ok { n = 0 }");
 
-        Compilation compilation = Compilation.ofSource(pasted, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(pasted);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(2, rows.size(), "the row that was there, and the one generated");
@@ -671,7 +669,7 @@ class CompileExampleGenerateTest {
         for (CameToNothing each : left) {
             assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                     each.why().reason(), each.toString());
-            assertTrue(each.why().subject().startsWith("request.flag="),
+            assertTrue(each.why().subject().endsWith(" at request.flag"),
                     "and it is still about the combination: " + each.why().subject());
         }
     }
@@ -780,8 +778,7 @@ class CompileExampleGenerateTest {
     void answeringTheBlockGivesRowsThatHoldAndCoverWhatTheyWereFor() {
         String source = answered(TRIP, "Accepted { at = \"now\" }");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two generated");
@@ -800,7 +797,7 @@ class CompileExampleGenerateTest {
         String wrong = answered(TRIP, "Accepted { at = \"later\" }");
 
         Compilation compilation = Compilation.ofSource(wrong, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1905", "E1905"), compilation);
 
         assertTrue(outcomes(compilation).stream()
                         .anyMatch(row -> row.disposition() == souther.compiler.observe.Disposition
@@ -825,8 +822,7 @@ class CompileExampleGenerateTest {
     void theBlockPastedUnchangedIsRowsThatStateNoAnswer() {
         String pasted = TRIP + sourceOf(blockOf(TRIP, "example.trip"));
 
-        Compilation compilation = Compilation.ofSource(pasted, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(pasted);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two pasted");
@@ -885,7 +881,7 @@ class CompileExampleGenerateTest {
 
         assertEquals(List.of("Cond { ...none, f = C }", "Cond { ...none, g = G2 }"),
                 inputs(filled));
-        assertEquals(List.of(List.of("c.f=C"), List.of("c.g=G2")),
+        assertEquals(List.of(List.of("C at c.f"), List.of("G2 at c.g")),
                 filled.rows().stream().map(row -> row.labels()).toList(),
                 "each named for the one class it moves");
     }
@@ -902,8 +898,7 @@ class CompileExampleGenerateTest {
     void theSpreadRowsHoldWhenTheyArePastedBack() {
         String source = answered(AGAINST_A_LET, "Out { n = 0 }");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two generated");
@@ -1071,7 +1066,7 @@ class CompileExampleGenerateTest {
                 + """
 
                         example submit
-                            | "a near one" : (near) -> Accepted { at = "now" }
+                            | "a near one" : (near) -> Accepted { at = "wide" }
                         """;
 
         // Every row offered, whatever it was composed for. A row through an arm is written against
@@ -1093,8 +1088,10 @@ class CompileExampleGenerateTest {
     /** Each named for the one class it is about, whatever it took to write one. */
     @Test
     void aFieldMovedToMakeARowBuildableIsNoPartOfWhatItIsFor() {
-        assertEquals(List.of(List.of("request.hi=0 <= x <= 60"), List.of("request.hi=60 < x"),
-                        List.of("request.lo=0 <= x <= 50"), List.of("request.lo=50 < x")),
+        assertEquals(List.of(List.of("request.hi: 0 <= x <= 60 at request.hi"),
+                        List.of("request.hi: 60 < x at request.hi"),
+                        List.of("request.lo: 0 <= x <= 50 at request.lo"),
+                        List.of("request.lo: 50 < x at request.lo")),
                 generated(CORRELATED).get("submit").composed().rows().stream()
                         .map(row -> row.labels()).toList());
     }
@@ -1177,7 +1174,7 @@ class CompileExampleGenerateTest {
         Compilation compilation = Compilation.ofSources(List.of(model, companion),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        String block = GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).text();
+        String block = GeneratedRows.of(compilation, null, null, SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertEquals(declared, block.lines()
                         .filter(line -> line.startsWith("example "))

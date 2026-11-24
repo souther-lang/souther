@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import org.junit.jupiter.api.Test;
 
@@ -65,7 +66,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
     /** Every comparison of the body, by the line of the source it is written on. */
     private static Map<Integer, BoundaryPolicy.Standing> classified() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -85,7 +86,8 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                                 checked.elementBindings().get("read"),
                                 ValueDefinitions.of(checked.analysisBodies().get("read"),
                                         rules.newtypes()),
-                                inputs.dependencies())).comparisons()) {
+                                inputs.dependencies()),
+                        ComparisonWitnesses.AtComparisons.NONE).comparisons()) {
             Citation.Written at = assertInstanceOf(
                     Citation.Written.class, each.at(),
                     "the model under test is written in this compile's own source");

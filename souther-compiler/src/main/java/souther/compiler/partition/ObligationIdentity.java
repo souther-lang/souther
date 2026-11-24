@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.observe.RowRef;
 import souther.compiler.types.TypeSymbol;
 
@@ -30,9 +31,10 @@ import java.util.Set;
  * own — which is the parallel bookkeeping this is here to have none of.
  */
 public sealed interface ObligationIdentity
-        permits ObligationIdentity.OfALine, ObligationIdentity.OfABorder, ObligationIdentity.OfAnArm,
+        permits ObligationIdentity.OfALine, ObligationIdentity.OfABorder,
+                ObligationIdentity.OfATiltAtAPosition, ObligationIdentity.OfAnArm,
                 ObligationIdentity.OfARow, ObligationIdentity.OfAnOutputCase,
-                ObligationIdentity.OfADecisionRule,
+                ObligationIdentity.OfADecisionRule, ObligationIdentity.OfACaseOfAStatement,
                 ObligationIdentity.OfACombinationOfDecisions,
                 ObligationIdentity.OfAFallbackPairCell, ObligationIdentity.OfAReplacement,
                 WhereACaseOfAnInputIsOwed {
@@ -88,6 +90,31 @@ public sealed interface ObligationIdentity
         public OfABorder {
             Objects.requireNonNull(line, "an obligation is told apart by something");
             Objects.requireNonNull(direction, "a line is held against some line beside it");
+        }
+    }
+
+    /**
+     * One position of a value a computation derives from several positions and cuts at several
+     * places, which is what a row fixing how the position weighs into it is owed for.
+     *
+     * <p>Beside {@link OfABorder} and on another grain again. That one holds one line against one
+     * line beside it; this holds the computation, which every threshold of its table cuts,
+     * against a weight of one of its positions. A weight is a fault of the computation and not of
+     * a threshold, so a row fixing it fixes it for every threshold, and the obligation is owed
+     * once for the computation however many thresholds the table has and however many of its
+     * positions a window of the table reads.
+     *
+     * <p>The computation and the position, and never a threshold: which threshold a row stands at
+     * moves with the rows an author writes, and an obligation whose identity moved with them would
+     * be a new obligation every run. And the computation, not the comparison alone: one comparison
+     * read at two calls is two computations, each owed its own.
+     */
+    record OfATiltAtAPosition(DerivedValue value, NumericTerm position)
+            implements ObligationIdentity {
+
+        public OfATiltAtAPosition {
+            Objects.requireNonNull(value, "an obligation is told apart by something");
+            Objects.requireNonNull(position, "a weight is a weight of some position");
         }
     }
 
@@ -200,6 +227,23 @@ public sealed interface ObligationIdentity
     }
 
     /**
+     * One case a statement of the decision draws inside itself, which the decision's measure is
+     * short of until some row is seen in it.
+     *
+     * <p>The behavior beside the case for the reason a rule of a decision has one: a statement is
+     * written in the terms of one body's positions, and a row written for another behavior is no
+     * evidence of a case of this one.
+     */
+    record OfACaseOfAStatement(String behavior, CaseOfAStatement which)
+            implements ObligationIdentity {
+
+        public OfACaseOfAStatement {
+            Objects.requireNonNull(behavior, "a case of a statement is some body's");
+            Objects.requireNonNull(which, "an obligation is told apart by something");
+        }
+    }
+
+    /**
      * One combination of the decisions a body settles a value by: the way in to where they meet,
      * and one outcome of each of them at it.
      *
@@ -223,7 +267,7 @@ public sealed interface ObligationIdentity
 
         public OfACombinationOfDecisions {
             Objects.requireNonNull(behavior, "a combination of decisions is some body's");
-            settled = Set.copyOf(settled);
+            settled = DecisionSet.of(settled);
             if (settled.isEmpty()) {
                 // A combination of a body's decisions is decisions being settled. Empty, it would
                 // be a requirement every run meets by having run at all.

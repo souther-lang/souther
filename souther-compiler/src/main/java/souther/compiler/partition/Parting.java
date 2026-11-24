@@ -91,6 +91,11 @@ public record Parting(Seam geometry, List<LineOrigin> readings) {
         return geometry.scaledBy(per).map(scaled -> new Parting(scaled, readings));
     }
 
+    /** The same place with every level counted ({@link Seam#counted}). */
+    ExactAnswer<Parting> counted() {
+        return geometry.counted().map(counted -> new Parting(counted, readings));
+    }
+
     /** What makes two of these one place, which is the quantity's answer and not the model's. */
     public String key() {
         return geometry.key();

@@ -1,10 +1,12 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.NameMessage.NothingSaysWhatThisFunctionTakes;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -469,8 +471,7 @@ class ExampleCallsHelperTest {
                 """);
         // The lambda escapes as the operand's answer, which no position that takes a value holds:
         // the refusal is the language's own (E1809), not a sentence about library functions.
-        assertTrue(e.getMessage().contains("Nothing says what this function takes"), e.getMessage());
-        assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
+        assertInstanceOf(NothingSaysWhatThisFunctionTakes.class, e.diagnostic().said(), e.getMessage());
     }
 
     /**

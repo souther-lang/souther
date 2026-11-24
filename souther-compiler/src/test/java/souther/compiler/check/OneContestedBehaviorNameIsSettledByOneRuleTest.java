@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -48,12 +49,13 @@ class OneContestedBehaviorNameIsSettledByOneRuleTest {
             """;
 
     /** What was said about {@code own.sou}, as the message each report carries. */
-    private static List<String> saidAbout(String own) {
+    private static List<String> saidAbout(List<String> refusedWith, String own) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("other.sou", OTHER);
         byId.put("third.sou", THIRD);
         byId.put("own.sou", own);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         List<String> said = new ArrayList<>();
         for (Located each : compilation.diagnostics().get(new SourceId("own.sou"))) {
             said.add(each.diagnostic().said().getClass().getSimpleName());
@@ -64,7 +66,7 @@ class OneContestedBehaviorNameIsSettledByOneRuleTest {
     /** Two written lines, each bringing a behavior of one name. One fact, one report. */
     @Test
     void twoWrittenLinesAreOneReport() {
-        assertEquals(List.of("TheNameIsImportedFromTwoModules"), saidAbout("""
+        assertEquals(List.of("TheNameIsImportedFromTwoModules"), saidAbout(List.of("E1508"), """
                 module app.own exposing ( Out )
                 import app.other ( quote )
                 import app.third ( quote )
@@ -83,7 +85,7 @@ class OneContestedBehaviorNameIsSettledByOneRuleTest {
      */
     @Test
     void aQualifiedReferenceBesideAWrittenLineIsTwoBehaviors() {
-        assertEquals(List.of(), saidAbout("""
+        assertEquals(List.of(), saidAbout(List.of(), """
                         module app.own exposing ( Out, flow : Out, fromThird : Out )
                         import app.other ( quote )
                         data Out = { n: Int }

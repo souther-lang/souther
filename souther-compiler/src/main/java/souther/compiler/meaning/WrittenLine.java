@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
@@ -26,6 +27,28 @@ public record WrittenLine(List<Arm> arms) {
     }
 
     /**
+     * The lines of one comparison in the order a reader that has nothing else to go on puts them
+     * in: the arms taken, outermost first, each by its choice, then which arm, then whether it
+     * selects; a line that is a prefix of another comes before it.
+     *
+     * <p>Total over the lines of one comparison: two lines it puts together are the same line.
+     */
+    public static Comparator<WrittenLine> inASteadyOrder() {
+        Comparator<Arm> arm = Comparator.comparing(Arm::at, WrittenChoice.inASteadyOrder())
+                .thenComparingInt(Arm::arm)
+                .thenComparing(Arm::selects);
+        return (one, other) -> {
+            for (int at = 0; at < Math.min(one.arms().size(), other.arms().size()); at++) {
+                int order = arm.compare(one.arms().get(at), other.arms().get(at));
+                if (order != 0) {
+                    return order;
+                }
+            }
+            return Integer.compare(one.arms().size(), other.arms().size());
+        };
+    }
+
+    /**
      * One arm taken at one choice.
      *
      * @param at      the choice
@@ -44,6 +67,23 @@ public record WrittenLine(List<Arm> arms) {
                         + arm);
             }
         }
+    }
+
+    /**
+     * The choice this line is what one arm of answers — or null where it is the comparison
+     * itself, a line under arms of more than one choice, or how an arm is selected.
+     */
+    public WrittenChoice choiceAnArmOfWhichItAnswers() {
+        return arms.size() != 1 || arms.getFirst().selects() ? null : arms.getFirst().at();
+    }
+
+    /**
+     * Whether this line is what the arms it is under answer, at however many choices: it is not
+     * the comparison itself and no arm of it only selects. A row that takes all of them has the
+     * comparison come out as this line does.
+     */
+    public boolean answersUnderArms() {
+        return !arms.isEmpty() && arms.stream().noneMatch(Arm::selects);
     }
 
     /** This line, one arm further in. */

@@ -73,6 +73,17 @@ public enum CompositionRepertoire {
     VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
 
     /**
+     * The values of the numbers of a form weighed by what is not a whole number, at a remainder
+     * the form is asked to leave.
+     *
+     * <p>A remainder is walked for as a class of whole numbers the form's numbers come to, and a
+     * form weighed by a half comes to no whole number that the class can be read off. So no value
+     * of its numbers is walked for, and that none was found is not that none is there. Raising
+     * anything reaches none of them; what would is somebody writing a walk over such a form.
+     */
+    VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS,
+
+    /**
      * The places inside one run of an order that this compiler names a value at.
      *
      * <p>It names one. Where the order has a smallest step there are others to step to and nothing
@@ -140,23 +151,47 @@ public enum CompositionRepertoire {
     ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
 
     /**
+     * The totals of a key from the last of its elements that puts its number in place of the
+     * ones before, among the elements adding up to them.
+     *
+     * <p>One element is a key whose total is its own number, whichever case it is of, so such a
+     * total is written as one. A container that must hold more of that key's elements, and a
+     * total no one element's number comes to, are written by none of these; what would is a way
+     * of writing the elements after the last put so that they add up to it.
+     */
+    TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
+
+    /**
      * The elements whose computed number is made of the fields of one element in ways this
      * compiler solves for.
      *
      * <p>A total of what a walk computed of each element is written by choosing one field of every
-     * element and solving for it, where the computation is a form of that one field alone. A form of
-     * several fields, or a choice between two by a flag, has more than one value to choose in an
-     * element, and nothing here chooses the others so that the first can be solved for. A choice by
-     * the element's case none of whose arms is a form of one field of its case is the same, and so
-     * is a weight made of the position or a choice by it between two forms of the field, which
-     * weigh the positions apart. Raising
-     * anything reaches none of them; what would is a way of choosing the rest of an element.
+     * element and solving for it, where the computation is a form of that one field once the
+     * others it reads are held still. A choice between two by a flag has two numbers to choose
+     * between in an element, and nothing here chooses which. A choice by the element's case none of
+     * whose arms is a form of one field of its case is the same, and so is a weight made of the
+     * position or a choice by it between two forms of the field, which weigh the positions apart.
+     * Raising anything reaches none of them; what would is a way of choosing the rest of an
+     * element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
      * told to raise a number that changes nothing; read as an answer about the model, they are told
      * the rules admit no row when what happened is that this compiler wrote none.
      */
     ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+
+    /**
+     * The containers a total of what was computed of each element is spread over, where the
+     * elements differ at a field the computation reads besides the one solved for.
+     *
+     * <p>A computation of several fields, a form of them or their products, is solved for one field
+     * with every other one it reads held at one value, the same in every element. A container whose
+     * elements hold different values there comes to totals none of these do — a product of two
+     * fields held at one is the other field's total, and every other total of products is written
+     * by none of these. What would reach them is a way of sharing a total out over several fields,
+     * and raising no figure does.
+     */
+    ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
 
     /**
      * The containers a total of what was computed of each element by its case is spread over,
@@ -183,6 +218,19 @@ public enum CompositionRepertoire {
     TREES_WRITTEN_FOR_A_COUNT,
 
     /**
+     * The trees written for how long the line is that a search down them finds: from the root to
+     * the first node, in the order the search goes down, that holds the value it is for.
+     *
+     * <p>Written as a chain: each node the only element below the one above it, the last holding
+     * the value the search is for at one field and the nodes above it holding another value there,
+     * as many nodes as the line asked for. A line past those is not written — a value held at a
+     * field of a field of the node, nodes below a node that are not a list, a value searched for
+     * that stands at no one value — and none of it is a line no tree makes: what would reach it
+     * is a way of writing the nodes, and raising no figure does.
+     */
+    TREES_WRITTEN_FOR_A_LINE,
+
+    /**
      * The strings written for how many code points of a class what a case conversion makes of them
      * holds.
      *
@@ -193,7 +241,40 @@ public enum CompositionRepertoire {
      * a count no string comes to: what would reach it is a way of writing strings backwards through
      * the conversion, and raising no figure does.
      */
-    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR;
+    STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+
+    /**
+     * The maps whose values come to a total, written with the one entry that holds it. A map of
+     * several entries coming to the same total, and a map whose entries are asked to hold
+     * something beside the number, are written by no way here; raising no figure does, and a total
+     * only such a map comes to is not one no map comes to.
+     */
+    MAPS_WRITTEN_WITH_ONE_ENTRY,
+
+    /**
+     * The rows whose run works a number out at an item, for a number only a run works out, where
+     * the comparison names containers and no whole number outside one.
+     *
+     * <p>Nothing says where the input's numbers stand for the run to come to a value there, so a
+     * row is looked for by writing candidates and running each. The candidates here are the sizes
+     * of the containers named, all of them one size; a row the item asks for elsewhere — a longer
+     * container, elements of other values — is found by none of them, and that none was found is
+     * not that none is there. What would reach the rest is a way of writing the candidates the run
+     * turns on, and raising no figure does.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+
+    /**
+     * The same, where the comparison names whole numbers outside a container and no container:
+     * the candidates are those numbers, all of them at one value.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+
+    /**
+     * The same, where the comparison names both: the candidates are every size crossed with every
+     * value.
+     */
+    ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES;
 
     /**
      * Whether a row that meets this for one value of a point meets it for every other: the
@@ -208,11 +289,17 @@ public enum CompositionRepertoire {
         return switch (this) {
             case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR -> true;
             case WAYS_A_TOTAL_IS_SPREAD, PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
-                 VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS, PLACES_IN_A_RUN_THAT_ARE_NAMED,
+                 VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                 VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS,
+                 PLACES_IN_A_RUN_THAT_ARE_NAMED,
                  ELEMENTS_CHOSEN_FOR_A_COUNT, KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
                  KEYS_OF_ONE_FOLD_ASKED_TOGETHER, ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
-                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
-                 TREES_WRITTEN_FOR_A_COUNT, STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR -> false;
+                 TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
+                 MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER, ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
+                 TREES_WRITTEN_FOR_A_COUNT, TREES_WRITTEN_FOR_A_LINE,
+                 STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                 MAPS_WRITTEN_WITH_ONE_ENTRY, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                 ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES, ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES -> false;
         };
     }
 

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -108,14 +110,13 @@ class WhichReadingStoppedDecidesWhatAPositionIsShortOfTest {
     }
 
     private static List<String> undividedIn(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return Partitions.of("check",
                         InputDomain.of(sigs.get("check"), reading,
                                 TypeCardinality.Counts.workedOutIn(reading), Membership.none())
@@ -126,11 +127,10 @@ class WhichReadingStoppedDecidesWhatAPositionIsShortOfTest {
     }
 
     private static List<String> borderIn(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source,
+                souther.compiler.query.Adequacy.Asked.fullReport());
         return souther.compiler.report.AdequacyReport.of(compilation)
-                .human(souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(each -> each.startsWith("border"))
                 .toList();

@@ -3,11 +3,10 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.test.RepositoryJavaSources;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
@@ -15,7 +14,6 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.WildcardType;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -136,7 +134,7 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
      * on the shape of the API would miss a second one written next to the first.
      */
     @Test
-    void onlyAReadingSaysADefinitionIsPublished() throws IOException {
+    void onlyAReadingSaysADefinitionIsPublished() {
         Class<?> leave = ModuleUniverse.InSight.Read.PublishedHelper.class;
         for (Constructor<?> each : leave.getDeclaredConstructors()) {
             assertTrue(Modifier.isPrivate(each.getModifiers()),
@@ -183,7 +181,7 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
      * where a rule is applied; a second somewhere is the defect.
      */
     @Test
-    void publicationIsDecidedInOnePlace() throws IOException {
+    void publicationIsDecidedInOnePlace() {
         List<String> reached = new ArrayList<>();
         for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             String text = read(source);
@@ -229,10 +227,6 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
     }
 
     private static String read(Path source) {
-        try {
-            return Files.readString(source);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return RepositoryJavaSources.forThisFork().mainText(source);
     }
 }

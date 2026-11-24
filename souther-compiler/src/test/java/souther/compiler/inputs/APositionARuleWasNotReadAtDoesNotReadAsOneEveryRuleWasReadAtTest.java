@@ -7,9 +7,10 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Answer;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,9 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * this holds for every position carrying the other kind and says nothing about the rest — which is
  * why the population here is every position of every model this repository carries, and the reason
  * is read off the finding rather than looked for in one place.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
 
     /**
@@ -95,7 +100,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
      */
     @Test
     void andAPositionNothingWasShortOfReadsAsOne() throws Exception {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module probe.plain
 
                 data Red
@@ -105,8 +110,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                 data Ok
 
                 behavior f : (c: Colour) -> Ok
-                """), ModulePath.EMPTY);
-        compilation.answerEverything();
+                """), ModulePath.EMPTY));
         List<InputDomain> read = new ArrayList<>();
         readings(compilation, read);
         Position at = read.get(0).positions().stream()
@@ -136,8 +140,8 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
             return everyReading;
         }
         List<InputDomain> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
-            readings(compilation, out);
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            readings(model.answered(), out);
         }
         everyReading = List.copyOf(out);
         return everyReading;

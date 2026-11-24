@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -123,7 +124,7 @@ class AnImplementationsParametersAreStatedOnceTest {
     }
 
     private static Hir.SpecBehavior behaviorOf(String source, String name) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         assertNotNull(prepared, "the model under test compiles");
@@ -134,7 +135,7 @@ class AnImplementationsParametersAreStatedOnceTest {
 
     /** What the accepted implementation of {@code name} was actually written with. */
     private static List<String> writtenParametersOf(String source, String name) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         assertNotNull(prepared, "the model under test compiles");

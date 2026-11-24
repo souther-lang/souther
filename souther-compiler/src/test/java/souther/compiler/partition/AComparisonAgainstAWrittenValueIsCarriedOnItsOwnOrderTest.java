@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -346,7 +347,7 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
 
     private static Read readingOf(String behavior) {
         return READINGS.computeIfAbsent(behavior, name -> {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            Compilation compilation = ACompiledModel.answered(MODEL);
             String module = compilation.modules().get(0);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");

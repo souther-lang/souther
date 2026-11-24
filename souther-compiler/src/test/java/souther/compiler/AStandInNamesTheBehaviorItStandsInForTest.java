@@ -6,6 +6,7 @@ import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,17 +64,19 @@ class AStandInNamesTheBehaviorItStandsInForTest {
                 """ + body;
     }
 
-    private static List<String> codesOf(String brings, String body) {
-        return codesOf(brings, body, "");
+    /** The codes the sources are refused with, then the codes of what they warn of. */
+    private static List<String> codesOf(List<String> refused, String brings, String body) {
+        return codesOf(refused, brings, body, "");
     }
 
     /** The same, {@code catalogRows} written after the catalog's own declarations. */
-    private static List<String> codesOf(String brings, String body, String catalogRows) {
-        List<String> codes = new java.util.ArrayList<>();
+    private static List<String> codesOf(List<String> refused, String brings, String body,
+                                        String catalogRows) {
+        List<String> codes = new ArrayList<>();
         Compilation compiled = Compilation.ofSources(
                 List.of(CATALOG + "\n" + catalogRows, shipping(brings, body)), ModulePath.EMPTY);
-        compiled.answerEverything();
-        compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+        ACompiledModel.refusedWith(refused, compiled);
+        codes.addAll(refused);
         compiled.warnings().forEach(w -> codes.add(w.diagnostic().code()));
         return codes;
     }
@@ -87,7 +90,7 @@ class AStandInNamesTheBehaviorItStandsInForTest {
      */
     @Test
     void aRequirementCarriedAcrossAModuleBoundaryIsStoodInFor() {
-        assertEquals(List.of(), codesOf(", currentStock", """
+        assertEquals(List.of(), codesOf(List.of(), ", currentStock", """
 
                 fake currentStock
                     | _ -> 在庫あり
@@ -102,7 +105,7 @@ class AStandInNamesTheBehaviorItStandsInForTest {
      */
     @Test
     void theStandInMayNameTheDependencyThroughItsModule() {
-        assertEquals(List.of(), codesOf("", """
+        assertEquals(List.of(), codesOf(List.of(), "", """
 
                 fake Catalog.currentStock
                     | _ -> 在庫あり
@@ -120,7 +123,7 @@ class AStandInNamesTheBehaviorItStandsInForTest {
      */
     @Test
     void aNamesakeDeclaredHereDoesNotAnswerTheBorrowedRequirement() {
-        List<String> codes = codesOf("", """
+        List<String> codes = codesOf(List.of("E1908"), "", """
 
                 behavior currentStock : (sku: Sku) -> Shipped
 
@@ -144,7 +147,7 @@ class AStandInNamesTheBehaviorItStandsInForTest {
      */
     @Test
     void aStandInIsReadAgainstTheRowsRecordedWhereTheBehaviorIsDeclared() {
-        List<String> codes = codesOf(", currentStock", """
+        List<String> codes = codesOf(List.of(), ", currentStock", """
 
                 fake currentStock
                     | (Sku("z-9")) -> Stock { sku = Sku("z-9"), count = 9 }
@@ -162,7 +165,7 @@ class AStandInNamesTheBehaviorItStandsInForTest {
     /** And where the two say the same thing, nothing is said. */
     @Test
     void aStandInThatAgreesWithThoseRowsSaysNothing() {
-        assertEquals(List.of(), codesOf(", currentStock", """
+        assertEquals(List.of(), codesOf(List.of(), ", currentStock", """
 
                 fake currentStock
                     | (Sku("z-9")) -> Stock { sku = Sku("z-9"), count = 3 }
@@ -211,8 +214,7 @@ class AStandInNamesTheBehaviorItStandsInForTest {
                     | "filed at the hour" : (Stamp("x"))
                         with Clocks.now = Stamp("10:00") -> Filed { at = Stamp("10:00") }
                 """), ModulePath.EMPTY);
-        compiled.answerEverything();
-        compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+        ACompiledModel.compiles(compiled);
         compiled.warnings().forEach(w -> codes.add(w.diagnostic().code()));
 
         assertEquals(List.of("E1919"), codes,

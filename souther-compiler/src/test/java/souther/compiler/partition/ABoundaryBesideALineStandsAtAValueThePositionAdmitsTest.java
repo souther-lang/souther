@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NameReach;
@@ -105,7 +106,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
 
     private static WitnessSearch admitting(ValueSet set) {
         return new WitnessSearch(AdmittedValues.of(Map.of(CODE, set), NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
     }
 
     /** The two positions of a pair, on an order with a step, since a distance is arithmetic and a
@@ -150,10 +151,10 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
         WitnessSearch bothWorkedOut = new WitnessSearch(
                 AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY,
                         BESIDE.position(), ValueSet.ANY), NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
         WitnessSearch onlyOne = new WitnessSearch(
                 AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.ANY), NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
 
         // The positive control: with both sets worked out the same pair is composed, so what the
         // two below show is the missing set and not a pair nothing could have built.
@@ -184,7 +185,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
         WitnessSearch oneValueEach = new WitnessSearch(
                 AdmittedValues.of(Map.of(COUNTED.position(), ValueSet.just(Value.number(0)),
                         BESIDE.position(), ValueSet.just(Value.number(0))), NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
 
         Realization made = pair(COUNTED, BESIDE, oneValueEach);
 
@@ -304,7 +305,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
         WitnessSearch elsewhere = new WitnessSearch(
                 AdmittedValues.of(Map.of(TermPath.of("somewhereElse"), A_CHARACTER_AT_LEAST),
                         NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
 
         assertInstanceOf(Realization.Unknown.class, realize(run(Towards.BELOW), elsewhere),
                 "nothing worked out what this position holds, so nothing here composes a value at"
@@ -372,7 +373,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
                 () -> {
                     taken.incrementAndGet();
                     return PatternPlan.Budget.OF_A_WITNESS.meter();
-                });
+                }, TestDay.TODAY);
 
         new LevelRealizer().realize(
                 new Standing.OfOneCoordinate(VALUE, whole, where),

@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -90,10 +91,9 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
      * a slot nothing here reaches is not a fault, and a slot that stops being reached is something
      * to look at. Either way the list moves and somebody reads it.
      *
-     * <p>Five are not reached. {@code PreservedArgument} stands in no body that runs — a preserved
+     * <p>Three are not reached. {@code PreservedArgument} stands in no body that runs — a preserved
      * call is what an analysis keeps and coverage numbering refuses one outright — so nothing that
-     * compiles will ever put one here. {@code TupleElement} and {@code TupleSource} are of a shape
-     * the models below do not write. {@code AppliedFunction} and {@code ApplyArgument} are for a
+     * compiles will ever put one here. {@code AppliedFunction} and {@code ApplyArgument} are for a
      * function value that is applied through a binding rather than spliced, which is what the
      * expansion these bodies go through leaves none of.
      */
@@ -109,7 +109,7 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
                         "ConstructedAttempt", "ConstructedElse", "ConstructedThen", "FieldTarget",
                         "FieldValue", "IfCondition", "IfElse", "IfThen", "LetBody", "LetValue",
                         "ListElement", "MatchCase", "MatchScrutinee", "NegOperand", "SomeValue",
-                        "WidenedValue"),
+                        "TupleElement", "TupleSource", "WidenedValue"),
                 List.copyOf(met),
                 "which slots the models put something in, and so which slots the checks above are"
                         + " about");
@@ -194,10 +194,16 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
     private static List<Core> checkedBodies() {
         List<Core> out = new ArrayList<>();
         List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
+        List<List<String>> refused = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus -> {
+            sources.add(corpus.sources());
+            refused.add(corpus.refusedWith());
+        });
         sources.add(List.of(BESIDE_THE_CORPORA));
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
+        refused.add(List.of());
+        for (int at = 0; at < sources.size(); at++) {
+            Compilation compilation = Compilation.ofSources(sources.get(at), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(refused.get(at), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

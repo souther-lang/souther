@@ -1,10 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -72,6 +74,7 @@ class WhatAScopeReadsOfTheModulesAroundItTest {
         assertFalse(compilation.db().isComputed(new Front.LibraryClaims("scope.money")),
                 "and nothing it writes is answered by what the module it imports from may write"
                         + " bare");
+        ACompiledModel.compiles(compilation);
     }
 
     @Test
@@ -87,5 +90,6 @@ class WhatAScopeReadsOfTheModulesAroundItTest {
         assertFalse(compilation.db().isComputed(new Names.Declarations("shared.money")),
                 "there is no module of that name, and asking what it declares is asking whether it"
                         + " is in an import cycle — a question about every module there is");
+        ACompiledModel.refusedWith(List.of("E1504"), compilation);
     }
 }

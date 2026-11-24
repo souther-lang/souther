@@ -54,6 +54,21 @@ public enum ConditionJoin {
         };
     }
 
+    /**
+     * The operator that composes this way, as {@link #of} says what an operator composes.
+     *
+     * <p>Found by asking that table and not by naming the operator, so what composes which way is
+     * said once.
+     */
+    public BinOp operator() {
+        for (BinOp op : BinOp.values()) {
+            if (of(op).filter(this::equals).isPresent()) {
+                return op;
+            }
+        }
+        throw new IllegalStateException("no operator composes " + this);
+    }
+
     /** What the connective composes where the condition it joins is denied: both halves where
      *  either of them would have done, and either of them where both would have. */
     public ConditionJoin denied() {

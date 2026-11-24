@@ -42,6 +42,16 @@ public final class WalkElements {
         return GrowingFold.elementBindingOf(walk);
     }
 
+    /** The container a walk still standing as a call hands its elements from, or null where
+     *  {@code walk} is no such walk. */
+    public static Core containerOf(Core walk, InputReads where, Symbols symbols,
+                                   DeclarationNewtypes newtypes) {
+        Combinators.Handed handed = Core.withoutStanding(walk) instanceof Core.PreservedCall call
+                ? Combinators.handedTo(call, closure -> blockOf(closure, where, symbols, newtypes))
+                : null;
+        return handed == null ? null : handed.container();
+    }
+
     /** The block {@code closure} is, or null where what it stands for is not one. What a name
      *  stands for is the reading's answer ({@link InputReads#denotes}); which kind of expression
      *  this wanted is its own. */

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -15,7 +16,10 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
+import souther.compiler.execute.RunStop;
+
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row is offered for a point only where the value that was built stands there.
@@ -134,7 +139,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                         first.add(candidate.text());
                     }
                     if (parameter != 0) {
-                        return new Generator.CandidateCheck.Built.Refused("the model refuses it");
+                        return Generator.CandidateCheck.Built.Refused.inItsOwnWords("the model refuses it");
                     }
                     // The first candidate stands away from the point and the other stands on it, so
                     // this parameter refuses one and succeeds all the same. Said of each candidate
@@ -187,7 +192,15 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                                                          souther.compiler.numeric.Place at,
                                                          Generator.CandidateCheck check,
                                                          Generator.Trial trial) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return attemptOver(source, behavior, at, check, trial, java.util.Optional.empty());
+    }
+
+    private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
+                                                         souther.compiler.numeric.Place at,
+                                                         Generator.CandidateCheck check,
+                                                         Generator.Trial trial,
+                                                         java.util.Optional<Generator.RowJudge> judge) {
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -211,7 +224,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain.quantities(rules).ordersOf(axis.term()).answered(), at))),
                 Reachability.untouched(domain.quantities(rules).region()), check,
-                StandInAttempt.REQUIRING_NOTHING, trial);
+                StandInAttempt.REQUIRING_NOTHING, trial, judge);
     }
 
     /** A trial whose run of the {@code n}-th row it is handed (from 1) is {@code answered}. */
@@ -222,7 +235,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
             return new Generator.ObservedRun(new Generator.Watched.NoAccount(),
                     answered.test(handed.size())
                             ? new AnswerObservation.Answered(new ObservedValue.Integer(0))
-                            : new AnswerObservation.NotAnswered());
+                            : new AnswerObservation.NotAnswered(), Optional.empty());
         };
     }
 
@@ -231,10 +244,42 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
     void rowsThatNoneAnsweredAreNoWitnessAndNotAPointNoRowReaches() {
         Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
-                        SearchShortfall.NONE, false, CompositionAccount.NOTHING));
+                        SearchShortfall.NONE, false, Set.of(), CompositionAccount.NOTHING));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 no.why().reason());
+    }
+
+    /**
+     * The constructions the runs stopped at are kept beside the rows whichever word the point
+     * comes to, and change none of them: a figure, a population written in part, or neither.
+     */
+    @Test
+    void theConstructionsTheRunsStoppedAtAreKeptBesideTheRowsWhicheverTheWord() {
+        WhereARunStopped stop = new WhereARunStopped(new RunStop.AtAConstruction("m", "T",
+                Optional.empty(), 0, Optional.of(new RunStop.Site("m", 8, 23))),
+                Optional.empty());
+        Set<WhereARunStopped> stops = Set.of(stop);
+
+        Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
+                        SearchShortfall.NONE, false, stops, CompositionAccount.NOTHING));
+        Generator.BoundaryAttempt.Stopped figure = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.of(List.of(
+                                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW))),
+                        false, stops, CompositionAccount.NOTHING));
+        Generator.BoundaryAttempt.Unexhausted population = assertInstanceOf(
+                Generator.BoundaryAttempt.Unexhausted.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.writing(
+                                List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
+                        false, stops, CompositionAccount.NOTHING));
+
+        assertEquals(List.of(stop), none.why().beside().stopped());
+        assertEquals(List.of(stop), figure.why().beside().stopped());
+        assertEquals(List.of(stop), population.why().beside().stopped());
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                none.why().reason());
     }
 
     /** A figure that stopped the search is said as the figure beside the rows that did not answer,
@@ -245,7 +290,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
                         SearchShortfall.of(CompositionShortfall.of(List.of(
                                 CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW))),
-                        false, CompositionAccount.NOTHING));
+                        false, Set.of(), CompositionAccount.NOTHING));
 
         assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
                 stopped.met().figures());
@@ -260,12 +305,12 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
 
         Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
                 Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
-                        SearchShortfall.of(both), false, CompositionAccount.NOTHING));
+                        SearchShortfall.of(both), false, Set.of(), CompositionAccount.NOTHING));
         Generator.BoundaryAttempt.Unexhausted unexhausted = assertInstanceOf(
                 Generator.BoundaryAttempt.Unexhausted.class, Generator.noRowAnswered("p",
                         SearchShortfall.of(CompositionShortfall.writing(
                                 List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
-                        false, CompositionAccount.NOTHING));
+                        false, Set.of(), CompositionAccount.NOTHING));
 
         assertEquals(both, stopped.met());
         assertEquals(Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
@@ -281,9 +326,9 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
         Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
                         SearchShortfall.of(CompositionShortfall.NONE, offered),
-                        false, CompositionAccount.NOTHING));
+                        false, Set.of(), CompositionAccount.NOTHING));
 
-        assertEquals(offered, no.why().alsoShort());
+        assertEquals(offered, no.why().beside().shortOf());
     }
 
     /** A row whose run aborts is passed over for the next one composed, which answers. */
@@ -301,6 +346,49 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 built.row().inputs().stream().map(FixtureTemplate::text).toList(),
                 "and it is the row offered, not the first");
         assertNotEquals(handed.get(0), handed.get(1));
+    }
+
+    /**
+     * A row the judge refuses is passed over inside the walk, and the walk goes on to the next
+     * assignment, which the judge accepts.
+     *
+     * <p>Asked of the rows after the walk had taken one, there was no next row to go on to: the
+     * first candidate decided. What a way cannot say — a case turning on what every node below the
+     * start comes to — is for a run to say, and a run saying no has to send the search on.
+     */
+    @Test
+    void aRowTheJudgeRefusesIsPassedOverForTheNextTheJudgeAccepts() {
+        // A function of the row alone, as a judge is: the walk asks it again of a row it reaches
+        // along another way, and the answer is the same.
+        List<List<String>> asked = new ArrayList<>();
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                Generator.Trial.NOTHING_RUNS, java.util.Optional.of(row -> {
+                    asked.add(row.inputs().stream().map(FixtureTemplate::text).toList());
+                    return !row.inputs().getLast().text().equals("Other { n = 0 }");
+                }));
+
+        Generator.BoundaryAttempt.Built built = assertInstanceOf(
+                Generator.BoundaryAttempt.Built.class, attempt,
+                "a row past the one the judge refused is accepted");
+        assertEquals(List.of("Req { cost = Amount(100), note = Note(\"0\") }", "Other { n = 1 }"),
+                built.row().inputs().stream().map(FixtureTemplate::text).toList(),
+                "and it is the row offered, not the first");
+        assertTrue(asked.stream().anyMatch(row -> row.getLast().equals("Other { n = 0 }")),
+                () -> "the first row was asked about and refused: " + asked);
+    }
+
+    /** Where the judge refuses every row, nothing was found, which is not that no row can be. */
+    @Test
+    void aJudgeThatRefusesEveryRowLeavesNoWitnessAndNotAnUnreachablePoint() {
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                Generator.Trial.NOTHING_RUNS, java.util.Optional.of(_ -> false));
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, attempt);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                no.why().reason());
     }
 
     /** Where every row composed aborts, the point is one this compiler composed no answering row

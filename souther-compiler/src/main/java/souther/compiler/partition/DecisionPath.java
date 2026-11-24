@@ -43,6 +43,23 @@ final class DecisionPath {
 
     private final List<Consulted> consulted;
 
+    private final List<PassedConstruction> passed;
+
+    /** What this path is as a way: the rule, and the constructions in no order. */
+    private final Way way;
+
+    /**
+     * What tells two paths apart: the rule they are, and the constructions they go through taken
+     * together in no order. Its own value so that what a path is compared by and what a register
+     * of ways is keyed by are one definition.
+     */
+    record Way(DecisionRule rule, Set<PassedConstruction> passed) {
+
+        Way {
+            passed = Set.copyOf(passed);
+        }
+    }
+
     /**
      * The rule this path is, made once.
      *
@@ -56,16 +73,65 @@ final class DecisionPath {
      */
     private final DecisionRule rule;
 
+    /**
+     * A path that consulted each of {@code consulted}'s conditions once: a condition met again on
+     * the way is the one column met again ({@link Consulted#again}), so a list naming one twice is
+     * refused. What a path's rule holds is then exactly the conditions it lists, which is what
+     * {@link #and} asks of the rule in place of looking through the list.
+     */
     DecisionPath(List<Consulted> consulted) {
+        this(consulted, List.of());
+    }
+
+    /**
+     * The same, going through {@code passed} as well: the constructions on the way, each once, in
+     * the order the way met them. They are no columns, so the rule is the conditions alone; and
+     * they are what a run along the path has to get past, so two paths are one only where they go
+     * through the same ones.
+     */
+    DecisionPath(List<Consulted> consulted, List<PassedConstruction> passed) {
         this.consulted = List.copyOf(consulted);
+        this.passed = List.copyOf(new LinkedHashSet<>(passed));
         Map<DecisionCondition, DecidedCondition> vector = new LinkedHashMap<>();
-        this.consulted.forEach(each -> vector.put(each.answer().condition(), each.answer()));
+        for (Consulted each : this.consulted) {
+            if (vector.put(each.answer().condition(), each.answer()) != null) {
+                throw new IllegalArgumentException("a path consults " + each.answer().condition()
+                        + " once, however often it is met");
+            }
+        }
         this.rule = new DecisionRule(vector);
+        this.way = new Way(rule, Set.copyOf(this.passed));
+    }
+
+    /** What this path is as a way ({@link Way}). */
+    Way way() {
+        return way;
     }
 
     /** The conditions this path consulted, in the order it met them. */
     List<Consulted> consulted() {
         return consulted;
+    }
+
+    /** The constructions this path goes through, in the order it met them. */
+    List<PassedConstruction> passed() {
+        return passed;
+    }
+
+    /** The same path, going through {@code construction} as well. */
+    DecisionPath passing(PassedConstruction construction) {
+        List<PassedConstruction> more = new ArrayList<>(passed);
+        more.add(construction);
+        return new DecisionPath(consulted, more);
+    }
+
+    /** Everything a row composed along this path has to satisfy of the input: what each condition
+     *  consulted states, and what getting past each construction does. */
+    List<OnTheWay> stated() {
+        List<OnTheWay> out = new ArrayList<>();
+        consulted.forEach(each -> out.addAll(each.states()));
+        passed.forEach(each -> out.addAll(each.states()));
+        return out;
     }
 
     /**
@@ -91,11 +157,15 @@ final class DecisionPath {
      *               column — and all of them about the one condition
      * @param said   which copies of the model's code each of {@code states} was read off, told
      *               where the condition was read, at every place it was consulted
+     * @param cases  what a row has to be, beside the way, to be evidence of a case the condition's
+     *               statement draws inside itself. One column asks one thing, so these are the
+     *               first consultation's
      */
     record Consulted(DecidedCondition answer, List<ShownBy> seen, List<OnTheWay> states,
-                     SaidOnTheWay said) {
+                     SaidOnTheWay said, List<CaseWay> cases) {
 
         Consulted {
+            cases = List.copyOf(cases);
             if (answer == null || seen == null || seen.isEmpty() || states == null
                     || states.isEmpty() || said == null) {
                 throw new IllegalArgumentException("a condition a path consulted is an answer,"
@@ -105,10 +175,10 @@ final class DecisionPath {
             states = List.copyOf(states);
         }
 
-        /** The condition consulted once, seen at {@code shown}. */
+        /** The condition consulted once, seen at {@code shown}, drawing the cases {@code cases}. */
         Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
-                  SaidOnTheWay said) {
-            this(answer, List.of(shown), states, said);
+                  SaidOnTheWay said, List<CaseWay> cases) {
+            this(answer, List.of(shown), states, said, cases);
         }
 
         /** Where the column is witnessed: the first place the way met it. */
@@ -133,7 +203,7 @@ final class DecisionPath {
             List<ShownBy> places = new ArrayList<>(seen);
             more.seen.stream().filter(each -> !places.contains(each)).forEach(places::add);
             return new Consulted(answer, places, states,
-                    said.retold(states, more.states, more.said));
+                    said.retold(states, more.states, more.said), cases);
         }
 
         /** Where a report about the condition asks for its place, which every entry for it
@@ -146,8 +216,8 @@ final class DecisionPath {
     /** This path with {@code answer} on it, or null where the path already answers that column the
      *  other way. */
     DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states,
-                     SaidOnTheWay said) {
-        return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said))));
+                     SaidOnTheWay said, List<CaseWay> cases) {
+        return and(new DecisionPath(List.of(new Consulted(answer, shown, states, said, cases))));
     }
 
     /**
@@ -163,15 +233,19 @@ final class DecisionPath {
      * the same distinctions and got the same answers are one rule whatever order they met them in,
      * and holding them apart by that order would count what the reading did rather than what the
      * body does.
+     *
+     * <p>And the constructions it goes through, taken together in no order for the same reason.
+     * They are no part of the rule, and two ways of one rule through different constructions ask
+     * different things of a row.
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof DecisionPath that && rule.equals(that.rule);
+        return other instanceof DecisionPath that && way.equals(that.way);
     }
 
     @Override
     public int hashCode() {
-        return rule.hashCode();
+        return way.hashCode();
     }
 
     /**
@@ -186,7 +260,7 @@ final class DecisionPath {
         for (Consulted each : consulted) {
             AnswersDemanded demands = demands(each);
             out.add(new RuleStep(each.seen(), each.states(), demands,
-                    each.said().asking(demands)));
+                    each.said().asking(demands), each.cases()));
         }
         return List.copyOf(out);
     }
@@ -409,25 +483,32 @@ final class DecisionPath {
         // disagree exactly where a column of one came out otherwise in the other. Most ways a
         // reading pairs are ways no run takes, and each of those is answered by a look per column
         // rather than by finding every condition of one among the conditions of the other.
-        for (Map.Entry<DecisionCondition, DecidedCondition> each
-                : more.rule.consulted().entrySet()) {
-            DecidedCondition had = rule.at(each.getKey());
-            if (had != null && !had.equals(each.getValue())) {
+        boolean[] metAgain = new boolean[more.consulted.size()];
+        for (int each = 0; each < metAgain.length; each++) {
+            DecidedCondition answer = more.consulted.get(each).answer();
+            DecidedCondition had = rule.at(answer.condition());
+            if (had != null && !had.equals(answer)) {
                 return null;
             }
+            metAgain[each] = had != null;
         }
+        // A condition this path never consulted is a column added, and one it did is a column met
+        // again, which is found among this path's own: what the rule held is what the path lists,
+        // and the conditions the other path adds are each its own once.
         List<Consulted> out = new ArrayList<>(consulted);
-        for (Consulted each : more.consulted) {
-            int already = at(out, each.answer().condition());
-            if (already < 0) {
-                out.add(each);
-            } else if (!out.get(already).answer().equals(each.answer())) {
-                return null;
+        for (int each = 0; each < metAgain.length; each++) {
+            Consulted added = more.consulted.get(each);
+            if (!metAgain[each]) {
+                out.add(added);
             } else {
-                out.set(already, out.get(already).again(each));
+                int already = at(consulted, added.answer().condition());
+                out.set(already, out.get(already).again(added));
             }
         }
-        return new DecisionPath(out);
+        // And every construction either goes through: a run along both gets past each of them.
+        List<PassedConstruction> through = new ArrayList<>(passed);
+        through.addAll(more.passed);
+        return new DecisionPath(out, through);
     }
 
     /**
@@ -440,9 +521,9 @@ final class DecisionPath {
         List<Consulted> out = new ArrayList<>();
         for (Consulted each : consulted) {
             out.add(new Consulted(each.answer(), each.seen().stream().map(seen).toList(),
-                    each.states(), each.said()));
+                    each.states(), each.said(), each.cases()));
         }
-        return new DecisionPath(out);
+        return new DecisionPath(out, passed);
     }
 
     /** Where this path consulted {@code condition}, or -1 where it never did. */

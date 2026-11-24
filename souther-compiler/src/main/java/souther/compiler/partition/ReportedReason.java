@@ -4,6 +4,7 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.observe.Figure;
 import souther.compiler.publish.SourceOrdered;
 
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -46,14 +48,27 @@ public final class ReportedReason {
      *                at, which the word does not say: several figures stop a reading under one
      *                word, and a reader told only the word cannot tell which one to raise. Empty
      *                where it stopped at none
+     * @param leftOpen where a relation was shown over some of the values here, which of them it
+     *                 was not shown over: no figure of this compiler's, and a reader told only the
+     *                 word cannot tell which values no class holds
+     * @param notShownComputed where the relation settles the numbers of a term by its terms' ends
+     *                 and no row is shown computed in them: no figure of this compiler's either,
+     *                 and a reader told only the word cannot tell which numbers they are
+     * @param runsStopped where the runs of the rows tried for it stopped without answering, each
+     *                 once and in {@link WhereARunStopped#IN_A_STEADY_ORDER} ({@link #runsStopped}):
+     *                 no figure either, and a reader told only the word cannot tell which input
+     *                 the model has not decided about. Empty where no run of a row tried stopped
      */
     public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo,
-                       List<Figure> figures) {
+                       List<Figure> figures,
+                       Optional<BlockReason.RelationShownOverARegion> leftOpen,
+                       Optional<NumberRegion> notShownComputed,
+                       List<WhereARunStopped> runsStopped) {
 
         /**
          * These in a steady order, which two of them are equal in only where they are equal: the
          * word in the vocabulary's own order, then what it is about, then where it sends a reader,
-         * then the figures it stopped at.
+         * then the figures it stopped at, then what it leaves open, then where runs stopped.
          *
          * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
          * wrote is asked of the places.
@@ -62,19 +77,33 @@ public final class ReportedReason {
                 Comparator.comparing(Stop::reason)
                         .thenComparing(Stop::about, RuleSite.IN_A_STEADY_ORDER)
                         .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER)
-                        .thenComparing(Stop::figures, Figure::compare);
+                        .thenComparing(Stop::figures, Figure::compare)
+                        .thenComparing(each -> each.leftOpen().orElse(null),
+                                Comparator.nullsFirst(BlockReason.RuleReadingStopped
+                                        .IN_A_STEADY_ORDER))
+                        .thenComparing(each -> each.notShownComputed().orElse(null),
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(Stop::runsStopped, WhereARunStopped::compare);
 
         public Stop {
-            if (reason == null || about == null || sentTo == null || figures == null) {
+            if (reason == null || about == null || sentTo == null || figures == null
+                    || leftOpen == null || notShownComputed == null || runsStopped == null) {
                 throw new IllegalArgumentException(
                         "a question stands on some reason, about something, somewhere in its rule");
             }
             figures = Figure.inOrder(figures);
+            runsStopped = runsStopped.stream().distinct()
+                    .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList();
         }
     }
 
     private static Stop stop(RuleReasons.Said said) {
-        return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures());
+        return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures(),
+                said.reason() instanceof BlockReason.RelationShownOverARegion open
+                        ? Optional.of(open) : Optional.empty(),
+                said.reason() instanceof BlockReason.RelationRowsNotShownComputed unshown
+                        ? Optional.of(unshown.numbers()) : Optional.empty(),
+                runsStopped(said.reason()));
     }
 
     /**
@@ -195,6 +224,23 @@ public final class ReportedReason {
     }
 
     /**
+     * Where the runs of the rows tried for {@code reason} stopped without answering, which the word
+     * does not say, each once and in {@link WhereARunStopped#IN_A_STEADY_ORDER}; none for a reason
+     * no run was tried for.
+     *
+     * <p>Beside the word as the figures are, and carried rather than worked out: the reason holds
+     * them from where the runs were read.
+     */
+    public static List<WhereARunStopped> runsStopped(BlockReason reason) {
+        return switch (reason) {
+            case BlockReason.RelationNotShownWhereItsRowsStopped(var stopped) -> stopped;
+            // The rows a search for one getting to the relation tried, where none got there.
+            case BlockReason.RelationNotShownReachedAtEveryValue(var _, var stopped, var _) -> stopped;
+            default -> List.of();
+        };
+    }
+
+    /**
      * Deliberately coarser than what it is given. What a reader of a document is promised is which
      * kind of thing stopped the derivation, not which capability this compiler is missing this
      * month: three missing traversals are one word, because the model reads the same whichever of
@@ -213,14 +259,18 @@ public final class ReportedReason {
             // not, which is told apart by the sensitivity beside the word — and for a statement
             // that is no relation of numbers the word for values that carry no order to draw a
             // line on.
-            case BlockReason.WhatItStatesIsNoLine(var why) -> switch (why) {
+            case BlockReason.WhatItStatesIsNoLine(var why, var _) -> switch (why) {
                 case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
-                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_WAYS_THAN_ARE_WRITTEN_OUT,
+                     MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
                      A_PART_NOT_READ ->
                         UndividedPosition.Reason.RULE_MEANING_NOT_READ;
                 case A_NUMBER_NO_POSITION_HOLDS ->
                         UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
                 case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+                // Its own word: the comparison may be written in a form this compiler reads.
+                case TWO_ELEMENTS_OF_ONE_CONTAINER ->
+                        UndividedPosition.Reason.RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER;
             };
             case BlockReason.NonAffineArithmetic(var operation) -> switch (operation) {
                 case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
@@ -229,6 +279,10 @@ public final class ReportedReason {
                 case REMAINDER_BY_NON_CONSTANT_VALUE ->
                         UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR;
             };
+            case BlockReason.RuleAboutARemainderNoPositionHolds _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS;
+            case BlockReason.EvaluationStopsNotFullyRead _ ->
+                    UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ;
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
@@ -280,7 +334,9 @@ public final class ReportedReason {
             case BlockReason.ValueRulesNotReached _,
                  BlockReason.ValueRulesNotReachedPastDepthLimit _ ->
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
-            case BlockReason.UnreadComparisonDomain _ ->
+            // One word for the two: the values the line would be drawn at are not ones a line can
+            // be drawn on here, whether they carry no order or are not values of the type.
+            case BlockReason.UnreadComparisonDomain _, BlockReason.OrderedExtentEndIsNoValue _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             // Its own word, and not the one above. The values carry an order and the line is
             // written; what has no place is the number it falls at, and a reader acts on the
@@ -304,8 +360,26 @@ public final class ReportedReason {
             case BlockReason.SeveralLinesInOneRule _,
                  BlockReason.WhereALineDecidesNotWorkedOut _ ->
                     UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
-            case BlockReason.RelationNotShownToReachEveryValue _ ->
+            // One word whether or not a search stopped short of the row that would have shown
+            // more, and whether or not the runs of the rows it tried stopped: which of the three
+            // it was is told apart by what is beside the word — the sensitivity and the figure
+            // for the second, where the runs stopped for the third ({@link #runsStopped}).
+            case BlockReason.RelationNotShownToReachEveryValue _,
+                 BlockReason.RelationNotShownWhereTheSearchStopped _,
+                 BlockReason.RelationNotShownWhereItsRowsStopped _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
+            // Its own word and not the one above: what falls short is the values here getting to
+            // the rule, and a reader looks at what the run works out before it.
+            // Numbers of a run the relation settles in which no row is shown to get past the
+            // operations told are the same kind of thing: what falls short is values
+            // getting to the rule, and no class is drawn over them.
+            case BlockReason.RelationNotShownReachedAtEveryValue _,
+                 BlockReason.RelationRowsNotShownComputed _ ->
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE;
+            // Its own word again: the classes stand over what was shown, and what falls short is
+            // the values they do not hold.
+            case BlockReason.RelationShownOverARegion _ ->
+                    UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION;
             case BlockReason.ComparisonRelatingTwoValues _ ->
                     UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two
@@ -318,6 +392,9 @@ public final class ReportedReason {
             // neither relates two positions nor is read over a run.
             case BlockReason.ComparisonOnARemainder _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER;
+            // Its own word again: the reading stopped, and the border is measured on the runs.
+            case BlockReason.ComparisonMeasuredOnItsRuns _ ->
+                    UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS;
             // Its own word again, and the one furthest from the two above. Those two are rules
             // that leave the position where they found it; this one holds it to what the rule
             // admits, which is a fact a reader acts on — the value written here is one of those.

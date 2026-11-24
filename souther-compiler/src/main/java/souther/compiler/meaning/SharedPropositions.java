@@ -1,6 +1,9 @@
 package souther.compiler.meaning;
 
+import souther.compiler.partition.CompositionBudget;
+
 import java.lang.ref.WeakReference;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
@@ -19,28 +22,54 @@ import java.util.function.Supplier;
  * <p>Compared as values when one is made. Its parts made the same way are the ones kept here
  * already, so the comparison stops at each of them.
  *
- * <p>And the denial of each, made once. A condition is stated where it holds and denied where it
- * does not, so a statement kept here is denied again wherever it is read, and a denial made afresh
- * writes out every part again before it comes to the one kept.
+ * <p>And each comparison asked for its denial, and that denial, so that equal comparisons made
+ * by different readers share one denial ({@link Proposition.Compared#denied}).
  *
  * <p>Held weakly both ways. A key held weakly whose value is the key itself held strongly is never
  * let go, so what is kept is a reference to it, and one nobody else holds is let go with its
- * entry. A statement and its denial are each the other's, so a denial held strongly would hold its
- * statement, and neither would be let go.
+ * entry. The denial of each is the proposition's own to keep ({@link Proposition.Denial}).
  */
 final class SharedPropositions {
 
     private static final Map<Proposition, WeakReference<Proposition>> KEPT = new WeakHashMap<>();
-    private static final Map<Proposition, WeakReference<Proposition>> DENIED =
-            new WeakHashMap<>();
     /**
      * The choices each count is written out as, held as long as the count is. Held strongly: what
      * is written out names the count's statements and never the count, so it keeps nothing alive
      * that the count does not, and held weakly it was let go between one reader and the next.
      */
-    private static final Map<Proposition, WhichOfThemHold.Written> CHOICES = new WeakHashMap<>();
+    private static final Map<Proposition, Map<Integer, WhichOfThemHold.Written>> CHOICES =
+            new WeakHashMap<>();
+
+    /**
+     * The cases a statement over the ways is written out as, by what they are written out from.
+     * Kept while that is held by any statement over the ways, which holds it for both the
+     * statement and its denial.
+     */
+    private static final Map<Proposition.WaysToWrite, Proposition> WRITTEN = new WeakHashMap<>();
 
     private SharedPropositions() {
+    }
+
+    /**
+     * The cases written out from {@code ways}: the ones written out the first time they were asked
+     * for while {@code ways} is held, or {@code writing}'s, kept from now on.
+     *
+     * <p>Written outside the lock, since writing them out concludes and builds every case. Two
+     * readers asking at once write two equal cases and keep the first, which is the same as the
+     * second: they follow from what is written out from.
+     */
+    static Proposition writtenOut(Proposition.WaysToWrite ways, Supplier<Proposition> writing) {
+        synchronized (WRITTEN) {
+            Proposition held = WRITTEN.get(ways);
+            if (held != null) {
+                return held;
+            }
+        }
+        Proposition made = writing.get();
+        synchronized (WRITTEN) {
+            Proposition raced = WRITTEN.putIfAbsent(ways, made);
+            return raced != null ? raced : made;
+        }
     }
 
     /** The proposition equal to {@code made} that is kept, or {@code made}, kept from now on. */
@@ -67,36 +96,17 @@ final class SharedPropositions {
      */
     static WhichOfThemHold.Written choices(Proposition.SoManyHold counted,
                                            Supplier<WhichOfThemHold.Written> writing) {
+        int readings = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         synchronized (CHOICES) {
-            WhichOfThemHold.Written held = CHOICES.get(counted);
+            Map<Integer, WhichOfThemHold.Written> byFigure = CHOICES.get(counted);
+            WhichOfThemHold.Written held = byFigure == null ? null : byFigure.get(readings);
             if (held != null) {
                 return held;
             }
         }
         WhichOfThemHold.Written made = writing.get();
         synchronized (CHOICES) {
-            CHOICES.putIfAbsent(counted, made);
-        }
-        return made;
-    }
-    /**
-     * What holds exactly where {@code stated} does not: the one made the first time it was asked
-     * while both are held, or {@code denying}'s, kept from now on.
-     *
-     * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
-     * asking at once make two equal denials and keep the one {@link #shared} hands both.
-     */
-    static Proposition denied(Proposition stated, Supplier<Proposition> denying) {
-        synchronized (DENIED) {
-            WeakReference<Proposition> held = DENIED.get(stated);
-            Proposition kept = held == null ? null : held.get();
-            if (kept != null) {
-                return kept;
-            }
-        }
-        Proposition made = denying.get();
-        synchronized (DENIED) {
-            DENIED.put(stated, new WeakReference<>(made));
+            CHOICES.computeIfAbsent(counted, _ -> new HashMap<>()).putIfAbsent(readings, made);
         }
         return made;
     }

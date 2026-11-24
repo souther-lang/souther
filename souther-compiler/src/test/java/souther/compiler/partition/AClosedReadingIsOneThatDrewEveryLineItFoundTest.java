@@ -6,7 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.NumericTerm;
@@ -177,7 +177,7 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
 
     private static LineOrigin bound(String clause) {
         return new LineOrigin.InvariantOrigin(
-                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),

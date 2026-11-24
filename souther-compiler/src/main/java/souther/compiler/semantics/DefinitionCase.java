@@ -81,6 +81,11 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
                 reached.add(where);
             }
         }
+        // A case reached under no relation is reached however the arguments stand, which is all
+        // this asks, and the relations the cases beside it are reached under take nothing from it.
+        if (reached.stream().anyMatch(Map::isEmpty)) {
+            return true;
+        }
         if (truths.size() > MOST_RELATIONS) {
             return false;
         }

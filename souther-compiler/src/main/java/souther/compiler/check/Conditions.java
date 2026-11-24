@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
@@ -14,7 +13,6 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Predicate;
 
 /**
  * What a condition states, read off the condition and nothing else.
@@ -288,7 +286,8 @@ final class Conditions {
      * operation answering that order answered — or null where it states nothing about them.
      *
      * <p>What it states of them is {@link TheSignOfAnOrder}'s answer, the one every reader of a
-     * condition takes; what is this check's own is the environment it reads in ({@link #sides}).
+     * condition takes; what is this check's own is the environment it reads in
+     * ({@link Terms#signOf}).
      * A comparison every answer comes out the same against states no order, and that the arm is
      * never entered is said by what reads reachability rather than by an order nobody can stand on.
      *
@@ -306,7 +305,7 @@ final class Conditions {
      */
     private static ComparisonReadings.Reading orderStatedBy(Terms terms,
                                                             ComparisonReadings.Reading from) {
-        if (!(TheSignOfAnOrder.read(from.stated(), from.at(), sides(terms))
+        if (!(terms.signOf(from.stated(), from.at())
                 instanceof TheSignOfAnOrder.Read.OfTheArguments<Denotations> ordered)) {
             return null;
         }
@@ -319,55 +318,6 @@ final class Conditions {
                 from.isTheCondition() && ordered.isTheCondition());
     }
 
-    /**
-     * What this check answers about its environment for a comparison of a sign: a name is what it
-     * was given, as everywhere a value is read here ({@link Terms#readThrough}), and the number
-     * against it is read and not matched, so {@code compare(a, b) > zero} under {@code let zero = 0}
-     * is the condition it looks like.
-     *
-     * <p>Where a name was given is where its value is read, which for this check is the environment
-     * at the comparison: a binding tells itself from every other, so nothing bound later answers
-     * for a name the arguments hold.
-     */
-    private static TheSignOfAnOrder.Sides<Denotations> sides(Terms terms) {
-        return new TheSignOfAnOrder.Sides<>() {
-
-            @Override
-            public ValueStanding.ReadThrough<Denotations> standing(Core e, Denotations at) {
-                Core value = e;
-                Denotations in = at;
-                while (Core.withoutStanding(value) instanceof Core.Read name
-                        && terms.readThrough(name, in)
-                                instanceof ValueStanding.ReadThrough<Denotations> through) {
-                    value = through.value();
-                    in = through.at();
-                }
-                return new ValueStanding.ReadThrough<>(value, in);
-            }
-
-            @Override
-            public ExactRatio constant(Core e, Denotations at) {
-                LinearForm<FactSubject> read = terms.affineOf(e, at);
-                return read == null || !read.coefs().isEmpty() ? null : read.constant();
-            }
-
-            @Override
-            public LinearForm<AffineForms.ACall<Denotations>> overTheCalls(
-                    Core e, Denotations at, Predicate<Core> taken) {
-                return terms.overTheCalls(e, at, taken);
-            }
-
-            @Override
-            public DeclarationAccess declarations() {
-                return terms.declarations();
-            }
-
-            @Override
-            public DeclarationNewtypes newtypes() {
-                return terms.newtypes();
-            }
-        };
-    }
 
     /**
      * An emptiness check as the comparison it means, or {@code e} unchanged.

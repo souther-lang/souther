@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopedDeclarations;
@@ -41,7 +42,7 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
     /** A reading of one behavior's input, which takes a string called {@code s}. */
     private static Quantities readingOfAString() {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("s",null, Type.STRING)),
                 reading, TypeCardinality.Counts.workedOutIn(reading),
@@ -52,7 +53,7 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
      *  no parameter the term below is under. */
     private static Quantities readingOfANumber() {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("n",null, Type.INT)),
                 reading, TypeCardinality.Counts.workedOutIn(reading),
@@ -108,13 +109,13 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
     @Test
     void twoReadingsWithAParameterSpelledAlikeAreNotOneReading() {
         RuleReadingContext textReading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputReading text = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.STRING)),
                 textReading, TypeCardinality.Counts.workedOutIn(textReading),
                 souther.compiler.carrier.Membership.none()).reading(RULES);
         RuleReadingContext numberReading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputReading number = InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.INT)),
                 numberReading, TypeCardinality.Counts.workedOutIn(numberReading),

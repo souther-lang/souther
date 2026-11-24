@@ -1,7 +1,6 @@
 package souther.compiler.conformance;
 
 import souther.test.CheckedInObservation;
-import souther.test.ReadsTheRepositorysModels;
 
 import org.junit.jupiter.api.Test;
 
@@ -28,15 +27,23 @@ import java.util.List;
  * mechanism: the value of it is not in this class but in the diff a rule's author has to show.
  *
  * <p>What it does not claim is that the answers are good ones. It records what they are.
+ *
+ * <p>Each corpus is analysed here for itself and not through {@link RepositoryModels}, which
+ * compiles every model the repository carries: the answers of the conformance corpora are all this
+ * reads.
  */
 @CheckedInObservation
-@ReadsTheRepositorysModels
 class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
 
     /**
      * Rewrites every document instead of checking it. A deliberate act, spelled out, and it fails
      * afterwards: a run that rewrote what it was going to be measured against has not measured
      * anything, and one that said so quietly would read as a passing run.
+     *
+     * <p>Not for a change of which errors a corpus is refused with. The analysis holds the corpus
+     * to the {@code error} lines of its {@code expected.diagnostics.txt} before anything is
+     * written, so a corpus refused for something else stops there: edit those lines first, then
+     * rewrite.
      */
     private static final String UPDATE = "souther.conformance.update";
 
@@ -69,7 +76,7 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
         }
         List<Document> out = new ArrayList<>();
         for (ConformanceCorpus corpus : corpora) {
-            ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
+            ConformanceCorpus.Analysed analysed = corpus.analyse();
             out.add(new Document(corpus.name(), corpus.name() + "/expected.report.json",
                     ConformanceSnapshot.report(analysed)));
             out.add(new Document(corpus.name(), corpus.name() + "/expected.diagnostics.txt",

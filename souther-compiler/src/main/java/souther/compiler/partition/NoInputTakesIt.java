@@ -42,6 +42,15 @@ public sealed interface NoInputTakesIt {
                 Objects.requireNonNull(condition, "some condition never comes out so");
             }
         }
+
+        /** Some of them state remainders of one form that leave none of it in common, which is
+         *  nothing the region of the declarations holds a run of to say. */
+        record RemaindersLeaveNone(Reachability.NumbersLeaveNone what) implements Clash {
+
+            public RemaindersLeaveNone {
+                Objects.requireNonNull(what, "some remainders leave none in common");
+            }
+        }
     }
 
     /** What the declarations hold, with the numbers the conditions on the way state, leaves no

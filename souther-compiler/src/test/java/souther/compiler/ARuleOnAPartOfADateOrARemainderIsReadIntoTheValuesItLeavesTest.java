@@ -44,9 +44,9 @@ class ARuleOnAPartOfADateOrARemainderIsReadIntoTheValuesItLeavesTest {
                 %s
                 """.formatted(type, clause, body, rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static List<String> standing(String report) {

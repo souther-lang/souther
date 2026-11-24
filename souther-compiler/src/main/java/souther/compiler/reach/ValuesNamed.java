@@ -50,7 +50,7 @@ public sealed interface ValuesNamed {
             case ValueSet.Cofinite cofinite when !cofinite.excluded().isEmpty() ->
                     new Refused(cofinite.excluded());
             case ValueSet.Finite _, ValueSet.Cofinite _, ValueSet.Matching _,
-                 ValueSet.WholeRuns _ -> null;
+                 ValueSet.WholeRuns _, ValueSet.WholeSteps _ -> null;
         };
     }
 }

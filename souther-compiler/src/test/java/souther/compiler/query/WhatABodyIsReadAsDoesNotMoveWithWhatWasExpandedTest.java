@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -219,11 +220,7 @@ class WhatABodyIsReadAsDoesNotMoveWithWhatWasExpandedTest {
 
     private static Bodies.Elaborated checked() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test was checked");

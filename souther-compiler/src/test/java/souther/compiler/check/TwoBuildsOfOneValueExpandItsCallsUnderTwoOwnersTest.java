@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingOwner;
 
 import java.util.LinkedHashSet;
@@ -33,7 +35,8 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
             """;
 
     private static void accepted(String tail) {
-        assertEquals("{0=[]}", String.valueOf(Compiler.compiled(HEAD + tail, "m").diagnostics()));
+        Compilation model = ACompiledModel.compiles(Compiler.compiled(HEAD + tail, "m"));
+        assertEquals("{0=[]}", String.valueOf(model.diagnostics()));
     }
 
     @Test
@@ -101,7 +104,7 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
                 behavior f : (n: Int) -> Int
                 let f (n) = (if n > 0 then dependent else 0) + (if n > 1 then dependent else 0)
                 """;
-        var db = Compiler.compiled(source, "m").db();
+        var db = ACompiledModel.answered(source).db();
         Set<BindingOwner> inTheBehavior = new LinkedHashSet<>();
         collect(db.ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
                 .value().value().definition().writtenBody(),inTheBehavior);

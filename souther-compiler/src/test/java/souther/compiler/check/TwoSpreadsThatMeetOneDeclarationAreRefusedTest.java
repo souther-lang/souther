@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
@@ -84,8 +85,8 @@ class TwoSpreadsThatMeetOneDeclarationAreRefusedTest {
 
                 data Both = { ...Left, b: Bool }
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
 
         assertEquals(List.of(), c.db().allReports().stream().map(Object::toString).toList(),
                 "a declaration reached down one chain of spreads is written as it reads");
@@ -107,7 +108,7 @@ class TwoSpreadsThatMeetOneDeclarationAreRefusedTest {
     private static String whatItSays(Map<String, String> byId) {
         try {
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
+            ACompiledModel.refusedWith(List.of("E1004"), c);
             return c.db().allReports().toString();
         } catch (RuntimeException e) {
             return String.valueOf(e.getMessage());

@@ -1,16 +1,20 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Interaction;
-import souther.compiler.reading.WhyNotJoined;
+import souther.compiler.reading.UnjoinedMeeting;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * What the rows of one behavior are asked for by the decisions its body settles a value with.
@@ -32,19 +36,78 @@ import java.util.SequencedMap;
  * decisions again.
  *
  * <p>And the meetings this asks nothing of though they were read: the ones the limit kept back
- * ({@code notMeasured}), which a wider run walks, and the ones the classes do not place
- * ({@code notPlaced}), which none does. And the sums of kept elements whose decisions could not be
- * joined to the evaluations a run records, which have no group to hold back and are counted
- * ({@code notJoined}); why each was not is the reading's ({@link CoverageRead.Read#notJoined}) and
- * is not a part of what is asked of the rows. None is a meeting with nothing owed at it, and all
- * are said where what this asks for is measured.
+ * ({@code notMeasured}), which a wider run walks. A group with a decision the classes do not
+ * state is asked for over a wider region, and the combinations of it that no choice states are
+ * {@code unconfirmed}: asked for, and not shown to exist until a row makes them. And the sums of
+ * kept elements whose decisions could not be joined to the evaluations a run records, which have
+ * no group to hold back and are
+ * held ({@code notJoined}) with why each was not and where it is written, which is not a part of
+ * what is asked of the rows. None is a
+ * meeting with nothing owed at it, and all are said where what this asks for is measured.
  */
 public record InteractionRequirements(
         int read,
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways,
+        List<OfferedGroup> groups,
         List<InteractionCells.NotOffered> notMeasured,
-        List<InteractionCells.NotPlaced> notPlaced,
-        int notJoined) {
+        Set<ObligationIdentity.OfACombinationOfDecisions> unconfirmed,
+        List<UnjoinedMeeting> notJoined) {
+
+    /**
+     * One outcome of a factor, or the way in to the group, as what a run that took it is seen
+     * doing and the decisions it settles.
+     *
+     * <p>The classes the outcome leaves open are not here: they steer a search and say nothing of
+     * what a choice is, and a value that holds them is one an answer cannot be compared by.
+     */
+    public record Outcome(List<ControlClaim> claims,
+                          List<souther.compiler.reading.Condition> settles) {
+
+        public Outcome {
+            claims = List.copyOf(claims);
+            settles = List.copyOf(settles);
+        }
+
+        static Outcome of(InteractionCells.Placed placed) {
+            return new Outcome(placed.claims(), placed.settles());
+        }
+    }
+
+    /**
+     * One group of the body's decisions and the requirement each of its choices states.
+     *
+     * <p>Kept beside {@code ways} because the group is the structure the requirements were counted
+     * off: a reader that says which requirements are missing as a set of choices, and not one by
+     * one, needs the factors the choices are made of.
+     *
+     * @param reach    what every choice of the group is under
+     * @param byFactor the outcomes of each factor, in the order the group takes them
+     * @param at       the requirement of the {@code index}th choice of the group, the first factor
+     *                 varying fastest, or null where the factors it takes leave a position nothing
+     *                 and the choice is no combination
+     */
+    public record OfferedGroup(Outcome reach, List<List<Outcome>> byFactor,
+                               List<ObligationIdentity.OfACombinationOfDecisions> at) {
+
+        public OfferedGroup {
+            Objects.requireNonNull(reach, "a group of decisions has a way in");
+            byFactor = byFactor.stream().map(List::copyOf).toList();
+            at = Collections.unmodifiableList(new ArrayList<>(at));
+            int choices = 1;
+            for (List<Outcome> factor : byFactor) {
+                choices *= factor.size();
+            }
+            if (at.size() != choices) {
+                throw new IllegalArgumentException("a group of " + choices
+                        + " choices states " + at.size() + " requirements");
+            }
+        }
+
+        /** How many outcomes each factor has, in the order the group takes them. */
+        public List<Integer> widths() {
+            return byFactor.stream().map(List::size).toList();
+        }
+    }
 
     /**
      * One way to a requirement: the rows that take it, and what a run that took it is seen doing.
@@ -74,13 +137,14 @@ public record InteractionRequirements(
 
     public InteractionRequirements {
         ways = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(ways));
+        groups = List.copyOf(groups);
         notMeasured = List.copyOf(notMeasured);
-        notPlaced = List.copyOf(notPlaced);
-        if (read < 0 || notJoined < 0) {
-            throw new IllegalArgumentException("meetings are counted from none: " + read
-                    + " read, " + notJoined + " not joined");
+        unconfirmed = Collections.unmodifiableSet(new LinkedHashSet<>(unconfirmed));
+        notJoined = List.copyOf(notJoined);
+        if (read < 0) {
+            throw new IllegalArgumentException("meetings are counted from none: " + read + " read");
         }
-        int heldBack = notMeasured.size() + notPlaced.size() + notJoined;
+        int heldBack = notMeasured.size() + notJoined.size();
         if (read < heldBack) {
             throw new IllegalArgumentException("more meetings were held back than were read: "
                     + heldBack + " of " + read);
@@ -89,7 +153,8 @@ public record InteractionRequirements(
 
     /** Nothing asked of a behavior whose decisions meet nowhere, which is not a group of none. */
     public static final InteractionRequirements NONE =
-            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of(), 0);
+            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of(), Set.of(),
+                    List.of());
 
     /**
      * Whether the body has meetings at all, which is what says the criterion this behavior is held
@@ -113,31 +178,50 @@ public record InteractionRequirements(
      * about a requirement — whether it exists — and they decide nothing about whether it is met.
      */
     public static InteractionRequirements of(String behavior, List<Interaction> groups,
-                                             List<WhyNotJoined> notJoined,
+                                             List<UnjoinedMeeting> notJoined,
                                              MeasuredInput.MeasuredAxes axes,
                                              int mostCellsPerGroup) {
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, mostCellsPerGroup);
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways =
                 new LinkedHashMap<>();
+        List<OfferedGroup> kept = new ArrayList<>();
+        Set<ObligationIdentity.OfACombinationOfDecisions> unconfirmed = new LinkedHashSet<>();
+        Set<ObligationIdentity.OfACombinationOfDecisions> stated = new HashSet<>();
+        // What each decision hashes to, by the decision itself: the choices of a group are taken
+        // from the same few outcomes, so a decision is hashed once and not once per choice.
+        Map<souther.compiler.reading.Condition, Integer> hashes = new IdentityHashMap<>();
         for (InteractionCells.Group group : offered.groups()) {
+            List<ObligationIdentity.OfACombinationOfDecisions> at = new ArrayList<>();
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
-                if (selection == null) {
+                InteractionCells.Choice choice = group.at(index);
+                if (choice == null) {
+                    at.add(null);
                     continue;
                 }
                 ObligationIdentity.OfACombinationOfDecisions item =
                         new ObligationIdentity.OfACombinationOfDecisions(
-                                behavior, group.settledAt(index));
+                                behavior, DecisionSet.of(group.settlesAt(index), hashes));
+                at.add(item);
+                (choice.exact() ? stated : unconfirmed).add(item);
                 List<Way> already = ways.computeIfAbsent(item, _ -> new ArrayList<>());
-                Way way = new Way(RowRegion.of(List.of(
-                        RowRegion.Cell.of(selection.cell(), axes.axes()))), selection.claims());
+                // The cells of one choice are places to look for one run, so they are one way.
+                Way way = new Way(RowRegion.of(choice.ways().stream()
+                        .map(each -> RowRegion.Cell.of(each.cell(), axes.axes())).toList()),
+                        choice.ways().getFirst().claims());
                 if (!already.contains(way)) {
                     already.add(way);
                 }
             }
+            kept.add(new OfferedGroup(Outcome.of(group.reach()),
+                    group.byFactor().stream()
+                            .map(factor -> factor.stream().map(Outcome::of).toList()).toList(),
+                    at));
         }
-        return new InteractionRequirements(groups.size() + notJoined.size(), ways,
-                offered.notOffered(), offered.notPlaced(), notJoined.size());
+        // A combination the classes state in some choice is one a row can be found for there, so
+        // another choice of it that they do not state leaves nothing undetermined.
+        unconfirmed.removeAll(stated);
+        return new InteractionRequirements(groups.size() + notJoined.size(), ways, kept,
+                offered.notOffered(), unconfirmed, notJoined);
     }
 
     /**

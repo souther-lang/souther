@@ -3,6 +3,7 @@ package souther.runtime;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Which invariant clause a construction failed, and of which type — the failure side of the
@@ -16,21 +17,40 @@ import java.util.Map;
  * there is nothing to tell it apart from the type's other unnamed clauses by, which is what declaring
  * it without a name says.
  *
+ * <p>{@code declared} is which clause it was whether it has a name or not: the type that wrote it and
+ * where it stands among that type's clauses. A type spreading another's clauses holds them under the
+ * type that wrote them, so it is not always {@code type}. What reads it is a tool that has the source
+ * and is asked which clause stopped a run; the destinations above go by the name.
+ *
  * <p>This is not a value the domain can see. It rides the {@code Result} between a generated
  * constructor and its caller, and every path out of that turns it into an abort, a departure, or a
  * boundary issue.
  */
-public record InvariantFailure(String module, String type, @Nullable String clause)
-        implements ConstraintFailure {
+public record InvariantFailure(String module, String type, @Nullable String clause,
+                               Declared declared) implements ConstraintFailure {
+
+    public InvariantFailure {
+        Objects.requireNonNull(declared, "a failed clause is one of the clauses some type wrote");
+    }
+
+    /**
+     * Which clause, as the declaration that wrote it and its place among that declaration's
+     * clauses, counted from nought in the order they are written.
+     */
+    public record Declared(String module, String type, int ordinal) {}
 
     /** The failure of a clause declared with a name. */
-    public static InvariantFailure of(String module, String type, String clause) {
-        return new InvariantFailure(module, type, clause);
+    public static InvariantFailure of(String module, String type, String clause,
+                                      String declaredModule, String declaredType, int ordinal) {
+        return new InvariantFailure(module, type, clause,
+                new Declared(declaredModule, declaredType, ordinal));
     }
 
     /** The failure of a clause declared without one. */
-    public static InvariantFailure unnamed(String module, String type) {
-        return new InvariantFailure(module, type, null);
+    public static InvariantFailure unnamed(String module, String type, String declaredModule,
+                                           String declaredType, int ordinal) {
+        return new InvariantFailure(module, type, null,
+                new Declared(declaredModule, declaredType, ordinal));
     }
 
     /** The rejecting type as Souther identifies it: a type is its module and its name, and two modules

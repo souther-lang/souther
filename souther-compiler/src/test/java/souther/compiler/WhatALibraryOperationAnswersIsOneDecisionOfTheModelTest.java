@@ -51,15 +51,12 @@ class WhatALibraryOperationAnswersIsOneDecisionOfTheModelTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String decisionLine(String report) {
@@ -87,15 +84,16 @@ class WhatALibraryOperationAnswersIsOneDecisionOfTheModelTest {
         assertEquals(decisionLine(written), decisionLine(through), through);
     }
 
-    /** The reading of what runs is the operation's own walk, and is measured as the match written
-     *  out is: the arms a row goes through are the same arms. */
+    /** The match the operation holds is no match of the model's: the arms of the one written out
+     *  are owed rows, and the operation's are not. */
     @Test
-    void theArmsARowGoesThroughAreTheMatchWrittenOutsArms() {
+    void theArmsOfTheOperationAreNoArmsOfTheModel() {
         String through = report(measured(THROUGH_THE_OPERATION + ROWS));
         String written = report(measured(WRITTEN_OUT + ROWS));
 
-        assertEquals(lineAbout(written, "branch "), lineAbout(through, "branch "), through);
-        assertTrue(lineAbout(through, "branch ").contains("2/2"), through);
+        assertTrue(lineAbout(written, "branch ").contains("2/2"), written);
+        assertFalse(lineAbout(through, "branch ").contains("2/2"), through);
+        assertFalse(through.contains("no row goes through"), through);
     }
 
     /**

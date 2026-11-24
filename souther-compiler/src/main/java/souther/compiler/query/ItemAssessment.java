@@ -2,12 +2,16 @@ package souther.compiler.query;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
+import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -57,10 +61,27 @@ public sealed interface ItemAssessment {
      *                   <p>Several, because one reading of a line can be searched more than once: a
      *                   helper called from two arms is the same line at the same target, and a row
      *                   for it is composed under each caller's own conditions
+     * @param unneeded   whether the point was worth a value and none was built, because nothing a
+     *                   search here found would reach a point of the author's line that an account
+     *                   of the module keeps and no row meets ({@code Coverages.searched}). The
+     *                   decision about this point of this reading, held here rather than among
+     *                   {@code searches}: what searches came to is put together over readings, and
+     *                   whether this one was searched is no part of another reading's answer.
+     *                   Never beside a search that was made, and only at a point worth one
      */
     record Owed(Criterion criterion, Measurement<Coverage> coverage,
-                WritabilityProjection projection, SearchOutcomes searches)
+                WritabilityProjection projection, SearchOutcomes searches, boolean unneeded)
             implements ItemAssessment {
+
+        public Owed {
+            if (unneeded && searches.ran()) {
+                throw new IllegalArgumentException("a point searched was not left unsearched");
+            }
+            if (unneeded && !worthSearching(coverage)) {
+                throw new IllegalArgumentException("a point not worth a value was never a search to"
+                        + " leave: " + criterion);
+            }
+        }
 
         /**
          * Whether building a value here would tell anybody anything.
@@ -81,7 +102,12 @@ public sealed interface ItemAssessment {
          * the list was written before the state existed.
          */
         public boolean worthSearching() {
-            if (hasRowWitness()) {
+            return worthSearching(coverage);
+        }
+
+        /** The same, of what the rows came to at a point, which is all it is answered from. */
+        private static boolean worthSearching(Measurement<Coverage> coverage) {
+            if (hasRowWitness(coverage)) {
                 return false;
             }
             return switch (coverage) {
@@ -113,6 +139,10 @@ public sealed interface ItemAssessment {
          * silent {@code false}.
          */
         public boolean hasRowWitness() {
+            return hasRowWitness(coverage);
+        }
+
+        private static boolean hasRowWitness(Measurement<Coverage> coverage) {
             return switch (coverage) {
                 case Measurement.Complete<Coverage> it -> Coverage.hit(it.value());
                 case Measurement.Partial<Coverage> it -> Coverage.hit(it.value());
@@ -132,7 +162,15 @@ public sealed interface ItemAssessment {
          * anybody asked.
          */
         public Owed settledBy(SearchOutcomes searched) {
-            return new Owed(criterion, coverage, projection, searches.plus(searched));
+            return new Owed(criterion, coverage, projection, searches.plus(searched), unneeded);
+        }
+
+        /**
+         * The same point, left unsearched because nothing a search found here would reach a point
+         * anybody keeps an account of and no row meets.
+         */
+        public Owed leftUnneeded() {
+            return new Owed(criterion, coverage, projection, searches, true);
         }
 
         /**
@@ -250,8 +288,10 @@ public sealed interface ItemAssessment {
         public enum Ground {
 
             /** The model proves the point is inside what it admits, whether a rule or the type alone
-             *  is what shows it. The one ground that is about the model rather than about this run,
-             *  so it stands whatever a search afterwards makes of the point. */
+             *  is what shows it, and that the input it is a point of has a whole value to be in:
+             *  every position every value has, in any parameter, is shown to hold one by rules read
+             *  whole. The one ground that is about the model rather than about this run, so it
+             *  stands whatever a search afterwards makes of the point. */
             IT_IS_PROVED,
 
             /** A row this compilation read stands at the point, which is a value that went through
@@ -453,6 +493,40 @@ public sealed interface ItemAssessment {
                     Attempt.Unavailable {
 
         /**
+         * What a second stage of a search came to when it found nothing, and what it was short of:
+         * the outcome of that stage, to be kept beside the outcomes of the first.
+         *
+         * <p><b>A search of its own, and not a mark on the first.</b> What was built and what a
+         * search was incomplete in are two facts, and an outcome that is a row has no place to
+         * carry the second: written onto the outcomes of the first stage, a stage that came to a
+         * row, a stop or a limit each took it in its own way, or took nothing, and the shortfall
+         * was lost without a word. Kept as an outcome beside them it is read as every other is
+         * ({@link SearchOutcomes#prevented}), as a gap of its own whatever the first stage came to.
+         *
+         * <p>Limited where a figure is why, since a figure is what a reader raises, and otherwise
+         * a search that walked some of a population or could not hold a number.
+         *
+         * @param extra what the stage was short of, which says something: a stage that was short
+         *              of nothing came to nothing for a reason of the model's and has no
+         *              outcome of this kind
+         */
+        static Attempt ofAStageShortOf(Generator.UnresolvedCombination why, WayToTheBorder way,
+                                       CompositionShortfall extra) {
+            if (extra.nothing()) {
+                throw new IllegalArgumentException("a stage short of nothing has no shortfall"
+                        + " to be an outcome of: " + extra);
+            }
+            return extra.figures().isEmpty()
+                    ? new Unexhausted(why, way, CompositionAccount.NOTHING,
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()))
+                    : new Limited(why, way, CompositionAccount.NOTHING,
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(extra.figures()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(extra.populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(extra.unheld()));
+        }
+
+        /**
          * What a search of the region came to, whichever way it came out.
          *
          * <p>The boundary is which side of the search an outcome is on, and it is a type because it
@@ -535,11 +609,13 @@ public sealed interface ItemAssessment {
                 return account;
             }
 
-            /** A row composed where the whole way was stated and used, and seen run there. */
+            /** A row composed where the whole way was stated and used, and seen run there, read
+             *  back as {@code readBack}. */
             static Certified certified(Generator.GeneratedRow row,
-                                       souther.compiler.partition.WayToTheBorder way) {
+                                       souther.compiler.partition.WayToTheBorder way,
+                                       ObservedInputs readBack) {
                 return new Certified(row, way,
-                        souther.compiler.partition.CompositionAccount.NOTHING, true);
+                        souther.compiler.partition.CompositionAccount.NOTHING, true, readBack);
             }
         }
 
@@ -595,15 +671,19 @@ public sealed interface ItemAssessment {
          *                 ran it, or nothing watched where it went, the value stands at the point
          *                 and nothing shows a run gets there with it — which a point something on
          *                 the way may stop a run before is open on
+         * @param readBack the row as its run read it back, which is what a reader asking what the
+         *                 row does to anything else reads — and never the values it was composed
+         *                 for, which the row need not hold
          */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
                          souther.compiler.partition.CompositionAccount uncomposed,
-                         boolean ranThere)
+                         boolean ranThere, ObservedInputs readBack)
                 implements Attempt, Searched, Built {
 
             public Certified {
                 uncomposed = Built.withNoProofAmongThem(uncomposed);
+                Objects.requireNonNull(readBack, "a row read back standing somewhere was read back");
             }
         }
 

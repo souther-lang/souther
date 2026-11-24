@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.4.1</version>
+        <version>0.4.2-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-lsp</artifactId>
@@ -71,6 +71,14 @@
             <artifactId>souther-test-support</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- The helper a test goes through to ask that a model compiles before it reads a report. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-compiler</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -109,7 +117,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.1</version>
                 <configuration>
                     <systemPropertyVariables>
                         <souther.lsp.jar>${project.build.directory}/souther-lsp-all.jar</souther.lsp.jar>

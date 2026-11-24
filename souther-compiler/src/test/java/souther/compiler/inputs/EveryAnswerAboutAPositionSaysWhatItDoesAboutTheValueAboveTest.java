@@ -58,10 +58,20 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + ".aCaseThatStopsTheFieldShorterThanTheValueAboveHoldsThatEndAlone"));
         table.put("leftAt", new Decided(Above.ASKED, "what both leave, met",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
+        table.put("runsLeftAt", new Decided(Above.ASKED,
+                "what both leave, met: the runs of lengths either takes out are runs the position "
+                        + "has, as the ends either places are ends it has",
+                "ALengthHoleAboveASumStandsUnderEachCaseTest.theRunsStandAtTheSharedFieldUnderEachCase"));
         table.put("admits", new Decided(Above.ASKED,
                 "the values both admit, and short of what either was short of",
                 "ALineDrawnOnASharedNameFallsUnderEachCaseTest"
                         + ".aClauseThatComesToNoLineNamesTheSharedFieldUnderEachCase"));
+        table.put("orderedRegionAt", new Decided(Above.ASKED,
+                "what both leave on the order, met, in whatever shape the meet comes to — a gap "
+                        + "either leaves is one the position has, as a value either refuses is one "
+                        + "`admits` leaves out",
+                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
+                        + ".aCaseLeavingOneOfTheRunsAboveLeavesTheFieldThatRun"));
         table.put("placedAt", new Decided(Above.ASKED, "both, kept apart by the rule that drew each",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.theEndStandsUnderEachCase"));
         table.put("noLineAt", new Decided(Above.ASKED, "both",
@@ -81,6 +91,11 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                 "neither certificate is one for the pair, so the pair is not certified",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
                         + ".theProofThatBoundsSayEverythingIsNotOneValuesAlone"));
+        table.put("guaranteedOfEveryElementAt", new Decided(Above.ASKED,
+                "both: what a clause above the sum states of every element of a container the cases "
+                        + "share is a fact about each element under each case",
+                "ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest"
+                        + ".aRuleAboveASumReachesTheElementsOfAListTheCasesShare"));
         table.put("handsTheRulesOnAt", new Decided(Above.NOT_ASKED,
                 "the value above raises its own handing over at the sum, and the descent into the "
                         + "case is what takes it up — asked here as well, one handing over would be "

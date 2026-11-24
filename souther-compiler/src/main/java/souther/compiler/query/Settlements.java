@@ -1,9 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.Place;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ReadingSeat;
@@ -15,7 +13,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
-import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.DrawnBoundary;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.observe.AnswerObservation;
@@ -494,6 +492,8 @@ public record Settlements(List<ObligationIdentity> requested,
                                RulesTaken rules,
                                souther.compiler.partition.InteractionRequirements combinations,
                                Adequacy.Generated.RowsForRules ruleRows,
+                               Adequacy.Generated.RowsForCases caseRows,
+                               souther.compiler.partition.CasesTheRowsTook cases,
                                Map<ObligationIdentity.OfALine, List<AtAPoint>> reads,
                                Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides) {
 
@@ -535,6 +535,8 @@ public record Settlements(List<ObligationIdentity> requested,
             // point, and the module's account holds it ({@link BorderAccount}) — a behavior
             // resolving its own points beside that would be one search made twice, free to come to
             // two answers about one row.
+            // Every reading below is of this behavior's measurement, each read where it is.
+            MeasuredInput.Lines drawn = subject.lines();
             List<BorderObligationPointAssessment> points = db.ask(
                     new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior),
                             Adequacy.OFFERED_ROWS_READ_AS))
@@ -551,7 +553,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 point.met().forEach((where, at) -> {
                     if (point.seatOf(where) instanceof ReadingSeat.At(var asked)) {
                         reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                                .add(AtAPoint.of(subject.at(at.border()),
+                                .add(AtAPoint.of(drawn.at(at.border()),
                                         at.owedAt(asked).criterion()));
                     }
                 });
@@ -563,7 +565,7 @@ public record Settlements(List<ObligationIdentity> requested,
                     if (at.at(point.point()) instanceof ItemAssessment.Owed owed) {
                         reads.computeIfAbsent(new ObligationIdentity.OfALine(point),
                                 _ -> new ArrayList<>())
-                                .add(AtAPoint.of(subject.at(at.border()), owed.criterion()));
+                                .add(AtAPoint.of(drawn.at(at.border()), owed.criterion()));
                     }
                 }
             });
@@ -603,7 +605,10 @@ public record Settlements(List<ObligationIdentity> requested,
             // answer nothing, and the line would be offered a second row it already has.
             //
             // One entry per line of the family the rows leave standing, which is what is owed: a
-            // row ruling one of them out need not rule out another.
+            // row ruling one of them out need not rule out another. And each entry is put to the
+            // line its search was made for, which is where every reading's rows leave it together,
+            // and read at the reading the search was made along: the row was composed along that
+            // reading's way and is read back at its positions.
             Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides = new LinkedHashMap<>();
             if (filling != null) {
                 List<BorderAssessment> lines =
@@ -620,11 +625,11 @@ public record Settlements(List<ObligationIdentity> requested,
                                 continue;
                             }
                             besides.computeIfAbsent(item, _ -> new ArrayList<>())
-                                    .add(new ALineBesideOne(subject.at(one.reading()),
-                                            OrderedAffineBoundary.of(one.reading())
+                                    .add(new ALineBesideOne(drawn.at(one.reading()),
+                                            DrawnBoundary.of(one.reading())
                                                     .orFail("a line the rows allow beside one"
                                                             + " whose values were not worked out")
-                                                    .orElse(null), standing, one));
+                                                    .orElse(null), one.line(), one));
                         }
                     }
                 }
@@ -639,7 +644,28 @@ public record Settlements(List<ObligationIdentity> requested,
                     identityOfArm, targetOfArm, rulesOf(db, module, behavior),
                     combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
+                    filling == null ? Adequacy.Generated.RowsForCases.NOTHING : filling.cases(),
+                    casesOf(db, module, behavior, subject),
                     reads, besides);
+        }
+
+        /**
+         * What reads a row for the cases a statement of the decision draws inside itself, or
+         * nothing where the decision was not read.
+         *
+         * <p>Built the way the measure builds it, so a row weighed here is placed at a rule and
+         * read for its cases by the reading that counted the rows.
+         */
+        private static souther.compiler.partition.CasesTheRowsTook casesOf(
+                Db db, String module, String behavior,
+                souther.compiler.partition.MeasuredInput subject) {
+            Map<String, DecisionEvidence> decisions =
+                    db.ask(new Adequacy.Decides(module)).value();
+            DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
+            return evidence == null || subject == null
+                    ? souther.compiler.partition.CasesTheRowsTook.none()
+                    : souther.compiler.partition.CasesTheRowsTook.of(evidence.read(),
+                            subject.inputs(), subject.quantities());
         }
 
         /**
@@ -665,7 +691,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 return souther.compiler.partition.InteractionRequirements.NONE;
             }
             return souther.compiler.partition.InteractionRequirements.of(behavior,
-                    here.interactions(), here.notJoined(), subject.axes(),
+                    here.interactions(), here.unjoined(), subject.axes(),
                     db.ask(new Front.Adequacy()).value().measures().cellsPerGroup());
         }
 
@@ -752,6 +778,9 @@ public record Settlements(List<ObligationIdentity> requested,
             filling.rules().byRule().forEach((rule, row) ->
                     out.put(new ObligationIdentity.OfADecisionRule(behavior, rule),
                             RowKey.of(behavior, row)));
+            filling.cases().byCase().forEach((which, row) ->
+                    out.put(new ObligationIdentity.OfACaseOfAStatement(behavior, which),
+                            RowKey.of(behavior, row)));
             // And the row composed at a line the rows do not tell from another, where one was. The
             // reading that composed it says which row it is, and the first of them is the row the
             // block offers — read off any reading that has one, a line searched twice would be
@@ -832,6 +861,10 @@ public record Settlements(List<ObligationIdentity> requested,
             // rule its own row already discharges.
             ruleRows.asked().forEach(rule ->
                     out.add(new ObligationIdentity.OfADecisionRule(behavior, rule)));
+            // And every case a statement of the decision draws inside itself that the rows leave
+            // unseen, for the same reason: a row composed for a rule may be in one of them.
+            caseRows.asked().forEach(which ->
+                    out.add(new ObligationIdentity.OfACaseOfAStatement(behavior, which)));
             // And every line the rows do not tell from a line beside it. The whole line and not a
             // point of it: what a row here shows is which of two lines the model draws, and a line
             // is what two lines are two of.
@@ -884,9 +917,14 @@ public record Settlements(List<ObligationIdentity> requested,
                      ObligationIdentity.OfARow _ -> throw new IllegalStateException(
                         "no row is offered for " + item + ", so none is weighed against it");
                 case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at).said();
+                // Nothing composes a row to show the weight of a position, so no row is weighed
+                // against it here: a weight is shown by the rows already written
+                // ({@link TiltOfADerivedValue}), which is read where the findings are made.
+                case ObligationIdentity.OfATiltAtAPosition _ -> new Settlement.DoesNotSettle();
                 case ObligationIdentity.OfAnArm owed -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
+                case ObligationIdentity.OfACaseOfAStatement owed -> inTheCase(asRead, owed);
                 case ObligationIdentity.OfACombinationOfDecisions owed ->
                         makingTheDecisions(asRead, owed);
                 case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(row, owed);
@@ -918,8 +956,10 @@ public record Settlements(List<ObligationIdentity> requested,
                 return new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             }
             AnswerObservation rewritten = switch (asked) {
-                case ReplacementOwed.OfAnArm arm ->
-                        trial.runReplacing(asRead.toRun(), arm.replacing()).orElse(null);
+                case ReplacementOwed.OfAnArm arm -> trial.runReplacing(asRead.toRun(),
+                        Rewriting.ofArms(arm.replacing())).orElse(null);
+                case ReplacementOwed.OfAWalk walk -> trial.runReplacing(asRead.toRun(),
+                        Rewriting.ofWalks(walk.replacing())).orElse(null);
                 case ReplacementOwed.ByOneAnswer one ->
                         new AnswerObservation.Answered(one.answer());
             };
@@ -1010,6 +1050,33 @@ public record Settlements(List<ObligationIdentity> requested,
                                     ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                     // A run this reading could not place says nothing about where the row went,
                     // which is this compiler falling short rather than the row missing.
+                    case RulesTaken.WhichRule.CouldNotTell _ ->
+                            new Settlement.Undetermined(
+                                    Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
+                };
+                case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            };
+        }
+
+        /**
+         * Whether running the row is evidence of the case.
+         *
+         * <p>The run and not the values: a row is evidence of a case only where its run went
+         * through the statement that draws it, which is the rule it was placed at consulting the
+         * statement ({@link souther.compiler.partition.CasesTheRowsTook}). A run this reading could
+         * not place says nothing about where the row went.
+         */
+        private Settlement inTheCase(RowAsRead asRead, ObligationIdentity.OfACaseOfAStatement owed) {
+            if (!behavior.equals(owed.behavior()) || rules == null) {
+                return new Settlement.DoesNotSettle();
+            }
+            return switch (asRead.watched()) {
+                case Generator.Watched.Ran _ -> switch (
+                        new RunPlacement(rules, subject.inputs()).takenBy(asRead.asRun())) {
+                    case RulesTaken.WhichRule.TookThis took ->
+                            cases.casesSeenBy(asRead.asRun(), took.rule()).contains(owed.which())
+                                    ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                     case RulesTaken.WhichRule.CouldNotTell _ ->
                             new Settlement.Undetermined(
                                     Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
@@ -1131,44 +1198,14 @@ public record Settlements(List<ObligationIdentity> requested,
          * is over other positions.
          */
         private ToldApartAt tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
-            StandingAtAPoint.RowsRead read = one.toRows().valuesOf(List.of(asRead.asInputs()));
-            if (read.each().isEmpty()) {
-                // The row holds no value on this line at all, whether because nothing watched its
-                // run or because its positions could not be read there. Which of those it is is
-                // the reading's own answer and is what a reader is told.
-                return new ToldApartAt(read.everyOne() ? new Settlement.DoesNotSettle()
-                        : new Settlement.Undetermined(read.unwatched()
-                                ? Settlement.Reason.NO_ACCOUNT_OF_THE_RUN
-                                : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ), null);
-            }
-            boolean unheld = false;
-            for (Map<NumericTerm, Place> values : read.each()) {
-                // Whether it leaves no threshold on the line standing beside the rows already
-                // read, and not whether it answers the line at its current threshold differently.
-                // A row the model keeps between the two ends of the range does the second and not
-                // the first: the line moves to it, and the next run finds the same line standing.
-                // Where the arithmetic could not say, the row is one nothing here can tell about —
-                // neither settling the line nor shown to leave it.
-                ExactAnswer<Boolean> rules = one.beside().ruledOutBy(one.drawn(), values);
-                if (rules instanceof ExactAnswer.Unheld<Boolean>) {
-                    unheld = true;
-                    continue;
-                }
-                if (((ExactAnswer.Held<Boolean>) rules).value()) {
-                    // Where it rules the line out, kept beside the answer. What a person is shown
-                    // for this line is where the row they are handed stands, and that is this —
-                    // worked out again by whoever shows it, it would be a second reading of the
-                    // row, free to name a reading this one did not settle at.
-                    return new ToldApartAt(new Settlement.Settles(),
-                            new InputOfARowForALine(one.reading().border(), values));
-                }
-            }
-            // A row whose sum could not be held is a row read in part (a reading's own
-            // ReadingGap.CouldNotWorkOut), and a row read short of a value is what this answers
-            // in that word wherever else a row is put to a line.
-            return new ToldApartAt(unheld
-                    ? new Settlement.Undetermined(Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ)
-                    : new Settlement.DoesNotSettle(), null);
+            WhatARowRulesOut.Said said = WhatARowRulesOut.of(one.toRows(), one.drawn(),
+                    one.beside(), asRead.asInputs());
+            // Where it rules the line out, kept beside the answer. What a person is shown for this
+            // line is where the row they are handed stands, and that is this — worked out again by
+            // whoever shows it, it would be a second reading of the row, free to name a reading
+            // this one did not settle at.
+            return new ToldApartAt(said.said(), said.at() == null ? null
+                    : new InputOfARowForALine(one.reading().border(), said.at()));
         }
 
         /**
@@ -1280,12 +1317,12 @@ public record Settlements(List<ObligationIdentity> requested,
      * of the behavior and reading the inequality folds the quantity's own step, once per row for an
      * answer that was the same every time. And the line put to rows, for the same reason.
      */
-    private record ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+    private record ALineBesideOne(MeasuredInput.BorderReading reading, DrawnBoundary drawn,
                                   AnotherLineTheRowsAllow.Stands beside,
                                   ARowTellingTheLinesApart.AtOneReading toldApart,
                                   StandingAtAPoint.AtALine toRows) {
 
-        ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+        ALineBesideOne(MeasuredInput.BorderReading reading, DrawnBoundary drawn,
                        AnotherLineTheRowsAllow.Stands beside,
                        ARowTellingTheLinesApart.AtOneReading toldApart) {
             this(reading, drawn, beside, toldApart, StandingAtAPoint.putToRows(reading,
@@ -1294,12 +1331,12 @@ public record Settlements(List<ObligationIdentity> requested,
 
         ALineBesideOne {
             if (drawn == null) {
-                // A rule that names a value orders nothing, so no line beside it is ever named.
-                // Refused where the pair is put together rather than where a row is weighed against
-                // it: what it says is that the measurement and this account disagree about the
-                // line, which is true of the pair whether or not a row is ever offered.
-                throw new IllegalStateException("a line the rows allow beside a rule that orders"
-                        + " nothing: " + reading.border().obligation());
+                // A line beside one is named only where its rule reads as a line. Refused where the
+                // pair is put together rather than where a row is weighed against it: what it says
+                // is that the measurement and this account disagree about the line, which is true
+                // of the pair whether or not a row is ever offered.
+                throw new IllegalStateException("a line the rows allow beside a rule that reads as"
+                        + " no line: " + reading.border().obligation());
             }
         }
     }

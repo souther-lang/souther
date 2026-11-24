@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.query.Adequacy;
@@ -221,10 +222,7 @@ class AForkFurtherInIsReadUnderWhatTheWayThereSettledTest {
 
         static Read of(String model, String module) {
             Compilation compilation = Compilation.ofSource(model, "Main");
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors().stream()
-                            .map(each -> each.diagnostic().code()).toList(),
-                    "the model under test compiles");
+            ACompiledModel.compiles(compilation);
             return new Read(module,
                     compilation.db().ask(new Bodies.Observable(module)).value().plan(),
                     compilation.db().ask(new Adequacy.PathReached(module)).value());

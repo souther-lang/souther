@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Adequacy;
@@ -69,7 +70,7 @@ class ARuleNamingOneValueAdmitsItsClassOrTheRestTest {
     /** What each way of the rule naming one value admits on {@code x}'s axis, under
      *  {@code guard}. */
     private static Map<Boolean, List<String>> admittedOn(String guard) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module probe
 
                 data Low
@@ -77,9 +78,7 @@ class ARuleNamingOneValueAdmitsItsClassOrTheRestTest {
 
                 behavior pick : (x: Int) -> Low | High
                 let pick (x) = if %s then High else Low
-                """.formatted(guard), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(guard), Adequacy.Asked.fullReport());
         CoverageRead.Read read =
                 compilation.db().ask(new Adequacy.Meets("probe")).value().get("pick");
         MeasuredInput.MeasuredAxes measured = MeasuredInput.of("pick",

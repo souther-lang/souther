@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperInliner;
@@ -71,8 +72,8 @@ class AnExpansionAnswersWithTheRecursionsItLeftStandingTest {
 
     /** What expanding {@code fn}'s body of {@code module} left standing. */
     private static Set<String> leftStandingIn(String module, String source, String fn) {
-        Db db = Compilation.ofDocuments(Map.of(module + ".sou", source), Set.of(), ModulePath.EMPTY)
-                .db();
+        Db db = ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of(module + ".sou", source), Set.of(), ModulePath.EMPTY)).db();
         HelperTable table = db.ask(new Bodies.Expanding(module, InliningPolicy.FULL)).value().table();
         Hir.FnDef def = HelperInliner.helpersOf(db.ask(new Bodies.Settled(module)).value()).get(fn);
         assertTrue(def != null, fn + " is a helper of " + module);

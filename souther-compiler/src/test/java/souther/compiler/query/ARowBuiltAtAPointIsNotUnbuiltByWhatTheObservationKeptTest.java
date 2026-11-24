@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.partition.PointRole;
@@ -132,10 +133,7 @@ class ARowBuiltAtAPointIsNotUnbuiltByWhatTheObservationKeptTest {
     private static BorderAssessment line(int length) {
         Compilation compilation = Compilation.ofSource(model(length), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code()).toList(),
-                () -> "the model under test compiles at " + length);
+        ACompiledModel.compiles(compilation);
         List<BorderAssessment> lines =
                 Adequacy.readingsOf(compilation.db(), "example.text").get("判定する");
         assertNotNull(lines, () -> "the threshold draws a line at " + length);

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.ValueName;
 
@@ -23,9 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatABodyIsCheckedAgainstIsWhatItReachesTest {
 
     private static Compilation compiled(String source) {
-        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", source), Set.of(),
-                ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("orders.sou", source), Set.of(), ModulePath.EMPTY));
         assertTrue(c.db().allReports().isEmpty(), "the module compiles: " + c.db().allReports());
         return c;
     }

@@ -102,7 +102,9 @@ public final class DeclaredInput {
      *
      * <p>A position already narrowed to several leaves is read as those leaves, which is what the
      * declaration leaves there now; and an arm narrowing it further narrows that narrowing rather
-     * than adding a second one after it ({@link #narrowedTo}).
+     * than adding a second one after it ({@link TermPath#refine(CasesLeft)}). An arm covering none
+     * of those leaves arrives at no value there ({@link TermPath#admits}), whatever the
+     * declarations say.
      *
      * <p>What the declaration leaves the value is read under each name it wears as well as under
      * all of them, because the path does not say how many of them the scrutinee took off: taking a
@@ -118,7 +120,10 @@ public final class DeclaredInput {
      * answer a reader was given before the declarations were asked.
      */
     public Taking taking(TermPath at, Type matchedAs, CasesLeft covered) {
-        Taking asTheArmSaysIt = new Taking.Narrows(narrowedTo(at, covered));
+        if (!at.admits(covered)) {
+            return new Taking.Excluded();
+        }
+        Taking asTheArmSaysIt = new Taking.Narrows(at.refine(covered));
         List<List<TypeSymbol>> readings = readingsAt(at);
         Set<TypeSymbol> chosen = covered.leavesOfASum();
         if (readings == null || matchedAs == null || chosen.isEmpty()) {
@@ -152,7 +157,7 @@ public final class DeclaredInput {
         // reaches one of them.
         CasesLeft both = covered.keeping(each -> each instanceof Refinement.SumCase sum
                 && left.contains(sum.leaf()));
-        return new Taking.Narrows(narrowedTo(at, both));
+        return at.admits(both) ? new Taking.Narrows(at.refine(both)) : new Taking.Excluded();
     }
 
     /**
@@ -171,25 +176,6 @@ public final class DeclaredInput {
             return type;
         }
         return source.inners().terminal(type);
-    }
-
-    /**
-     * {@code at} narrowed to {@code cases}.
-     *
-     * <p>Narrowing a position already narrowed to several leaves to some of them is one narrowing
-     * of it, stronger, and not a second narrowing after the first: {@code kind@{Hospital|Station}}
-     * narrowed to {@code Station} is {@code kind@Station}, which is the position the reading of
-     * the input holds and the one an arm naming {@code Station} outright arrives at. A step after
-     * it would be a location nothing else spells.
-     *
-     * <p>Only from several leaves. A position narrowed to one distinction and narrowed again is a
-     * distinction of what stands there — an optional inside an optional, a newtype case over a sum
-     * — and folding the two would lose the outer one.
-     */
-    public static TermPath narrowedTo(TermPath at, CasesLeft cases) {
-        return at.narrowsWhatItReaches() && at.narrowing().only() == null
-                && cases.within(at.narrowing())
-                ? at.narrowedFrom().refine(cases) : at.refine(cases);
     }
 
     /**

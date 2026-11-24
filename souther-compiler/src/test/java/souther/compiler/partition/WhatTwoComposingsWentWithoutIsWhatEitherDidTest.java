@@ -114,7 +114,7 @@ class WhatTwoComposingsWentWithoutIsWhatEitherDidTest {
     void conditionsInsideAlternativesAreSaidInTheOrderTheAlternativesAreKept() {
         OnTheWay.Declined inFirst = declined(1);
         OnTheWay.Declined inSecond = declined(2);
-        WayToTheBorder way = new WayToTheBorder(List.of(new OnTheWay.OneOf(condition(0),
+        WayToTheBorder way = new WayToTheBorder(List.of(OnTheWay.OneOf.of(condition(0),
                 anchor(0), List.of(List.of(inFirst), List.of(inSecond)), Optional.empty())));
         CompositionAccount one = CompositionAccount.ofTheInput(
                 List.of(new ReachabilityGap.Unstated(inSecond)));

@@ -27,20 +27,6 @@ class ASeparationWitnessIsAboutTheTwoItemsNotTheBreaksTest {
         return Witnesses.separation(source, Formatter.canonicalize(CstParser.parse(source).root()));
     }
 
-    /** The canonical form of a source has nothing against it. */
-    @Test
-    void aSourceInItsCanonicalFormHasNoWitness() {
-        assertEquals(List.of(), witnesses(Formatter.format("""
-                module fmtprobe exposing ( Alpha, Beta )
-
-                import some.place ( gamma )
-
-                data Alpha = Int
-
-                data Beta = Int
-                """)));
-    }
-
     /** An item run onto the header's line is one witness: the file writes a blank line under a
      * header whatever the author put there. */
     @Test

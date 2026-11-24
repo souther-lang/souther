@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
+import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -10,6 +12,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,25 +41,41 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
 
     /** The clause alone, so that nothing written beside it decides the answer. */
     private static FieldDomains read(String clause) {
-        String source = """
+        return readOf(ACompiledModel.answered(lengthWith(clause)));
+    }
+
+    /** The same, of a clause the model is refused for with {@code codes} and still read. */
+    private static FieldDomains readWhatIsRefused(String clause, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(lengthWith(clause), "Main");
+        ACompiledModel.refusedWith(codes, compilation);
+        return readOf(compilation);
+    }
+
+    private static String lengthWith(String clause) {
+        return """
                 module example.rooms
 
                 data Length = Int
                     %s
                 """.formatted(clause);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+    }
+
+    private static FieldDomains readOf(Compilation compilation) {
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     /** What the one clause of the one declaration raises. */
     private static Set<CoverageObligation> raisedBy(String clause) {
-        FieldDomains domains = read(clause);
+        return raisedBy(read(clause));
+    }
+
+    private static Set<CoverageObligation> raisedBy(FieldDomains domains) {
         assertEquals(1, domains.required().size(),
                 () -> "one clause, one rule: " + domains.required().keySet());
         Set<CoverageObligation> out = new LinkedHashSet<>();
@@ -75,7 +94,11 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
 
     /** What became of the line question of that clause. */
     private static RuleAccounting.Outcome lineOf(String clause) {
-        return read(clause).accounting().values().stream()
+        return lineOf(read(clause));
+    }
+
+    private static RuleAccounting.Outcome lineOf(FieldDomains domains) {
+        return domains.accounting().values().stream()
                 .flatMap(account -> account.answers().entrySet().stream())
                 .filter(e -> e.getKey().obligation() == CoverageObligation.BOUNDARY)
                 .map(java.util.Map.Entry::getValue)
@@ -244,14 +267,14 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
 
     /** The rules of {@code named} in {@code source}, read as the compilation reads them. */
     private static FieldDomains rulesOf(String source, String named) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
         assertNotNull(symbols.declaredNode(at.key()), "no `" + named + "` declared");
         return FieldDomains.of(at, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     /** The same of a declaration over strings, since a run is a statement about those. */
@@ -262,7 +285,7 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
                 data Code = String
                     %s
                 """.formatted(clause);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
@@ -270,7 +293,7 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         assertNotNull(symbols.declaredNode(named.key()), "no `Code` declared");
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         assertEquals(1, domains.required().size(),
                 () -> "one clause, one rule: " + domains.required().keySet());
         Set<CoverageObligation> out = new LinkedHashSet<>();
@@ -290,9 +313,10 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
      */
     @Test
     void aBoundPastWhereTheOrderStopsIsAskedAboutAndIsAnswered() {
-        assertEquals(BOTH, raisedBy("invariant none = value > 9223372036854775807"));
-        assertInstanceOf(RuleAccounting.Outcome.Accounted.class,
-                lineOf("invariant none = value > 9223372036854775807"),
+        FieldDomains domains = readWhatIsRefused("invariant none = value > 9223372036854775807",
+                List.of("E1013"));
+        assertEquals(BOTH, raisedBy(domains));
+        assertInstanceOf(RuleAccounting.Outcome.Accounted.class, lineOf(domains),
                 "the reading read the rule to the end, which is the line understood");
     }
 

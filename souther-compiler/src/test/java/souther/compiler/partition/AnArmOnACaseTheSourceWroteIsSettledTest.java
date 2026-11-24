@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.Note;
 import souther.compiler.diag.msg.DeadBranchMessage;
@@ -252,10 +253,6 @@ class AnArmOnACaseTheSourceWroteIsSettledTest {
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource("module demo\n\n" + model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().literalMessage())
-                .toList(), "the model compiles and its rows hold");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

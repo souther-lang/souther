@@ -3,7 +3,11 @@ package souther.compiler.diag;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.doc.SpecDocument;
+import souther.compiler.diag.msg.Code;
 import souther.compiler.diag.msg.MessageCodes;
+import souther.compiler.diag.msg.Prose;
+import souther.compiler.diag.msg.Reported;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.MessageTemplate;
@@ -11,6 +15,7 @@ import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
 import souther.compiler.check.Ordering;
@@ -25,6 +30,7 @@ import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -137,6 +143,54 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         assertEquals(1, bases.size(),
                 "the base catalog is what every other one is compared against, and what a key"
                         + " missing everywhere else falls back to: " + bases);
+    }
+
+    /**
+     * What an entry writes as code, a translation writes too.
+     *
+     * <p>Code in a message is what the author types — a keyword, a form, a name the message fills
+     * in — and it is the same in every language; a sentence around it is what a translation is for.
+     * So an entry and its translation write the same code, and one that does not is a translation
+     * left behind when the entry's code changed, or written against code the entry never had. That
+     * is the part of a translation a check can hold, and nothing here asks about the sentence.
+     *
+     * <p>A word in angle brackets inside code stands for what the author writes there, and is the
+     * sentence's to name: {@code <name>} and {@code <名前>} are one piece of code.
+     */
+    @Test
+    void everyCatalogWritesTheCodeTheBaseWrites() throws IOException {
+        Properties base = load(baseCatalog().path());
+        List<String> apart = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                continue;
+            }
+            Properties translated = load(catalog.path());
+            for (String key : new TreeSet<>(base.stringPropertyNames())) {
+                String said = translated.getProperty(key);
+                if (said == null) {
+                    continue;
+                }
+                Set<String> wrote = codeOf(base.getProperty(key));
+                Set<String> here = codeOf(said);
+                if (!wrote.equals(here)) {
+                    apart.add(catalog.path().getFileName() + " " + key + ": " + wrote + " / " + here);
+                }
+            }
+        }
+        assertEquals(List.of(), apart, "a translation writes code its entry does not");
+    }
+
+    private static final Pattern CODE = Pattern.compile("`([^`]+)`");
+    private static final Pattern WRITTEN_BY_THE_AUTHOR = Pattern.compile("<[^<>]*>");
+
+    private static Set<String> codeOf(String entry) {
+        Set<String> code = new TreeSet<>();
+        Matcher m = CODE.matcher(entry);
+        while (m.find()) {
+            code.add(WRITTEN_BY_THE_AUTHOR.matcher(m.group(1)).replaceAll("<>"));
+        }
+        return code;
     }
 
     /**
@@ -365,6 +419,34 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         }
         broken.sort(String::compareTo);
         assertEquals(List.of(), broken);
+    }
+
+    /**
+     * An apostrophe in a message filled by position is written {@code ''}, or quotes a brace.
+     *
+     * <p>The check above sees a lone {@code '} only where a placeholder follows it. A message with
+     * none after it renders without its apostrophe and with nothing else wrong, so {@code an
+     * installed backend's own} reaches the reader as {@code backends own}. Read off the text: with
+     * {@code ''} and a quoted brace taken out, an apostrophe left over is one the formatter drops.
+     */
+    @Test
+    void everyApostropheInAMessageFilledByPositionIsWrittenTwice() throws IOException {
+        List<String> dropped = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                if (ownedByAMessage().contains(key)) {
+                    continue;   // filled by name, where an apostrophe is itself
+                }
+                String template = messages.getProperty(key);
+                String rest = template.replace("''", "").replace("'{'", "").replace("'}'", "");
+                if (rest.indexOf('\'') >= 0) {
+                    dropped.add(catalog.name() + ": " + key + " -> " + template);
+                }
+            }
+        }
+        dropped.sort(String::compareTo);
+        assertEquals(List.of(), dropped, "write a literal apostrophe as `''`");
     }
 
     /**
@@ -605,12 +687,13 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * {@link souther.compiler.diag.msg.Supporting}, and names none — a code there is read by
      * nothing, and counted by the rule below as a rule something reports.
      *
-     * <p>Every message carries one of the two roles and never both, which is what makes being a
+     * <p>Every message carries one of the three roles and never two, which is what makes being a
      * {@code Reported} the same thing as being usable as one: the builder takes each where it
      * belongs, so a message written for a hint cannot reach {@code say} and one written as a subject
-     * cannot reach {@code hint}. Held here as well because a leaf could carry neither and fall
-     * through both. The roles sit outside the {@link Message} hierarchy, so this walk never meets
-     * them and what may be a message stays what {@code Message} permits.
+     * cannot reach {@code hint}. A line of a report is {@link Prose}, which no diagnostic takes and
+     * which names no code either. Held here as well because a leaf could carry none and fall
+     * through all three. The roles sit outside the {@link Message} hierarchy, so this walk never
+     * meets them and what may be a message stays what {@code Message} permits.
      */
     @Test
     void everyMessageIsARecordThatNamesItsRule() {
@@ -621,21 +704,25 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 wrong.add(leaf.getName() + " is not a record");
                 continue;
             }
-            boolean reports = souther.compiler.diag.msg.Reported.class.isAssignableFrom(leaf);
-            boolean supports = souther.compiler.diag.msg.Supporting.class.isAssignableFrom(leaf);
-            if (reports == supports) {
-                wrong.add(leaf.getName() + (reports
-                        ? " is both what a diagnostic is about and what is said beside one"
-                        : " is neither what a diagnostic is about nor what is said beside one"));
+            boolean reports = Reported.class.isAssignableFrom(leaf);
+            boolean supports = Supporting.class.isAssignableFrom(leaf);
+            boolean prose = Prose.class.isAssignableFrom(leaf);
+            int roles = (reports ? 1 : 0) + (supports ? 1 : 0) + (prose ? 1 : 0);
+            if (roles != 1) {
+                wrong.add(leaf.getName() + (roles == 0
+                        ? " is neither what a diagnostic is about, nor what is said beside one,"
+                                + " nor a line of a report"
+                        : " carries more than one of the three roles"));
             }
-            boolean named = leaf.getAnnotation(souther.compiler.diag.msg.Code.class) != null;
+            boolean named = leaf.getAnnotation(Code.class) != null;
             if (reports && !named) {
                 wrong.add(leaf.getName() + " reports a rule and names no code");
             }
             // A hint's code is read by nothing — a diagnostic's comes from its subject — so one
-            // written here is a number that looks reported and is not.
-            if (supports && named) {
-                wrong.add(leaf.getName() + " is a hint or a label and names a code");
+            // written here is a number that looks reported and is not. A line of a report is
+            // about no rule at all.
+            if ((supports || prose) && named) {
+                wrong.add(leaf.getName() + " is not what a diagnostic is about and names a code");
             }
         }
         wrong.sort(String::compareTo);
@@ -941,19 +1028,9 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
         return keys;
     }
 
-    private static List<String> texts;
-
-    /** What every main source says, read once for the class. */
-    private static List<String> mainSourceTexts() throws IOException {
-        if (texts != null) {
-            return texts;
-        }
-        List<String> read = new ArrayList<>();
-        for (Path source : mainSources()) {
-            read.add(Files.readString(source, StandardCharsets.UTF_8));
-        }
-        texts = List.copyOf(read);
-        return texts;
+    /** What every main source says, read once for the fork. */
+    private static Collection<String> mainSourceTexts() {
+        return RepositoryJavaSources.forThisFork().mainTexts().values();
     }
 
     /**
@@ -1006,14 +1083,8 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /** Every module's main sources. Any module may name a message key. */
-    public static List<Path> mainSources() throws IOException {
-        List<Path> sources = new ArrayList<>();
-        for (Path root : moduleDirectories("java")) {
-            try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(p -> p.toString().endsWith(".java")).forEach(sources::add);
-            }
-        }
-        return sources;
+    public static List<Path> mainSources() {
+        return REPOSITORY.mainJavaSources();
     }
 
     /** Every module's {@code src/main/<kind>}, for the modules that have one. The test runs in its

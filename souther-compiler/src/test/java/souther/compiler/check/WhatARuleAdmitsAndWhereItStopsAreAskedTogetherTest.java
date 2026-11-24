@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
@@ -57,7 +58,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     /** And a cut the pattern reaches over is a rule somebody can satisfy. */
     @Test
     void aPatternAndACutItReachesOverAreARuleAValueSatisfies() {
-        assertNull(only("""
+        assertNull(onlyOfAModelThatCompiles("""
                 module demo
 
                 data Code = String
@@ -196,8 +197,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     private static List<String> saidBy(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        return compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
+        return compilation.errors().stream()
                 .map(souther.compiler.diag.Located::diagnostic)
                 .filter(each -> "E1013".equals(each.code()))
                 .map(each -> each.said().getClass().getSimpleName())
@@ -207,7 +207,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     /** And the same alternatives with one of them left standing are a rule somebody satisfies. */
     @Test
     void oneAlternativeStandingIsARuleAValueSatisfies() {
-        assertNull(only("""
+        assertNull(onlyOfAModelThatCompiles("""
                 module demo
 
                 data Held = { x: String, y: String }
@@ -275,11 +275,18 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
      *  one. */
     private static Emptiness only(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
+        return emptinessOf(source, compilation);
+    }
+
+    /** As {@link #only}, of a model that compiles. */
+    private static Emptiness onlyOfAModelThatCompiles(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.compiles(compilation);
+        return emptinessOf(source, compilation);
+    }
+
+    private static Emptiness emptinessOf(String source, Compilation compilation) {
         List<Hir.Def> defs = compilation.module("demo").defs().stream()
                 .map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();

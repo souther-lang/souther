@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -37,14 +39,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class WhatAReadingCouldNotHoldTogetherIsSaidAtThePositionTest {
 
     private static Partitions.Partitioning of(String source, String behavior) {
-        Compilation compilation = Compilation.ofSources(List.of(source),
-                souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of(source),
+                souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().getFirst();
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
+                ReadAs.MERGING_WHAT_A_CHOICE_LEAVES, TestDay.TODAY);
         return Partitions.of(behavior,
                 InputDomain.of(sigs.get(behavior), reading,
                         TypeCardinality.Counts.workedOutIn(reading),

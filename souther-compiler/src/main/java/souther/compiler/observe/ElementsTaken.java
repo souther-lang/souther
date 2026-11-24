@@ -2,11 +2,8 @@ package souther.compiler.observe;
 
 import souther.compiler.inputs.TermPath;
 
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Which element was taken from each container on the way to one value, outermost first.
@@ -53,20 +50,25 @@ public record ElementsTaken(List<Taken> outermostFirst) {
      */
     public ElementsTaken {
         outermostFirst = List.copyOf(outermostFirst);
-        Set<TermPath> seen = new HashSet<>();
-        for (Taken each : outermostFirst) {
-            if (!seen.add(each.container())) {
-                throw new IllegalArgumentException(
-                        "a container is entered once: " + each.container());
+        // Containers are few, as deep as a value is nested, so each is asked of the ones before it
+        // and no set is built.
+        for (int at = 1; at < outermostFirst.size(); at++) {
+            TermPath container = outermostFirst.get(at).container();
+            for (int before = 0; before < at; before++) {
+                if (outermostFirst.get(before).container().equals(container)) {
+                    throw new IllegalArgumentException(
+                            "a container is entered once: " + container);
+                }
             }
         }
     }
 
     /** These, and one element more taken from {@code container}, inside them. */
     public ElementsTaken and(TermPath container, int element) {
-        List<Taken> deeper = new ArrayList<>(outermostFirst);
-        deeper.add(new Taken(container, element));
-        return new ElementsTaken(deeper);
+        Taken[] deeper = outermostFirst.toArray(new Taken[outermostFirst.size() + 1]);
+        deeper[outermostFirst.size()] = new Taken(container, element);
+        // Immutable already, so the copy the canonical constructor makes is this list itself.
+        return new ElementsTaken(List.of(deeper));
     }
 
     /** The element taken from {@code container}, or null where this entered no such container. */

@@ -3,9 +3,15 @@ package souther.compiler.inputs;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
+import souther.compiler.core.Core;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.SequencedSet;
 
 /**
  * Where inside a rule a reader is sent, said as what an author wrote rather than as where it is.
@@ -104,6 +110,41 @@ public sealed interface RuleSite {
 
     /** The one of those, since it holds nothing and two of them say the same thing. */
     RuleSite THE_RULE_ITSELF = new TheRuleItself();
+
+    /**
+     * The call its author wrote that the arithmetic stopped at, where {@code node} is one.
+     *
+     * <p>The one place that says what an arithmetic stop is sent to, for a comparison in a body
+     * and for one in a data invariant alike. Nothing for a call no author wrote — an expansion
+     * composed it, and a reader sent there would be pointed at something nobody can edit — and for
+     * an expression that is no call.
+     */
+    static Optional<RuleSite> ofTheCallStoppedAt(Core node) {
+        return Core.withoutStanding(node) instanceof Core.PreservedCall call
+                && call.occurrence().origin().isWritten()
+                ? Optional.of(new AConstructTheAuthorWrote(call.occurrence().origin()))
+                : Optional.empty();
+    }
+
+    /** The rule and nothing in it, shared: where a reader is sent when nothing says otherwise. */
+    SequencedSet<RuleSite> THE_RULE_ONLY =
+            Collections.unmodifiableSequencedSet(new LinkedHashSet<>(List.of(THE_RULE_ITSELF)));
+
+    /** No site, shared: what is held where there is nothing to hold. */
+    SequencedSet<RuleSite> NO_SITES =
+            Collections.unmodifiableSequencedSet(new LinkedHashSet<>());
+
+    /**
+     * These sites, in the order they were met, for a value to hold.
+     *
+     * <p>Copied only when there is something to copy, because a reading that stopped at no
+     * expression of an author's is the common one and every record that carries sites is built
+     * once for each place it is filed at.
+     */
+    static SequencedSet<RuleSite> held(SequencedSet<RuleSite> sites) {
+        return sites.isEmpty() ? NO_SITES
+                : Collections.unmodifiableSequencedSet(new LinkedHashSet<>(sites));
+    }
 
     /**
      * Where this stands among these, for a reader putting some of them in a steady order.

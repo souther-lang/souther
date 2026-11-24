@@ -49,7 +49,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
 
     /** One it reads and will not build a machine for, which is the other way to be short. */
     private static final String MORE_THAN_A_WITNESS_MAY_SPEND =
-            "String.matches(\"a{60000}\", value)";
+            "String.matches(\"[ab]*a[ab]{20}\", value)";
 
     private static String model(String rule) {
         return """
@@ -384,7 +384,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String json(String model) {
@@ -396,7 +396,8 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     /** Each model measured once for the class: the tests here ask three models for their page
      *  and their document, and only read them. */
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, WhatTheOfferWasShortOfReachesTheAccountTest::measuring);
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model,
+                WhatTheOfferWasShortOfReachesTheAccountTest::measuring));
     }
 
     private static final Map<String, Compilation> MEASURED = new HashMap<>();
@@ -411,10 +412,6 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     private static Compilation measuring(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
         return compilation;
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -177,11 +178,7 @@ class AConditionOnADependencysAnswerIsTheColumnTheTableHoldsTest {
     /** What the condition of the one fork of a body written {@code body} states. */
     private static Proposition stated(String body) {
         Compilation compilation = Compilation.ofSource(model(body), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().titleKey())
-                        .toList(),
-                () -> "the model compiles: " + body);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");

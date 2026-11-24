@@ -67,7 +67,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
     /** What stands at {@code position}. */
     public static <P> NumberAt<P> valueOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsOwnValue());
+        return new NumberAt<>(position, OfWhatNumber.OWN_VALUE);
     }
 
     /** The number {@code operation} answers of what stands at {@code position} as it stands,
@@ -95,25 +95,24 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
     /** What the code points of the string at {@code position} come to, each the number it is. */
     public static <P> NumberAt<P> codePointSumOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfWhatItsCodePointsComeTo());
+        return new NumberAt<>(position, OfWhatNumber.WHAT_ITS_CODE_POINTS_COME_TO);
     }
 
-    /** How many elements of the container {@code position} stands inside hold there what the
-     *  element under consideration holds. */
-    public static <P> NumberAt<P> multiplicityOf(P position) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsMultiplicity());
+    /** The code point of the string at {@code position} at {@code index} of its code points. */
+    public static <P> NumberAt<P> codePointAt(P position, int index) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheCodePointAt(index));
+    }
+
+    /** The step of the order {@code operation} answers on that the value at {@code position} falls
+     *  in. */
+    public static <P> NumberAt<P> wholeUnitsOf(P position, ValueName operation) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheWholeUnitsOf(operation));
     }
 
     /** How many of the values standing at {@code position}, in every container it stands inside,
      *  are what the value under consideration is. */
-    public static <P> NumberAt<P> occurrencesOf(P position, String keptBy) {
-        return new NumberAt<>(position, new OfWhatNumber.OfItsOccurrencesInEveryContainer(keptBy));
-    }
-
-    /** How many of the values standing at {@code position}, in every container it stands inside,
-     *  are what the value spelled {@code key} is. */
-    public static <P> NumberAt<P> occurrencesOfAKey(P position, String key) {
-        return new NumberAt<>(position, new OfWhatNumber.OfTheOccurrencesOfAKey(key));
+    public static <P> NumberAt<P> occurrencesOf(P position) {
+        return new NumberAt<>(position, OfWhatNumber.OCCURRENCES_IN_EVERY_CONTAINER);
     }
 
     /** The {@code extreme} of what the elements of the container {@code position} stands inside
@@ -145,6 +144,14 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
      * place is what this exists to stop, so what makes them two is carried rather than summarised.
      */
     public sealed interface OfWhatNumber {
+
+        // The kinds that carry nothing, each one value: a name of a number holds its kind, and
+        // every name of a place's own value would otherwise hold a kind of its own.
+        OfItsOwnValue OWN_VALUE = new OfItsOwnValue();
+        OfWhatItsCodePointsComeTo WHAT_ITS_CODE_POINTS_COME_TO = new OfWhatItsCodePointsComeTo();
+        OfItsMultiplicity MULTIPLICITY = new OfItsMultiplicity();
+        OfItsOccurrencesInEveryContainer OCCURRENCES_IN_EVERY_CONTAINER =
+                new OfItsOccurrencesInEveryContainer();
 
         /** What stands at the place. */
         record OfItsOwnValue() implements OfWhatNumber {}
@@ -204,6 +211,25 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         record OfWhatItsCodePointsComeTo() implements OfWhatNumber {}
 
         /**
+         * The code point of the string standing there at {@code index} of its code points,
+         * counted from nought: one of the numbers its code points come to, and another number of
+         * the place at each index.
+         */
+        record OfTheCodePointAt(int index) implements OfWhatNumber {}
+
+        /**
+         * The step of the coarser order {@code operation} answers on that the value standing there
+         * falls in: another number of the place than the value itself, and than the step another
+         * operation declaring another unit answers.
+         */
+        record OfTheWholeUnitsOf(ValueName operation) implements OfWhatNumber {
+
+            public OfTheWholeUnitsOf {
+                Objects.requireNonNull(operation, "this one names the operation");
+            }
+        }
+
+        /**
          * How many elements of the container the place stands inside hold at it what the element
          * under consideration holds there.
          *
@@ -221,8 +247,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * of the container the place stands inside, and this among all of them put end to end.
          * The same place holds both numbers, and a line drawn on one falls on the other no more
          * than a line on a length falls on the value.
+         *
+         * <p>Every value at the place is counted. A count of only the values a statement keeps is
+         * not said by the place and this kind of number, so it is named by its term
+         * ({@code NumericTerm#atItsPlace}).
          */
-        record OfItsOccurrencesInEveryContainer(String keptBy) implements OfWhatNumber {}
+        record OfItsOccurrencesInEveryContainer() implements OfWhatNumber {}
 
         /**
          * How many of the values standing at the place, in every container it stands inside, are
@@ -248,7 +278,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * part of which number it is: the least of one place by one key and by another are two
          * numbers at one place.
          */
-        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key)
+        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key, ValueName through)
                 implements OfWhatNumber {
 
             public OfTheExtremeOfItsKey {
@@ -256,14 +286,22 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 key = List.copyOf(key);
             }
 
+            /** The end of the values themselves. */
+            public OfTheExtremeOfItsKey(Extreme extreme, List<String> key) {
+                this(extreme, key, null);
+            }
+
             /** This number of what stands at the place spelled {@code position}, in the words a
-             *  report and a diagnostic write it in. */
+             *  report and a diagnostic write it in. The end of the steps a value falls in, where
+             *  it is, names the operation that counts them. */
             public String spelledAt(String position) {
                 String end = switch (extreme) {
                     case Extreme.Least _ -> "least";
                     case Extreme.Greatest _ -> "greatest";
                 };
-                return end + "(" + position + " by " + keySpelled(key) + ")";
+                String values = through == null ? position
+                        : ((ValueName.Stdlib) through).qualified() + "(" + position + ")";
+                return end + "(" + values + " by " + keySpelled(key) + ")";
             }
 
             /**
@@ -298,10 +336,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                             position.toString()) + ")";
             case OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     "List.sum(String.codePoints(" + position + "))";
+            case OfWhatNumber.OfTheCodePointAt at ->
+                    "List.get(" + at.index() + ", String.codePoints(" + position + "))";
+            case OfWhatNumber.OfTheWholeUnitsOf units -> units.operation() + "(" + position + ")";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
-            case OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> kept.keptBy() == null
-                    ? "occurrences(" + position + ")"
-                    : "occurrences(" + position + " kept by " + kept.keptBy() + ")";
+            case OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
+                    "occurrences(" + position + ")";
             case OfWhatNumber.OfTheOccurrencesOfAKey asked ->
                     "occurrences(" + position + " equal to " + asked.key() + ")";
             case OfWhatNumber.OfTheExtremeOfItsKey extremeOf ->

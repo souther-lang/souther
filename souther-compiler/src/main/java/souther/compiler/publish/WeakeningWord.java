@@ -86,23 +86,13 @@ public enum WeakeningWord {
     BORDER_READINGS_NOT_EXHAUSTED,
 
     /**
-     * Nothing here holds a border of this shape against the lines the model puts one step from it.
-     *
-     * <p>Beside the four above and not among them: those are readings of the rows, and this is a
-     * question over rows that were read. What it is short of is a strategy nobody has written, so
-     * running again allowing more comes to the same answer — which is what tells a consumer to act
-     * on it differently from {@link #BORDER_READINGS_NOT_EXHAUSTED}.
-     */
-    LINES_BESIDE_A_BORDER_NOT_TRIED,
-
-    /**
      * The rows a border was held against all fall on one side of its line, so they pin no threshold
      * on any line beside it.
      *
-     * <p>Its own word beside the one above, because what to do about them differs: that one wants
-     * this compiler to grow a strategy, and this one wants a row. A border every point of which has
-     * a row never comes back this way, so a consumer meeting it is looking at a border that is
-     * short of a row as well.
+     * <p>Beside the readings above and not among them: those are readings of the rows, and this is
+     * a question over rows that were read, which a row answers and a wider run does not. A border
+     * every point of which has a row never comes back this way, so a consumer meeting it is looking
+     * at a border that is short of a row as well.
      */
     A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
 
@@ -149,6 +139,17 @@ public enum WeakeningWord {
     ITEMS_PLACE_NOT_WORKED_OUT,
 
     /**
+     * The rows neither fix nor leave unfixed how a position weighs into a value derived from
+     * several positions: nothing was read against the computation, a border of it was not read in
+     * full, or the exact arithmetic gave out on a changed weight or on a row.
+     *
+     * <p>Apart from the words about a border: the weight is the computation's, and the borders of a
+     * computation cut at several places are not held against the lines beside them. No wider run
+     * decides it, since no allowance stopped it; where one stopped a border, that border says so.
+     */
+    A_WEIGHT_NOT_DECIDED,
+
+    /**
      * A reading of a comparison a body wrote that could not be tied to the line its author drew:
      * the comparison turns there because a caller's choice does, and what rows came to there is not
      * counted for or against a point of the author's line.
@@ -181,6 +182,16 @@ public enum WeakeningWord {
      */
     BODY_NOT_IN_EVALUATION,
 
+    /**
+     * A behavior whose body was left unread because its author is told what to change so that
+     * measuring it does not run into a figure.
+     *
+     * <p>Beside the one above and not that one. Nothing is wrong with the body and the image
+     * carries it: a run asked to measure it all the same reads it, and what a reader does here is
+     * make the change the report names.
+     */
+    BEHAVIOR_TO_BE_CHANGED_FIRST,
+
     /** The boundary of the behavior could not be worked out, so no measure that reads one could be
      *  finished. Every one of them was asked for and started, which is what tells this from a
      *  measure nobody asked for. */
@@ -210,15 +221,6 @@ public enum WeakeningWord {
      * two would send it to whichever it guessed.
      */
     MEETINGS_NOT_WALKED,
-
-    /**
-     * A meeting of the body's decisions whose combinations the classes of the input do not place,
-     * so which of them the rows make was never established.
-     *
-     * <p>Its own word beside the one above, because a consumer acts on them differently: a wider
-     * limit walks a meeting held back by one, and places nothing more of these.
-     */
-    MEETINGS_NOT_PLACED,
 
     /**
      * A sum of the elements a comparison keeps was met, and its decisions were not joined to the

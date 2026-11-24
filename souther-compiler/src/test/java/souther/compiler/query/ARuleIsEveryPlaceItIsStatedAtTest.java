@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.CameToNothing;
@@ -132,15 +133,13 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         DecisionReading with(DecisionReading.Ruled... more) {
             List<DecisionReading.Ruled> found = new ArrayList<>(read.found());
             found.addAll(Arrays.asList(more));
-            return new DecisionReading(read.behavior(), found, read.impossible(),
+            return new DecisionReading(read.behavior(), found, read.excluded(),
                     read.enumeration(), read.metAt());
         }
     }
 
     private static Compiled compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
         DecisionEvidence decided =
                 compilation.db().ask(new Adequacy.Decides(module)).value().get("f");
@@ -284,10 +283,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         OnTheWay.Declined declinedSecond = declined(1);
         DecisionReading.Ruled one = new DecisionReading.Ruled(first.rule(),
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedFirst),
-                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE, List.of())), true);
         DecisionReading.Ruled other = new DecisionReading.Ruled(first.rule(),
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
-                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
+                        AnswersDemanded.NOTHING, SaidOnTheWay.NONE, List.of())), true);
         SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
                 cameToNothing(), CompositionAccount.NOTHING), Set.of());
         SettledAt composed = new SettledAt(other, RuleSettlement.of(

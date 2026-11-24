@@ -37,6 +37,13 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             let f (k, m, q) = (Map.get(k, m) |> Option.withDefault(0)) >= q
             """;
 
+    private static final String MAPPED = """
+            module p
+            behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+            let f (k, m, q) =
+                (Map.get(k, m) |> Option.map(v -> v + 1 - 1) |> Option.withDefault(0)) >= q
+            """;
+
     private static final String WRITTEN_OUT = """
             module p
             behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
@@ -47,6 +54,11 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             """;
 
     private static Compilation measured(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -55,7 +67,7 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String lineAbout(String report, String word) {
@@ -71,20 +83,25 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
      * Nothing is left unread, the threshold included. On the way to the entry the lookup asks
      * which key the map holds an entry under, which says nothing of the value under it, so the
      * entry's value reaches every threshold — written with the default or with the match spelled
-     * out, and with the value moved by a constant before it is compared.
+     * out.
+     *
+     * <p>Moved by a constant in a closure before it is compared, the value is read the same: the
+     * closure's sum is worked out where the entry is held, and it is told where it passes the type.
      */
     @Test
     void aLookupWithADefaultIsReadToTheEnd() {
-        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT, """
-                module p
-                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
-                let f (k, m, q) =
-                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
-                """)) {
+        for (String source : List.of(WITH_DEFAULT, WRITTEN_OUT)) {
             String report = report(measured(source));
 
             assertEquals(List.of(), notRead(report), report);
         }
+        String moved = report(measured("""
+                module p
+                behavior f : (k: String, m: Map<String, Int>, q: Int) -> Bool
+                let f (k, m, q) =
+                    (Map.get(k, m) |> Option.map(v -> v + 1) |> Option.withDefault(0)) >= q
+                """));
+        assertEquals(List.of(), notRead(moved), moved);
     }
 
     /**
@@ -103,6 +120,20 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
         assertEquals(1, notRead(report).size(), report);
         assertTrue(notRead(report).getFirst().contains("not shown to reach every value here")
                 && notRead(report).getFirst().endsWith("about `q`"), report);
+    }
+
+    private static final Pattern NAMED_BESIDE =
+            Pattern.compile("a row at `m\\[\\*] = (-?\\d+), q = (-?\\d+)` would");
+
+    /** The entry's value and the threshold of each input {@code report} names for a line beside
+     *  one, in the order it names them. */
+    static List<long[]> namedBeside(String report) {
+        List<long[]> out = new ArrayList<>();
+        Matcher named = NAMED_BESIDE.matcher(report);
+        while (named.find()) {
+            out.add(new long[] {Long.parseLong(named.group(1)), Long.parseLong(named.group(2))});
+        }
+        return out;
     }
 
     /** The lines {@code report} says were not read. */
@@ -151,6 +182,23 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
     }
 
     /**
+     * The sum a closure works out on the entry stops the run at the greatest {@code Int}, and a
+     * row that stops is no row: held against that number, the line at the entry is drawn but no
+     * row is composed at it, which the report says. Without the closure the same line has its
+     * row.
+     */
+    @Test
+    void theLineAtTheNumberAClosuresSumStopsAtHasNoRowComposedAtIt() {
+        String stops = lineAbout(report(measured(
+                MAPPED.replace(">= q", ">= 9223372036854775807"))), "= 9223372036854775807");
+        assertTrue(stops.contains("nothing composed one: no row composed here was run to an answer"),
+                stops);
+        String reaches = lineAbout(report(measured(MAPPED.replace(">= q", ">= 9223372036854775807")
+                .replace("|> Option.map(v -> v + 1 - 1) ", ""))), "= 9223372036854775807");
+        assertFalse(reaches.contains("nothing composed one"), reaches);
+    }
+
+    /**
      * Every row offered for a line of the entry's value has an entry under the key, and the value
      * of that entry is where the line puts it; every row offered for the line of the default has
      * none.
@@ -181,7 +229,10 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
 
     /**
      * The rows offered, answered by what the lookup is defined to answer and put back as examples,
-     * are all the model asks: they run, and each answers the line it was offered for.
+     * are all the model asks: they run, and each answers the line it was offered for. Offered in
+     * two rounds, because the lines beside the entry's line are asked about once its points are
+     * met: the rows at the points leave lines weighing the entry or the threshold once more, and
+     * each is named with an input the second round writes a row at.
      */
     @Test
     void theRowsOfferedAreAnsweredByTheDefinitionAndSatisfyTheModel() {
@@ -191,6 +242,12 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             examples.append("    | \"").append(row.label()).append("\" : (")
                     .append(String.join(", ", row.inputTexts())).append(") -> ")
                     .append(answer(row.key(), row.entries(), row.q())).append('\n');
+        }
+        for (long[] at : namedBeside(report(measured(WITH_DEFAULT + examples)))) {
+            examples.append("    | \"beside at ").append(at[0]).append(", ").append(at[1])
+                    .append("\" : (\"a\", [(\"a\", ").append(at[0]).append(")], ")
+                    .append(at[1]).append(") -> ")
+                    .append(answer("a", Map.of("a", at[0]), at[1])).append('\n');
         }
         Compilation answered = measured(WITH_DEFAULT + examples);
 
@@ -228,13 +285,14 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
     /** The control: the same rows with one answer the lookup does not give are refused. */
     @Test
     void anAnswerTheLookupDoesNotGiveIsRefused() {
-        Compilation compilation = measured(WITH_DEFAULT + """
+        Compilation compilation = attempted(WITH_DEFAULT + """
 
                 example f
                     | "another key holds the large value" : ("A", [("B", 10), ("A", 2)], 5) -> true
                 """);
 
-        assertFalse(compilation.errors().isEmpty(), () -> report(compilation));
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
+        assertFalse(report(compilation).isEmpty(), () -> report(compilation));
     }
 
     /** One row offered for a line: what it was offered for, and the values it writes. */

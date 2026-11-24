@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -86,7 +87,7 @@ public sealed interface RepresentativeSource {
      * <p>What the class knows about itself. A reader told only that there are no values would
      * report a case somebody can write in one line as a row that does not exist.
      */
-    record NothingProducible(String why) implements RepresentativeSource {}
+    record NothingProducible(SearchMessage why) implements RepresentativeSource {}
 
     /**
      * Nothing was produced for this class and nothing here says none can be.
@@ -103,7 +104,7 @@ public sealed interface RepresentativeSource {
      * @param met what of this compiler's the search met, in every vocabulary it has
      * @param why what to tell a reader, in words that are about this compiler
      */
-    record NotArrivedAt(CompositionShortfall met, String why) implements RepresentativeSource {
+    record NotArrivedAt(CompositionShortfall met, SearchMessage why) implements RepresentativeSource {
 
         public NotArrivedAt {
             if (met.nothing()) {

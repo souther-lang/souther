@@ -5,9 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -37,31 +38,96 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
             }
             """;
 
+    /** The same, with a pay no sum written out can carry past the greatest {@code Int}: a row that
+     *  stops in {@code a.pay + a.pay} is no row at the comparison, and the total over the list is
+     *  not read as one that stops. */
+    private static final String SMALL_PAYS = MODEL.replace(
+            "data Month = { pay: Int, days: Int }",
+            "data Month = { pay: Int, days: Int }\n"
+                    + "    invariant pay >= -1000000 && pay <= 1000000");
+
     private static final String SUM = "a.pay + b.pay + c.pay";
+
+    /** What the report says of a walk not unrolled: it is measured on what its runs worked out. */
+    private static final String ON_ITS_RUNS =
+            WhyAPlaceIsUndividedIsSaid.of(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS);
+
+    /**
+     * {@code report} without where a run is said to stop. A sum written out is a step for each
+     * addition it works out, and is shown to stop where two of the pays together pass the type; a
+     * total over a list written out is one step, and is shown to stop where the whole total passes
+     * it, as is a total over what a closure makes of each element of one. Which steps a run may
+     * stop at, and where they are written, turn on how the total is written, so the stops a
+     * behavior is said to have are left out whatever they say. What else is read of them is the
+     * same.
+     */
+    private static String besideWhereEveryRunStops(String report) {
+        return report.replaceAll("(?m)^    stops .*\\R((      ·|          ·) .*\\R)*", "");
+    }
 
     /** The report, with where in the guard each comparison is written left out. */
     private static String measured(String total) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(total), "Main");
+        return measured(MODEL, total);
+    }
+
+    /**
+     * The report of the total written in {@code model}, where each part stands left out, and
+     * without the line naming the operations that stop a run only past what the representation
+     * holds: a range and a list written out are one total, and only the range is an operation
+     * that builds a list.
+     */
+    private static String measured(String model, String total) {
+        Compilation compilation = Compilation.ofSource(model.formatted(total), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()))
-                .replaceAll("\\d+:\\d+", "");
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
+                .lines().filter(line -> !line.contains("a run stops only where"))
+                .map(line -> line.replaceAll("\\d+:\\d+", ""))
+                .reduce("", (all, line) -> all + line + "\n");
     }
 
     @Test
     void theTotalOfWhatAMapAnswersIsTheSumOfTheElementsNumbers() {
         String report = measured("List.sum(List.map(m -> m.pay, [a, b, c]))");
         assertFalse(report.contains("states no law"), report);
-        assertEquals(measured(SUM), report);
+        assertEquals(measured("List.sum([a.pay, b.pay, c.pay])"), report);
     }
 
     @Test
     void theTotalOfElementsWrittenOutIsTheirSum() {
         String report = measured("List.sum([a.pay, b.pay, c.pay])");
-        assertEquals(measured(SUM), report);
+        assertEquals(besideWhereEveryRunStops(measured(SUM)), besideWhereEveryRunStops(report));
+    }
+
+    /**
+     * The library adds the elements up exactly and holds only the total to the type, so the total
+     * of {@code [max, 1, -1]} is {@code max}: a total over a list written out stops where the whole
+     * total passes the type and not where the first two of its elements added written out do.
+     */
+    @Test
+    void theTotalOfElementsWrittenOutStopsWhereTheWholeTotalPassesTheType() {
+        String report = measured("List.sum([a.pay, b.pay, c.pay])");
+        assertTrue(report.contains("every run that gets here stops in a.pay + b.pay + c.pay where"
+                + " a.pay + b.pay + c.pay is at least 9223372036854775808"), report);
+        assertFalse(report.contains("in a.pay + b.pay where"), report);
+        String sum = measured(SUM);
+        assertTrue(sum.contains("in a.pay + b.pay where"), sum);
+    }
+
+    /** Two elements are one addition, which the total is as well. */
+    @Test
+    void theTotalOfTwoElementsWrittenOutStopsWhereTheirSumDoes() {
+        assertEquals(measured("a.pay + b.pay"), measured("List.sum([a.pay, b.pay])"));
+    }
+
+    /** The sum written out is shown to stop where its first addition passes the type, which is
+     *  what the comparisons above leave out of it. */
+    @Test
+    void theSumWrittenOutIsShownToStopWhereItsFirstAdditionPassesTheType() {
+        String sum = measured(SUM);
+        assertTrue(sum.contains("every run that gets here stops in a.pay + b.pay where"
+                + " a.pay + b.pay is at least 9223372036854775808"), sum);
     }
 
     @Test
@@ -90,7 +156,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aRangeOfMoreThanAreWrittenOutIsNotReadAndEndsAtTheFigure() {
         String report = measured("List.sum(List.map(n -> a.pay, List.rangeInclusive(1, 1025)))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertNotEquals(measured("a.pay"), report);
     }
 
@@ -102,20 +168,42 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
 
     @Test
     void aTotalOfAnElementWrittenTwiceCountsItTwice() {
-        String report = measured("List.sum([a.pay, a.pay, b.pay])");
-        assertEquals(measured("a.pay + a.pay + b.pay"), report);
+        String report = measured(SMALL_PAYS, "List.sum([a.pay, a.pay, b.pay])");
+        assertEquals(measured(SMALL_PAYS, "a.pay + a.pay + b.pay"), report);
     }
 
+    /**
+     * A fold over a list written out adds the elements one step at a time, so it works out the
+     * same additions the sum written out does, in the same order, and stops where they stop.
+     */
     @Test
     void aTotalBehindAnAdditionOfTheFoldIsTheSum() {
         String report = measured("List.fold((acc, m) -> acc + m.pay, 0, [a, b, c])");
-        assertEquals(measured(SUM), report);
+        assertEquals(besideWhereEveryRunStops(measured(SUM)), besideWhereEveryRunStops(report));
+        assertTrue(report.contains("· may stop a run:"), report);
+    }
+
+    /** The same, the list being what a helper answers: a helper is read where its parameters are
+     *  the values it was handed, and the list it writes is the one the fold walks. */
+    @Test
+    void aFoldOverTheListAHelperWritesAddsItsElementsOneStepAtATime() {
+        String model = MODEL.replace("data No\n", """
+                data No
+                let monthsOf (x: Month, y: Month, z: Month): List<Month> = [x, y, z]
+                """);
+        String report =
+                measured(model, "List.fold((acc, m) -> acc + m.pay, 0, monthsOf(a, b, c))");
+        assertEquals(besideWhereEveryRunStops(measured(model, SUM)),
+                besideWhereEveryRunStops(report));
+        assertTrue(report.contains("· may stop a run:"), report);
     }
 
     @Test
     void aTotalThatIsDividedByAWrittenNumberIsTheSumDividedByIt() {
         String report = measured("List.sum(List.map(m -> m.pay, [a, b, c])) / 3");
-        assertEquals(measured("(a.pay + b.pay + c.pay) / 3"), report);
+        assertEquals(measured("List.sum([a.pay, b.pay, c.pay]) / 3"), report);
+        assertEquals(besideWhereEveryRunStops(measured("(a.pay + b.pay + c.pay) / 3")),
+                besideWhereEveryRunStops(report));
     }
 
     @Test
@@ -135,16 +223,28 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
 
     @Test
     void anElementThatIsNoFormStopsOnlyTheWaysThatKeepIt() {
-        String report = measured("List.sum(List.map(m -> m.pay * m.days,"
+        String report = measured("List.sum(List.map(m -> m.pay * m.days * m.pay,"
                 + " List.filter(m -> m.days >= 17, [a, b])))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("states no law"), report);
     }
 
+    /**
+     * The walk draws the lines of the form it is the walk of. It tells of no operation the walk
+     * works out, so the comparison is not read to the end where the form written out is: what is
+     * held is the lines, and not that nothing is left unread.
+     */
     @Test
     void aWalkWhoseStepScalesWhatItCarriedIsReadAsThatForm() {
         String report = measured("List.fold((acc, m) -> acc * 2 + m.pay, 0, [a, b, c])");
-        assertEquals(measured("(a.pay * 2 + b.pay) * 2 + c.pay"), report);
+        String written = measured("(a.pay * 2 + b.pay) * 2 + c.pay");
+        assertEquals(readAs(written), readAs(report));
+    }
+
+    /** The lines of a report that say which form a border is drawn on. */
+    private static Set<String> readAs(String report) {
+        return report.lines().filter(line -> line.contains("read as")).map(String::strip)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -155,7 +255,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aWalkFromTheEndIsNotUnrolledInTheOrderTheListIsWritten() {
         String report = measured("List.foldRight((m, acc) -> acc * 2 + m, 0, [a.pay, 1, 2])");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
         assertFalse(report.contains("= 74"), "the line of 4 * a.pay + 4: " + report);
         assertTrue(measured("a.pay + 10").contains("read as f/a.pay: = 290"),
                 "the line the walk would draw were it read");
@@ -164,13 +264,13 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aWalkOverAContainerWithNoOrderIsNotUnrolled() {
         String report = measured("Set.fold((acc, m) -> acc * 2 + m, 0, Set.fromList([a.pay, 1]))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
     }
 
     @Test
     void aWalkWhoseStepIsNotAnAdditionIsNotTheSum() {
         String report = measured("List.fold((acc, m) -> acc * m.pay, 1, [a, b, c])");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(report.contains(ON_ITS_RUNS), report);
         assertNotEquals(measured(SUM), report);
     }
 

@@ -55,8 +55,8 @@ let judgeHours (agreement, hours) =
 data Paid
 data Unpaid
 
-// And an arm taken by what another behavior answers. Which case `judgeHours` answers turns on what it
-// is handed, so the arm a row takes here is read off that body, with this call's values put in.
+// And an arm taken by what another behavior answers. Which case `judgeHours` answers is that
+// behavior's own account, so the arm a row takes here is the one its run of the call came to.
 behavior settleOvertime : (agreement: Agreement, hours: Hours) -> Paid | Unpaid
 
 let settleOvertime (agreement, hours) =

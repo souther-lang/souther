@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Compilation;
@@ -118,17 +119,9 @@ class WhatTheComparisonLeftToADelegatedEqualityIsAFormItCanReachTest {
 
     /** The classes one build of {@code source} emits, read for what they were stamped with. */
     private static PublishedClasses declarationsOf(String source) {
-        Compilation compiled = Compilation.ofSource(source, "Main");
+        Compilation compiled = ACompiledModel.answered(source);
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-        assertEquals(List.of(), refused(compiled), "the model this is measured against compiles");
         return ModulePath.of(classes).declarations();
-    }
-
-    /** What a compile refused, as codes — nothing, for the model measured here. */
-    private static List<String> refused(Compilation compiled) {
-        return compiled.diagnostics().values().stream().flatMap(List::stream)
-                .filter(d -> d.diagnostic().severity() == souther.compiler.diag.Severity.ERROR)
-                .map(d -> String.valueOf(d.diagnostic().code())).toList();
     }
 
 }

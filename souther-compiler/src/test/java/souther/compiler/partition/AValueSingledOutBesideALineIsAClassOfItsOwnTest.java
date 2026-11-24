@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.RowsOfABlock;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.SourceRendering;
@@ -111,7 +112,8 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
         Recognition.OfACount count =
                 assertInstanceOf(Recognition.OfACount.class, rest.recognises());
         Carrier on = count.orders().answered();
-        LevelRegion asked = NumbersAskedFor.ofTheClass(count.is(), on).values();
+        LevelRegion asked = NumbersAskedFor.ofTheClass(
+                assertInstanceOf(NumericSet.OfRuns.class, count.is()), on).values();
         assertFalse(asked.contains(new Level.OnACarrier(on, Count.of(3))), asked.toString());
         assertTrue(asked.contains(new Level.OnACarrier(on, Count.of(2))), asked.toString());
         assertTrue(asked.contains(new Level.OnACarrier(on, Count.of(4))), asked.toString());
@@ -136,7 +138,7 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
                 example pick
                     | "at three" : (3) -> High
                 """);
-        assertTrue(RowsOfABlock.of(block).stream().anyMatch(row -> row.isFor("x=x < 10 and x /= 3")),
+        assertTrue(RowsOfABlock.of(block).stream().anyMatch(row -> row.isFor("x: x < 10 and x /= 3 at x")),
                 block);
         List<Long> offered = offeredAt(block);
         assertTrue(offered.stream().anyMatch(at -> at < 10 && at != 3), block);
@@ -178,9 +180,7 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
 
     /** The classes of the one measure of {@code pick} in {@code source}. */
     private static List<PartitionClass> classesIn(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         List<Axis> axes =
                 compilation.db().ask(new Adequacy.Divided("probe", "pick")).value().axes();
         assertNotNull(axes, () -> "the model compiles: " + compilation.errors());
@@ -189,15 +189,13 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
     }
 
     private static String generatedFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("probe")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 }

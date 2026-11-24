@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Compilation;
@@ -29,14 +31,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
     private static FieldDomains domainsIn(String source, String type) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` in " + module);
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
     }
 
     /** What the rules leave the field the record's own clauses call {@code field}. */
@@ -298,7 +300,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
      */
     @Test
     void anImportedBoundIsReadLikeADeclaredOne() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module example.money exposing ( Amount )
 
                 data Amount = Decimal
@@ -309,13 +311,13 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 import example.money ( Amount )
 
                 data Forecast = { total: Amount }
-                """), souther.compiler.meta.ModulePath.EMPTY);
+                """), souther.compiler.meta.ModulePath.EMPTY));
         Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation,"example.report"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
 
         assertTrue(domains.projection().isCertified(),
                 "the rule is `value >= 0.0m` wherever it is declared");
@@ -409,10 +411,11 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.compiles(compilation);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation,"example.pair"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
 
         assertBounds(at(domains, "a"), 0, 9);
         assertBounds(at(domains, "b"), 1, 10);
@@ -510,10 +513,11 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     }
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.compiles(compilation);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadingContext.unshared(RuleReadings.of(compilation,"example.report"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
 
         assertBounds(at(domains, "a"), 0, 9);
         assertBounds(at(domains, "b"), 1, 10);

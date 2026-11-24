@@ -165,7 +165,9 @@ final class Crossing {
             value = GeneratedClasses.load(into, new GeneratedClass.Value(type));
             factory = value.getDeclaredMethod("decoder");
             factory.setAccessible(true);
-        } catch (ReflectiveOperationException e) {
+        } catch (ReflectiveOperationException | LinkageError e) {
+            // The classes are the other build's, so one that will not link is theirs failing to be
+            // reached and not this compile's output.
             throw new ImplementationNotReached("`" + type.name() + "` is not in the classes the"
                     + " implementation was built against: " + e, e);
         }
@@ -174,7 +176,7 @@ final class Crossing {
             @SuppressWarnings("unchecked")
             Decoder<Object, ?> decoder = (Decoder<Object, ?>) factory.invoke(null);
             read = decoder.decode(neutral, Path.ROOT);
-        } catch (ReflectiveOperationException | ClassCastException e) {
+        } catch (ReflectiveOperationException | ClassCastException | LinkageError e) {
             throw new ImplementationNotReached("`" + type.name() + "`'s decoder could not be run in"
                     + " the classes the implementation was built against: " + e, e);
         }

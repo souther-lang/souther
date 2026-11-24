@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.InvariantChecker.GaveUp;
 import souther.compiler.core.Core;
@@ -231,7 +233,8 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
 
         assertEquals(InvariantChecker.Status.COMPLETE,
                 InvariantChecker.analyze(body,
-                        RuleReadingContext.unshared(readingOf(c, saidBy(c)), POLICY),
+                        RuleReadingContext.unshared(readingOf(c, saidBy(c)), POLICY,
+                                TestDay.TODAY),
                         Map.of(), params).status(),
                 "the control: read through a lookup that answers, this analysis runs to the end");
 
@@ -240,7 +243,7 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
         };
         IllegalStateException why = assertThrows(IllegalStateException.class,
                 () -> InvariantChecker.analyze(body,
-                        RuleReadingContext.unshared(readingOf(c, broken), POLICY),
+                        RuleReadingContext.unshared(readingOf(c, broken), POLICY, TestDay.TODAY),
                         Map.of(), params),
                 "the analysis has no rule that makes this the program's problem");
 
@@ -339,9 +342,7 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
     // --- reading the compilation ------------------------------------------------------------------
 
     private static Compilation answered(String source) {
-        Compilation c = Compilation.ofSource(source, "Main");
-        c.answerEverything();
-        return c;
+        return ACompiledModel.answered(source);
     }
 
     private static Symbols symbolsOf(Compilation c) {

@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -31,7 +32,7 @@ class AHelpersPredicateIsToldApartByItsCallTest {
 
             behavior k : (a: String, b: String) -> Int
 
-            let has (c: String, p: String): Bool = String.startsWith(c, p)
+            let has (c: String, p: String): Bool = String.startsWith(String.append(c, "x"), p)
 
             let k (a, b) = if has(a, b) then 1 else (if has(b, a) then 2 else 3)
             """;
@@ -78,11 +79,8 @@ class AHelpersPredicateIsToldApartByItsCallTest {
     private static String page() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

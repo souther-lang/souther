@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.OnTheWay;
@@ -267,10 +268,7 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
     private static List<DecisionReading.Ruled> found(String model, String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().getFirst();
         DecisionEvidence decided =
                 compilation.db().ask(new Adequacy.Decides(module)).value().get(behavior);

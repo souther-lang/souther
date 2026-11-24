@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -14,7 +15,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,23 +43,23 @@ class WhatAQuantifierOverAListPutTogetherStatesIsAboutWhatItHoldsTest {
 
     @Test
     void aFlatMapStatesWhatTheListWrittenOutStates() {
-        assertEquals(stated(ANY.formatted(BOTH)).key(), stated(ANY.formatted(
-                "List.flatMap(s -> [Placement { who = s, room = 1 }], [Alice, Bob])")).key());
+        assertEquals(stated(ANY.formatted(BOTH)).spelledOut(), stated(ANY.formatted(
+                "List.flatMap(s -> [Placement { who = s, room = 1 }], [Alice, Bob])")).spelledOut());
     }
 
     @Test
     void anyOverAFilterStatesWhatItStatesOfTheElementsKept() {
         String kept = "List.filter(p -> p.room == 1, %s)".formatted(BOTH);
-        assertEquals(stated(ANY.formatted(ALICE)).key(), stated(ANY.formatted(kept)).key());
-        assertNotEquals(stated(ANY.formatted(BOTH)).key(), stated(ANY.formatted(kept)).key(),
+        assertEquals(stated(ANY.formatted(ALICE)).spelledOut(), stated(ANY.formatted(kept)).spelledOut());
+        assertNotEquals(stated(ANY.formatted(BOTH)).spelledOut(), stated(ANY.formatted(kept)).spelledOut(),
                 "the element dropped is one the statement would otherwise be about");
     }
 
     @Test
     void allOverAFilterStatesWhatItStatesOfTheElementsKept() {
         String kept = "List.filter(p -> p.room == 1, %s)".formatted(BOTH);
-        assertEquals(stated(ALL.formatted(ALICE)).key(), stated(ALL.formatted(kept)).key());
-        assertNotEquals(stated(ALL.formatted(BOTH)).key(), stated(ALL.formatted(kept)).key(),
+        assertEquals(stated(ALL.formatted(ALICE)).spelledOut(), stated(ALL.formatted(kept)).spelledOut());
+        assertNotEquals(stated(ALL.formatted(BOTH)).spelledOut(), stated(ALL.formatted(kept)).spelledOut(),
                 "the element dropped is one the statement would otherwise be about");
     }
 
@@ -73,9 +73,7 @@ class WhatAQuantifierOverAListPutTogetherStatesIsAboutWhatItHoldsTest {
                 let f (who) = if %s then 1 else 0
                 """.formatted(truth);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("p")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "p");

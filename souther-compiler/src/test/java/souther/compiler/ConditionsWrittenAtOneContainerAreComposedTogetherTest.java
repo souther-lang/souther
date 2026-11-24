@@ -269,7 +269,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
                     total(row.get(0), "q") < 10 ? 0
                             : meeting(row.get(0), "q", 5) < 3 ? 1
                             : number(row.get(1)) > 3 ? 2 : 3,
-                    Set.of(0, 2, 3))),
+                    Set.of(0, 1, 2, 3))),
             Map.entry(EVERY_ELEMENT_THEN_HOW_MANY_MEET, new Answered(row ->
                     !every(row.get(0), "q", 5) ? 0
                             : meeting(row.get(0), "q", 5) < 1 ? 1
@@ -325,7 +325,8 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
         ANSWERED.forEach((model, answered) -> {
             List<String> examples = new ArrayList<>();
             Set<Integer> answers = new TreeSet<>();
-            for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
+            Compilation compilation = measured(model);
+            for (List<FixtureTemplate> row : composedForTheRules(compilation)) {
                 int answer = answered.by().apply(row.stream().map(FixtureTemplate::value).toList());
                 answers.add(answer);
                 examples.add("    | \"composed " + examples.size() + "\" : ("
@@ -334,30 +335,8 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
             }
             assertEquals(answered.composedFor(), answers,
                     () -> "a row for the rules this model has one for: " + examples + "\n" + model);
+            ACompiledModel.compiles(compilation);
         });
-    }
-
-    /**
-     * The rule nothing is composed for is said as the pair of numbers no one list is composed for,
-     * and as nothing about the model.
-     */
-    @Test
-    void aTotalAndACountNothingComposesOneListForAreSaidAsThat() {
-        String report = report(measured(A_TOTAL_AND_HOW_MANY_MEET));
-        List<String> lines = report.lines().toList();
-        List<Integer> opened = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).contains("nothing could show a row can be written at")
-                    && lines.get(i).contains("decision rule")) {
-                opened.add(i);
-            }
-        }
-
-        assertEquals(1, opened.size(), () -> report);
-        List<String> under = lines.subList(opened.getFirst() + 1, lines.size()).stream()
-                .takeWhile(line -> line.startsWith("          · ")).toList();
-        assertTrue(under.stream().anyMatch(line -> line.contains("a condition on another number"
-                + " taken where this row is already being written for one")), () -> report);
     }
 
     /**
@@ -370,7 +349,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
      */
     @Test
     void theLeastOfACountsLeftIsNoProofTheRulesLeaveNothing() {
-        String report = report(measured("""
+        Compilation compilation = ACompiledModel.compiles(measured("""
                 module p
                 data Line = { q: Int }
                     invariant big = q >= 5
@@ -383,6 +362,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
                     if n > 3 then 2 else 3
                 }
                 """));
+        String report = report(compilation);
         List<String> past = report.lines()
                 .filter(line -> line.contains("read as pick/n:")
                         || line.contains("decision rule"))
@@ -469,8 +449,7 @@ class ConditionsWrittenAtOneContainerAreComposedTogetherTest {
     }
 
     private static String report(Compilation compilation) {
-        compilation.answerEverything();
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

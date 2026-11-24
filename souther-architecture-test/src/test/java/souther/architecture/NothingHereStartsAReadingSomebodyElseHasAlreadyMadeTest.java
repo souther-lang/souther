@@ -90,6 +90,8 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
 
     private static final String SOURCE_AND_POLICY = THE_RULES + THE_BUDGET;
 
+    private static final String THE_DAY = "Lsouther/compiler/numeric/Today;";
+
     /**
      * Every method of {@code check} and {@code inputs} that takes the rules and the budget as two
      * arguments, which is what makes a world and nothing else.
@@ -102,11 +104,12 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
      */
     private static final Set<String> TAKING_THE_RULES_AND_THE_BUDGET_APART = Set.of(
             AMethod.of(CHECK + "RuleReadingContext", "<init>",
-                    "(" + SOURCE_AND_POLICY + LENDING_TYPE + ")V"),
+                    "(" + SOURCE_AND_POLICY + LENDING_TYPE + THE_DAY + ")V"),
             AMethod.of(CHECK + "RuleReadingContext", "of",
-                    "(" + SOURCE_AND_POLICY + LENDING_TYPE + ")L" + CHECK + "RuleReadingContext;"),
+                    "(" + SOURCE_AND_POLICY + LENDING_TYPE + THE_DAY + ")L" + CHECK
+                            + "RuleReadingContext;"),
             AMethod.of(CHECK + "RuleReadingContext", "unshared",
-                    "(" + SOURCE_AND_POLICY + ")L" + CHECK + "RuleReadingContext;"));
+                    "(" + SOURCE_AND_POLICY + THE_DAY + ")L" + CHECK + "RuleReadingContext;"));
 
     /**
      * The one way in that says outright it reads for itself, and the whole of what may say it.
@@ -123,7 +126,7 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
      * disappearance, and that is what makes it the control below.
      */
     private static final String THE_WAY_IN_THAT_READS_FOR_ITSELF =
-            CHECK + "RuleReadingContext#unshared(" + SOURCE_AND_POLICY + ")L" + CHECK
+            CHECK + "RuleReadingContext#unshared(" + SOURCE_AND_POLICY + THE_DAY + ")L" + CHECK
                     + "RuleReadingContext; -> " + NOTHING_TO_BORROW_FROM;
 
     /**

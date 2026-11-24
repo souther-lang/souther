@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -54,7 +53,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
             let fee (days, policy) = {
                 let accrued = days * policy.rate.value
 
-                if accrued > policy.cap.value then policy.cap.value else accrued
+                if accrued >= policy.cap.value then policy.cap.value else accrued
             }
 
             example fee
@@ -69,8 +68,11 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
      * sum nor a product of the fields as they are. Each of those is a rule the composing now
      * reasons through — it finds {@code rate = 0, cap = 10} for the sum and
      * {@code rate = 10, cap = 1} for the product — and the block it produces has rows in it, which
-     * is the right answer and the wrong fixture. What is wanted here is a rule outside what the
-     * algebra reasons in.
+     * is the right answer and the wrong fixture. So does a weighed product, now that a value of
+     * the two fields a rule ties together is written down and held to what a row puts at either:
+     * {@code rate = 20, cap = 1}. What is wanted here is a rule outside what the algebra reasons
+     * in and outside what a value written down is worked out by: a remainder, which the fold does
+     * not work out, of a product the example holds it of.
      *
      * <p>Here for the shape of the block it produces — explanations and no rows — and not for why the
      * search failed. Whether that failure may be read as a fact about the model is #602's question.
@@ -80,20 +82,18 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
             behavior fee""", """
                 }
-                invariant together = 2 * rate.value * cap.value >= 20
+                invariant together = Int.floorMod(rate.value * cap.value, 7) == 2 && rate.value * cap.value > 4000
 
             behavior fee""");
 
     private static String block(String source, String module) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(module)),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
     }
 
     /** Where each row starts. A row the formatter wrapped is still one row, and one {@code |}. */
@@ -116,14 +116,41 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         return said.find() ? Integer.parseInt(said.group(1)) : -1;
     }
 
+    /** The same model, whose cap is reached only past it, so that a row of its own is owed to the
+     *  rule that takes the cap. */
+    private static final String POLICY_CAPPED_PAST_THE_CAP = POLICY.replace(
+            "accrued >= policy.cap.value", "accrued > policy.cap.value");
+
     /** Which says the count as well: two edges meet at this input, and one {@code |} is written. */
     @Test
     void twoEdgesMeetingAtOneInputAreOneRow() {
         String block = block(POLICY, "example.policy");
 
+        // The comparison of the product with the cap draws its own points beside the minimum of
+        // each, and the minimum edges are the one row at the end: rate and cap at nought.
         assertEquals(List.of(
                         "example fee",
-                        "    | (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
+                        "    | (-1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) })  -> <?>",
+                        "    | (0, Policy { rate = Rate(0), cap = Cap(0) })  -> <?>"),
+                written(block));
+    }
+
+    /**
+     * A rule of the decision that a row takes only past the edges is one more row beside them: the
+     * edge it fills is the one its inputs stand on, and the other edge is filled by a row of its
+     * own.
+     */
+    @Test
+    void aRuleOnlyARowPastTheEdgesTakesIsOneMoreRowBesideThem() {
+        String block = block(POLICY_CAPPED_PAST_THE_CAP, "example.policy");
+
+        assertEquals(List.of(
+                        "example fee",
+                        "    | (1, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (0, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (2, Policy { rate = Rate(1), cap = Cap(0) }) -> <?>",
+                        "    | (0, Policy { rate = Rate(0), cap = Cap(1) }) -> <?>"),
                 written(block));
     }
 
@@ -166,15 +193,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
                 .filter(line -> !line.startsWith("//"))
                 .reduce("", (all, line) -> all + line + "\n");
 
-        Compilation compiled = Compilation.ofSource(pasted, "Main");
-        compiled.answerEverything();
-        List<String> refused = new ArrayList<>();
-        for (souther.compiler.query.Db.Found found : compiled.db().allReports()) {
-            if (found.report().isError()) {
-                refused.add(found.report().diagnostic().code());
-            }
-        }
-        assertEquals(List.of(), refused, () -> "the block pasted whole compiles:\n" + pasted);
+        ACompiledModel.answered(pasted);
     }
 
     @Test

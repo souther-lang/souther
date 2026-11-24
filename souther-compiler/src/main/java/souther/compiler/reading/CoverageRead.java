@@ -19,7 +19,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.MeaningsOfABody;
-import souther.compiler.partition.MeaningsOfABodyReading;
+import souther.compiler.meaning.PieceDemand;
 import souther.compiler.types.ConstructOccurrence;
 
 import java.util.ArrayList;
@@ -199,9 +199,9 @@ public final class CoverageRead {
      *                     budget over these takes them in this order, so which of them a budget that
      *                     runs out reaches is said by where the meeting is written and not by which
      *                     way round a fork above it a row goes
-     * @param notJoined    the sums of kept elements the walk met and could not join to the
-     *                     evaluations of the comparison that keeps them, each with why, in the order
-     *                     it met them. Meetings all the same, and ones nothing was asked about
+     * @param unjoined     the meetings the walk met and could not join to what a run records, each
+     *                     with why and where it is written, in the order it met them. Meetings all
+     *                     the same, and ones nothing was asked about
      * @param arms         one answer per arm of the behavior, by the number the plan gave it. Total
      *                     over the plan's arms: a key that is not there is not a thing to interpret,
      *                     because there is no such key.
@@ -242,19 +242,26 @@ public final class CoverageRead {
      *                       each the largest such part on its way down, in the order the walk met
      *                       them. Read on the same walk as the ways in, so the inputs said to reach
      *                       one are the inputs every other reading here says reach it
+     * @param piecesAttempted the strings of the input the bodies part and build a newtype of the
+     *                       pieces of, each with where it stands, what it is parted at and the
+     *                       type attempted. Read on the same walk as the conditions, so a string
+     *                       reached through a name, a closure or an arm is the one the conditions
+     *                       say it is
      */
     public record Read(List<Interaction> interactions,
-                       List<WhyNotJoined> notJoined,
+                       List<UnjoinedMeeting> unjoined,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
                        List<WayIn> taken,
                        List<WayIn> answeredBy,
                        Map<WayIn, Set<WrittenWithout>> saidInPart,
                        java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock,
-                       List<NothingAnsweredHere> answersNothing) {
+                       List<NothingAnsweredHere> answersNothing,
+                       List<PieceDemand> piecesAttempted) {
 
         public Read {
+            piecesAttempted = List.copyOf(piecesAttempted);
             interactions = List.copyOf(interactions);
-            notJoined = List.copyOf(notJoined);
+            unjoined = List.copyOf(unjoined);
             taken = List.copyOf(taken);
             answeredBy = List.copyOf(answeredBy);
             Map<WayIn, Set<WrittenWithout>> copied = new LinkedHashMap<>();
@@ -285,6 +292,11 @@ public final class CoverageRead {
                             + " that says where its block goes on: " + each);
                 }
             }
+        }
+
+        /** Why each of the meetings {@link #unjoined} could not be joined, in the same order. */
+        public List<WhyNotJoined> notJoined() {
+            return unjoined.stream().map(UnjoinedMeeting::why).toList();
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */
@@ -341,8 +353,8 @@ public final class CoverageRead {
                         input.domain().parameterReads(), input.declared(),
                         analysed.orElseThrow(), input.domain().dependencies()));
         MeaningsOfABody meanings = run.analysis()
-                .map(analysis -> MeaningsOfABodyReading.of(analysis, () -> input,
-                        analysisReads.orElseThrow(), symbols, source.newtypes()))
+                .map(analysis -> WhatABodyStates.of(analysis, input.domain(), source,
+                        input.ruleReading().revision()))
                 .orElse(MeaningsOfABody.NONE);
         Meetings meetings = new Meetings(plan, new KeptElements(plan,
                 run.analysis().orElse(null), analysisReads.orElse(null), symbols,
@@ -374,7 +386,7 @@ public final class CoverageRead {
         return new Read(found, meetings.notJoined(), arms.found(behavior),
                 List.copyOf(walked.taken),
                 List.copyOf(walked.answeredBy), walked.saidInPart, arms.restOfTheBlock(behavior),
-                walked.answersNothing);
+                walked.answersNothing, List.copyOf(meanings.piecesAttempted()));
     }
 
     /**
@@ -409,6 +421,26 @@ public final class CoverageRead {
         for (WayIn way : ways) {
             saidInPart.computeIfAbsent(way, _ -> new LinkedHashSet<>()).add(without);
         }
+    }
+
+    /**
+     * Whether the meetings at a place reached by {@code reach} are read here.
+     *
+     * <p>A meeting where no way in can be stated is still one: it is read, and said where it cannot
+     * be offered, rather than dropped for want of a way in to name. Where no run arrives there is
+     * none. And inside the body of a function value there is one that is not this walk's: the
+     * operation the function is handed to reads what its body decides, as the elements it keeps and
+     * what each is worth, so reading it here too would be one meeting said twice. Whatever else
+     * could not be stated of the way there, the body is the function's: the reasons gather as the
+     * walk goes in, and one of them being the function is what puts it inside one.
+     */
+    private static boolean meetingsAreReadUnder(Reach reach) {
+        return switch (reach) {
+            case Reach.Nothing _ -> false;
+            case Reach.Unnameable it -> it.whys().stream().noneMatch(
+                    why -> why == PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT);
+            case Reach.Ways _, Reach.Coarse _ -> true;
+        };
     }
 
     /**
@@ -509,6 +541,11 @@ public final class CoverageRead {
      * in are named, so both are already settled here.
      */
     private void takesAt(Interaction group) {
+        // A meeting reached some way that is not stated has no way in to hold its decisions to, and
+        // says nothing of how a fork inside it is taken that the walk into the fork does not.
+        if (!group.reachStated()) {
+            return;
+        }
         taken.add(new WayIn(group.reach()));
         for (Factor factor : group.factors()) {
             for (Outcome outcome : factor.outcomes()) {
@@ -554,7 +591,7 @@ public final class CoverageRead {
             walk(let.body(), naming.entering(new ScopeStep.Let(let)), reach, arrives);
             return;
         }
-        if (arrives && !reach.ways().isEmpty()) {
+        if (arrives && meetingsAreReadUnder(reach)) {
             meetings.at(node, naming, body, reach.ways().stream().map(WayIn::decisions).toList(),
                     reading);
         }
@@ -894,6 +931,14 @@ public final class CoverageRead {
             return known.seenApart() ? new Reach.Ways(ways) : fallbackWayIn(iff, part, naming,
                     PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, ways);
         }
+        // A comparison of how many elements are kept comes out by the keeping decisions of the
+        // elements, which a run is not seen to tell apart at the arm.
+        List<WayIn> counted = WaysOfACount.of(iff.cond(), part == 0, meetings.keptElements(),
+                naming, body);
+        if (counted != null) {
+            return fallbackWayIn(iff, part, naming,
+                    PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, counted);
+        }
         return fallbackWayIn(iff, part, naming,
                 PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE, List.of());
     }
@@ -912,7 +957,8 @@ public final class CoverageRead {
         if (back == null) {
             return new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED);
         }
-        List<WayIn> arm = List.of(new WayIn(back.holds()));
+        List<WayIn> arm = List.of(new WayIn(back.comingOutBy(
+                written.stream().map(WayIn::conditions).toList()).holds()));
         return new Reach.Coarse(arm, why, written.isEmpty() ? arm : written);
     }
 

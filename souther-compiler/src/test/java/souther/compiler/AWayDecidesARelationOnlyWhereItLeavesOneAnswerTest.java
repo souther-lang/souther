@@ -21,18 +21,16 @@ class AWayDecidesARelationOnlyWhereItLeavesOneAnswerTest {
             "whether a row is at the OFF point (comparison@6:";
 
     private static String report(String comparison) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
 
                 behavior f : (on: Date, b: Date) -> Bool
                 let f (on, b) =
                     if Date.year(on) - Date.year(b) >= 0
                     then Date.year(on) - Date.year(b) >= %s else false
-                """.formatted(comparison), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(comparison), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Differences of nought and of nine are both left by the way, and ten is between them. */

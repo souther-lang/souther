@@ -42,6 +42,20 @@ public interface DiagnosticRenderer {
         return List.copyOf(rendered);
     }
 
+    /** The language of a text that has no reader to ask: what {@code getMessage()} answers. */
+    private static Locale withoutAReader() {
+        return Locale.ENGLISH;
+    }
+
+    /**
+     * A keyed entry as {@code getMessage()} answers it, for a failure that is not a diagnostic but
+     * is said through the catalog all the same: the text a Java caller reads, where the command
+     * line reads the same entry in the language it chose.
+     */
+    static String legacyText(String key, Object... args) {
+        return Messages.get(key, withoutAReader(), args);
+    }
+
     /**
      * The body a {@code CompileException} builds its {@code getMessage()} from — that text with
      * the position and the code put in front of it.
@@ -54,7 +68,7 @@ public interface DiagnosticRenderer {
      * choose one. English is what this text is.
      */
     static String legacyBody(Diagnostic d) {
-        Locale written = Locale.ENGLISH;
+        Locale written = withoutAReader();
         StringBuilder said = new StringBuilder(body(d, written));
         if (d.diff() != null) {
             said.append(' ').append(Messages.get("diag.diff.found", written))

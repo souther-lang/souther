@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -47,9 +48,7 @@ class ARuleChosenWhileItRunsIsNeverACompleteMeasureTest {
 
     @Test
     void itsArmsAreNeverCountedAsAWholeMeasure() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Adequacy.BranchEvidence tally = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("tally");
         assertNotNull(tally, "the model under test compiles");

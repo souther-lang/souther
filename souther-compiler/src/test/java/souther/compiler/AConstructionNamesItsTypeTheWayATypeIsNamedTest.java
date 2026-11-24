@@ -143,8 +143,8 @@ class AConstructionNamesItsTypeTheWayATypeIsNamedTest {
     }
 
     private static List<String> errorsAcross(Map<String, String> byId) {
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         List<String> out = new ArrayList<>();
         compilation.diagnostics().forEach((_, said) -> said.forEach(each -> {
             if (each.diagnostic().severity() == Severity.ERROR) {

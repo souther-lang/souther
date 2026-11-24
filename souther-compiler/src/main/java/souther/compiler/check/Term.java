@@ -1,7 +1,16 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.hash.SaysWhatStandsForIt;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -11,11 +20,13 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -139,7 +150,59 @@ final class Term {
         /** A value opened, over the scrutinee and each arm's body. */
         MATCHED(Payload.listOf(Payload.listOf(Payload.of(TypeSymbol.class)))),
         /** An attempted construction, over what it builds and what each of its departures answers. */
-        ATTEMPTED(Payload.listOf(Payload.of(String.class)));
+        ATTEMPTED(Payload.listOf(Payload.of(String.class))),
+        /**
+         * How many elements of a container are one value, or how many of its keys, over the
+         * container and the value.
+         *
+         * <p>A number and not the truth of a membership, because it is what two laws of the library
+         * meet at: that a container holds a value is some element of it being the value, and how
+         * many an insert answers is one more where none is. Named by what it counts, so the guard
+         * asking whether a set holds a value and the insert of that value into it are about one
+         * number.
+         */
+        HOW_MANY_ARE(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many elements of one container another holds — among its elements, or among its
+         * keys — over the two: how many an intersection of them holds, and what adding to either
+         * moves by no more than what was added.
+         */
+        HOW_MANY_ARE_IN(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many elements of a container come out on the holding side of an aspect — each
+         * element itself, over the container alone, or what a closure answers of each, over the
+         * container and the closure.
+         *
+         * <p>What some element meeting a statement is, read as a number: some element meets it
+         * exactly where this is above nought. Named by what it counts, so {@code List.any(p, xs)}
+         * and what {@code List.filter(p, xs)} holds are about one number.
+         */
+        HOW_MANY_MEET(Payload.of(AnswerAspect.class)),
+        /**
+         * How many different values the elements of a container come to — the elements or their
+         * keys as the payload says, over the container alone, or what a closure answers of each,
+         * over the container and the closure.
+         */
+        HOW_MANY_DIFFERENT(Payload.of(AddsWhatItDoesNotHold.Of.class)),
+        /**
+         * How many the elements of a container hold, added up over all of them — each element, over
+         * the container alone, or what a closure answers of each, over the container and the
+         * closure.
+         */
+        SUM_OF_SIZES(Payload.of(CountedBy.class)),
+        /**
+         * What the elements of a list come to when the accumulation the payload names is carried
+         * over all of them, over the list.
+         *
+         * <p>Not the call. A library sum answers an {@code Int} where its total is one and ends the
+         * run where it is not, so the call's value is a number of its type; this is the exact
+         * number, which the call answers wherever it answers. Held apart, a sum of the elements of
+         * two lists is the exact sums added whether or not either list's own sum is a number the
+         * type holds.
+         */
+        EXACT_TOTAL(Payload.of(ValueName.class)),
+        /** How many of the code points of a string are in a class, over the string. */
+        CODE_POINTS(Payload.of(CodePointClass.class));
 
         private final Payload payload;
 
@@ -348,6 +411,11 @@ final class Term {
         if (type.isRecord() && !statesAHashOfItsOwn(type)) {
             return Rule.ITS_COMPONENTS;
         }
+        // The library writes this hash by hand, over both of its ends, which are all it carries; so
+        // it is what its components are, and taking them in gives equal runs one hash.
+        if (type == CodePoints.Range.class) {
+            return Rule.ITS_COMPONENTS;
+        }
         return Rule.NONE_HERE;
     }
 
@@ -498,20 +566,16 @@ final class Term {
 
         private final Map<Term, Map<Term, Integer>> compared = new IdentityHashMap<>();
 
+        /** How many terms one term is compared with, as far as a table need be sized for: the
+         *  default holds sixty-four places, and a term is mostly compared with one other. */
+        private static final int AGAINST_ONE = 1;
+
         int compare(Term one, Term other) {
             if (one == other) {
                 return 0;
             }
-            Map<Term, Integer> against = compared.computeIfAbsent(one, _ -> new IdentityHashMap<>());
-            Integer known = against.get(other);
-            if (known == null) {
-                known = comparedOnce(one, other);
-                against.put(other, known);
-            }
-            return known;
-        }
-
-        private int comparedOnce(Term one, Term other) {
+            // What two terms differ in at once is asked of them and not held: only a pair that
+            // has to be told apart by its parts is reached again from other places.
             int by = one.shape.name().compareTo(other.shape.name());
             if (by != 0) {
                 return by;
@@ -520,10 +584,22 @@ final class Term {
             if (by != 0) {
                 return by;
             }
+            Map<Term, Integer> against = compared.computeIfAbsent(one,
+                    _ -> new IdentityHashMap<>(AGAINST_ONE));
+            Integer known = against.get(other);
+            if (known == null) {
+                known = comparedByParts(one, other);
+                against.put(other, known);
+            }
+            return known;
+        }
+
+        private int comparedByParts(Term one, Term other) {
+            counted();
             List<Term> these = inOrder(one);
             List<Term> those = inOrder(other);
             for (int at = 0; at < Math.min(these.size(), those.size()); at++) {
-                by = compare(these.get(at), those.get(at));
+                int by = compare(these.get(at), those.get(at));
                 if (by != 0) {
                     return by;
                 }
@@ -541,6 +617,18 @@ final class Term {
             Term first = term.parts.get(0);
             Term second = term.parts.get(1);
             return compare(first, second) <= 0 ? term.parts : List.of(second, first);
+        }
+    }
+
+    /** Where a test in this package counts the pairs of parts an equality or an ordering compares,
+     *  and null everywhere else. What a comparison answers does not say how many pairs it
+     *  compared to answer. */
+    static long[] COUNTING_PAIRS;
+
+    private static void counted() {
+        long[] counting = COUNTING_PAIRS;
+        if (counting != null) {
+            counting[0]++;
         }
     }
 
@@ -680,6 +768,187 @@ final class Term {
         return shape == Shape.CALLED ? (ValueName) of : null;
     }
 
+    /** Whether {@code part} is this term or stands anywhere within it. A term is a graph, so each
+     *  is asked once; terms are interned, so a part is the very instance it is looked for as. */
+    boolean holds(Term part) {
+        return holds(part, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private boolean holds(Term part, Set<Term> asked) {
+        if (this == part) {
+            return true;
+        }
+        if (!asked.add(this)) {
+            return false;
+        }
+        for (Term each : parts) {
+            if (each.holds(part, asked)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The answer of a closure of one parameter, or null where this is no such closure: the
+     *  parameter count is what the payload of a closure says, and a body is the one part of it
+     *  however many parameters it has. */
+    Term answerOfAClosureOfOneParameter() {
+        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of) ? parts.getFirst() : null;
+    }
+
+    /**
+     * Whether this is a closure of one parameter that answers what it is handed as it is. Counting
+     * what such a closure answers of each element is counting the elements, so a count that names
+     * it names the same number as one that names none.
+     */
+    boolean answersWhatItIsHanded() {
+        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of)
+                && parts.getFirst().shape == Shape.BOUND
+                && new At(0, 0).equals(parts.getFirst().of);
+    }
+
+    /**
+     * What a statement over whole numbers is about, and the numbers it holds of: {@code subject}
+     * is the value the statement compares, which is the parameter of the closure or how many it
+     * holds.
+     */
+    record StatementOverWholeNumbers(Term subject, WholeNumberRuns runs) {}
+
+    /**
+     * What a closure of one parameter answers true of, where it compares one thing about its
+     * parameter to whole numbers written out, joined and denied as it likes — or null where it is
+     * anything else.
+     */
+    StatementOverWholeNumbers statementOverWholeNumbers() {
+        if (shape != Shape.CLOSURE || !Integer.valueOf(1).equals(of)) {
+            return null;
+        }
+        Term[] subject = new Term[1];
+        WholeNumberRuns runs = parts.getFirst().runsOfAStatement(subject);
+        return runs == null || subject[0] == null ? null
+                : new StatementOverWholeNumbers(subject[0], runs);
+    }
+
+    /** The parameter of a closure, or how many it holds. */
+    private boolean canBeComparedToWholeNumbers() {
+        return (shape == Shape.BOUND && new At(0, 0).equals(of))
+                || (shape == Shape.CALLED && parts.size() == 1 && parts.getFirst().isTheParameter()
+                && DefaultBoundOperationFacts.get().answersHowManyItHolds(calledOperation()));
+    }
+
+    private boolean isTheParameter() {
+        return shape == Shape.BOUND && new At(0, 0).equals(of);
+    }
+
+    private Long writtenWholeNumber() {
+        return shape == Shape.INT ? (Long) of : null;
+    }
+
+    /** Whether {@code side} is what a statement compares, the first comparison deciding it: every
+     *  comparison after is of that one, or the statement is about two things. */
+    private static boolean isTheSubject(Term[] subject, Term side) {
+        if (subject[0] == null && side.canBeComparedToWholeNumbers()) {
+            subject[0] = side;
+        }
+        return side.equals(subject[0]);
+    }
+
+    /**
+     * The whole numbers this statement holds of, reading only through what joins and denies
+     * statements — a closure inside one has a parameter of its own, which is not the parameter of
+     * this one — and recording in {@code subject} the one thing it compares.
+     */
+    private WholeNumberRuns runsOfAStatement(Term[] subject) {
+        return switch (shape) {
+            case BOOL -> (Boolean) of ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
+            case NOT -> {
+                WholeNumberRuns denied = parts.getFirst().runsOfAStatement(subject);
+                yield denied == null ? null : denied.others();
+            }
+            case EQ -> {
+                boolean numberFirst = parts.get(0).writtenWholeNumber() != null;
+                Long number = parts.get(numberFirst ? 0 : 1).writtenWholeNumber();
+                yield number == null || !isTheSubject(subject, parts.get(numberFirst ? 1 : 0))
+                        ? null : WholeNumberRuns.standing(Rel.EQ, ExactRatio.of(number));
+            }
+            case CHOICE -> {
+                WholeNumberRuns when = parts.get(0).runsOfAStatement(subject);
+                WholeNumberRuns then = parts.get(1).runsOfAStatement(subject);
+                WholeNumberRuns otherwise = parts.get(2).runsOfAStatement(subject);
+                yield when == null || then == null || otherwise == null ? null
+                        : when.and(then).or(when.others().and(otherwise));
+            }
+            case OP -> {
+                if (of == BinOp.LT) {
+                    Term left = parts.get(0);
+                    Term right = parts.get(1);
+                    if (right.writtenWholeNumber() != null && isTheSubject(subject, left)) {
+                        yield WholeNumberRuns.standing(Rel.LT,
+                                ExactRatio.of(right.writtenWholeNumber()));
+                    }
+                    yield left.writtenWholeNumber() != null && isTheSubject(subject, right)
+                            ? WholeNumberRuns.standing(Rel.GT,
+                                    ExactRatio.of(left.writtenWholeNumber())) : null;
+                }
+                ConditionJoin join = ConditionJoin.of((BinOp) of).orElse(null);
+                WholeNumberRuns left = join == null ? null : parts.get(0).runsOfAStatement(subject);
+                WholeNumberRuns right = join == null ? null : parts.get(1).runsOfAStatement(subject);
+                yield left == null || right == null ? null
+                        : join == ConditionJoin.BOTH ? left.and(right) : left.or(right);
+            }
+            default -> null;
+        };
+    }
+
+    /**
+     * What a closure of one parameter answers of what it is handed, as a form of the fields it
+     * reads off it — the value itself where the fields are none — or null where this is no such
+     * closure, or what it answers is no such form.
+     *
+     * <p>Read off how the closure was built: its parameter is the one bound nearest it, and the
+     * fields read off a bound value are one chain ({@link Interner#on}), so {@code .a.b} and
+     * {@code x -> x.a.b} come back as the same two fields.
+     */
+    LinearForm<List<String>> formAClosureOfOneAnswers() {
+        if (shape != Shape.CLOSURE || !Integer.valueOf(1).equals(of)) {
+            return null;
+        }
+        return parts.getFirst().formOfWhatIsHanded();
+    }
+
+    /** {@link #formAClosureOfOneAnswers} of the body of the closure. */
+    private LinearForm<List<String>> formOfWhatIsHanded() {
+        return switch (shape) {
+            case BOUND -> new At(0, 0).equals(of) ? LinearForm.atom(List.of()) : null;
+            case ON -> parts.getFirst().shape == Shape.BOUND
+                    && new At(0, 0).equals(parts.getFirst().of)
+                    ? LinearForm.atom(fields().names()) : null;
+            case INT -> LinearForm.constant(ExactRatio.of((Long) of));
+            case DECIMAL -> LinearForm.constant(ExactRatio.of((BigDecimal) of));
+            case NEG -> {
+                LinearForm<List<String>> operand = parts.getFirst().formOfWhatIsHanded();
+                yield operand == null ? null : operand.negate();
+            }
+            case OP -> {
+                LinearForm<List<String>> left = parts.get(0).formOfWhatIsHanded();
+                LinearForm<List<String>> right = parts.get(1).formOfWhatIsHanded();
+                if (left == null || right == null) {
+                    yield null;
+                }
+                ExactAnswer<LinearForm<List<String>>> out = switch ((BinOp) of) {
+                    case ADD -> left.plus(right);
+                    case SUB -> left.minus(right);
+                    case MUL -> left.coefs().isEmpty() ? right.times(left.constant())
+                            : right.coefs().isEmpty() ? left.times(right.constant()) : null;
+                    default -> null;
+                };
+                yield out instanceof ExactAnswer.Held<LinearForm<List<String>>>(var held)
+                        ? held : null;
+            }
+            default -> null;
+        };
+    }
+
     /** The text this term is written as, or null where it is no written text. */
     String writtenText() {
         return shape == Shape.STRING ? (String) of : null;
@@ -748,16 +1017,45 @@ final class Term {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof Term term && same(this, term, new IdentityHashMap<>());
+        if (!(other instanceof Term term)) {
+            return false;
+        }
+        // Answered before the table of pairs is made: most questions end at the same term or at a
+        // difference the term carries on its face, and a table made for each of them is most of
+        // what this costs.
+        if (term == this) {
+            return true;
+        }
+        if (differsOnItsFace(this, term)) {
+            return false;
+        }
+        // Terms one interner made out of the same parts hold those parts as the same instances, so
+        // there is nothing for a table of pairs to remember. A term with no parts is the commonest.
+        return hasTheSamePartsAs(term) || same(this, term, new IdentityHashMap<>());
+    }
+
+    /** Whether each part of this is the very instance at its place in {@code other}. */
+    private boolean hasTheSamePartsAs(Term other) {
+        for (int at = 0; at < parts.size(); at++) {
+            if (parts.get(at) != other.parts.get(at)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether two terms are told apart by what each carries, without looking at their parts. */
+    private static boolean differsOnItsFace(Term one, Term other) {
+        return other.hash != one.hash || other.shape != one.shape
+                || !Objects.equals(other.of, one.of)
+                || other.parts.size() != one.parts.size();
     }
 
     private static boolean same(Term one, Term other, Map<Term, Map<Term, Boolean>> met) {
         if (one == other) {
             return true;
         }
-        if (other.hash != one.hash || other.shape != one.shape
-                || !java.util.Objects.equals(other.of, one.of)
-                || other.parts.size() != one.parts.size()) {
+        if (differsOnItsFace(one, other)) {
             return false;
         }
         Map<Term, Boolean> against = met.computeIfAbsent(one, _ -> new IdentityHashMap<>());
@@ -765,6 +1063,7 @@ final class Term {
         if (known != null) {
             return known;
         }
+        counted();
         boolean answer;
         if (one.shape == Shape.EQ) {
             List<Term> a = one.parts;
@@ -839,6 +1138,23 @@ final class Term {
                     .append(')');
             case MATCHED -> joined(sb.append("match("), ", ").append(')');
             case ATTEMPTED -> joined(sb.append("attempt("), ", ").append(')');
+            case HOW_MANY_ARE -> sb.append("howManyAre(").append(parts.get(1).rendered())
+                    .append(", ").append(parts.get(0).rendered()).append(", ").append(of)
+                    .append(')');
+            case HOW_MANY_ARE_IN -> sb.append("howManyAreIn(").append(parts.get(0).rendered())
+                    .append(", ").append(parts.get(1).rendered()).append(", ").append(of)
+                    .append(')');
+            case HOW_MANY_MEET -> joined(sb.append("howManyMeet(").append(of).append(", "), ", ")
+                    .append(')');
+            case HOW_MANY_DIFFERENT ->
+                    joined(sb.append("howManyDifferent(").append(of).append(", "), ", ")
+                            .append(')');
+            case SUM_OF_SIZES -> joined(sb.append("sumOfSizes(").append(of).append(", "), ", ")
+                    .append(')');
+            case EXACT_TOTAL -> sb.append("exact ").append(((ValueName) of).name()).append('(')
+                    .append(parts.get(0).rendered()).append(')');
+            case CODE_POINTS -> sb.append("codePoints(").append(parts.get(0).rendered())
+                    .append(", ").append(of).append(')');
         }
         return sb.toString();
     }
@@ -879,6 +1195,19 @@ final class Term {
         }
     }
 
+    /**
+     * What counts a container and what counts each of its elements or each answer of a closure
+     * over them, either null where nothing counts it. What a sum of sizes carries is a function of
+     * these as much as of the terms it is over, so they are part of which sum it is.
+     */
+    record CountedBy(ValueName whole, ValueName each) {
+
+        @Override
+        public String toString() {
+            return whole + "/" + each;
+        }
+    }
+
     /** Where a closure's parameter is bound: which closure down from here, and which parameter. */
     record At(int depth, int index) {
 
@@ -906,10 +1235,82 @@ final class Term {
 
         private final Map<Term, Term> shared = new HashMap<>();
 
+        /**
+         * The term {@link #shared} holds for a shape, what it carries and parts that are these very
+         * instances, so that a question asked again in the same words is answered without making
+         * the term to look it up by.
+         *
+         * <p>Only an accelerator. A question it does not know — parts that are equal and not the
+         * same, an equality with its sides the other way round — is answered by {@link #shared},
+         * which is where the term stands for its value, and then remembered here.
+         */
+        private final Map<AsAsked, Term> asked = new HashMap<>();
+
         private Term of(Shape shape, Object of, List<Term> parts) {
+            AsAsked question = new AsAsked(shape, of, parts);
+            Term known = asked.get(question);
+            if (known != null) {
+                return known;
+            }
             Term made = new Term(shape, of, parts);
             Term had = shared.putIfAbsent(made, made);
-            return had != null ? had : made;
+            Term answer = had != null ? had : made;
+            asked.put(new AsAsked(shape, of, made.parts), answer);
+            return answer;
+        }
+
+        /**
+         * A shape, what it carries and its parts, told apart from another by the very instances the
+         * parts are.
+         *
+         * <p>The hash is taken from the hashes the parts already carry, and from the carried value's
+         * own, which agrees with the equality that is read of it. It is not the hash of a term and
+         * nothing is ordered by it: it places a question in a table that is looked into and never
+         * walked.
+         */
+        private static final class AsAsked {
+
+            private final Shape shape;
+
+            private final Object of;
+
+            private final List<Term> parts;
+
+            private final int hash;
+
+            AsAsked(Shape shape, Object of, List<Term> parts) {
+                this.shape = shape;
+                this.of = of;
+                this.parts = parts;
+                int h = shape.name().hashCode() * MIX + Objects.hashCode(of);
+                for (int at = 0; at < parts.size(); at++) {
+                    h = h * MIX + parts.get(at).hash;
+                }
+                this.hash = h;
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                if (!(other instanceof AsAsked question)) {
+                    return false;
+                }
+                if (question.hash != hash || question.shape != shape
+                        || !Objects.equals(question.of, of)
+                        || question.parts.size() != parts.size()) {
+                    return false;
+                }
+                for (int at = 0; at < parts.size(); at++) {
+                    if (question.parts.get(at) != parts.get(at)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
 
         /** The place {@code where} is. */
@@ -1095,8 +1496,11 @@ final class Term {
          * about where an answer was expected.
          */
         Term calledIfBuilt(ValueName operation, List<Term> args) {
-            Term made = new Term(Shape.CALLED, operation, args);
-            return shared.containsKey(made) ? made : null;
+            Term known = asked.get(new AsAsked(Shape.CALLED, operation, args));
+            if (known != null) {
+                return known;
+            }
+            return shared.get(new Term(Shape.CALLED, operation, args));
         }
 
         /** A value given to an optional position. */
@@ -1154,6 +1558,131 @@ final class Term {
             return of(Shape.ATTEMPTED, List.copyOf(clauses), parts);
         }
 
+        /** How many elements of {@code container}, or keys where {@code of} says, are
+         *  {@code value}. */
+        Term howManyAre(Term container, Term value, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_ARE, of, List.of(container, value));
+        }
+
+        /** How many elements of {@code counted} {@code holder} holds, among its elements or among
+         *  its keys as {@code of} says. */
+        Term howManyAreIn(Term counted, Term holder, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_ARE_IN, of, List.of(counted, holder));
+        }
+
+        /** How many elements of {@code container} come out on the holding side of {@code aspect}:
+         *  each element itself where {@code closure} is null, and otherwise what it answers of
+         *  each. */
+        Term howManyMeet(Term container, Term closure, AnswerAspect aspect) {
+            return of(Shape.HOW_MANY_MEET, aspect, ofEach(container, closure));
+        }
+
+        /** How many different values the elements of {@code container} come to: the elements or
+         *  their keys as {@code of} says where {@code closure} is null, and otherwise what it
+         *  answers of each. */
+        Term howManyDifferent(Term container, Term closure, AddsWhatItDoesNotHold.Of of) {
+            return of(Shape.HOW_MANY_DIFFERENT, of, ofEach(container, closure));
+        }
+
+        /** How many the elements of {@code container} hold, added up: each element where
+         *  {@code closure} is null, and otherwise what it answers of each. */
+        Term sumOfSizes(Term container, Term closure, CountedBy countedBy) {
+            return of(Shape.SUM_OF_SIZES, countedBy, ofEach(container, closure));
+        }
+
+        /** What {@code operation}, a sum or a product, comes to over all of the elements of
+         *  {@code list}, as the exact number and not as the answer of a call. */
+        Term exactTotal(ValueName operation, Term list) {
+            return of(Shape.EXACT_TOTAL, operation, List.of(list));
+        }
+
+        /** How many of the code points of {@code string} are in {@code counted}. */
+        Term codePoints(Term string, CodePointClass counted) {
+            return of(Shape.CODE_POINTS, counted, List.of(string));
+        }
+
+        /** What a count over each element is over: the container, and the closure whose answer is
+         *  counted unless that answer is the element itself, which the count of no closure is. */
+        private static List<Term> ofEach(Term container, Term closure) {
+            return closure == null || closure.answersWhatItIsHanded()
+                    ? List.of(container) : List.of(container, closure);
+        }
+
+        /** The closure of one parameter — an element — or of two — a key and its value — that
+         *  answers true where both of two closures of the same do, or null where either is any
+         *  other. Each parameter is the same one in both, so the two bodies are about the same
+         *  element, or the same entry. */
+        Term closureAnsweringBoth(Term one, Term other) {
+            return one != null && other != null && one.shape == Shape.CLOSURE
+                    && other.shape == Shape.CLOSURE && one.of instanceof Integer params
+                    && (params == 1 || params == 2) && params.equals(other.of)
+                    ? closure(params, operator(ConditionJoin.BOTH.operator(),
+                            one.parts.getFirst(), other.parts.getFirst())) : null;
+        }
+
+        /**
+         * The closure of one parameter that answers true of exactly {@code runs}, written the one
+         * way: the runs one after another as a choice, each as the parameter being its one number,
+         * or not below its first and below the number after its last. {@code n > 2},
+         * {@code n >= 3} and {@code n > 2 && n > 1} are one term. Null where a number of the runs
+         * is past what a number written in a program is.
+         */
+        Term closureAnswering(Term subject, WholeNumberRuns runs) {
+            Term parameter = subject;
+            Term body = null;
+            for (WholeNumberRuns.Run run : runs.runs()) {
+                Term in = written(true);
+                if (run.isOneNumber()) {
+                    if (run.from().bitLength() > Long.SIZE - 1) {
+                        return null;
+                    }
+                    in = of(Shape.EQ, null, List.of(parameter, written(run.from().longValue())));
+                } else {
+                    if (run.from() != null) {
+                        if (run.from().bitLength() > Long.SIZE - 1) {
+                            return null;
+                        }
+                        in = not(of(Shape.OP, BinOp.LT,
+                                List.of(parameter, written(run.from().longValue()))));
+                    }
+                    if (run.to() != null) {
+                        if (run.to().bitLength() > Long.SIZE - 2) {
+                            return null;
+                        }
+                        Term below = of(Shape.OP, BinOp.LT,
+                                List.of(parameter, written(run.to().longValue() + 1)));
+                        in = run.from() == null ? below : choice(in, below, written(false));
+                    }
+                }
+                body = body == null ? in : choice(body, written(true), in);
+            }
+            return closure(1, body == null ? written(false) : body);
+        }
+
+        /**
+         * The closure of one parameter that answers true where {@code closure} answers false, or
+         * null where it is no such closure. The denial of a denial is the statement itself
+         * ({@link #not}), and a comparison is held as the statement it makes or the denial of one
+         * ({@link #comparison}).
+         */
+        Term closureDenying(Term closure) {
+            return closure.shape == Shape.CLOSURE && Integer.valueOf(1).equals(closure.of)
+                    ? closure(1, not(closure.parts.getFirst())) : null;
+        }
+
+        /**
+         * {@code closure} written the one way where it states something of whole numbers, so that
+         * two statements of one set are one term, and as it is where it does not — or null where
+         * there is none.
+         */
+        Term normalClosure(Term closure) {
+            Term.StatementOverWholeNumbers statement = closure == null ? null
+                    : closure.statementOverWholeNumbers();
+            Term written = statement == null ? null
+                    : closureAnswering(statement.subject(), statement.runs());
+            return written == null ? closure : written;
+        }
+
         /** How many distinct terms this has been asked for — what a test measuring the sharing
          * reads. */
         int size() {
@@ -1186,6 +1715,11 @@ final class Term {
     /** The parts, for a reader that walks one. */
     List<Term> parts() {
         return parts;
+    }
+
+    /** What this term carries beside its parts: an operator, a written number, a case's data. */
+    Object carried() {
+        return of;
     }
 
     /**

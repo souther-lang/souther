@@ -89,8 +89,6 @@ class ACombinationIsReachedByMovingWhatItSaysNothingAboutTest {
 
         String answered = MODEL + rowsOf(block);
         Compilation after = measured(answered);
-        assertEquals(List.of(), after.errors(),
-                () -> "the rows offered are rows this model admits:\n" + answered);
         assertEquals(List.of(), gapsOf(after),
                 () -> "and they answer every combination: " + report(after));
     }
@@ -118,18 +116,17 @@ class ACombinationIsReachedByMovingWhatItSaysNothingAboutTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.repair")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

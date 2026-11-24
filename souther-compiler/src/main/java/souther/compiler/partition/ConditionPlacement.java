@@ -162,11 +162,15 @@ sealed interface ConditionPlacement {
                             && there.through().equals(count.through());
             case NumericTerm.CodePointValueSum _ ->
                     measured instanceof NumericTerm.CodePointValueSum;
+            case NumericTerm.CodePointAt point -> measured instanceof NumericTerm.CodePointAt there
+                    && there.index() == point.index();
+            case NumericTerm.WholeUnitsOf units -> measured instanceof NumericTerm.WholeUnitsOf there
+                    && there.operation().equals(units.operation());
             // No number a position answers is this one.
             case NumericTerm.OfAnElementsNeighbours _ -> false;
             case NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ -> false;
             case NumericTerm.GatheredUnderItsKey _, NumericTerm.GatheredUnderAKey _ -> false;
-            case NumericTerm.TakenOver _ -> false;
+            case NumericTerm.TakenOver _, NumericTerm.ProductOf _ -> false;
         };
     }
 }

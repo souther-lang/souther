@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -48,6 +49,9 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
      * <p>What survives relates two positions, so what the rule leaves at each of them is that — a
      * sum held against a number, which each reaches but where the other's type stops — and
      * {@code t.y} is left alone, because the rule the arithmetic came to does not mention it.
+     * The sum of {@code t.x} and {@code t.y} is worked out before {@code t.y} is taken away, and
+     * it is no sum of the form; {@code t.y} stands at the value it takes nearest nought, where
+     * that sum is told, so what each of the two reaches is shown.
      */
     @Test
     void aCancelledPositionIsFiledAtByNothing() {
@@ -72,7 +76,7 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
                         then High
                         else Low
                 """.replace("CONDITION", condition);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -52,7 +54,7 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
 
             behavior onCode : (v: Code) -> Ok
                 constructs Ok
-            let onCode (v) = Ok { size = String.length(v) }
+            let onCode (v) = Ok { size = String.length(v.value) }
             """;
 
     /** A line on the order, and a line on the length. */
@@ -65,7 +67,6 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
                 invariant long = String.length(s) >= 3
 
             behavior f : (v: R) -> Ok
-                constructs Ok
             let f (v) = Ok
             """;
 
@@ -79,7 +80,6 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
                 invariant low  = s >= "m"
 
             behavior f : (v: R) -> Ok
-                constructs Ok
             let f (v) = Ok
             """;
 
@@ -149,7 +149,7 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
 
                 behavior onCode : (v: Code) -> Ok
                     constructs Ok
-                let onCode (v) = Ok { size = String.length(v) }
+                let onCode (v) = Ok { size = String.length(v.value) }
                 """.formatted(rules);
     }
 
@@ -164,7 +164,8 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
     void neitherRuleIsLeftUnread() {
         assertEquals(List.of(), notRead(TWO_LINES), "both rules drew their own line");
         assertEquals(List.of(), notRead(VALUES_AND_A_LENGTH));
-        assertTrue(!human(TWO_LINES).contains("not read: invariant R"), human(TWO_LINES));
+        String report = human(TWO_LINES);
+        assertTrue(!report.contains("not read: invariant R"), report);
     }
 
     /** How the reading measures every position of {@code model}: the number, and the classes on
@@ -173,14 +174,15 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
         RuleReadingSource rules = RuleReadings.ofSource(model);
         Type type = Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), parameter)));
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain read = InputDomain.of(
                 List.of(new InputDomain.Parameter("v", null, type)),
                 reading, TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         List<String> out = new ArrayList<>();
         for (souther.compiler.inputs.Position at : read.positions()) {
             switch (LocalInspection.of(at,
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))) {
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY))) {
                 case LocalPartition.Divided divided -> divided.measures().forEach(each ->
                         out.add(each.term() + ": " + labelled(each)));
                 case LocalPartition.Open _ -> { }
@@ -197,18 +199,14 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
     }
 
     private static List<String> notRead(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
                 .partition().notRead().stream()
                 .map(PartitionEvidence.NotRead::at).toList();
     }
 
     private static String human(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

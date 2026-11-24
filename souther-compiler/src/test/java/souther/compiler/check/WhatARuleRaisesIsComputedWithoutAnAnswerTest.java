@@ -89,6 +89,15 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
             "souther/compiler/inputs/NumericTerm",
             "souther/compiler/numeric/NumericDomain");
 
+    /**
+     * What the walk does not enter: what is proved of a library's own operations, which is a fact
+     * of the library alone. Binding a library's facts reads its bodies and declarations and nothing
+     * of any model, so it answers the same for every rule of every model, and what it computes with
+     * to prove them is the library's and not an answer to a question a rule raised.
+     */
+    private static final List<String> FACTS_OF_THE_LIBRARY_ALONE = List.of(
+            "souther/compiler/check/OperationFactBinder#bindAll");
+
     @Test
     void nothingAnAnswerProducedIsReachedByTheComputation() {
         Reached reached = walk();
@@ -122,6 +131,14 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
             assertTrue(byName.keySet().stream()
                             .anyMatch(one -> one.equals(each) || one.startsWith(each + "$")),
                     each + " is not a class this module declares, so forbidding it forbids nothing");
+        }
+        for (String each : FACTS_OF_THE_LIBRARY_ALONE) {
+            String owner = each.substring(0, each.indexOf('#'));
+            String name = each.substring(each.indexOf('#') + 1);
+            ClassModel of = byName.get(owner);
+            assertTrue(of != null && of.methods().stream()
+                            .anyMatch(one -> one.methodName().stringValue().equals(name)),
+                    each + " names no method, so the walk is kept out of nothing");
         }
         for (String each : ROOTS) {
             String owner = each.substring(0, each.indexOf('#'));
@@ -200,7 +217,7 @@ class WhatARuleRaisesIsComputedWithoutAnAnswerTest {
         Deque<String> todo = new ArrayDeque<>(ROOTS);
         while (!todo.isEmpty()) {
             String at = todo.removeFirst();
-            if (!methods.add(at)) {
+            if (!methods.add(at) || FACTS_OF_THE_LIBRARY_ALONE.contains(at)) {
                 continue;
             }
             ClassModel of = byName.get(at.substring(0, at.indexOf('#')));

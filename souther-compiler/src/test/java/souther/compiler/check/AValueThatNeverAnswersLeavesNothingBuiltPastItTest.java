@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,14 +23,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AValueThatNeverAnswersLeavesNothingBuiltPastItTest {
 
     private static AnalysisBody analysed(String value, String declared) {
-        return Compiler.compiled("""
+        Compilation compilation = ACompiledModel.compiles(Compiler.compiled("""
                 module m exposing (f)
 
                 let never%s = %s
 
                 behavior f : (n: Int) -> Int
                 let f (n) = never
-                """.formatted(declared, value), "m").db()
+                """.formatted(declared, value), "m"));
+        return compilation.db()
                 .ask(new Bodies.Checked("m")).value().analysisBodies().get("f");
     }
 

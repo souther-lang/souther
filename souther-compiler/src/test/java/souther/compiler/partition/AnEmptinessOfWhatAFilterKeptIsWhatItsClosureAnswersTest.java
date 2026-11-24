@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -83,7 +84,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     void theReasonsAHelperBuiltAreReadAsWhatTheyWereKeptFor() {
         Compilation compilation = compiled(THE_REASONS_A_HELPER_BUILT);
         assertEquals(List.of(), measured(compilation).notRead(), "every rule is read");
-        assertEquals(List.of("[t.cost/x < 100, t.cost/100 <= x]", "[true, false]"),
+        assertEquals(List.of("[t.cost: x < 100, t.cost: 100 <= x]", "[true, false]"),
                 measured(compilation).axes().stream()
                         .map(axis -> String.valueOf(axis.classes())).toList());
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
@@ -178,6 +179,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                     | "zero is not positive" : ([0]) -> 0
                     | "negative" : ([-1]) -> 0
                     | "mixed" : ([-1, 3]) -> 1
+                    | "positive first" : ([3, -1]) -> 1
                     | "none" : ([]) -> 0
                 """;
         assertTheSame(pick.formatted("List.any(x -> x > 0, xs)"),
@@ -249,7 +251,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
             String filter = kept.get(2);
             String through = kept.get(3);
             String filterLibrary = filter.substring(0, filter.indexOf('.'));
-            Compilation empty = compiled(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"));
+            String empty = model.formatted(filterLibrary + ".isEmpty(" + filter + ")");
             assertTheSame(empty, model.formatted(library + ".isEmpty(" + through + ")"));
             String size = library.equals("List") ? "List.length(" : library + ".size(";
             assertTheSame(empty, model.formatted(size + through + ") == 0"));
@@ -270,7 +272,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 let pick (xs) = if List.length(%s) %s then 1 else 0
                 """;
         for (String count : List.of(">= 1", "== 0")) {
-            Compilation direct = compiled(list.formatted("List.filter(x -> x > 0, xs)", count));
+            String direct = list.formatted("List.filter(x -> x > 0, xs)", count);
             for (String order : List.of("List.reverse(xs)", "List.sort(xs)",
                     "List.reverse(List.sort(xs))")) {
                 assertTheSame(direct, list.formatted(
@@ -341,7 +343,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 let pick (xs) =
                     if Set.size(Set.filter(x -> x > 0, Set.fromList(xs))) >= 2 then 1 else 0
                 """));
-        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]"), classesOf(counted),
+        assertEquals(List.of("[xs[*]: x <= 0, xs[*]: 0 < x]"), classesOf(counted),
                 "the closure's own line on each element, and none on how many meet it");
         assertTrue(notRead(counted).contains("xs RULE_ABOUT_A_DERIVED_VALUE"),
                 "how many different values meet it is not how many elements do");
@@ -402,7 +404,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 "List.take(n, List.filter(x -> x > 0, xs))")));
         assertEquals(List.of(), notRead(taken),
                 "taking none of what was kept is empty whatever was kept, and nothing else is");
-        assertEquals(List.of("[xs[*]/x <= 0, xs[*]/0 < x]", "[n/x < 1, n/1 <= x]"),
+        assertEquals(List.of("[xs[*]: x <= 0, xs[*]: 0 < x]", "[n: x < 1, n: 1 <= x]"),
                 classesOf(taken), "a line on n, beside the closure's on each element");
         String text = """
                 behavior pick : (s: String) -> Int
@@ -428,7 +430,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
             assertEquals(List.of(),
                     counted.notRead().stream().map(each -> each.at() + " " + each.reason())
                             .toList(), count);
-            assertEquals(List.of("[t.cost/x < 100, t.cost/100 <= x]", "[true, false]"),
+            assertEquals(List.of("[t.cost: x < 100, t.cost: 100 <= x]", "[true, false]"),
                     classesOf(counted), count);
         }
     }
@@ -528,10 +530,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     /** Both spellings read every rule alike, tell the same apart and come to one verdict. */
     private static void assertTheSame(String one, String other) {
-        assertTheSame(compiled(one), other);
-    }
-
-    private static void assertTheSame(Compilation first, String other) {
+        Compilation first = compiled(one);
         Compilation second = compiled(other);
         assertEquals(List.of(), measured(first).notRead());
         assertEquals(notRead(measured(first)), notRead(measured(second)));
@@ -572,12 +571,8 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     }
 
     private static Compilation compiled(String model) {
-        return COMPILED.computeIfAbsent(model, text -> {
-            Compilation compilation = Compilation.ofSource("module demo\n\n" + text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), "the model compiles and its rows hold");
-            return compilation;
-        });
+        return ACompiledModel.compiles(COMPILED.computeIfAbsent(model,
+                text -> ACompiledModel.measured("module demo\n\n" + text,
+                        Adequacy.Asked.fullReport())));
     }
 }

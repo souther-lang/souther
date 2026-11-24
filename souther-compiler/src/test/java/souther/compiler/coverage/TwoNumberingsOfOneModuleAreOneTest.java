@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.LinkedHashMap;
@@ -157,8 +158,8 @@ class TwoNumberingsOfOneModuleAreOneTest {
      * is what the check itself came to.
      */
     private static NumberingIdentity numberingOf(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked(module)).value();

@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
@@ -9,6 +11,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
@@ -51,7 +54,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      *  relation leaving it at three or above. */
     @Test
     void aChoiceAndARelationThatShareNoValueAdmitNothing() {
-        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -71,7 +74,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void andTheSameRulesWrittenAsAConjunctionAreRefusedToo() {
-        assertEquals(new Emptiness.ConflictingRules(), only("""
+        assertEquals(new Emptiness.ConflictingRules(), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -82,7 +85,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     /** The same over an order the model does not add on, where the relation is an operation's. */
     @Test
     void datesAreTheSameShapeOverAnOrderTheModelDoesNotAddOn() {
-        assertEquals(atAField("a", new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+        assertEquals(atAField("a", new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Span = { a: Date, b: Date }
@@ -102,7 +105,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void aBoundWrittenOnThePositionIsStillTheOrdersOwnProof() {
-        assertEquals(atAField("x", new Emptiness.EmptyOrderedInterval()), only("""
+        assertEquals(atAField("x", new Emptiness.EmptyOrderedInterval()), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -121,7 +124,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void everyAlternativeOutsideWhatIsRequiredIsRefusedThoughWhatTheyShareIsNot() {
-        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+        assertEquals(atAField("x", new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Held = { x: Int, y: Int }
@@ -145,7 +148,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         assertEquals(new Emptiness.AtEqualPositions(
                         List.of(new Emptiness.AtAField.Where.In("p"),
                                 new Emptiness.AtAField.Where.In("r")),
-                        new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+                        new Emptiness.NoAllowedValueWithinRequiredBounds()), refused("""
                 module demo
 
                 data Held = { p: Int, r: Int, s: Int, t: Int }
@@ -173,7 +176,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         assertEquals(new Emptiness.AtEqualPositions(
                         List.of(new Emptiness.AtAField.Where.In("p"),
                                 new Emptiness.AtAField.Where.In("r")),
-                        new Emptiness.NoCommonValueForEqualPositions()), only("""
+                        new Emptiness.NoCommonValueForEqualPositions()), refused("""
                 module demo
 
                 data Held = { p: Int, r: Int, x: Int, y: Int }
@@ -253,14 +256,14 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 "no rule names it, so nothing about it follows from these rules");
         NumericDomain<String> related = nothing.assume(
                 LinearForm.<String>atom("x").minus(LinearForm.atom("y")), Rel.EQ,
-                Map.of("x", souther.compiler.numeric.Granularity.DISCRETE,
-                        "y", souther.compiler.numeric.Granularity.DISCRETE));
+                Map.of("x", NumberSpace.spacedOnly(Granularity.DISCRETE),
+                        "y", NumberSpace.spacedOnly(Granularity.DISCRETE)));
         assertEquals(new NumericDomain.Projection.Within(new NumericDomain.Bounds(null, null)),
                 related.projectionOf("x"),
                 "a rule names it and places no end, which is not the same as no rule naming it");
         NumericDomain<String> nowhere = related.assume(
                 LinearForm.<String>constant(ExactRatio.ONE), Rel.LT,
-                Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
+                Map.of("x", NumberSpace.spacedOnly(Granularity.DISCRETE)));
         assertInstanceOf(NumericDomain.Projection.NothingIsLeft.class, nowhere.projectionOf("x"),
                 "an atom of rules nothing satisfies is at no value, not at every value");
     }
@@ -278,10 +281,10 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     void aComponentHoldingNothingLeavesNoEnvelopeEvenWithNoPositionToAskAbout() {
         ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.asTheyAreSpelled())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
-                        Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
+                        Map.of("x", NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)))
                 .taking(SmallForm.small(LinearForm.<String>constant(ExactRatio.of(-1)))
                                 .minus(LinearForm.atom("x")).form(), Rel.GE,
-                        Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
+                        Map.of("x", NumberSpace.stopping(Granularity.DISCRETE, NumericDomain.Bounds.OPEN)));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
         assertEquals(Map.of(), nowhere.confinement().carriers(), "and no position is read at all");
         assertInstanceOf(PositionEnvelope.NothingIsLeft.class, nowhere.positionEnvelope());
@@ -336,24 +339,33 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      * settles what it fixes.
      */
     private static boolean settling(int at) {
-        Compilation compilation = Compilation.ofSource(CHOICE, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(CHOICE);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
         ConstraintState<String> handedOver = domains
-                .constraintsOver(claim -> "at:" + claim, other -> "other:" + other,
-                        CanonicalOrder.asTheyAreSpelled())
+                .constraintsOver(claim -> "at:" + claim, total -> null,
+                        other -> "other:" + other, CanonicalOrder.asTheyAreSpelled())
                 .constraints();
         return ConstraintState.settling(handedOver, "at:" + NumberAt.valueOf(RuleKey.of("y")),
-                new Count(BigDecimal.valueOf(at)), Granularity.DISCRETE).isBottom();
+                new Count(BigDecimal.valueOf(at)),
+                NumberSpace.spacedOnly(Granularity.DISCRETE)).isBottom();
     }
 
     /** What the one declaration of {@code source} was shown to have no value by, or null. */
     private static Emptiness only(String source) {
+        return only(List.of(), source);
+    }
+
+    /** As {@link #only}, of a declaration the compiler refuses with {@code codes}. */
+    private static Emptiness refused(String source) {
+        return only(List.of("E1013"), source);
+    }
+
+    private static Emptiness only(List<String> codes, String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),

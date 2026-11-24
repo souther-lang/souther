@@ -66,7 +66,7 @@ class ASearchGeneratedRowSpreadsOverAnImportedBaselineTest {
     void theGeneratedRowSpreadsOverTheImportedName() {
         Compilation compilation = Compilation.ofSources(List.of(PRICING, APP), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "app");
         assertNotNull(all, "the model under test compiles");

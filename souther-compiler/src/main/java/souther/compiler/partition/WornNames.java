@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeView;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
@@ -29,12 +31,17 @@ sealed interface WornNames {
         public Spelled {
             names = List.copyOf(names);
         }
+
+        /** A collection holding {@code elements}, under these names. */
+        FixtureTemplate holding(List<FixtureTemplate> elements) {
+            return RepresentativeSource.under(names, FixtureTemplate.collection(elements));
+        }
     }
 
     /** A name nothing here can write, which takes the whole value with it. */
     record Unwritable(TypeSymbol name) implements WornNames {
 
-        String why() {
+        SearchMessage why() {
             return noSpellingFor(name);
         }
     }
@@ -75,14 +82,30 @@ sealed interface WornNames {
                 ? RepresentativeSource.under(spelled.names(), value) : null;
     }
 
+    /**
+     * A collection holding {@code elements}, under the names {@code container} wears — or null
+     * where a name it wears cannot be written.
+     *
+     * <p>The one place a collection is put on the names of its type: a list a newtype wraps is
+     * written as that newtype and not as the bare list, which a boundary reading the position
+     * refuses, so every reader that makes a collection of a position's type makes it here. A
+     * reader that makes many asks {@link #of} once and holds on to the {@link Spelled}: whether
+     * the names can be written is a fact of the type, so a type whose names cannot be is known
+     * before the first collection is made and not after every one of them came back null.
+     */
+    static FixtureTemplate collectionHolding(TypeView container, List<FixtureTemplate> elements,
+                                             RuleReadingSource ruleSource) {
+        return of(container.wrappers(), ruleSource) instanceof Spelled spelled
+                ? spelled.holding(elements) : null;
+    }
+
     /** Why nothing here can write a value of {@code name}: no spelling reaches it. */
-    static String noSpellingFor(TypeSymbol name) {
+    static SearchMessage noSpellingFor(TypeSymbol name) {
         return name instanceof TypeSymbol.AtModule at
-                ? "`" + at.module() + "` does not expose `" + at.name()
-                        + "`, so nothing here can name it"
+                ? new SearchMessage.TheModuleDoesNotExposeIt(String.valueOf(at.module()),
+                        String.valueOf(at.name()))
                 // What the language declares is kept by nobody: a declaration of this module
                 // spells it, so the language's has no name left here.
-                : "`" + name.name() + "` is declared here, so what the language declares under"
-                        + " that name has no name here";
+                : new SearchMessage.TheNameIsDeclaredHere(String.valueOf(name.name()));
     }
 }

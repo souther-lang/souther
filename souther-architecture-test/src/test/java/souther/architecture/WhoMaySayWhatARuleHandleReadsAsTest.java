@@ -76,9 +76,6 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
 
     private static final Told SAID_OF_A_SUBJECT = Told.takingA(REPORT, "said", 0, Subject.class);
 
-    private static final Told THE_FINDINGS_OF_THE_DOCUMENT =
-            Told.takingA(REPORT, "findings", 0, DocumentArray.class);
-
     /**
      * The block's words for a point of a body's line, which a finding about the point and a row
      * handed for it both ask. The other {@code about} of the block says a finding and hands a
@@ -89,8 +86,7 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
 
     private static final List<Told> TOLD_APART = List.of(PARTITION_IN_PROSE,
             PARTITION_IN_THE_DOCUMENT, INSIDE_THE_PARTITION_IN_PROSE,
-            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, THE_FINDINGS_OF_THE_DOCUMENT,
-            SAID_OF_A_POINT);
+            INSIDE_THE_PARTITION_IN_THE_DOCUMENT, SAID_OF_A_SUBJECT, SAID_OF_A_POINT);
 
     /**
      * Every class that asks what a handle reads as outside a document, and why it may.
@@ -113,7 +109,11 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // And the same block saying which rule gave the offer no value, which is the same
             // reader meeting the same rule: told that a search was short of what the rules leave
             // and not told which rule, they have every rule of the position to look at.
-            ROWS + "#gaveNothing");
+            ROWS + "#gaveNothing",
+            // And the rule a run of a row composed there stopped at, beside the same word: told
+            // that no row was run to an answer and not which rule refused it, a reader has every
+            // construction and ensures of the body to look at.
+            ROWS + "#ruleHandleSaid");
 
     /**
      * And every class that writes one into the document, which is one.
@@ -127,8 +127,15 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
             REPORT + "#causes",
-            THE_FINDINGS_OF_THE_DOCUMENT.spelt(),
+            // The rule a line of which was not worked out for its many cases, or was read all the
+            // same at a cost, beside what those cases were or the helper they choose among: the
+            // same rule the partition's own entries name for why.
+            REPORT + "#caseRowOf",
+            REPORT + "#finding",
             REPORT + "#obligations",
+            // The rule a run of a row stopped at, beside the combination no row was found for: the
+            // same rule the human lines name through the rendering.
+            REPORT + "#runsStopped",
             INSIDE_THE_PARTITION_IN_THE_DOCUMENT.spelt(),
             PARTITION_IN_THE_DOCUMENT.spelt());
 

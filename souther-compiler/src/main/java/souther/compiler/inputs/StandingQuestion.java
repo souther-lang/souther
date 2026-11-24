@@ -95,6 +95,13 @@ public sealed interface StandingQuestion {
                 case PARTITION -> false;
                 case BOUNDARY -> true;
             };
+            // The measure that answers which class a value is in, and only that one. The rule's
+            // classes stand over the values it was shown over, and what is open is which class the
+            // rest are in; where its lines fall is not asked of them.
+            case RegionUndetermined _ -> switch (measure) {
+                case PARTITION -> true;
+                case BOUNDARY -> false;
+            };
             // And a comparison the reading did not finish, which is undecided about what it does at
             // all. A line it comes to divides the position and owes the rows either side, so both
             // measures rest on a reading that stopped — asked per measure rather than answered with
@@ -299,8 +306,8 @@ public sealed interface StandingQuestion {
      * knows which. Where a measure's own answer is written is {@code MeasureClosure}'s, which asks
      * the question rather than the reason.
      *
-     * <p>What makes two of these one is the whole of which rule it is, where it was filed and what
-     * stopped the reading. How a reader finds it is a separate thing — a name where the author gave
+     * <p>What makes two of these one is the whole of which rule it is, where it was filed, what
+     * stopped the reading and the expression it stopped at. How a reader finds it is a separate thing — a name where the author gave
      * one, a place where they did not — and is not part of that identity.
      */
     sealed interface Unclassified extends StandingQuestion {
@@ -343,8 +350,15 @@ public sealed interface StandingQuestion {
         public static NothingClassifiesIt of(RuleCitation cited, ModelOccurrences readAt,
                                              FilingCoordinate at,
                                              BlockReason.RuleReadingStopped why) {
+            return of(cited, readAt, at, RuleSite.theRuleItself(), why);
+        }
+
+        /** The same, for a reader that has the expression the reading stopped at to send anybody to. */
+        public static NothingClassifiesIt of(RuleCitation cited, ModelOccurrences readAt,
+                                             FilingCoordinate at, RuleSite sentTo,
+                                             BlockReason.RuleReadingStopped why) {
             return new NothingClassifiesIt(
-                    new NothingClassifiesIt.Filed(cited.rule(), at, why),
+                    new NothingClassifiesIt.Filed(cited.rule(), at, sentTo, why),
                     RuleCitation.anchorOf(cited), readAt);
         }
 
@@ -370,10 +384,17 @@ public sealed interface StandingQuestion {
             return filed.why();
         }
 
+        /** Where inside the rule a reader goes about it: the expression the reading stopped at,
+         *  or the rule itself where it names none. */
+        public RuleSite sentTo() {
+            return filed.sentTo();
+        }
+
         /** The one reason, as the list every one of these is read through. */
         @Override
         public WhatAQuestionStandsOn stopped() {
-            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.sentTo(), filed.why()),
+                    Optional.empty());
         }
 
         @Override
@@ -394,7 +415,7 @@ public sealed interface StandingQuestion {
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
             return new NothingClassifiesIt(
-                    new NothingClassifiesIt.Filed(filed.rule(), filed.at(),
+                    new NothingClassifiesIt.Filed(filed.rule(), filed.at(), filed.sentTo(),
                     BlockReason.together(filed.why(), it.filed.why())),
                     both, readAt.and(it.readAt));
         }
@@ -413,11 +434,11 @@ public sealed interface StandingQuestion {
          * the first of them would leave the second unsaid. The figures the reason was met at are
          * not ({@link #fact}): one limit met at two of them is one thing to lift.
          */
-        public record Filed(RuleRef rule, FilingCoordinate at,
+        public record Filed(RuleRef rule, FilingCoordinate at, RuleSite sentTo,
                             BlockReason.RuleReadingStopped why) {
 
             public Filed {
-                if (rule == null || at == null || why == null) {
+                if (rule == null || at == null || sentTo == null || why == null) {
                     throw new IllegalArgumentException(
                             "a rule nothing classified is one rule, filed somewhere, for a reason");
                 }
@@ -426,7 +447,7 @@ public sealed interface StandingQuestion {
             /** What makes two of these one: all of it, with the figures its reason was met at
              *  left out. */
             Object fact() {
-                return List.of(rule, at, BlockReason.factOf(why));
+                return List.of(rule, at, sentTo, BlockReason.factOf(why));
             }
         }
     }
@@ -466,8 +487,129 @@ public sealed interface StandingQuestion {
         public static BoundaryUndetermined of(RuleCitation cited, ModelOccurrences readAt,
                                               FilingCoordinate at,
                                               BlockReason.RuleReadingStopped why) {
+            return of(cited, readAt, at, RuleSite.theRuleItself(), why);
+        }
+
+        /** The same, for a reader that has the call the arithmetic stopped at to send anybody to. */
+        public static BoundaryUndetermined of(RuleCitation cited, ModelOccurrences readAt,
+                                              FilingCoordinate at, RuleSite sentTo,
+                                              BlockReason.RuleReadingStopped why) {
             return new BoundaryUndetermined(
-                    new BoundaryUndetermined.Filed(cited.rule(), at, why),
+                    new BoundaryUndetermined.Filed(cited.rule(), at, sentTo, why),
+                    RuleCitation.anchorOf(cited), readAt);
+        }
+
+        @Override
+        public RuleRef rule() {
+            return filed.rule();
+        }
+
+        @Override
+        public Set<RuleCitation> cited() {
+            return RuleCitation.handlesFor(filed.rule(), reachedBy);
+        }
+
+        @Override
+        public FilingCoordinate at() {
+            return filed.at();
+        }
+
+        @Override
+        public BlockReason.RuleReadingStopped why() {
+            return filed.why();
+        }
+
+        /** Where inside the rule a reader goes about it: the call the arithmetic stopped at, or the
+         *  rule itself. */
+        public RuleSite sentTo() {
+            return filed.sentTo();
+        }
+
+        @Override
+        public WhatAQuestionStandsOn stopped() {
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.sentTo(), filed.why()),
+                    Optional.empty());
+        }
+
+        @Override
+        public Object fact() {
+            return filed.fact();
+        }
+
+        @Override
+        public StandingQuestion mergedWith(StandingQuestion other) {
+            if (!(other instanceof BoundaryUndetermined it)) {
+                throw new IllegalArgumentException("a question nothing worked out and " + other
+                        + " are not two accounts of one thing");
+            }
+            if (!filed.fact().equals(it.filed.fact())) {
+                throw new IllegalArgumentException("two accounts put together are of one question: "
+                        + filed + " and " + it.filed);
+            }
+            Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
+            both.addAll(it.reachedBy);
+            return new BoundaryUndetermined(
+                    new BoundaryUndetermined.Filed(filed.rule(), filed.at(), filed.sentTo(),
+                    BlockReason.together(filed.why(), it.filed.why())),
+                    both, readAt.and(it.readAt));
+        }
+
+        @Override
+        public String toString() {
+            return "undetermined BOUNDARY of " + filed.rule() + " at " + filed.at();
+        }
+
+        /** Which rule, where, the call it stopped at and what stopped it — the whole of what makes
+         *  two of these one, for the reason {@link Exact.Fact} gives about the citation, with the
+         *  figures the reason was met at left out for the one {@link NothingClassifiesIt.Filed}
+         *  gives. */
+        public record Filed(RuleRef rule, FilingCoordinate at, RuleSite sentTo,
+                            BlockReason.RuleReadingStopped why) {
+
+            public Filed {
+                if (rule == null || at == null || sentTo == null || why == null) {
+                    throw new IllegalArgumentException("a question nothing worked out is one of"
+                            + " one rule, filed somewhere, for a reason");
+                }
+            }
+
+            /** What makes two of these one, as {@link NothingClassifiesIt.Filed#fact} says. */
+            Object fact() {
+                return List.of(rule, at, sentTo, BlockReason.factOf(why));
+            }
+        }
+    }
+
+    /**
+     * A rule whose classes of a position were shown over some of its values, and which class the
+     * rest are in nothing worked out.
+     *
+     * <p>Beside {@link BoundaryUndetermined}, and the other half of it. There the classes close and
+     * the border is open; here the classes stand over what was shown, the values they do not hold
+     * are open, and the rule has no border on them to leave open.
+     *
+     * @param filed which rule, where it was filed and what the showing stopped at
+     * @param reachedBy every question a reader was offered for that rule, empty exactly where the
+     *                  author named it
+     */
+    record RegionUndetermined(RegionUndetermined.Filed filed,
+                              Set<RuleReportAnchor> reachedBy, ModelOccurrences readAt)
+            implements Unclassified {
+
+        public RegionUndetermined {
+            if (filed == null || readAt == null) {
+                throw new IllegalArgumentException("a question nothing worked out is one question,"
+                        + " of one rule, filed somewhere");
+            }
+            reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
+            RuleCitation.requireReached(filed.rule(), reachedBy);
+        }
+
+        /** One reader's account of it, as that reader produced it, read at {@code readAt}. */
+        public static RegionUndetermined of(RuleCitation cited, ModelOccurrences readAt,
+                                            FilingCoordinate at,
+                                            BlockReason.RelationShownOverARegion why) {
+            return new RegionUndetermined(new RegionUndetermined.Filed(cited.rule(), at, why),
                     RuleCitation.anchorOf(cited), readAt);
         }
 
@@ -501,34 +643,42 @@ public sealed interface StandingQuestion {
             return filed.fact();
         }
 
+        /**
+         * <p>Two accounts of one rule at one place agree on what is open there, or they are two
+         * readings of the rule that showed different values: the open values are a fact about the
+         * position and the rule, so two that differ are refused.
+         */
         @Override
         public StandingQuestion mergedWith(StandingQuestion other) {
-            if (!(other instanceof BoundaryUndetermined it)) {
+            if (!(other instanceof RegionUndetermined it)) {
                 throw new IllegalArgumentException("a question nothing worked out and " + other
                         + " are not two accounts of one thing");
             }
-            if (!filed.fact().equals(it.filed.fact())) {
+            if (!filed.equals(it.filed)) {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + filed + " and " + it.filed);
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new BoundaryUndetermined(
-                    new BoundaryUndetermined.Filed(filed.rule(), filed.at(),
-                    BlockReason.together(filed.why(), it.filed.why())),
-                    both, readAt.and(it.readAt));
+            return new RegionUndetermined(filed, both, readAt.and(it.readAt));
         }
 
         @Override
         public String toString() {
-            return "undetermined BOUNDARY of " + filed.rule() + " at " + filed.at();
+            return "undetermined region of " + filed.rule() + " at " + filed.at();
         }
 
-        /** Which rule, where and what stopped it — the whole of what makes two of these one, for
-         *  the reason {@link Exact.Fact} gives about the citation, with the figures the reason was
-         *  met at left out for the one {@link NothingClassifiesIt.Filed} gives. */
+        /**
+         * Which rule, where and what of it is open — the whole of what makes two of these one, for
+         * the reason {@link Exact.Fact} gives about the citation.
+         *
+         * <p>What a report says of the values open, and not the values. A question is carried by
+         * every answer that waits on it, and a set of strings is a machine compared by where it
+         * is: held here, it would stand under all of them. The values are worked out and used where
+         * the classes are composed, which is the one reader that needs them.
+         */
         public record Filed(RuleRef rule, FilingCoordinate at,
-                            BlockReason.RuleReadingStopped why) {
+                            BlockReason.RelationShownOverARegion why) {
 
             public Filed {
                 if (rule == null || at == null || why == null) {
@@ -537,9 +687,9 @@ public sealed interface StandingQuestion {
                 }
             }
 
-            /** What makes two of these one, as {@link NothingClassifiesIt.Filed#fact} says. */
+            /** What makes two of these one: all of it. */
             Object fact() {
-                return List.of(rule, at, BlockReason.factOf(why));
+                return List.of(rule, at, why);
             }
         }
     }

@@ -2,10 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -40,14 +43,19 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
     private final N names;
     private final Symbols symbols;
 
+    /** Which declarations are one value wearing a name, where the reader folds a construction of
+     *  one to the value it wraps; none where it does not. */
+    private final DeclarationNewtypes wearing;
+
     /** What each name came to, by what it stands for where it is read ({@link
      *  ValueStanding.Names#standingOf}), told apart by identity. */
     private final Map<Object, Map<BindingId, Optional<Object>>> folded;
 
-    private FoldedValue(N names, Symbols symbols,
+    private FoldedValue(N names, Symbols symbols, DeclarationNewtypes wearing,
                         Map<Object, Map<BindingId, Optional<Object>>> folded) {
         this.names = names;
         this.symbols = symbols;
+        this.wearing = wearing;
         this.folded = folded;
     }
 
@@ -55,7 +63,21 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      *  compile-time constant. */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols) {
-        return new FoldedValue<>(names, symbols, new IdentityHashMap<>()).eval(e, at);
+        // Most expressions read no name, or one standing: a table for a few, not for sixty-four.
+        return new FoldedValue<>(names, symbols, DeclarationNewtypes.NONE,
+                new IdentityHashMap<>(2)).eval(e, at);
+    }
+
+    /**
+     * The same, where a construction of a newtype of {@code wearing} is the value it wraps.
+     *
+     * <p>For a reader that asks for the value a position holds under whatever names it wears —
+     * the value a source writes where a place of a newtype's type is asked for — and not for what
+     * a rule is discharged on, which a construction is not a constant of.
+     */
+    public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> underItsNames(
+            Core e, E at, N names, Symbols symbols, DeclarationNewtypes wearing) {
+        return new FoldedValue<>(names, symbols, wearing, new IdentityHashMap<>(2)).eval(e, at);
     }
 
     /**
@@ -67,7 +89,12 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols, Kept kept) {
-        return new FoldedValue<>(names, symbols, kept.folded).eval(e, at);
+        // A fold puts a name down as "not a constant" while it is folded, which another reading of
+        // the same table must not see, so the table is read by one fold at a time.
+        synchronized (kept) {
+            return new FoldedValue<>(names, symbols, DeclarationNewtypes.NONE, kept.folded)
+                    .eval(e, at);
+        }
     }
 
     /**
@@ -106,9 +133,16 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
             case Core.Decimal d -> Optional.of(d.value());
             case Core.Str s -> Optional.of(s.value());
             case Core.Bool b -> Optional.of(b.value());
+            // The value under the names it wears, for a reader that asks for it: a newtype is one
+            // value wearing a name.
+            case Core.Construct worn when worn.values().size() == 1 && wearing.wraps(worn.type()) ->
+                    eval(worn.values().getFirst().value(), at);
             case Core.Neg n -> ConstantAlgebra.negate(eval(n.operand(), at).orElse(null));
             case Core.Binary b -> binary(b, at);
             case Core.PreservedCall call -> call(call, at);
+            // The arm the condition takes and no other, as a run works it out.
+            case Core.If choice -> eval(choice.cond(), at).orElse(null) instanceof Boolean taken
+                    ? eval(taken ? choice.then() : choice.els(), at) : Optional.empty();
             case null, default -> Optional.empty();
         };
     }
@@ -124,18 +158,24 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         if (already != null) {
             return already;
         }
-        long[] counting = FOLDED;
-        if (counting != null) {
-            counting[0]++;
-        }
         // Put before the fold as "not a constant", so a name that reaches itself answers rather
         // than going round.
         here.put(read.binding(), Optional.empty());
         Optional<Object> answer = ValueStanding.named(read, at, names)
                 instanceof ValueStanding.Named.One<E, N>(ValueStanding.Standing<E, N> one)
-                ? eval(one.value(), one.at()) : Optional.empty();
+                ? ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FOLD,
+                        one.value(), one.at(), () -> foldedAfresh(one))
+                : Optional.empty();
         here.put(read.binding(), answer);
         return answer;
+    }
+
+    private Optional<Object> foldedAfresh(ValueStanding.Standing<E, N> one) {
+        long[] counting = FOLDED;
+        if (counting != null) {
+            counting[0]++;
+        }
+        return eval(one.value(), one.at());
     }
 
     private Optional<Object> binary(Core.Binary b, E at) {
@@ -152,9 +192,60 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         return ConstantAlgebra.binary(b.op(), left.get(), right.get());
     }
 
+    /** The furthest from nought a scale is folded at, which no rounding a model writes is past. */
+    private static final int MOST_SCALE = 1000;
+
+    /**
+     * What a rounding to a step comes to, for an operation the library says rounds: the number
+     * taken to the scale, rounded the way the policy written there rounds, and written at it.
+     *
+     * <p>Which operations round, which of their arguments are the scale, the policy and the number,
+     * and what each way of rounding does are the library's to say ({@link ARounding}), asked here as
+     * every other reader of a rounding asks. Folded with a way of the compiler's own, a rounding
+     * would be one thing where it is discharged and another where its bounds are read.
+     */
+    private Optional<Object> rounded(Core.PreservedCall call, E at) {
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        ARounding rounds = applied == null ? null
+                : DefaultBoundOperationFacts.get().rounding(applied);
+        if (rounds == null) {
+            return Optional.empty();
+        }
+        Object scale = rounds.scale() == null ? Long.valueOf(0)
+                : eval(rounds.scale(), at).orElse(null);
+        WholeRounding way = rounds.wayOf(Core.withoutStanding(rounds.policy()));
+        Object folded = eval(rounds.rounded(), at).orElse(null);
+        ExactRatio number = folded == null ? null : ConstantAlgebra.exactly(folded);
+        if (!(scale instanceof Long places) || way == null || number == null
+                || Math.abs(places) > MOST_SCALE
+                || !ARounding.hasRoomAtAScale(BigInteger.valueOf(places))) {
+            return Optional.empty();
+        }
+        ExactRatio ten = ExactRatio.of(BigInteger.TEN.pow((int) Math.abs(places)));
+        ExactRatio scaled = (places >= 0 ? number.times(ten) : number.dividedBy(ten)).orNull();
+        BigInteger whole = scaled == null ? null : way.of(scaled);
+        if (whole == null) {
+            return Optional.empty();
+        }
+        if (call.type() == Type.DECIMAL) {
+            return Optional.of(new BigDecimal(whole, (int) (long) places));
+        }
+        return whole.bitLength() < Long.SIZE ? Optional.of(whole.longValue()) : Optional.empty();
+    }
+
     private Optional<Object> call(Core.PreservedCall call, E at) {
         if (!(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return Optional.empty();
+        }
+        // A denial is kept as the call it is, and what it answers is its law's to say, which is
+        // the reading of a clause's own word for it ({@link DischargeRules#denies}).
+        if (DischargeRules.denies(operation) && call.args().size() == 1) {
+            return eval(call.args().getFirst(), at).orElse(null) instanceof Boolean held
+                    ? Optional.of(!held) : Optional.empty();
+        }
+        Optional<Object> rounding = rounded(call, at);
+        if (rounding.isPresent()) {
+            return rounding;
         }
         Kernel kernel = symbols.kernelOf(operation);
         if (kernel == null) {

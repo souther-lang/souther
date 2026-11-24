@@ -89,6 +89,11 @@ public enum FailurePhase {
      * the model — how many frames a stack holds is decided by how large they are. */
     STACK_EXHAUSTED,
 
+    /** The evaluation was short of the room the platform supplies for an answer it worked out — a
+     * decimal past the scales its representation keeps, say. Not a statement about the model
+     * either: the answer is a value, and a platform with more room writes it. */
+    OUT_OF_ROOM,
+
     /**
      * A value this compile built could not be put in the form the answer reads it by.
      *
@@ -116,7 +121,7 @@ public enum FailurePhase {
             case INPUT_FIXTURE, EXPECTED_FIXTURE, FAKE_RESOLUTION, ENSURES, INVOCATION, COMPARISON ->
                     true;
             case NONE, ANSWERER_ESTABLISHMENT, IMPLEMENTATION_NOT_MADE, STEP_LIMIT, DEPTH_LIMIT,
-                 TIMEOUT, STACK_EXHAUSTED, VALUE_CROSSING -> false;
+                 TIMEOUT, STACK_EXHAUSTED, OUT_OF_ROOM, VALUE_CROSSING -> false;
         };
     }
 }

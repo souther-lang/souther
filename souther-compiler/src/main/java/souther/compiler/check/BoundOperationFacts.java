@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import net.unit8.notation199x.pattern.CodePoints;
+import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -29,6 +30,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -88,12 +91,17 @@ public final class BoundOperationFacts {
             Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>>> several =
             new LinkedHashMap<>();
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> bounds;
+    private final Map<ValueName, List<ResultBound<DeclaredArgument>>> linesOfTheOperation;
+    private final Map<ValueName, List<ResultBound<DeclaredArgument>>> eachElementBounds;
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
     private final Map<ValueName, List<LawProposition<Slot>>> relations;
     private final Stdlib stdlib;
     private final Map<ValueName, Map<OperationLaw.Observed, Settled>> settled;
+    /** What proved the operations the library writes, which is asked what else is proved of
+     *  their bodies once everything is settled. */
+    private final LibraryProofs proved;
     private final List<BoundOperationFact> notProvedOfTheirBodies;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
@@ -121,6 +129,7 @@ public final class BoundOperationFacts {
                 BoundOperationFact.HasALaw::beside));
         Settling settling = settle(awaiting, proofs);
         settled = settling.settled();
+        proved = settling.proving();
         // One the body does not prove is an obligation, held apart, and no reader takes it. The
         // cases a definition is written in stand or fall together: a reader takes them as every
         // way the operation answers, so they are filed where every one of them is proved and some
@@ -151,7 +160,10 @@ public final class BoundOperationFacts {
                 BoundOperationFact.ResultIsNoSmallerThan::container);
         bounds = projected(BoundOperationFact.BoundsItsResult.class,
                 BoundOperationFact.BoundsItsResult::bound);
-        cases = projected(BoundOperationFact.IsDefinedByCases.class,
+        linesOfTheOperation = ofTheOperation(bounds);
+        eachElementBounds = projected(BoundOperationFact.BoundsEachElementOfItsResult.class,
+                BoundOperationFact.BoundsEachElementOfItsResult::bound);
+        cases =projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
     }
 
@@ -179,8 +191,7 @@ public final class BoundOperationFacts {
     private Map<BinOp, List<ValueName>> writtenAs() {
         Map<BinOp, List<ValueName>> out = new LinkedHashMap<>();
         for (ValueName operation : computesANumber()) {
-            NumericResult<DeclaredArgument> result = computesANumber(operation);
-            BinOp op = result == null ? null : result.computes().writtenAs();
+            BinOp op = operatorComputedBy(operation);
             if (op != null) {
                 List<ValueName> computing = out.get(op);
                 if (computing == null) {
@@ -190,6 +201,21 @@ public final class BoundOperationFacts {
                 computing.add(operation);
             }
         }
+        return Collections.unmodifiableMap(out);
+    }
+
+    /** {@code all} less the ends a position is not divided at, and less an operation left with
+     *  none. */
+    private static Map<ValueName, List<ResultBound<DeclaredArgument>>> ofTheOperation(
+            Map<ValueName, List<ResultBound<DeclaredArgument>>> all) {
+        Map<ValueName, List<ResultBound<DeclaredArgument>>> out = new LinkedHashMap<>();
+        all.forEach((operation, rows) -> {
+            List<ResultBound<DeclaredArgument>> lines = rows.stream()
+                    .filter(ResultBound::isDrawnTo).toList();
+            if (!lines.isEmpty()) {
+                out.put(operation, lines);
+            }
+        });
         return Collections.unmodifiableMap(out);
     }
 
@@ -298,6 +324,11 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ShiftsBy.class);
     }
 
+    /** How {@code operation} moves a date by months, or null where it moves none so. */
+    public BoundOperationFact.MovesADateByMonths movesADateByMonths(ValueName operation) {
+        return one(BoundOperationFact.MovesADateByMonths.class, operation);
+    }
+
     /** How {@code operation} counts whole units between its two arguments, or null where it
      *  counts none. */
     public BoundOperationFact.CountsWholeUnitsBetween countsWholeUnitsBetween(
@@ -310,20 +341,207 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
     }
 
-    /** How {@code operation} rounds a number to a whole one, or null where it rounds none. */
-    public BoundOperationFact.RoundsToAWholeNumber roundsToAWholeNumber(ValueName operation) {
-        return one(BoundOperationFact.RoundsToAWholeNumber.class, operation);
+    /** How {@code operation} counts the whole units of its argument in a coarser order, or null
+     *  where it counts none. */
+    public BoundOperationFact.CountsTheWholeUnitsOf countsTheWholeUnitsOf(ValueName operation) {
+        return one(BoundOperationFact.CountsTheWholeUnitsOf.class, operation);
+    }
+
+    /** How many steps of the order its argument is counted on make one step of the order
+     *  {@code operation} answers on, or empty where it counts no whole units. */
+    public OptionalLong wholeUnitsPerStep(ValueName operation) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
+        return counts == null ? OptionalLong.empty() : OptionalLong.of(counts.perUnit());
+    }
+
+    /** What {@code applied} is handed to count the whole units of, or null where its operation
+     *  counts none. */
+    public Core wholeUnitsCountedIn(AnOperationApplied applied) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts =
+                applied == null ? null : countsTheWholeUnitsOf(applied.operation());
+        return counts == null ? null : applied.argument(counts.of());
+    }
+
+    /** The type of the step {@code operation} answers, or null where it counts no whole units. */
+    public Type wholeUnitsAnswered(ValueName operation) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
+        return counts == null ? null : counts.answers();
+    }
+
+    /** The type of the value {@code operation} counts the whole units of, or null where it counts
+     *  none. */
+    public Type wholeUnitsCountedOn(ValueName operation) {
+        BoundOperationFact.CountsTheWholeUnitsOf counts = countsTheWholeUnitsOf(operation);
+        return counts == null ? null : counts.of().stands();
+    }
+
+    /** How {@code operation} rounds a number to a whole one, or null where it rounds none to a
+     *  whole number. */
+    public BoundOperationFact.RoundsToAStep roundsToAWholeNumber(ValueName operation) {
+        BoundOperationFact.RoundsToAStep rounds = roundsToAStep(operation);
+        return rounds != null && rounds.toAWholeNumber() ? rounds : null;
+    }
+
+    /** How {@code operation} rounds a number to a step, at a scale or to a whole number, or null
+     *  where it rounds none. */
+    public BoundOperationFact.RoundsToAStep roundsToAStep(ValueName operation) {
+        return one(BoundOperationFact.RoundsToAStep.class, operation);
+    }
+
+    /** {@code applied} as a rounding of a number to a step, or null where the operation it
+     *  applies rounds none or it hands nothing where the law reads. */
+    public ARounding rounding(AnOperationApplied applied) {
+        BoundOperationFact.RoundsToAStep rounds = roundsToAStep(applied.operation());
+        return rounds == null ? null : ARounding.of(applied, rounds);
     }
 
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
-     *  declared. */
+     *  declared, less the places the representation stops that a position is not divided at
+     *  ({@link #everyBoundOnTheResult}). What a position is divided into reads these. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
+        return operation == null ? List.of() : linesOfTheOperation.getOrDefault(operation, List.of());
+    }
+
+    /** Every end of the number {@code operation} answers, the places the representation stops
+     *  included: what a value can be, for a reader asking whether one can stand. */
+    public List<ResultBound<DeclaredArgument>> everyBoundOnTheResult(ValueName operation) {
         return operation == null ? List.of() : bounds.getOrDefault(operation, List.of());
     }
 
+    /** What holds of every number in the list {@code operation} answers, wherever it is called, in
+     *  the order declared. */
+    public List<ResultBound<DeclaredArgument>> boundsOnEachElementOfTheResult(ValueName operation) {
+        return operation == null ? List.of() : eachElementBounds.getOrDefault(operation, List.of());
+    }
+
+    /** The operations something holds of each element of the result of. */
+    public Set<ValueName> boundsOnEachElementOfTheResult() {
+        return eachElementBounds.keySet();
+    }
+
+    /**
+     * The key and the container {@code operation} answers the value filed under that key of, or null
+     * where it says no such thing ({@link BoundOperationFact.AnswersTheValueFiledUnder}).
+     */
+    public Lookup looksUp(ValueName operation) {
+        BoundOperationFact.AnswersTheValueFiledUnder held =
+                one(BoundOperationFact.AnswersTheValueFiledUnder.class, operation);
+        return held == null ? null : new Lookup(held.key(), held.container());
+    }
+
+    /**
+     * The index and the list {@code operation} answers the element at that index of, or null where
+     * it says no such thing ({@link BoundOperationFact.AnswersTheElementAt}).
+     */
+    public ElementAt elementAt(ValueName operation) {
+        BoundOperationFact.AnswersTheElementAt held =
+                one(BoundOperationFact.AnswersTheElementAt.class, operation);
+        return held == null ? null : new ElementAt(held.index(), held.list());
+    }
+
+    /** The argument an element is picked at, and the list it is picked from. */
+    public record ElementAt(DeclaredArgument index, DeclaredArgument list) {}
+
+    /** The argument a value is looked up under, and the one that files it. */
+    public record Lookup(DeclaredArgument key, DeclaredArgument container) {}
+
+    /**
+     * The member and the container {@code operation} answers whether the second holds the first
+     * of, or null where its answer is true for some other reason: read off its law of truth, which
+     * says it is true exactly where some element of a container, or some key of it, is a value it
+     * was given.
+     */
+    public Membership holdsAMember(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw<DeclaredArgument> law, var _))
+                || !(law instanceof OperationLaw.Observation<DeclaredArgument>(
+                        AnswerAspect aspect, LawProposition<DeclaredArgument> equivalent))
+                || aspect != AnswerAspect.TRUTH
+                || !(equivalent instanceof LawProposition.SomeElement<DeclaredArgument>(
+                        DeclaredArgument container, LawProposition<DeclaredArgument> held,
+                        boolean some))
+                || !some
+                || !(held instanceof LawProposition.Same<DeclaredArgument>(
+                        LawSubject<DeclaredArgument> held1,
+                        LawSubject<DeclaredArgument> given, boolean same))
+                || !same || !(given instanceof LawSubject.Argument<DeclaredArgument>(
+                        DeclaredArgument member))) {
+            return null;
+        }
+        if (held1 instanceof LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument of)
+                && of.equals(container)) {
+            return new Membership(member, container, true);
+        }
+        return held1 instanceof LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument of)
+                && of.equals(container) ? new Membership(member, container, false) : null;
+    }
+
+    /** The argument looked for, the one it is looked for in, and whether what is looked for is a
+     *  key of a map and not an element. */
+    public record Membership(DeclaredArgument member, DeclaredArgument container, boolean aKey) {}
+
+    /**
+     * The container whose element {@code operation} answers where it answers a value, or null where
+     * it says no such thing ({@link BoundOperationFact.AnswersAnElementOf}).
+     */
+    public DeclaredArgument answersAnElementOf(ValueName operation) {
+        BoundOperationFact.AnswersAnElementOf held =
+                one(BoundOperationFact.AnswersAnElementOf.class, operation);
+        return held == null ? null : held.source();
+    }
+
+    /**
+     * The container whose greatest or least element {@code operation} answers where it answers a
+     * value, and which end — or null where it says no such thing
+     * ({@link BoundOperationFact.AnswersAnExtremeElementOf}).
+     */
+    public Extremity answersAnExtremeElementOf(ValueName operation) {
+        BoundOperationFact.AnswersAnExtremeElementOf held =
+                one(BoundOperationFact.AnswersAnExtremeElementOf.class, operation);
+        return held == null ? null : new Extremity(held.source(), held.end());
+    }
+
+    /** The container an answer is an end of, and which end. */
+    public record Extremity(DeclaredArgument container, End end) {}
+
+    /** Which end of the elements of a container an answer is: the one no element is above, or the
+     *  one no element is below, by the order the comparison operators put them in. */
+    public enum End {
+        GREATEST,
+        LEAST
+    }
+
+    /**
+     * The container {@code operation} finds an element of and the closure that element is found
+     * by, where what it answers holds, if it holds a value, an element of that container the closure
+     * answers true on — or null where it says no such thing
+     * ({@link BoundOperationFact.AnswersAnElementWhereTheClosureHolds}).
+     */
+    public Found answersAnElementWhereTheClosureHolds(ValueName operation) {
+        BoundOperationFact.AnswersAnElementWhereTheClosureHolds held =
+                one(BoundOperationFact.AnswersAnElementWhereTheClosureHolds.class, operation);
+        return held == null ? null : new Found(held.source(), held.closure());
+    }
+
+    /** The container an element is found among, and the closure it is found by. */
+    public record Found(DeclaredArgument source, DeclaredArgument closure) {}
+
+    /**
+     * The arguments {@code operation} answers every whole number between, from the first up — or
+     * null where it says no such thing ({@link BoundOperationFact.HoldsEachWholeNumberInTurn}).
+     */
+    public Between holdsEachWholeNumberInTurn(ValueName operation) {
+        BoundOperationFact.HoldsEachWholeNumberInTurn held =
+                one(BoundOperationFact.HoldsEachWholeNumberInTurn.class, operation);
+        return held == null ? null : new Between(held.from(), held.to());
+    }
+
+    /** The argument the numbers start at and the one they end at. */
+    public record Between(DeclaredArgument from, DeclaredArgument to) {}
+
     /** The operations something holds of the result of. */
     public Set<ValueName> boundsOnTheResult() {
-        return bounds.keySet();
+        return linesOfTheOperation.keySet();
     }
 
     /** What {@code operation} builds its result from, or null where it builds none. */
@@ -467,6 +685,27 @@ public final class BoundOperationFacts {
     public record Assembled(DeclaredArgument source, DeclaredArgument closure,
                             PieceOfAnElement piece) {}
 
+    /** The argument whose elements {@code operation} keeps where a closure holds of them, and the
+     *  closure — or null where nothing says it does
+     *  ({@link BoundOperationFact.KeepsTheElementsWhereItHolds}). */
+    public Kept keepsWhereItHolds(ValueName operation) {
+        BoundOperationFact.KeepsTheElementsWhereItHolds held =
+                one(BoundOperationFact.KeepsTheElementsWhereItHolds.class, operation);
+        return held == null ? null : new Kept(held.source(), held.closure());
+    }
+
+    /** The argument whose elements are kept, and the closure that decides which. */
+    public record Kept(DeclaredArgument source, DeclaredArgument closure) {}
+
+    /** The argument whose entries {@code operation} keeps where a closure holds of the key and the
+     *  value, and the closure — or null where nothing says it does
+     *  ({@link BoundOperationFact.KeepsTheEntriesWhereItHolds}). */
+    public Kept keepsEntriesWhereItHolds(ValueName operation) {
+        BoundOperationFact.KeepsTheEntriesWhereItHolds held =
+                one(BoundOperationFact.KeepsTheEntriesWhereItHolds.class, operation);
+        return held == null ? null : new Kept(held.source(), held.closure());
+    }
+
     /** The count and the list {@code operation} answers the elements of that list kept by that
      *  index of, and which side of it it keeps — or null where nothing says it does. */
     public KeptByIndex holdsTheElementsByIndex(ValueName operation) {
@@ -478,6 +717,27 @@ public final class BoundOperationFacts {
     /** The count an operation keeps the elements of a list by, that list, and how the index of
      *  each element kept stands to the count. */
     public record KeptByIndex(DeclaredArgument count, DeclaredArgument list, Rel kept) {}
+
+    /**
+     * The operation that keeps the elements {@code operation} leaves, given the same count and the
+     * same list — which together with {@code operation} hold every element once — or null where
+     * there is none.
+     */
+    public ValueName holdingTheOtherSideOfTheIndex(ValueName operation) {
+        KeptByIndex mine = holdsTheElementsByIndex(operation);
+        if (mine == null) {
+            return null;
+        }
+        for (ValueName other : ones(BoundOperationFact.HoldsTheElementsByIndex.class)) {
+            KeptByIndex theirs = holdsTheElementsByIndex(other);
+            if (theirs.kept() == mine.kept().denied()
+                    && theirs.count().position() == mine.count().position()
+                    && theirs.list().position() == mine.list().position()) {
+                return other;
+            }
+        }
+        return null;
+    }
 
     /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
      *  the proofs of what the library's written operations build, and by no reader of a
@@ -506,6 +766,12 @@ public final class BoundOperationFacts {
     public Settled settled(ValueName operation, OperationLaw.Observed observed) {
         Map<OperationLaw.Observed, Settled> of = operation == null ? null : settled.get(operation);
         return of == null ? null : of.get(observed);
+    }
+
+    /** What proved the operations the library writes, for what is asked of their bodies once
+     *  every law of the library is settled ({@link LibraryEndings}). */
+    LibraryProofs proofs() {
+        return proved;
     }
 
     /** What is stated of operations the library writes that their bodies do not prove, and that
@@ -641,7 +907,8 @@ public final class BoundOperationFacts {
     }
 
     /** What is stated of {@code operation}'s answer beside what other kernels answer, in the
-     *  words of a walk, for the proofs of the library's written operations. */
+     *  words of a walk: every one, for what the axioms are checked against and for the readers of
+     *  these. A proof is handed what {@link LibraryUnderProof#relations} leaves of them. */
     List<LawProposition<Slot>> relationsOf(ValueName operation) {
         return operation == null ? List.of() : relations.getOrDefault(operation, List.of());
     }
@@ -659,11 +926,21 @@ public final class BoundOperationFacts {
                 OperationLaw<DeclaredArgument> law, var _))) {
             return null;
         }
-        List<LawProposition<Slot>> beside = new ArrayList<>(relationsOf(operation));
+        return AddsWhatItDoesNotHold.of(operation, law, provedRelationsOf(operation),
+                this::askedWhetherItHolds);
+    }
+
+    /**
+     * What is stated of {@code operation}'s answer beside what other operations answer, as a
+     * reader of a program may take it: declared of a kernel, and of an operation the library
+     * writes only once its body has proved it.
+     */
+    public List<LawProposition<Slot>> provedRelationsOf(ValueName operation) {
+        List<LawProposition<Slot>> out = new ArrayList<>(relationsOf(operation));
         several.getOrDefault(BoundOperationFact.HasARelatedLemma.class, Map.of())
                 .getOrDefault(operation, List.of())
-                .forEach(each -> beside.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
-        return AddsWhatItDoesNotHold.of(operation, law, beside, this::askedWhetherItHolds);
+                .forEach(each -> out.add(((BoundOperationFact.HasARelatedLemma) each).holds()));
+        return out;
     }
 
     /**
@@ -772,50 +1049,16 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * Where {@code operation} comes out true exactly where no two elements of a container it is
-     * handed come to one answer of a closure it is handed: which argument is the container and
-     * which the closure — or null where it states no such thing.
-     *
-     * <p>Read off the law its body is proved to come to: as many different answers of that closure
-     * on the container's elements as the container holds elements.
+     * Whether {@code operation} comes out true exactly where some element of a container it is
+     * handed meets what it asks of an element, or exactly where none does, as the law settling its
+     * truth says: the quantifiers over a container, and whatever is written like them.
      */
-    public NoTwoAlike statesNoTwoAlike(ValueName operation) {
-        if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
-                OperationLaw.Observation<DeclaredArgument>(var _,
-                        LawProposition.Compared<DeclaredArgument>(var form, Rel states)), var _))
-                || states != Rel.EQ || !form.constant().isZero() || form.coefs().size() != 2) {
-            return null;
-        }
-        DeclaredArgument container = null;
-        DeclaredArgument by = null;
-        DeclaredArgument sized = null;
-        ExactRatio different = null;
-        ExactRatio size = null;
-        for (var term : form.coefs().entrySet()) {
-            switch (term.getKey()) {
-                case LawNumber.HowManyDifferent<DeclaredArgument>(var over,
-                        LawSubject.WhatTheClosureAnswers<DeclaredArgument>(var closure)) -> {
-                    container = over;
-                    by = closure;
-                    different = term.getValue();
-                }
-                case LawNumber.SizeOf<DeclaredArgument>(
-                        LawSubject.Argument<DeclaredArgument>(var of)) -> {
-                    sized = of;
-                    size = term.getValue();
-                }
-                default -> {
-                    return null;
-                }
-            }
-        }
-        return container == null || !container.equals(sized)
-                || !different.negated().equals(size) ? null : new NoTwoAlike(container, by);
+    public boolean quantifiesOverTheElementsItIsHanded(ValueName operation) {
+        return settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(AnswerAspect aspect,
+                        LawProposition.SomeElement<DeclaredArgument> _), var _)
+                && aspect == AnswerAspect.TRUTH;
     }
-
-    /** The container no two elements of which are alike, and the closure whose answers they are
-     *  alike by. */
-    public record NoTwoAlike(DeclaredArgument container, DeclaredArgument by) {}
 
     /** Whether {@code operation} states its predicate of every element. */
     public boolean statesItsPredicateOfEveryElement(ValueName operation) {
@@ -833,6 +1076,66 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.MeansTheSameAsASizeOfNought.class, operation);
     }
 
+    /** The operator {@code operation} is, or null where it is none
+     *  ({@link BoundOperationFact.IsTheOperator}). */
+    public BinOp operatorOf(ValueName operation) {
+        BoundOperationFact.IsTheOperator held =
+                one(BoundOperationFact.IsTheOperator.class, operation);
+        return held == null ? null : held.operator();
+    }
+
+    /** Whether {@code operation} is the operator that puts two values end to end, over lists. */
+    public boolean putsListsEndToEnd(ValueName operation) {
+        return operandOf(operation, BinOp.CONCAT) instanceof Type.ListOf;
+    }
+
+    /** The type {@code operation} takes two of where it is {@code operator}, or null where it is
+     *  not that operator. */
+    Type operandOf(ValueName operation, BinOp operator) {
+        BoundOperationFact.IsTheOperator held =
+                one(BoundOperationFact.IsTheOperator.class, operation);
+        return held == null || held.operator() != operator ? null : held.operand().stands();
+    }
+
+    /**
+     * The operation {@code operator} is over two values of {@code operand}, or null where none is
+     * declared to be: the one whose declared type {@code operand} is an instance of.
+     */
+    public ValueName operationFor(BinOp operator, Type operand) {
+        for (ValueName operation : ones(BoundOperationFact.IsTheOperator.class)) {
+            Type declared = operandOf(operation, operator);
+            if (declared != null && instanceOf(operand, declared)) {
+                return operation;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code actual} is the type {@code declared} stands for with its variables filled
+     *  in, to the depth a declared operand is written: a container of anything is any container
+     *  of that kind. */
+    private static boolean instanceOf(Type actual, Type declared) {
+        return switch (declared) {
+            case Type.Var _ -> true;
+            case Type.ListOf l -> actual instanceof Type.ListOf a
+                    && instanceOf(a.element(), l.element());
+            case Type.SetOf l -> actual instanceof Type.SetOf a
+                    && instanceOf(a.element(), l.element());
+            case Type.OptionOf l -> actual instanceof Type.OptionOf a
+                    && instanceOf(a.element(), l.element());
+            case Type.MapOf l -> actual instanceof Type.MapOf a
+                    && instanceOf(a.key(), l.key()) && instanceOf(a.value(), l.value());
+            default -> declared.equals(actual);
+        };
+    }
+
+    /** What {@code operation} answers where it is given a string at a place: the operation it then
+     *  agrees with, or null where it agrees with none. */
+    public BoundOperationFact.AgreesWithAnotherWhereItIsGivenText agreesWhereItIsGivenText(
+            ValueName operation) {
+        return one(BoundOperationFact.AgreesWithAnotherWhereItIsGivenText.class, operation);
+    }
+
     /** The emptiness checks. */
     public Set<ValueName> meansTheSameAsASizeOfNought() {
         return ones(BoundOperationFact.MeansTheSameAsASizeOfNought.class);
@@ -844,6 +1147,13 @@ public final class BoundOperationFacts {
         BoundOperationFact.ComputesANumber held =
                 one(BoundOperationFact.ComputesANumber.class, operation);
         return held == null ? null : held.result();
+    }
+
+    /** The operator whose arithmetic {@code operation} computes, or null where it computes
+     *  none that an operator is written as. */
+    public BinOp operatorComputedBy(ValueName operation) {
+        NumericResult<DeclaredArgument> result = computesANumber(operation);
+        return result == null ? null : result.computes().writtenAs();
     }
 
     /** The operations that compute arithmetic of their own. */
@@ -899,6 +1209,75 @@ public final class BoundOperationFacts {
      *  it accumulates nothing, including where the name is no operation of the library. */
     public BoundOperationFact.AccumulatesItsContainer accumulates(ValueName operation) {
         return one(BoundOperationFact.AccumulatesItsContainer.class, operation);
+    }
+
+    /**
+     * The type of what {@code operation} counts the contents of, as the library declares
+     * ({@link TakenAs.HowManyItHolds}): a string, or a list, set or map of anything. Null where it
+     * counts nothing.
+     */
+    public Type counted(ValueName operation) {
+        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven held =
+                one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
+        return held != null && held.how() instanceof TakenAs.HowManyItHolds
+                ? held.of().stands() : null;
+    }
+
+    /**
+     * The operation that counts what a value of type {@code carried} holds, as the library declares
+     * ({@link TakenAs.HowManyItHolds}): the one whose first argument is a value of that kind. Null
+     * where none counts it, or where more than one does and which is not for this to choose.
+     */
+    public ValueName.Stdlib countOf(Type carried) {
+        ValueName found = null;
+        for (ValueName operation : ones(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class)) {
+            BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven held =
+                    one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
+            if (held.how() instanceof TakenAs.HowManyItHolds
+                    && instanceOf(carried, held.of().stands())) {
+                if (found != null) {
+                    return null;
+                }
+                found = operation;
+            }
+        }
+        return (ValueName.Stdlib) found;
+    }
+
+    /**
+     * Whether {@code operation} adds up or multiplies what a container holds, as the library
+     * declares ({@link Accumulation.Combine}): it folds numbers, where joining lists or strings
+     * folds something else.
+     */
+    public boolean foldsNumbers(ValueName operation) {
+        Accumulation how = accumulation(operation);
+        return how != null && (how.combine() == Accumulation.Combine.ADD
+                || how.combine() == Accumulation.Combine.MULTIPLY);
+    }
+
+    /**
+     * The operation that adds up what a container holds from nought, as the library declares
+     * ({@link Accumulation.Combine#ADD}): the one a total of numbers over the elements of a list
+     * is filed as.
+     *
+     * <p>One, and refused where the library declares none or more: which of two a total is filed
+     * as would be decided by the order they are read in, and a reader handed none would find out
+     * when it was asked.
+     */
+    public ValueName.Stdlib totalOf() {
+        List<ValueName> adding = new ArrayList<>();
+        for (ValueName operation : ones(BoundOperationFact.AccumulatesItsContainer.class)) {
+            Accumulation how = accumulation(operation);
+            if (how.identity() == Accumulation.Identity.ZERO
+                    && how.combine() == Accumulation.Combine.ADD) {
+                adding.add(operation);
+            }
+        }
+        if (adding.size() != 1) {
+            throw new IllegalStateException("a total of numbers is filed as the one operation the"
+                    + " library declares to add up from nought, and it declares " + adding);
+        }
+        return (ValueName.Stdlib) adding.getFirst();
     }
 
     /** What walking {@code operation}'s container comes to, or null where it accumulates nothing. */
@@ -988,6 +1367,23 @@ public final class BoundOperationFacts {
         return Collections.unmodifiableSet(out);
     }
 
+    /**
+     * The operation of the library that takes {@code part} of a date, or null where none does.
+     * Read off the account rather than declared beside it, so a reader that has a date and wants
+     * its year asks the operation the account names.
+     */
+    public ValueName.Stdlib takesThePart(TakenAs.DatePart part) {
+        for (ValueName operation
+                : ones(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class)) {
+            if (operation instanceof ValueName.Stdlib library
+                    && takenAs(operation) instanceof TakenAs.PartOfDate(TakenAs.DatePart taken)
+                    && taken == part) {
+                return library;
+            }
+        }
+        return null;
+    }
+
     /** The operations that count what they are given, which is the narrower vocabulary a size is
      *  asked for under. Read off the account rather than declared beside it. */
     public Set<ValueName> countsWhatItIsGiven() {
@@ -1007,9 +1403,29 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.EveryAnswerItCanGiveHasASourceValue.class, operation) != null;
     }
 
-    /** Whether the least and the greatest number {@code operation} answers are where what it is
-     *  read out of stops, and not lines of the operation. */
+    /**
+     * Whether the least and the greatest number {@code operation} answers are both where what it
+     * is read out of stops, and neither a line of the operation.
+     *
+     * <p>The year of a date ends where a date can be written, so a comparison that a year at one
+     * of its ends settles is a comparison the representation settles and not one the model draws.
+     * A month ends at twelve whatever the date is and a length at nought: those are lines of the
+     * operation, and a value at one settles a comparison for a reason of its own. A length stops
+     * above at the longest string and below at nought, so it is not an operation whose ends are
+     * both the representation's: it has one of each, which is why this is read from the ends one
+     * at a time and not declared of the operation.
+     */
     public boolean endsAreWhereTheRepresentationStops(ValueName operation) {
-        return one(BoundOperationFact.EndsAreWhereTheRepresentationStops.class, operation) != null;
+        List<ResultBound<DeclaredArgument>> every = everyBoundOnTheResult(operation);
+        boolean least = false;
+        boolean greatest = false;
+        for (ResultBound<DeclaredArgument> each : every) {
+            if (!each.isWhereTheRepresentationStops()) {
+                return false;
+            }
+            least |= each.rel() == Rel.GE;
+            greatest |= each.rel() == Rel.LE;
+        }
+        return least && greatest;
     }
 }

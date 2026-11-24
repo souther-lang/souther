@@ -9,6 +9,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.LinearForm;
@@ -124,9 +125,15 @@ final class RunReach {
             // The nodes of a tree stand at no path a type is declared at, and what is taken over
             // them is how many there are, which no step of a walk adds up.
             case RunSource.ReachableNodes _ -> null;
+            // A product of two entries is a product of the runs two places hold, and the run of
+            // a product is not read off the runs of its factors here.
+            case RunSource.JoinedOccurrences _ -> null;
+            // The nodes of a line stand at no path either, and what is taken over them is how
+            // many there are.
+            case RunSource.SearchedLine _ -> null;
         };
-        Granularity answeredOn = spacingOf(orders.answered());
-        Granularity observedOn = spacingOf(orders.observed());
+        NumberSpace answeredOn = spaceOf(orders.answered());
+        NumberSpace observedOn = spaceOf(orders.observed());
         if (walk == null || element == null || answeredOn == null || observedOn == null) {
             return null;
         }
@@ -135,11 +142,11 @@ final class RunReach {
         if (seed == null || step == null) {
             return null;
         }
-        Map<Atom, Granularity> kinds =
+        Map<Atom, NumberSpace> spaces =
                 Map.of(Atom.ACCUMULATOR, answeredOn, Atom.ELEMENT, observedOn);
         return Induction.proves(element, guaranteed -> new Walked(
-                NumericDomain.top(IN_ONE_ORDER).assuming(Atom.ELEMENT, guaranteed, kinds),
-                guaranteed, seed, step, kinds));
+                NumericDomain.top(IN_ONE_ORDER).assuming(Atom.ELEMENT, guaranteed, spaces),
+                guaranteed, seed, step, spaces));
     }
 
     /**
@@ -191,60 +198,94 @@ final class RunReach {
                                                           TermPath elements, TermOrders orders,
                                                           Function<TermPath, Type> typeAt,
                                                           RuleReadingContext reading) {
-        switch (computation) {
+        return switch (computation) {
             case ElementValue.Affine affine -> {
                 NumericDomain<ElementProjection> domain = NumericDomain.top(BY_NAME);
-                Map<ElementProjection, Granularity> kinds = new LinkedHashMap<>();
+                Map<ElementProjection, NumberSpace> spaces = new LinkedHashMap<>();
                 for (ElementProjection field : affine.form().coefs().keySet()) {
                     Type at = typeAt.apply(field.from(elements));
                     NumericDomain.Bounds guaranteed = at == null ? null
                             : ValueGuarantees.of(at, reading).get(RuleKey.THE_VALUE);
-                    Granularity spacing = spacingOf(orders.fieldCarrier(field));
-                    if (guaranteed == null || spacing == null) {
-                        return null;
+                    NumberSpace space = spaceOf(orders.fieldCarrier(field));
+                    if (guaranteed == null || space == null) {
+                        yield null;
                     }
-                    kinds.put(field, spacing);
-                    domain = domain.assuming(field, guaranteed, kinds);
+                    spaces.put(field, space);
+                    domain = domain.assuming(field, guaranteed, spaces);
                 }
-                return domain.boundsOf(affine.form());
+                yield domain.boundsOf(affine.form());
             }
+            // Either answer at any element: which elements a run holds, and which positions it
+            // has, are the row's, and a range that assumed some of them would be narrower than a
+            // row of others reaches.
             case ElementValue.Choose choice -> {
-                NumericDomain.Bounds yes =
-                        ofWhatWasComputed(choice.whenSet(), elements, orders, typeAt, reading);
-                NumericDomain.Bounds no =
-                        ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
-                return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
-            }
-            // Either answer at any element: which positions a run has, and so which answers it
-            // takes, is the row's, and a range that assumed some of them would be narrower than
-            // a row of other positions reaches.
-            case ElementValue.ByPosition choice -> {
                 NumericDomain.Bounds yes =
                         ofWhatWasComputed(choice.whenHolds(), elements, orders, typeAt, reading);
                 NumericDomain.Bounds no =
                         ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
-                return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
+                yield yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
             }
             // The range of a weight that grows with the position turns on how many elements the run
             // has, which nothing here is told; no range is claimed.
-            case ElementValue.Indexed _ -> {
-                return null;
+            case ElementValue.Indexed _ -> null;
+            // Each product at what its fields multiplied reach, each rounding within a step of what
+            // it rounds, and the sum of them read off the same domain a form is, each term as one
+            // atom. The terms are not assumed to fall out together — two of them sharing a field
+            // move together — so this is the widest sum they allow.
+            case ElementValue.Multilinear products -> {
+                Granularity spacing = spacingOf(orders.observed());
+                if (spacing == null) {
+                    yield null;
+                }
+                Map<ElementProjection, NumericDomain.Bounds> fields = new LinkedHashMap<>();
+                for (ElementProjection field : products.reads()) {
+                    Type at = typeAt.apply(field.from(elements));
+                    NumericDomain.Bounds guaranteed = at == null ? null
+                            : ValueGuarantees.of(at, reading).get(RuleKey.THE_VALUE);
+                    if (guaranteed == null || spacingOf(orders.fieldCarrier(field)) == null) {
+                        yield null;
+                    }
+                    fields.put(field, guaranteed);
+                }
+                NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
+                Map<Integer, NumberSpace> spaces = new LinkedHashMap<>();
+                Map<Integer, ExactRatio> weights = new LinkedHashMap<>();
+                for (Map.Entry<ElementValue.Monomial, ExactRatio> each
+                        : products.form().coefs().entrySet()) {
+                    ElementValue.Rounding rounding = each.getKey().rounding();
+                    NumericDomain.Bounds reached = rounding == null ? null
+                            : withinAStepOf(rounding, ofWhatWasComputed(rounding.inner(),
+                                    elements, orders, typeAt, reading), spacing);
+                    if (rounding != null && reached == null) {
+                        yield null;
+                    }
+                    for (ElementProjection field : each.getKey().fields()) {
+                        reached = reached == null ? fields.get(field)
+                                : Intervals.product(reached, fields.get(field));
+                    }
+                    int part = weights.size();
+                    weights.put(part, each.getValue());
+                    // A product of fields is no value of any type, so nothing is said of its ends.
+                    spaces.put(part, NumberSpace.spacedOnly(spacing));
+                    domain = domain.assuming(part, reached, spaces);
+                }
+                yield domain.boundsOf(new LinearForm<>(products.form().constant(), weights));
             }
             case ElementValue.OfItsCase choice -> {
                 NumericDomain.Bounds every = choice.rest() == null ? null
                         : ofWhatWasComputed(choice.rest(), elements, orders, typeAt, reading);
                 if (choice.rest() != null && every == null) {
-                    return null;
+                    yield null;
                 }
                 for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
                     NumericDomain.Bounds one =
                             ofWhatWasComputed(arm.value(), elements, orders, typeAt, reading);
                     if (one == null) {
-                        return null;
+                        yield null;
                     }
                     every = every == null ? one : NumericDomain.Bounds.spanning(every, one);
                 }
-                return every;
+                yield every;
             }
             // Each part at what it can come to, and the sum read off the same domain a form is:
             // the form beside the choices as one atom, and each choice as another, at its weight.
@@ -252,7 +293,7 @@ final class RunReach {
             case ElementValue.SumOfChoices sum -> {
                 Granularity spacing = spacingOf(orders.observed());
                 if (spacing == null) {
-                    return null;
+                    yield null;
                 }
                 List<ElementValue> parts = new ArrayList<>();
                 Map<Integer, ExactRatio> weights = new LinkedHashMap<>();
@@ -263,19 +304,43 @@ final class RunReach {
                     parts.add(choice);
                 });
                 NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION);
-                Map<Integer, Granularity> kinds = new LinkedHashMap<>();
+                Map<Integer, NumberSpace> spaces = new LinkedHashMap<>();
                 for (int i = 0; i < parts.size(); i++) {
                     NumericDomain.Bounds one =
                             ofWhatWasComputed(parts.get(i), elements, orders, typeAt, reading);
                     if (one == null) {
-                        return null;
+                        yield null;
                     }
-                    kinds.put(i, spacing);
-                    domain = domain.assuming(i, one, kinds);
+                    // A choice's answer is no value of any type, so nothing is said of its ends.
+                    spaces.put(i, NumberSpace.spacedOnly(spacing));
+                    domain = domain.assuming(i, one, spaces);
                 }
-                return domain.boundsOf(new LinearForm<>(ExactRatio.ZERO, weights));
+                yield domain.boundsOf(new LinearForm<>(ExactRatio.ZERO, weights));
             }
+        };
+    }
+
+    /**
+     * What {@code rounding} can come to, where what it rounds runs over {@code rounded}: no
+     * further out than a step either way, the step being what it rounds to — or null where
+     * nothing is said of what it rounds.
+     */
+    private static NumericDomain.Bounds withinAStepOf(ElementValue.Rounding rounding,
+                                                      NumericDomain.Bounds rounded,
+                                                      Granularity spacing) {
+        ExactRatio step = rounded == null ? null
+                : ExactRatio.ONE.dividedBy(rounding.stepsInOne()).orNull();
+        if (step == null) {
+            return null;
         }
+        NumericDomain<Integer> domain = NumericDomain.top(BY_POSITION)
+                .assuming(0, rounded, Map.of(0, NumberSpace.spacedOnly(spacing)));
+        NumericDomain.Bounds below = domain.boundsOf(
+                new LinearForm<>(step.negated(), Map.of(0, ExactRatio.ONE)));
+        NumericDomain.Bounds above = domain.boundsOf(
+                new LinearForm<>(step, Map.of(0, ExactRatio.ONE)));
+        return below == null || above == null ? null
+                : new NumericDomain.Bounds(below.min(), above.max());
     }
 
     /** The value the walk starts from, as a range, or null where this reading has no number for it.
@@ -292,6 +357,11 @@ final class RunReach {
     /** How the values on one order are spaced, or null where nothing orders them. */
     private static Granularity spacingOf(souther.compiler.check.Carrier on) {
         return on == null ? null : on.spacing();
+    }
+
+    /** What one order says of the values counted on it, or null where nothing orders them. */
+    private static NumberSpace spaceOf(souther.compiler.check.Carrier on) {
+        return on == null ? null : on.space();
     }
 
     private static NumericDomain.Bounds at(BigDecimal value) {
@@ -317,7 +387,7 @@ final class RunReach {
      * is checked against are the same assumptions.
      */
     private record Walked(NumericDomain<Atom> reading, NumericDomain.Bounds element,
-                          NumericDomain.Bounds seed, Step repeats, Map<Atom, Granularity> kinds)
+                          NumericDomain.Bounds seed, Step repeats, Map<Atom, NumberSpace> spaces)
             implements Induction.Prepared {
 
         @Override
@@ -342,8 +412,8 @@ final class RunReach {
 
         @Override
         public Induction.Prepared assuming(NumericDomain.Bounds candidate) {
-            return new Walked(reading.assuming(Atom.ACCUMULATOR, candidate, kinds),
-                    element, seed, repeats, kinds);
+            return new Walked(reading.assuming(Atom.ACCUMULATOR, candidate, spaces),
+                    element, seed, repeats, spaces);
         }
     }
 }

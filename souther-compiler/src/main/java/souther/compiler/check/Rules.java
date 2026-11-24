@@ -1,12 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The rules written about a value, or the fact that a value of this kind has none to write.
@@ -51,6 +53,14 @@ public sealed interface Rules {
      */
     record NoneWritten() implements Rules {}
 
+    /** These rules read again without the rules {@code parts} name ({@link FieldDomains#leavingOut}). */
+    default Rules leavingOut(Set<PartId<RuleRef.Invariant>> parts) {
+        return switch (this) {
+            case Read read -> new Read(read.domains().leavingOut(parts));
+            case NoneWritten _ -> this;
+        };
+    }
+
     /**
      * Whether any rule at all was written about this value.
      *
@@ -60,6 +70,7 @@ public sealed interface Rules {
      * was found — and a caller wanting the second and reading the first counts a record nobody wrote
      * a rule about as a value that spoke.
      */
+
     default boolean anythingWasWritten() {
         return switch (this) {
             case Read read -> read.domains().anythingWasWritten();
@@ -90,6 +101,15 @@ public sealed interface Rules {
         };
     }
 
+    /** What the order leaves {@code path}, or null where no rule of it stops the path
+     *  ({@link FieldDomains#orderedRegionAt}). */
+    default OrderedRuns orderedRegionAt(RuleKey path) {
+        return switch (this) {
+            case Read read -> read.domains().orderedRegionAt(path);
+            case NoneWritten _ -> null;
+        };
+    }
+
     /**
      * How much of what the rules say the bounds these leave at {@code place} are able to state
      * ({@link FieldDomains#projectionAt}).
@@ -104,6 +124,20 @@ public sealed interface Rules {
         return switch (this) {
             case Read read -> read.domains().projectionAt(place);
             case NoneWritten _ -> NOTHING_WAS_WRITTEN;
+        };
+    }
+
+    /**
+     * Whether the set of values at {@code place}, met with what the bounds say of its count, is
+     * what the rules leave it ({@link FieldDomains#valuesAndCountAreTheRulesAt}).
+     *
+     * <p>Not of a value of a kind carrying no clause: there is no rule for the set to be short of,
+     * and what it is is already said by the set.
+     */
+    default boolean valuesAndCountAreTheRulesAt(RuleKey place) {
+        return switch (this) {
+            case Read read -> read.domains().valuesAndCountAreTheRulesAt(place);
+            case NoneWritten _ -> false;
         };
     }
 
@@ -194,6 +228,34 @@ public sealed interface Rules {
             // no rule about, which is the sentence this whole reading exists to stop being cheap.
             case null -> new NoneWritten();
         };
+    }
+
+    /**
+     * The rules a value has that is one element of a container whose rules state something of every
+     * element: its own, if it wears a declaration, and what the container states.
+     *
+     * <p>Read, and not {@link NoneWritten}: what is written about the value is what the container
+     * wrote about each element it holds, and a reader that took the value for one with nothing
+     * written would answer of every element that nothing was said.
+     *
+     * <p>A declaration that is not a product — a choice between cases, a unit, one the library
+     * writes — is a value this has no way to read what a container states into. It is said to be
+     * unread, and not read as its own rules alone: those say less of the element than the
+     * container does, and a position claiming to hold everything they leave would be claiming it
+     * of values the container refuses.
+     *
+     * @param named the declaration the element wears, or null where it wears none
+     */
+    public static Rules ofElement(TypeSymbol named, Type type, List<ElementGuarantee> guarantees,
+                                  RuleReadingContext reading) {
+        if (named == null) {
+            return new Read(FieldDomains.ofElement(null, type, guarantees, reading));
+        }
+        if (named instanceof TypeSymbol.AtModule at
+                && reading.source().kinds().of(at.key()) == DeclarationKind.PRODUCT) {
+            return new Read(FieldDomains.ofElement(at, type, guarantees, reading));
+        }
+        return new Read(FieldDomains.NONE);
     }
 
     /** The same, for a value whose type may name no declaration at all. */

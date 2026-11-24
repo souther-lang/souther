@@ -329,23 +329,30 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
     }
 
     /**
-     * A chain of values each of which names the one before it twice comes to more than a clause is
-     * closed over by copying, and is held to what the values it names rest on instead: the first of
-     * them moved is a clause that moved, and none moved is one that did not.
+     * A chain of values each of which names the one before it twice is held to what the values it
+     * names rest on: the first of them moved is a clause that moved, and none moved is one that
+     * did not.
      */
     @Test
-    void aClauseNamingAChainOfValuesTooLongToCopyIsHeldToWhatTheChainRestsOn() {
-        String moved = libOfBase(doublingChain(20, "3"), "c20");
+    void aClauseNamingAChainOfValuesIsHeldToWhatTheChainRestsOn() {
+        String last = "c" + CHAIN_LINKS;
+        String moved = libOfBase(doublingChain(CHAIN_LINKS, "3"), last);
         Map<String, ClassFileImage> path = builtAgainst(
-                libOfBase(doublingChain(20, "2"), "c20"), INCLUDES_BASE, moved);
+                libOfBase(doublingChain(CHAIN_LINKS, "2"), last), INCLUDES_BASE, moved);
 
         assertEquals(IT_COPIED_ANOTHER_BASE, refusal(path, READS_WRAP));
 
         Map<String, ClassFileImage> unchanged = builtAgainst(
-                libOfBase(doublingChain(20, "2"), "c20"), INCLUDES_BASE,
-                libOfBase(doublingChain(20, "2"), "c20"));
+                libOfBase(doublingChain(CHAIN_LINKS, "2"), last), INCLUDES_BASE,
+                libOfBase(doublingChain(CHAIN_LINKS, "2"), last));
         assertAccepted(unchanged, READS_WRAP);
     }
+
+    /**
+     * How many values the chain has. What a chain of values each naming the one before it twice is
+     * held to does not turn on its length, and what it costs to compile doubles with every link.
+     */
+    private static final int CHAIN_LINKS = 6;
 
     /** A value of the helper's module is held in the helper as what it computes, and what the
      *  module called it is not part of that: a value renamed is the copy it was. */
@@ -390,14 +397,15 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
         assertAccepted(path, READS_WRAP);
     }
 
-    /** A helper naming a chain of values too long to copy into it is held to what the chain rests
-     *  on, and a reader that expands it still compiles against the values it carries. */
+    /** A helper naming a chain of values is held to what the chain rests on, and a reader that
+     *  expands it still compiles against the values it carries. */
     @Test
-    void aHelperNamingAChainOfValuesTooLongToCopyIsHeldToWhatTheChainRestsOn() {
-        String v1 = "module lib.p exposing ( capped )\n" + doublingChain(20, "2")
-                + "let capped (n: Int) = if n > c20 then c20 else n\n";
-        String v2 = "module lib.p exposing ( capped )\n" + doublingChain(20, "3")
-                + "let capped (n: Int) = if n > c20 then c20 else n\n";
+    void aHelperNamingAChainOfValuesIsHeldToWhatTheChainRestsOn() {
+        String last = "c" + CHAIN_LINKS;
+        String v1 = "module lib.p exposing ( capped )\n" + doublingChain(CHAIN_LINKS, "2")
+                + "let capped (n: Int) = if n > " + last + " then " + last + " else n\n";
+        String v2 = "module lib.p exposing ( capped )\n" + doublingChain(CHAIN_LINKS, "3")
+                + "let capped (n: Int) = if n > " + last + " then " + last + " else n\n";
 
         Map<String, ClassFileImage> moved = builtAgainst(v1, CALLS_THE_HELPER, v2);
         assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.r", "helper", "capped", "lib.p",

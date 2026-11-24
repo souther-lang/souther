@@ -16,6 +16,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.query.Weakening;
 import souther.compiler.reach.WhatMayStopARun;
 
 import tools.jackson.databind.node.ObjectNode;
@@ -85,6 +86,7 @@ public final class PublicationOrders {
             Incompleteness.Code.VALUE_TRUNCATED,
             Incompleteness.Code.VALUE_NOT_WORKED_OUT,
             Incompleteness.Code.VALUE_ROOM_EXCEEDED,
+            Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN,
             Incompleteness.Code.ROW_UNDECIDED,
             Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED,
             Incompleteness.Code.ANSWERER_NOT_ESTABLISHED,
@@ -233,7 +235,9 @@ public final class PublicationOrders {
      * <p>Composed from the order above and not written again. A reading that met an observation's
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
      * order, and this is it with the reasons that are no observation's put after them. First of
-     * those is a number the values came to and this could not work out: every value arrived, which
+     * those is a row standing at the point in cases nobody worked out: the number was worked out
+     * and the row is there, and only which case it is in is not known. Then a number the values
+     * came to and this could not work out: every value arrived, which
      * is nearer an answer than a position holding none. A walk that reached no value comes next for
      * the same reason the codes are in the order they are: it is further from an answer. The two
      * that never reached a value to begin with follow it, a step further out again — a position that
@@ -245,21 +249,29 @@ public final class PublicationOrders {
                     PublicationOrders::placeOf);
 
     /**
-     * Where a reading gap sits: an observation at its code, since the figures it carries are what
-     * it was met at and not a reason of their own, and every other gap at itself.
+     * Where a reading gap sits: an observation at its code, and cases nobody worked out at their
+     * kind, since the figures each carries are what it was met at and not a reason of their own;
+     * every other gap at itself.
      */
     private static Object placeOf(ReadingGap gap) {
-        return gap instanceof ReadingGap.Observation it ? it.code() : gap;
+        if (gap instanceof ReadingGap.Observation it) {
+            return it.code();
+        }
+        return gap instanceof ReadingGap.CasesNotWorkedOut ? ReadingGap.CasesNotWorkedOut.class
+                : gap;
     }
 
     private static List<Object> everyPlaceOfAReadingGap() {
         List<Object> out = new ArrayList<>(OBSERVATION_CODES_IN_ORDER);
+        out.add(ReadingGap.CasesNotWorkedOut.class);
         for (UnheldNumber why : UnheldNumber.values()) {
             out.add(ReadingGap.of(why));
         }
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);
+        out.add(ReadingGap.KEYS_NOT_TOLD);
+        out.add(ReadingGap.SAMENESS_NOT_TOLD);
         for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
             out.add(new ReadingGap.ReachNotRead(why));
         }
@@ -272,8 +284,8 @@ public final class PublicationOrders {
      *
      * <p>The figures first, since raising one is a thing a reader can do and the rest are not: the
      * fork the classes could not carry, the runs one rewrite may take, the composing, and a run that
-     * did not come back. Then what the rows came to — a statement that could not be read — and last
-     * how a search that ran to its end ended.
+     * did not come back. Then what the rows came to — a statement that could not be read — and how
+     * a search that ran to its end ended.
      */
     public static final CanonicalSelection.Order<ReplacementEvidence.Undecided.Why>
             REWRITE_UNDECIDED_REASONS = CanonicalSelection.Order.overValues(List.of(
@@ -282,9 +294,25 @@ public final class PublicationOrders {
                     ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED,
                     ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ,
+                    ReplacementEvidence.Undecided.Why.A_RULE_REFUSED_A_CANDIDATE,
                     ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY,
                     ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED,
                     ReplacementEvidence.Undecided.Why.NOTHING_RAN));
+
+    /**
+     * Why a weight of a derived value is neither fixed nor shown unfixed, for a reason that is first
+     * a fact of the weights, from what a reader can do something about to what no row changes.
+     *
+     * <p>A run nothing watched first, since recording the runs is a thing a reader can do. Then no
+     * border read, and a border short with no word of its own, which are about the rows; and last
+     * the exact arithmetic, which no row and no run changes.
+     */
+    public static final CanonicalSelection.Order<Weakening.AWeightNotDecided.Why>
+            WEIGHT_NOT_DECIDED_REASONS = CanonicalSelection.Order.overValues(List.of(
+                    Weakening.AWeightNotDecided.Why.A_RUN_WAS_NOT_WATCHED,
+                    Weakening.AWeightNotDecided.Why.NO_BORDER_OF_IT_WAS_READ,
+                    Weakening.AWeightNotDecided.Why.A_BORDER_WAS_NOT_READ_IN_FULL,
+                    Weakening.AWeightNotDecided.Why.THE_ARITHMETIC_GAVE_OUT));
 
     /**
      * What this compiler declined to do, from what bounds one value to what bounds a whole search.
@@ -306,10 +334,16 @@ public final class PublicationOrders {
                     CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                     CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
                     CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.TUPLES_OF_COUNTS_A_RELATION_IS_TRIED_AT,
+                    CompositionBudget.TOTALS_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.RUNS_A_COUNTS_ELEMENTS_CAN_COME_TO,
+                    CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED,
                     CompositionBudget.COUNTS_OF_KEYS_TRIED,
                     CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
+                    CompositionBudget.ELEMENTS_AN_INNER_CONTAINER_IS_LISTED_WITH,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
+                    CompositionBudget.CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                     CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,
                     CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                     CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
@@ -317,13 +351,20 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH,
+                    CompositionBudget.ROWS_BESIDE_A_RUN_ARE_MADE_FOR_A_POINT,
                     // After the figures for how many times a thing was tried, because the walking
                     // is what a reader raises once the trying turns out not to have been what
                     // stopped the search. Each sits by the trying figure it was split from.
                     CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
                     CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
                     CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR,
+                    CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT,
                     CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                    // The walking a way past the ways looked along is read again with for one
+                    // relation, beside the walking of the way it reads again.
+                    CompositionBudget.WALKS_A_WAY_IS_READ_AGAIN_WITH,
+                    // Beside it: what one walk's way apart is then worked out with.
+                    CompositionBudget.PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH,
                     // Beside the one above it, and for the same reason: both bound how many times
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.
@@ -340,6 +381,10 @@ public final class PublicationOrders {
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     // Beside it: the rows that walk composes, as the choice of one is handed them.
                     CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                    CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF,
+                    CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
+                    CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER,
+                    CompositionBudget.NUMBERS_A_SIDE_IS_BALANCED_FROM,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,
                     // After every figure a search for the value stops at, because what this one
@@ -352,6 +397,9 @@ public final class PublicationOrders {
                     // them, then what a path takes in of what the reading made.
                     CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
                     CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
+                    // The work of writing out the cases of a statement over the ways of keeping,
+                    // beside what the cases come to.
+                    CompositionBudget.WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER,
                     // After what a step states, as what a reader that takes a count of statements
                     // apart walks of it.
                     CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
@@ -362,6 +410,7 @@ public final class PublicationOrders {
                     CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
                     CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                     CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
+                    CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**
@@ -378,14 +427,25 @@ public final class PublicationOrders {
                             // what one value holds, where the three below are about which value out
                             // of a range, a line or a group of numbers this compiler names at all.
                             CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                            CompositionRepertoire
+                                    .VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS,
                             CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT,
                             CompositionRepertoire.KEYS_PLACED_AT_THE_NUMBER_THEIR_ELEMENTS_COME_TO,
                             CompositionRepertoire.KEYS_OF_ONE_FOLD_ASKED_TOGETHER,
                             CompositionRepertoire.ENDS_OF_A_KEY_WRITTEN_AS_ONE_ELEMENT,
+                            CompositionRepertoire.TOTALS_FROM_A_PUT_WRITTEN_AS_ONE_ELEMENT,
                             CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
                             CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
+                            CompositionRepertoire.ELEMENTS_WITH_THE_OTHER_FIELDS_HELD_STILL,
                             CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT,
+                            CompositionRepertoire.TREES_WRITTEN_FOR_A_LINE,
                             CompositionRepertoire.STRINGS_A_CASE_CONVERSION_IS_WRITTEN_FOR,
+                            CompositionRepertoire.MAPS_WRITTEN_WITH_ONE_ENTRY,
+                            // Last of the ones about which rows: a number only a run works out
+                            // is looked for by running them, with nothing said of where they are.
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES,
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_VALUES,
+                            CompositionRepertoire.ROWS_A_RUN_IS_TRIED_FOR_AT_SIZES_AND_VALUES,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
@@ -471,14 +531,15 @@ public final class PublicationOrders {
                 WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
                 WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT,
                 WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED,
-                WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED,
                 WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
                 WeakeningWord.A_BORDERS_RUN_NOT_WATCHED,
                 WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
                 WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
                 WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT,
+                WeakeningWord.A_WEIGHT_NOT_DECIDED,
                 WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE,
                 WeakeningWord.BODY_NOT_IN_EVALUATION,
+                WeakeningWord.BEHAVIOR_TO_BE_CHANGED_FIRST,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
                 WeakeningWord.RULE_UNREAD,
@@ -487,7 +548,6 @@ public final class PublicationOrders {
                 WeakeningWord.QUESTION_UNANSWERED,
                 WeakeningWord.PAIR_SPACE_TRUNCATED,
                 WeakeningWord.MEETINGS_NOT_WALKED,
-                WeakeningWord.MEETINGS_NOT_PLACED,
                 WeakeningWord.MEETINGS_NOT_JOINED,
                 WeakeningWord.PROOF_CONTRADICTED,
                 WeakeningWord.ARMS_UNSETTLED,

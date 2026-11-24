@@ -3,6 +3,8 @@ package souther.compiler.check;
 import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
@@ -72,7 +74,7 @@ class APatternPastItsFigureNamesTheFigureTest {
     /** Each figure that is fixed where it is declared is the one said. */
     @Test
     void aFigureFixedWhereItIsDeclaredIsTheOneSaid() {
-        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure()),
+        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 new BlockReason.WhatItStatesIsNoLine(
                         BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE).figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(
@@ -180,20 +182,21 @@ class APatternPastItsFigureNamesTheFigureTest {
      */
     private static BlockReason.ReadingStopReason whatStoppedTheReading(
             PatternPlan.Budget admitted) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
 
                 data Long = String
                     invariant plain = String.matches("a{300}", value)
                     invariant marked = String.matches("a{300}b?", value)
-                """, "Main");
+                """);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Long"));
         ReadingPolicy policy = new ReadingPolicy(ReadAs.THE_COMPILATION_DOES.dnfExpansionLimit(),
                 ReadAs.THE_COMPILATION_DOES.scalePlacesLimit(), admitted,
                 PatternPlan.Budget.OF_WHAT_A_RULE_LEAVES);
         FieldDomains read = FieldDomains.of(name,
-                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy));
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy,
+                        TestDay.TODAY));
         StoppedReading stopped = read.admits(RuleKey.THE_VALUE).whyPartial();
         assertNotNull(stopped, "a reading refused a machine is short of the rules it was about");
         return assertInstanceOf(BlockReason.ReadingStopReason.class, BlockReason.of(stopped));

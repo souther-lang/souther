@@ -111,6 +111,21 @@ class WhatSplitsCopyAReadingToIsBoundedWhereTheyCompoundTest {
         assertEquals(4, at4.factor());
     }
 
+    /** A value a relation drags in is read where the reading stands: none of its splits opens,
+     *  whatever room the path has left, and a split of one arm is that reading itself. What the
+     *  path has copied is unchanged, and the splits of the path itself still open. */
+    @Test
+    void aReadingInPlaceOpensNoSplitAndLeavesThePathAsItWas() {
+        ContextMultiplicity path = one().opening(2);
+        ContextMultiplicity inPlace = path.inPlace();
+        assertNull(inPlace.opening(2));
+        assertNull(one().inPlace().opening(2));
+        assertEquals(inPlace, inPlace.opening(1));
+        assertEquals(path.factor(), inPlace.factor());
+        assertEquals(inPlace, inPlace.inPlace());
+        assertNotNull(path.opening(2));
+    }
+
     /** A split answers one of several, so none of these is a split. */
     @Test
     void aSplitWithNoArmsIsNotAWidthThisAnswersAbout() {

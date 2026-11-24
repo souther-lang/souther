@@ -103,6 +103,6 @@ class AnArmIsLookedForAtEveryPlaceItStandsInTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, "example.arms", null,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 }

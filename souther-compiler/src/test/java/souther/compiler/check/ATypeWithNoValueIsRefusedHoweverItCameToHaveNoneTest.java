@@ -2,12 +2,14 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Types with no value, refused whatever left them without one.
@@ -25,18 +27,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
 
-    private static List<String> codesFor(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        return compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .map(Located::diagnostic)
-                .map(diagnostic -> diagnostic.code())
-                .toList();
+    private static Compilation noValue(String source) {
+        return ACompiledModel.refusedWith(List.of("E1013"), Compilation.ofSource(source, "Main"));
     }
 
+    /** {@code data} has no value to be built. */
     private static void refuses(String data, String source) {
-        assertEquals(List.of("E1013"), codesFor(source), "`" + data + "` has no value to be built");
+        assertTrue(source.contains(data), "`" + data + "` is named in the source");
+        noValue(source);
     }
 
     /**
@@ -46,9 +44,8 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      * sentence is written for every way a count comes to nothing, and a reading of the codes cannot
      * tell the two apart. What is asserted here is the sentence that was chosen.
      */
-    private static List<String> saidBy(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    private static List<String> saidBy(List<String> codes, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
@@ -58,7 +55,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
     }
 
     private static void admits(String source) {
-        assertEquals(List.of(), codesFor(source), "a value of this can be written");
+        ACompiledModel.compiles(Compilation.ofSource(source, "Main"));
     }
 
     /**
@@ -145,6 +142,33 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
 
                 data Many = List<One>
                     invariant two = List.length(value) >= 2
+                """);
+    }
+
+    /**
+     * A length is an {@code Int} and stops where one does, so two lists further apart than the
+     * greatest {@code Int} are none: one beside a list of one would be longer than any list.
+     */
+    @Test
+    void listsOnlyLengthsPastWhereAnIntStopsHoldAreRefused() {
+        refuses("Apart", """
+                module demo
+
+                data Apart = { ys: List<Int>, zs: List<Int> }
+                    invariant List.length(zs) >= 1
+                        && List.length(ys) - List.length(zs) >= 9223372036854775807
+                """);
+    }
+
+    /** One less apart is a list of the greatest length beside a list of one. */
+    @Test
+    void listsALengthAsLongAsAnIntHoldsAreAdmitted() {
+        admits("""
+                module demo
+
+                data Apart = { ys: List<Int>, zs: List<Int> }
+                    invariant List.length(zs) >= 1
+                        && List.length(ys) - List.length(zs) >= 9223372036854775806
                 """);
     }
 
@@ -470,7 +494,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      * nothing, that one is said and the other, which was answering for it, is not. */
     @Test
     void oneOfTwoWrittenInTermsOfEachOtherIsReportedWhereOnlyItHasARuleOfItsOwn() {
-        assertEquals(List.of("E1013", "E1013"), codesFor("""
+        ACompiledModel.refusedWith(List.of("E1013", "E1013"), Compilation.ofSource("""
                 module demo
 
                 data Other = Int
@@ -480,7 +504,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                     invariant no = n >= 2 && n <= 1
 
                 data B = A | Other
-                """), "`Other` and `A`, and not `B` beside them");
+                """, "Main"));
     }
 
     /**
@@ -546,7 +570,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
     /** And where the group reading it has nowhere to stop of its own, both are said. */
     @Test
     void aGroupWithNoValueOfItsOwnIsReportedBesideTheOneItReads() {
-        assertEquals(List.of("E1013", "E1013"), codesFor("""
+        ACompiledModel.refusedWith(List.of("E1013", "E1013"), Compilation.ofSource("""
                 module demo
 
                 data Bad = Int
@@ -554,7 +578,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
 
                 data A = { b: B }
                 data B = { a: A, bad: Bad }
-                """), "granting `Bad` a value leaves `A` and `B` where they were");
+                """, "Main"));
     }
 
     /**
@@ -565,8 +589,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      * and what the compiler said turns out to have been a guess.
      */
     private static List<List<String>> suggestedBy(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = noValue(source);
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
@@ -588,7 +611,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void aDeclarationWhoseRulesCannotAllHoldIsNotToldItRefersToItself() {
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data Bad = Int
@@ -607,7 +630,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void remaindersNoNumberLeavesTogetherAreRefusedAndOnesThatShareOneAreNot() {
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data Odd = Int
@@ -628,7 +651,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void partsOfADateNoDayHasAreRefusedAndOnesSomeDayHasAreNot() {
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data Day = Date
@@ -640,7 +663,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 data Day = Date
                     invariant both = Date.month(value) == 2 && Date.day(value) == 29
                 """);
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data Day = Date
@@ -674,7 +697,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                         "value == Date(\"2024-05-01\") && Date.day(value) == 1"},
                 new String[] {"Date", "value < Date(\"2024-01-01\") && Date.year(value) == 2025",
                         "value < Date(\"2026-01-01\") && Date.year(value) == 2025"})) {
-            assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+            assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                     module demo
 
                     data V = %s
@@ -701,7 +724,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void aDeclarationWhoseEqualitiesAdmitNoValueIsToldItsRulesCannotAllHold() {
-        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy(List.of("E1013"), """
                 module demo
 
                 data Gender = String
@@ -714,7 +737,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
     /** And a set too small for its element is told about the two counts. */
     @Test
     void aSetItsElementCannotFillIsToldWhichCountsDoNotMeet() {
-        assertEquals(List.of("ASetCannotBeFilledFromItsElement"), saidBy("""
+        assertEquals(List.of("ASetCannotBeFilledFromItsElement"), saidBy(List.of("E1013"), """
                 module demo
 
                 data One = Int
@@ -734,7 +757,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void aCycleWithNowhereToStopIsToldItNeedsAValueOfItself() {
-        assertEquals(List.of("DataCannotBeConstructed"), saidBy("""
+        assertEquals(List.of("DataCannotBeConstructed"), saidBy(List.of("E1013"), """
                 module demo
 
                 data A = { b: B }
@@ -750,7 +773,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void aCycleWithACaseThatStopsIsRefusedNothing() {
-        assertEquals(List.of(), saidBy("""
+        assertEquals(List.of(), saidBy(List.of(), """
                 module demo
 
                 data Stop
@@ -827,5 +850,53 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 data X = { a: A }
                 data Y = { a: A }
                 """));
+    }
+
+    private static String heldWith(String rule) {
+        return """
+                module demo
+
+                data Held = Int invariant %s
+                data Rec = { h: Held }
+                """.formatted(rule);
+    }
+
+    /**
+     * A rule whose arithmetic every value stops in leaves no value, though the form it comes to
+     * has one. Every `Held` above nought stops at the sum.
+     */
+    @Test
+    void aRuleEveryValueStopsInLeavesNoValue() {
+        noValue(heldWith("value >= 1 && value + 9223372036854775807 > 0"));
+    }
+
+    /** The sum is worked out before the difference takes it away, so cancelling it saves nothing. */
+    @Test
+    void aSumCancelledAwayIsStillWorkedOut() {
+        noValue(heldWith("value >= 1 && value + 9223372036854775807 - 9223372036854775807 >= 1"));
+    }
+
+    /** A divisor no value leaves non-nought is one no run gets past. */
+    @Test
+    void aQuotientByNoughtLeavesNoValue() {
+        noValue(heldWith("value == 0 && 1 / value > 0"));
+    }
+
+    /** Where the left of an `||` holds, the right is not worked out. */
+    @Test
+    void aSumTheRunSkipsIsNotAskedToFit() {
+        admits(heldWith("value == 1 || value + 9223372036854775807 > 0"));
+    }
+
+    /** The left of an `||` is worked out first, and a run that stops there reaches nothing. */
+    @Test
+    void aSumLeftOfAnOrIsAskedToFit() {
+        noValue(heldWith("value >= 1 && (value +9223372036854775807 > 0 || value == 1)"));
+    }
+
+    /** A value that gets through the sum is a value. */
+    @Test
+    void aSumSomeValueGetsThroughLeavesAValue() {
+        admits(heldWith("value == 0 && value + 9223372036854775807 > 0"));
     }
 }

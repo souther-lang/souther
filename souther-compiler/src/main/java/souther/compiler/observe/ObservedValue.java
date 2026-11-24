@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -31,6 +32,30 @@ import java.util.Map;
  */
 public sealed interface ObservedValue {
 
+    /**
+     * Whether two observations of this kind are the same value exactly where they are equal as
+     * records, so that a reader holding no declaration may compare them with {@code equals}.
+     *
+     * <p>Equality of the record is what the form of an observation says, and the form is the
+     * language's identity only where nothing outside the observation decides it. A decimal is the
+     * amount it stands for at whatever scale it was observed, which {@code BigDecimal.equals}
+     * does not say. A sequence is a list or a set by the position it stands at, and an observation
+     * does not carry that. A moment is kept as the text it was written as. None of these is
+     * answered here, and a construction is answered only where each field it holds is.
+     *
+     * <p>Exhaustive without a default, so a kind of observation added later is decided here
+     * before it is compared anywhere.
+     */
+    default boolean isSameWhereEqual() {
+        return switch (this) {
+            case Bool _, Integer _, Text _, Unit _ -> true;
+            case Constructed constructed -> constructed.fields().values().stream()
+                    .allMatch(ObservedValue::isSameWhereEqual);
+            case Decimal _, Temporal _, Sequence _, Mapping _, Absent _, Unknown _,
+                 Truncated _ -> false;
+        };
+    }
+
     record Bool(boolean value) implements ObservedValue {}
 
     /** A whole number: Souther's {@code Int}, and the inner value of a newtype over one. */
@@ -42,7 +67,14 @@ public sealed interface ObservedValue {
 
     /** A {@code Date} or {@code DateTime}, kept as the ISO text it was written as. Separate from
      * {@link Text} so a rule over dates is never compared against a rule over strings. */
-    record Temporal(String iso) implements ObservedValue {}
+    record Temporal(String iso) implements ObservedValue {
+
+        /** As source writes it: the construction of its type over its text, so it is never read
+         *  as the text that spells it. */
+        public String written() {
+            return primitive().shown() + "(" + CstLexer.literalOf(iso) + ")";
+        }
+    }
 
     /** A unit data — a case that carries nothing. Its identity is its name. */
     record Unit(TypeSymbol type) implements ObservedValue {}
@@ -147,6 +179,24 @@ public sealed interface ObservedValue {
     }
 
     /**
+     * The value a position holds that is a scalar, under whatever newtypes it is written in: the
+     * value itself, or the one inside the construction of a newtype, however many deep.
+     *
+     * <p>For a reader that already knows the position holds a scalar — a string, a number — and
+     * so that a construction there can only be a newtype over one: a record cannot stand where
+     * a scalar does, so its own field called {@code value} is never taken for a name worn over a
+     * value. A construction holding no value, which is what an observation stopped one layer down
+     * leaves, is handed back as it stands.
+     */
+    static ObservedValue scalarInside(ObservedValue value) {
+        ObservedValue at = value;
+        while (at instanceof Constructed constructed && constructed.field("value") != null) {
+            at = constructed.field("value");
+        }
+        return at;
+    }
+
+    /**
      * The value under {@code worn} where it wears every one of them, or null where it does not.
      *
      * <p>The same names taken off the same way, for a reader that needs the value to be one of the
@@ -162,6 +212,18 @@ public sealed interface ObservedValue {
                 return null;
             }
             at = constructed.field("value");
+        }
+        return at;
+    }
+
+    /**
+     * {@code inside} under every name of {@code worn}, the outermost first: the value {@link
+     * #wearing} would take those names off.
+     */
+    static ObservedValue wrapped(List<TypeSymbol> worn, ObservedValue inside) {
+        ObservedValue at = inside;
+        for (int name = worn.size() - 1; name >= 0; name--) {
+            at = new Constructed(worn.get(name), Map.of("value", at));
         }
         return at;
     }

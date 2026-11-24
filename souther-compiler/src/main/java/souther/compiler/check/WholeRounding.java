@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 
@@ -21,7 +22,7 @@ import java.math.BigInteger;
  * ({@link ConstantComparison#ofAWholeNumber}), so the line is the whole of what is particular to a
  * way of rounding.
  */
-enum WholeRounding {
+public enum WholeRounding {
 
     HALF_UP,
     HALF_EVEN,
@@ -30,6 +31,40 @@ enum WholeRounding {
     DOWN,
     CEILING,
     FLOOR;
+
+    /**
+     * The whole number {@code x} rounds to this way, or null where the exact arithmetic cannot
+     * hold the whole numbers either side of it.
+     *
+     * <p>Between the two whole numbers either side of {@code x}, and {@code x} itself where it is
+     * one: toward minus infinity, toward plus infinity, toward nought, away from it, and for the
+     * three halves the nearer of the two, an exact half going where its rule sends it.
+     */
+    public BigInteger of(ExactRatio x) {
+        if (!(x.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger below))
+                || !(x.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger above))) {
+            return null;
+        }
+        if (below.equals(above)) {
+            return below;
+        }
+        ExactRatio past = x.minus(ExactRatio.of(below)).orNull();
+        if (past == null) {
+            return null;
+        }
+        boolean positive = x.signum() > 0;
+        int half = past.compareTo(ExactRatio.of(BigInteger.ONE, BigInteger.TWO));
+        return switch (this) {
+            case FLOOR -> below;
+            case CEILING -> above;
+            case DOWN -> positive ? below : above;
+            case UP -> positive ? above : below;
+            case HALF_UP -> half != 0 ? (half > 0 ? above : below) : (positive ? above : below);
+            case HALF_DOWN -> half != 0 ? (half > 0 ? above : below) : (positive ? below : above);
+            case HALF_EVEN -> half != 0 ? (half > 0 ? above : below)
+                    : (below.testBit(0) ? above : below);
+        };
+    }
 
     /**
      * What the number before rounding stands to exactly where its rounding is at least {@code k}.

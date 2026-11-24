@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
+
 import java.util.Objects;
 
 /**
@@ -20,7 +22,7 @@ final class UnbuiltAttempts {
 
     private CompositionShortfall met = CompositionShortfall.NONE;
     private TermRealizations.Realization last;
-    private String detail;
+    private SearchMessage detail;
 
     /** Takes in one attempt that built nothing. */
     void add(TermRealizations.Realization one) {

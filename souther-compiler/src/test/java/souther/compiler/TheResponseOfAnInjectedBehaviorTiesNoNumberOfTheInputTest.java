@@ -138,11 +138,9 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
             """;
 
     private static String reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     @Test
@@ -160,9 +158,9 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         assertFalse(report.contains("not read: comparison"), report);
         assertFalse(report.contains("not read: fork"), report);
         assertFalse(report.contains("not accounted for"), report);
-        // The entry under a key is the last element of that key, and the cases of a key held twice
-        // are the ones no row measures.
-        assertTrue(report.contains("allocate — read what this measure went without"), report);
+        // The rules of the response keep its rows apart at the key, so no key is held twice and
+        // there is no case of one for a row to measure. Beside the next test, which drops the rule.
+        assertFalse(report.contains("allocate — read what this measure went without"), report);
     }
 
     @Test
@@ -170,7 +168,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         String report = reportOf(LOOKED_UP.replace("module example.looked", "module example.twice")
                 .replace("\n    invariant List.allDistinctBy(.sku, rows)", ""));
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("allocate — read what this measure went without"), report);
     }
 
@@ -198,7 +196,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
     void aMatchOnTheResponseBeforeAComparisonLeavesItRead() {
         String report = reportOf(CHOSEN);
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertFalse(report.contains("not accounted for"), report);
     }
 
@@ -242,7 +240,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     /** Every way of writing the sum of the response's quantities is the one number, down to the
@@ -331,23 +329,34 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         assertFalse(report.contains("not accounted for: comparison"), report);
     }
 
+    /** A sum over the elements the response kept is the sum of each element counting nought where
+     *  the filter's closure fails, as a choice in the closure says it, and no sum of the response
+     *  however it is walked. */
     @Test
     void aSumOverTheElementsTheResponseKeptIsNotTakenForASumOfTheResponse() {
-        String report = reportOf(summedAs("kept",
-                "List.sum(List.map(.quantity, List.filter(i -> i.active, readSnap(order).rows)))")
-                .replace("quantity: Int }", "quantity: Int, active: Bool }"));
-
-        assertTrue(report.contains("not read: comparison"), report);
+        String chosen = keptAs(
+                "List.sum(List.map(i -> if i.active then i.quantity else 0, readSnap(order).rows))");
+        assertFalse(chosen.contains("not read: comparison"), chosen);
+        assertFalse(chosen.equals(keptAs(SUM_OF_THE_ROWS)), chosen);
+        assertEquals(chosen, keptAs(
+                "List.sum(List.map(.quantity, List.filter(i -> i.active, readSnap(order).rows)))"));
     }
 
     @Test
     void aFoldOverTheElementsTheResponseKeptIsNotTakenForASumOfTheResponse() {
-        String report = reportOf(summedAs("keptfold",
-                "List.fold((acc, x) -> acc + x.quantity, 0,"
-                        + " List.filter(i -> i.active, readSnap(order).rows))")
-                .replace("quantity: Int }", "quantity: Int, active: Bool }"));
+        assertEquals(keptAs(
+                        "List.sum(List.map(i -> if i.active then i.quantity else 0,"
+                                + " readSnap(order).rows))"),
+                keptAs("List.fold((acc, x) -> acc + x.quantity, 0,"
+                        + " List.filter(i -> i.active, readSnap(order).rows))"));
+    }
 
-        assertTrue(report.contains("not read: comparison"), report);
+    /** The report of {@code number} compared over a response whose items hold a flag, with where
+     *  each part stands left out: spellings of one number differ in length. */
+    private static String keptAs(String number) {
+        return reportOf(summedAs("kept", number)
+                .replace("quantity: Int }", "quantity: Int, active: Bool }"))
+                .replaceAll("\\d+:\\d+", "");
     }
 
     @Test

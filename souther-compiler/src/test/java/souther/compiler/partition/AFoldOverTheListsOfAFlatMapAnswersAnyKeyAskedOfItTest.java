@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -380,7 +381,7 @@ class AFoldOverTheListsOfAFlatMapAnswersAnyKeyAskedOfItTest {
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The source measured, which is a source that compiles: a model that did not would have no
@@ -388,10 +389,6 @@ class AFoldOverTheListsOfAFlatMapAnswersAnyKeyAskedOfItTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + source);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

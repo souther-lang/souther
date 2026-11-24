@@ -1,8 +1,12 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.HeldClass;
+import souther.compiler.check.PartId;
+import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.LaterNumbersEliminated;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
@@ -12,6 +16,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Where a row for one coverage item has to be written.
@@ -48,6 +53,33 @@ import java.util.Optional;
 public interface SearchRegion {
 
     /**
+     * Where the regions this one was narrowed to are kept, for a caller narrowing it by lists of
+     * steps that start alike. A region that keeps none folds every list from itself.
+     */
+    default NarrowingsKept narrowingsKept() {
+        return NarrowingsKept.NONE;
+    }
+
+    /**
+     * This region without the relation the rules {@code parts} name hold between the places they
+     * read, under the parameter each is listed under, with what was taken in and fixed kept.
+     *
+     * <p>Not a reading of declarations that never had those rules. What the original reading
+     * derived of each place by itself, the run it leaves the place with the rules in force, is
+     * kept; so a place keeps the ends the rules gave it, and the places are no longer held to one
+     * another by them. A reader asking the form the rules were about gets the sum of what each
+     * place keeps, which is wider than the rules allow together and no wider otherwise.
+     *
+     * <p>The inclusion this region keeps against what the declarations leave holds of the rest of
+     * the rules, so a reader that has shown the relation holds nothing it asks of may ask the
+     * region without it. A region that reads no declarations has none to leave out, which is what
+     * the default is.
+     */
+    default SearchRegion withoutTheRelationOf(Map<String, Set<PartId<RuleRef.Invariant>>> parts) {
+        return this;
+    }
+
+    /**
      * This region asked to take {@code form rel 0} in, and whether it could.
      *
      * <p>A refinement of where a row may be written and not a new reading of anything. Taking in
@@ -68,6 +100,21 @@ public interface SearchRegion {
      * as one the search was narrowed by, or by giving up on what it was composing.
      */
     Assumption assuming(LinearForm<NumericTerm> form, Rel rel);
+
+    /**
+     * The bounds every form taken in here states ({@link #assuming(LinearForm, Rel)}), as they were
+     * said.
+     *
+     * <p>What was taken in and not what the region worked it out to. The region reads them with
+     * the declarations one bound at a time, which can leave a position wider than the bounds
+     * together do where a bound weighs three positions or more; a reader that eliminates them
+     * together reads them exactly. Every one is implied by the region, so whatever a reader
+     * concludes from them holds of every row the region holds. A region that took nothing in
+     * states none, which is what the default is.
+     */
+    default List<LaterNumbersEliminated.Bound<NumericTerm>> boundsTakenIn() {
+        return List.of();
+    }
 
     /**
      * What asking a region to take a constraint in came to.
@@ -141,6 +188,19 @@ public interface SearchRegion {
      * condition nothing took in leaves a region that still holds every row that arrives.
      */
     SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel);
+
+    /**
+     * The same region, with the date at {@code date} held to the days whose year leaves one of
+     * {@code remainders} by {@code divisor}.
+     *
+     * <p>A class of the days and no run of them, so it narrows which days a search offers
+     * ({@link #classAt}) and leaves {@link #projectionOf} as it was. A region that reads no date
+     * has none to hold, which is what the default is.
+     */
+    default SearchRegion assumingTheYearLeaves(NumericTerm.ValueOf date, int divisor,
+                                               Set<Integer> remainders) {
+        return this;
+    }
 
     /**
      * The same region, with {@code term} held away from {@code at}.
@@ -221,6 +281,31 @@ public interface SearchRegion {
     }
 
     /**
+     * Whether {@code term} is a whole number a position or a fold over a container holds as an
+     * {@code Int}, which lies between the ends of an {@code Int}: a fold that passes them is a
+     * stop of its own, owed a witness, and is not asked again of a statement about its number.
+     * Not a product, which the arithmetic of two {@code Int} works out past the ends: its range
+     * is that of its factors. A region that reads no types says it of no term, which is what the
+     * default is.
+     */
+    default boolean isAnInt(NumericTerm term) {
+        return false;
+    }
+
+    /**
+     * What the order leaves the value at {@code place} by its declarations — one run, runs apart,
+     * or none — or null where no rule of the order stops it ({@link Position#orderedRegion}).
+     *
+     * <p>{@link #projectionOf} may be wider, and a search choosing the value is held to this as
+     * well: a value in a gap between two runs is one every alternative refuses, and a value where
+     * this holds nothing is one no rule admits. A region that reads no declarations says nothing of
+     * it, which is what the default is.
+     */
+    default OrderedRuns orderedRegionAt(NumericTerm.ValueOf place) {
+        return null;
+    }
+
+    /**
      * The values the declarations of the position {@code term} is read of admit it, as far as they
      * were read.
      *
@@ -296,6 +381,28 @@ public interface SearchRegion {
     }
 
     /**
+     * Where {@code term} runs in a row of this region: with every number a condition taken in
+     * names still to be chosen ({@link #projectionOf(NumericTerm, Collection)}), so that a number
+     * the region ties it to bounds it by where that number can be. Read off the rules a run
+     * shown whole is read of ({@link #wholeRunOf}), and where the values lie, not that a row takes
+     * them. A region that took nothing in has nothing to add, which is what the default is.
+     */
+    default NumericDomain.FormProjection projectionOfARow(NumericTerm term) {
+        return projectionOf(term);
+    }
+
+    /**
+     * Whether what this region was narrowed to relates some of {@code these} to some of
+     * {@code those}: a chain of what it holds names one of each, so that holding one of them
+     * narrower may hold the other narrower too. Numbers no chain relates are free of one another
+     * here but for whether any value is left. True where that is not shown, which is what the
+     * default is.
+     */
+    default boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
+        return true;
+    }
+
+    /**
      * A run of {@code term} every value of which some row in this region takes, at the term's own
      * spacing — or null where that is not shown.
      *
@@ -313,10 +420,72 @@ public interface SearchRegion {
     }
 
     /**
+     * A run of {@code term} and the values the rules of this region hold it away from, such that
+     * every value of the run but those is one some row in this region takes — or null where that
+     * is not shown, where the rules hold it away from none, and for a term held to a class
+     * ({@link #classAt}).
+     *
+     * <p>Not {@link #wholeRunOf}, which is no answer for a term with a hole: a hole is no end, and
+     * a run it is taken out of is not every value of it. The holes the rules state are the ones
+     * answered; those a search added ({@link #apartAt}) are asked of the region beside this.
+     */
+    default NumericDomain.RunBesidesItsHoles wholeRunBesidesItsHolesOf(
+            NumericTerm.FromOnePosition term) {
+        return null;
+    }
+
+    /**
      * Why nothing is left here, or empty where nothing proved it.
      *
      * <p>Empty is not "there is a value", the same as everywhere else. A search reading it that way
      * would take the absence of a proof for one.
      */
     Optional<EmptyInput> emptiness();
+
+    /**
+     * Whether {@link #emptiness} was answered by readings that looked to the end, so that this
+     * region is shown empty wherever a region it refines was.
+     *
+     * <p>Saying more of the rules, or fixing a position, only takes values away, but a reading that
+     * stops short of the end does not have to keep a proof it made of the coarser region: it can
+     * show a region empty and then, asked of that region with one more position fixed, show
+     * nothing. Where this is true, none of that happens, and the absence of a proof here is the
+     * absence of one anywhere above. A reader that goes straight to the end of a walk instead of
+     * asking the regions on the way is leaning on that, and asks it first — and, for the value it
+     * takes at each position, on {@link #runsOnlyNarrowWhenFixed}, which is not implied by this.
+     *
+     * <p>False unless a region says otherwise, and also false for a region whose emptiness shows
+     * nothing — that is the answer to a question the reader may ask and not one it may act on.
+     */
+    default boolean emptinessIsSettled() {
+        return false;
+    }
+
+    /**
+     * Whether fixing any of {@code terms} can only narrow where the others run and which values of
+     * their classes they may take, and never widen either.
+     *
+     * <p>A different thing from {@link #emptinessIsSettled}, which is about proofs: that a region
+     * shown empty is shown empty with more fixed. This is about the first value of a position. A
+     * reader that takes it from where the position runs before anything is fixed, and not from
+     * where it runs once the positions before it are, gets the same value only if the narrower run
+     * is inside the wider one — and the narrower run is then the wider one cut, so a value that
+     * is first in the wider run and lies in the narrower is first in it.
+     *
+     * <p>Asked of the numbers a reader fixes and reads the runs of, and not of every number the
+     * region could be asked about, because a region can know the property for some kinds of
+     * number and not for others. A kind it has not been held for is one it answers false to, and
+     * the reader leaves the search to the walk.
+     *
+     * <p>Of regions that are not shown empty. Where a region is, there is nowhere for a position to
+     * run and what it answers about where is no run, so nothing is promised of it — a search asks
+     * {@link #emptiness} first and does not read a run out of a region it shows empty.
+     *
+     * <p>The ranges and the classes are approximations, and nothing in a region's other answers
+     * says they are held to this: a region may read a run one way before a position is fixed and
+     * more coarsely after. False unless a region says otherwise.
+     */
+    default boolean runsOnlyNarrowWhenFixed(Collection<? extends NumericTerm> terms) {
+        return false;
+    }
 }

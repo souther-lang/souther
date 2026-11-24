@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -153,15 +155,14 @@ class ALineIsNamedByTheClauseThatDrewItTest {
     }
 
     private static Axis axis(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return Partitions.of("price", InputDomain.of(sigs.get("price"), context,
                 TypeCardinality.Counts.workedOutIn(context),
                 Membership.none()).reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
@@ -170,9 +171,7 @@ class ALineIsNamedByTheClauseThatDrewItTest {
     }
 
     private static String humanOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

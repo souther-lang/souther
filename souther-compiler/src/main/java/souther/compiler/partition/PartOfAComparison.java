@@ -21,9 +21,13 @@ import java.util.Objects;
 public final class PartOfAComparison {
 
     private final WrittenLine line;
+    /** The line's hash, worked out once: the arms are walked to the choices they are of, and a
+     *  part is a key of every place a line is read at. */
+    private final int hash;
 
     private PartOfAComparison(WrittenLine line) {
         this.line = line;
+        this.hash = line.hashCode();
     }
 
     /** The line the arms of {@code line} lead to. */
@@ -36,19 +40,15 @@ public final class PartOfAComparison {
         return line;
     }
 
-    /** Whether this is the comparison itself, which its author drew as one line. */
-    public boolean isTheComparison() {
-        return line.arms().isEmpty();
-    }
-
     @Override
     public boolean equals(Object other) {
-        return other instanceof PartOfAComparison that && line.equals(that.line);
+        return other instanceof PartOfAComparison that && hash == that.hash
+                && line.equals(that.line);
     }
 
     @Override
     public int hashCode() {
-        return line.hashCode();
+        return hash;
     }
 
     @Override

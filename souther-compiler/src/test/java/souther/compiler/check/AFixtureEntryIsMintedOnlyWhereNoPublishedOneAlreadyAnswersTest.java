@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AFixtureEntryIsMintedOnlyWhereNoPublishedOneAlreadyAnswersTest {
 
     private static final String MODULE = """
-            module m exposing ( settle%s )
+            module m exposing ( settle, Amount, Order, Accepted, Rejected%s )
 
             data Amount = Decimal
             data Order = { total: Amount }
@@ -116,7 +117,7 @@ class AFixtureEntryIsMintedOnlyWhereNoPublishedOneAlreadyAnswersTest {
     }
 
     private static CheckSurface surfaceOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface("m")).value();
         assertNotNull(surface, "the source under test does not get as far as being assembled");
         return surface;

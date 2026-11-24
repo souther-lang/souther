@@ -42,6 +42,8 @@ public final class TermOrders {
     private final Carrier answered;
     private final Map<ElementProjection, Carrier> fields;
     private final Map<ElementProjection, List<TypeSymbol>> worn;
+    private final List<TermOrders> factors;
+    private int hash;
 
     /**
      * @param term     the number these are the orders of. Carried, because an answer that leaves
@@ -69,6 +71,17 @@ public final class TermOrders {
     TermOrders(NumericTerm term, Carrier observed, Carrier answered,
                Map<ElementProjection, Carrier> fields,
                Map<ElementProjection, List<TypeSymbol>> worn) {
+        this(term, observed, answered, fields, worn, List.of());
+    }
+
+    /**
+     * @param factors for a product of two forms: the orders of every number either form is of,
+     *                the numbers a row is read for before they are multiplied. Nothing for any
+     *                other term
+     */
+    TermOrders(NumericTerm term, Carrier observed, Carrier answered,
+               Map<ElementProjection, Carrier> fields,
+               Map<ElementProjection, List<TypeSymbol>> worn, List<TermOrders> factors) {
         if (term == null) {
             throw new IllegalArgumentException("orders of no term, which is an answer to nothing");
         }
@@ -77,6 +90,12 @@ public final class TermOrders {
         this.answered = answered;
         this.fields = Map.copyOf(fields);
         this.worn = Map.copyOf(worn);
+        this.factors = List.copyOf(factors);
+    }
+
+    /** The orders of every number either form of a product is of, or none for any other term. */
+    public List<TermOrders> factors() {
+        return factors;
     }
 
     /** The number these are the orders of. */
@@ -282,6 +301,31 @@ public final class TermOrders {
         return TermReading.overElements(this, each);
     }
 
+    /** One entry of a map as a row holds it: the key and the value filed under it. */
+    public record KeyedEntry(ObservedValue key, ObservedValue value) {}
+
+    /**
+     * Whether the observations of the keys of two maps tell which keys are one: the language writes
+     * a key one way when it is the same key. Asked before {@link #readJoined}, which is of keys
+     * that are, and a join over any other is not read.
+     */
+    public boolean canTellTheKeysApart(List<KeyedEntry> first, List<KeyedEntry> second) {
+        return TermReading.keysCanBeTold(first, second);
+    }
+
+    /**
+     * The products of the values two maps hold under one key, for a term over
+     * {@link RunSource.JoinedOccurrences}: the entries of the map walked and of the map looked
+     * into.
+     */
+    public NumericTerm.Reading readJoined(List<KeyedEntry> first, List<KeyedEntry> second) {
+        if (!(term instanceof NumericTerm.TakenOver over)
+                || !(over.source() instanceof RunSource.JoinedOccurrences)) {
+            throw new IllegalArgumentException(term + " is not the products of two maps' values");
+        }
+        return TermReading.joined(this, first, second);
+    }
+
     /** What the value at {@code field} of an element is decoded on, for a term computed of each
      *  element, or null where nothing orders it. */
     public Carrier fieldCarrier(ElementProjection field) {
@@ -312,6 +356,12 @@ public final class TermOrders {
         return answered;
     }
 
+    /** Whether the number the term names is measured in whole numbers, and so is one on every
+     *  row. */
+    public boolean countsWhole() {
+        return answered != null && answered.countsInWholeNumbers();
+    }
+
     /**
      * Two of these are one where they are the orders of one term.
      *
@@ -322,7 +372,11 @@ public final class TermOrders {
      */
     @Override
     public boolean equals(Object other) {
+        if (other == this) {
+            return true;
+        }
         return other instanceof TermOrders that
+                && hashCode() == that.hashCode()
                 && term.equals(that.term)
                 && Objects.equals(observed, that.observed)
                 && Objects.equals(answered, that.answered)
@@ -330,9 +384,21 @@ public final class TermOrders {
                 && worn.equals(that.worn);
     }
 
+    /**
+     * Worked out once. These are keys of the tables a reading keeps, and what they hash is the
+     * term, both orders and two maps, each of them hashed through its own parts; a table asks again
+     * for every entry it copies and every one it looks up. One word, so a thread that sees it sees
+     * all of it, with nought standing for not worked out: a hash that is nought is worked out each
+     * time, which is the same answer without the saving.
+     */
     @Override
     public int hashCode() {
-        return Objects.hash(term, observed, answered, fields, worn);
+        int had = hash;
+        if (had == 0) {
+            had = Objects.hash(term, observed, answered, fields, worn);
+            hash = had;
+        }
+        return had;
     }
 
     @Override

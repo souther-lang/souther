@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
@@ -156,7 +158,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
                 data B = A
                 """)) {
             Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-            compilation.answerEverything();
+            ACompiledModel.refusedWith(List.of("E1013"), compilation);
 
             for (String each : List.of("A", "B", "C")) {
                 assertEquals(each, ownerOf(compilation, "ring", each),
@@ -210,9 +212,9 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
         TypeKey thrice = new TypeKey("ranged", "Thrice");
 
         FieldDomains lent = FieldDomains.of(TypeSymbols.declared(thrice),
-                RuleReadingContext.of(rules, policy, compilation.db().readings()));
+                RuleReadingContext.of(rules, policy, compilation.db().readings(), TestDay.TODAY));
         FieldDomains own = FieldDomains.of(TypeSymbols.declared(thrice),
-                RuleReadingContext.unshared(rules, policy));
+                RuleReadingContext.unshared(rules, policy, TestDay.TODAY));
 
         assertEquals("Once", lent.named().key().name(), "the lent reading is the owner's");
         assertEquals("Thrice", own.named().key().name(), "the other is the name's own");
@@ -255,7 +257,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
                 return declaration.equals(thrice) ? once : declaration;
             }
         }, () -> 1, StoreWork.UNWATCHED);
-        RuleReadingContext reading = RuleReadingContext.of(rules, policy, lender);
+        RuleReadingContext reading = RuleReadingContext.of(rules, policy, lender, TestDay.TODAY);
 
         FieldDomains asked = FieldDomains.of(thrice, reading);
 
@@ -266,12 +268,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
     }
 
     private static Compilation compiled(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model under test is a program that can be written");
-        return compilation;
+        return ACompiledModel.compiles(Compilation.ofSources(sources, ModulePath.EMPTY));
     }
 
     private static long readingsMadeCompiling(String source) {

@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -139,7 +140,7 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
 
     private static Set<String> placementsIn(String source) {
         Set<String> out = new LinkedHashSet<>();
-        for (Body body : bodiesOf(List.of(List.of(source)))) {
+        for (Body body : bodiesOf(List.of(SourceSet.compiling(source)))) {
             NodeAddresses places = NodeAddresses.of(body.behavior(), body.body());
             Binders binders = Binders.of(body.module(), places);
             for (Core.Read read : readsIn(body.body())) {
@@ -170,19 +171,28 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
 
     private record Body(String module, String behavior, Core body) {}
 
+    /** A set of sources, with the codes of the errors it is checked in as refused with. */
+    private record SourceSet(List<String> sources, List<String> refusedWith) {
+
+        static SourceSet compiling(String source) {
+            return new SourceSet(List.of(source), List.of());
+        }
+    }
+
     private static List<Body> everyBody() {
-        List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
-        sources.add(List.of(SPLICED));
-        sources.add(List.of(BINDING_SHAPES));
+        List<SourceSet> sources = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus -> sources.add(
+                new SourceSet(corpus.sources(), corpus.refusedWith())));
+        sources.add(SourceSet.compiling(SPLICED));
+        sources.add(SourceSet.compiling(BINDING_SHAPES));
         return bodiesOf(sources);
     }
 
-    private static List<Body> bodiesOf(List<List<String>> sources) {
+    private static List<Body> bodiesOf(List<SourceSet> sources) {
         List<Body> out = new ArrayList<>();
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (SourceSet set : sources) {
+            Compilation compilation = Compilation.ofSources(set.sources(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(set.refusedWith(), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

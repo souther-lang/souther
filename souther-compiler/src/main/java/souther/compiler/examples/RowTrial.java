@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.execute.RunStop;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
@@ -15,7 +16,9 @@ import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Probe;
+import souther.compiler.coverage.Rewriting;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.WalkRewrites;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
@@ -27,6 +30,10 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.runtime.ConstraintViolation;
+import souther.runtime.EnsuresFailure;
+import souther.runtime.InvariantFailure;
+import souther.runtime.UnreachableReached;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -111,11 +118,11 @@ public final class RowTrial {
                     }
 
                     @Override
-                    public Optional<AnswerObservation> runReplacing(
-                            Map<Integer, Integer> replacing) {
-                        Intervention.begin(replacing);
+                    public Optional<AnswerObservation> runReplacing(Rewriting asked) {
+                        Intervention.begin(asked);
                         try {
-                            return applied(ready.applying(), ready.over(), steps, ready.reading());
+                            return applied(ready.applying(), ready.over(), steps, ready.reading())
+                                    .map(Applied::answer);
                         } finally {
                             Intervention.end();
                         }
@@ -146,10 +153,12 @@ public final class RowTrial {
                 return new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
             }
         };
-        // The siblings these classes carry, which are the only rewrites a run of them can be asked
-        // for.
-        ArmReplacements held = probes instanceof ProbeImage.Instrumented(var _, var carried)
+        // The siblings and the walks these classes carry, which are the only rewrites a run of them
+        // can be asked for.
+        ArmReplacements held = probes instanceof ProbeImage.Instrumented(var _, var carried, var _)
                 ? carried : ArmReplacements.NONE;
+        WalkRewrites walks = probes instanceof ProbeImage.Instrumented(var _, var _, var at)
+                ? at : WalkRewrites.NONE;
         return new RowTrials() {
 
             @Override
@@ -160,6 +169,11 @@ public final class RowTrial {
             @Override
             public ArmReplacements carried() {
                 return held;
+            }
+
+            @Override
+            public WalkRewrites walksCarried() {
+                return walks;
             }
         };
     }
@@ -185,13 +199,15 @@ public final class RowTrial {
         return switch (probes) {
             case ProbeImage.Uninstrumented _ ->
                     applied(ready.applying(), ready.over(), steps, ready.reading())
-                            .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
-            case ProbeImage.Instrumented(NumberingIdentity numbering, var _) -> {
+                            .map(came -> new RowTrials.Ran(new RunRecord.NoAccount(),
+                                    came.answer(), came.stopped()));
+            case ProbeImage.Instrumented(NumberingIdentity numbering, var _, var _) -> {
                 Probe.begin(numbering);
                 try {
                     yield applied(ready.applying(), ready.over(), steps, ready.reading())
-                            .map(answer -> new RowTrials.Ran(
-                                    new RunRecord.Recorded(Probe.snapshot()), answer));
+                            .map(came -> new RowTrials.Ran(
+                                    new RunRecord.Recorded(Probe.snapshot()), came.answer(),
+                                    came.stopped()));
                 } finally {
                     // On every way out, including one nothing here catches. A recording left
                     // installed is where the next reader on this thread would start.
@@ -236,12 +252,17 @@ public final class RowTrial {
                 return Optional.empty();
             }
             applying = applies.applying(standins);
-        } catch (StandinNotBuilt | LinkageError e) {
-            // Nothing was applied, and these are the two ways that happens before an application:
-            // a stand-in that could not be made, and this compiler's own output not linking. Named
-            // rather than taken by category — anything else out of here is this compiler failing at
-            // something it does not have a word for, and turning that into a fact about where a row
-            // went is how a defect in the runner comes back as a defect in the model.
+        } catch (StandinNotBuilt e) {
+            // Nothing was applied, because a stand-in could not be made. Named rather than taken by
+            // category — anything else out of here is this compiler failing at something it does
+            // not have a word for, and turning that into a fact about where a row went is how a
+            // defect in the runner comes back as a defect in the model.
+            return Optional.empty();
+        } catch (LinkageError e) {
+            // Nothing was applied, because there is no runtime to apply it with. A class that was
+            // generated wrongly is not that, and is this compiler failing, and nor is a class that
+            // failed to initialize.
+            EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
             return Optional.empty();
         }
         return Optional.of(new Ready(applying, over,
@@ -341,10 +362,12 @@ public final class RowTrial {
      * Applies the behavior, and says what it answered — or that it was not applied at all, which is
      * the empty answer.
      *
-     * <p>A run that aborts still went where it went, so what stopped it is dropped: nothing here is
-     * judging the row, and a generator has no expectation for it to have failed against. It answered
-     * nothing, and that is what it is said to have answered. What is not a run at all is the
-     * implementation being out of reach.
+     * <p>A run that aborts still went where it went, and nothing here is judging the row: a generator
+     * has no expectation for it to have failed against. It answered nothing, and that is what it is
+     * said to have answered. Where what stopped it was a construction its type's invariant refused,
+     * that construction is said beside the answer, for a reader that has to tell an author which
+     * input the model has not decided about. What is not a run at all is the implementation being
+     * out of reach.
      *
      * <p>The answer is read once the budget is let go, as a written row's is: reading it walks what
      * the run built, every node walked would be a counted step, and a run charged for being read
@@ -353,9 +376,8 @@ public final class RowTrial {
      * <p>The budget is let go on every way out, a worker being something the next row would
      * otherwise start inside of.
      */
-    private static Optional<AnswerObservation> applied(Answerer.Applying applying,
-                                                       List<Handed> over, EvaluationPolicy steps,
-                                                       AnswerReading reading) {
+    private static Optional<Applied> applied(Answerer.Applying applying, List<Handed> over,
+                                             EvaluationPolicy steps, AnswerReading reading) {
         Object answered;
         EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
         try {
@@ -378,14 +400,54 @@ public final class RowTrial {
                 // Except that a run that went past what a run may spend did not stop of its own
                 // accord: given more it might answer, so it is said to have run out rather than to
                 // have answered nothing.
-                return Optional.of(RunLimits.reached(e)
-                        ? new AnswerObservation.RanOut(RunLimits.figureOf(e, steps))
-                        : new AnswerObservation.NotAnswered());
+                if (RunLimits.reached(e)) {
+                    return Optional.of(new Applied(
+                            new AnswerObservation.RanOut(RunLimits.figureOf(e, steps)),
+                            Optional.empty()));
+                }
+                return Optional.of(new Applied(new AnswerObservation.NotAnswered(), stopOf(e)));
             }
         } finally {
             EvaluationContext.end();
         }
-        return Optional.of(reading.read(answered));
+        return Optional.of(new Applied(reading.read(answered), Optional.empty()));
+    }
+
+    /** What a run answered, and where it stopped where it stopped without answering. */
+    private record Applied(AnswerObservation answer, Optional<RunStop> stopped) {}
+
+    /**
+     * Where {@code stopped} ended, read off the language's own ends among the causes the
+     * application wrapped it in: a {@link ConstraintViolation} — a construction refused, an
+     * {@code ensures} not kept, or an operation the language refuses to finish — or an
+     * {@link UnreachableReached}. None where it ended some other way.
+     */
+    private static Optional<RunStop> stopOf(InvocationFailure stopped) {
+        for (Throwable cause = stopped.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof UnreachableReached reached) {
+                UnreachableReached.Site site = reached.site();
+                return Optional.of(new RunStop.AtAnUnreachable(String.valueOf(
+                        reached.getMessage()), site == null ? Optional.empty()
+                                : Optional.of(new RunStop.Site(site.module(), site.line(),
+                                        site.column()))));
+            }
+            if (cause instanceof ConstraintViolation violation) {
+                return Optional.of(switch (violation.failure()) {
+                    case InvariantFailure failed -> {
+                        ConstraintViolation.ConstructionSite site = violation.site();
+                        yield new RunStop.AtAConstruction(failed.declared().module(),
+                                failed.declared().type(), Optional.ofNullable(failed.clause()),
+                                failed.declared().ordinal(), site == null ? Optional.empty()
+                                        : Optional.of(new RunStop.Site(site.module(), site.line(),
+                                                site.column())));
+                    }
+                    case EnsuresFailure failed -> new RunStop.AtAnEnsures(failed.module(),
+                            failed.behavior(), Optional.ofNullable(failed.clause()));
+                    case null -> new RunStop.AtAnEnd(String.valueOf(violation.getMessage()));
+                });
+            }
+        }
+        return Optional.empty();
     }
 
     private RowTrial() {}

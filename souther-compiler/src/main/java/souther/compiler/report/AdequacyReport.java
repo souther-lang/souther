@@ -1,6 +1,8 @@
 package souther.compiler.report;
 
 import souther.compiler.check.PathReachability;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.publish.ReachProofWord;
 import souther.compiler.types.ConstructOccurrence;
@@ -11,12 +13,18 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.CallPassage;
+import souther.compiler.check.StopOrigin;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.WholeRounding;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
 import souther.compiler.publish.InputUseWord;
+import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.AnApplicationOfAClosure;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.CanonicalNameOrder;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
@@ -27,18 +35,26 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.partition.BorderQuantity;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
+import souther.compiler.partition.BoundHeldIn;
 import souther.compiler.partition.BoundaryLine;
+import souther.compiler.partition.ChoicePattern;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.ThresholdOfADerivedValue;
 import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
@@ -51,7 +67,10 @@ import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
+import souther.compiler.meaning.CaseCount;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.NumericallyConsistentWays;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLine;
@@ -62,6 +81,8 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LeftOutPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.execute.RunStop;
 import souther.compiler.partition.InputUse;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.NotOwedReason;
@@ -78,10 +99,29 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Localizable;
+import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageOrder;
+import souther.compiler.diag.msg.ReportMessage;
+
+import java.math.BigInteger;
+import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AConstructionStopNotShown;
+import souther.compiler.inputs.AConstructionStopShown;
+import souther.compiler.inputs.AStopNotShown;
+import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AuthoredOrder;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.WhatAConstructionAsks;
+import souther.compiler.inputs.WhatIsShownOfAStop;
+import souther.compiler.inputs.WhatKeepsEveryRunGoing;
+import souther.compiler.inputs.CasesAtARule;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputQuestion;
@@ -92,16 +132,25 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.InputFact;
+import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberRegion;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ConditionsStoppedAtAFigure;
 import souther.compiler.query.FindingSubject;
+import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
+import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
 import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.query.TiltOfADerivedValue;
+import souther.compiler.query.ToBeChangedFirst;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Offering;
 import souther.compiler.query.InputOfARowForALine;
@@ -113,6 +162,8 @@ import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
 import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
+import souther.compiler.query.WhatToDeclare;
+import souther.compiler.query.WhereTheReadingsDiffer;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.observe.MeasurementStatus;
@@ -139,6 +190,7 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.WhichLine;
 import souther.compiler.partition.WhyKept;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.UnjoinedMeeting;
 import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
@@ -188,7 +240,6 @@ import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.RowObligation;
-import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.query.RowSummary;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.text.DisplayColumns;
@@ -209,10 +260,15 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -284,7 +340,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 24;
+    public static final int SCHEMA_VERSION = 28;
 
     /**
      * Where the schema this writes documents ships.
@@ -437,6 +493,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * What one module's compile came to, as this report says it.
      *
+     * @param apart              which lines of a comparison the points of the whole module say in
+     *                           the same words. The module's and not a view's: a report narrowed
+     *                           to some behaviors numbers the lines it shows as the whole does
      * @param owedByDeclarations what this module's declarations are owed and how far the reading it
      *                           was made from got. An account and not a list of debts: a module
      *                           whose lines nobody could read holds no debts anybody found, and read
@@ -446,7 +505,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     public record ModuleReport(String module, SourceId declaredIn,
                                List<BehaviorReport> behaviors,
                                List<ReportedFinding> declarations,
-                               DeclarationsShown owedByDeclarations) {
+                               DeclarationsShown owedByDeclarations,
+                               WhereTheReadingsDiffer apart) {
 
         /**
          * What the module is short of that is not any behavior's.
@@ -530,11 +590,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * is a measure's answer and not a renderer's (issue #953).
          */
         public WeakeningSet weakenedBy() {
-            WeakeningSet out = WeakeningSet.none();
+            List<WeakeningSet> each = new ArrayList<>();
             for (BehaviorReport behavior : behaviors) {
-                out = out.union(behavior.weakenedBy());
+                each.add(behavior.weakenedBy());
             }
-            return out.union(declarationsWeakenedBy());
+            each.add(declarationsWeakenedBy());
+            return WeakeningSet.unionOf(each);
         }
 
         /**
@@ -634,6 +695,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  name what only such rows cover. The module's and not this behavior's: a row
      *                  of another behavior can be what covers an arm of this one, and a report
      *                  narrowed to this one still names it
+     * @param helpersCalledOnEachElement the helpers this behavior's comparisons are written in
+     *                  that a function applied outside them calls on more than one element, each
+     *                  with the calls and the helpers calling it
+     *                  ({@link HelpersReadOnApplicationsAroundThem}): what a reading of a line
+     *                  written in one of them names, beside what the other rules suggest there.
+     *                  Asked of where the body's comparisons stand, and not of the cases of a
+     *                  line, since a case of one candidate is made of nothing the function did
+     * @param stoppedAtAFigure the conditions of the body read no further at a figure, and what to
+     *                  declare as a behavior so that they are read
+     * @param leftToBeChanged what the body was left unread for its author to change first; nothing
+     *                  where it was measured
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
@@ -649,8 +721,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  PathReachability.Answers.Contradictions reachShownWrong,
                                  Map<ObligationIdentity.OfACombinationOfDecisions,
                                          List<List<ShownCondition>>> combinationReadings,
-                                 Map<RowRef, WhereARowIs.Shown> rowPlaces) {
+                                 List<UnobservedGroup> unobserved,
+                                 Map<RowRef, WhereARowIs.Shown> rowPlaces,
+                                 List<TiltOfADerivedValue> weights,
+                                 Map<Replacement, Citation> rewritePlaces,
+                                 Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops,
+                                 Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
+                                         helpersCalledOnEachElement,
+                                 ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure,
+                                 ToBeChangedFirst.Left leftToBeChanged) {
         public BehaviorReport {
+            Objects.requireNonNull(stoppedAtAFigure, "what stopped at a figure, if nothing");
+            Objects.requireNonNull(leftToBeChanged, "what is left to be changed, if nothing");
+            helpersCalledOnEachElement = Map.copyOf(helpersCalledOnEachElement);
+            weights = List.copyOf(weights);
+            wayStops = Map.copyOf(wayStops);
+            rewritePlaces = Map.copyOf(rewritePlaces);
             Objects.requireNonNull(reachShownWrong,
                     "what the rows showed of the reading of reach, or that they showed nothing");
             reported = List.copyOf(reported);
@@ -661,7 +747,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ruleReadings = Map.copyOf(ruleReadings);
             ruleSettlements = Map.copyOf(ruleSettlements);
             combinationReadings = Map.copyOf(combinationReadings);
+            unobserved = List.copyOf(unobserved);
             rowPlaces = Map.copyOf(rowPlaces);
+        }
+
+        /**
+         * Each rewrite of this body that no row was shown to tell apart or that was left open, in
+         * the words a page says it in.
+         *
+         * <p>One saying for both, so that a rewrite is said the same whichever of the two lines
+         * it is on. Which rewrites read alike is the measure's own answer
+         * ({@link ReplacementEvidence.Summary#toldApartBy}), the one a warning and a
+         * generated row ask as well. Never left alike: two lines a reader cannot tell apart are
+         * the defect that answer is here to stop, so a pair it did not part is raised.
+         *
+         * <p>The place of each is worked out when the report was assembled, by the question that
+         * places a finding about one, so that a reader is sent to one place for a rewrite.
+         *
+         * <p>Held apart by what each line says, which is what the measure's answer was worked out
+         * to part. A language that words two of them alike says two rewrites in the same words; it
+         * does not make them one.
+         */
+        Map<Replacement, String> rewritesSaid(String module, SourceId declaredIn, Page page) {
+            Map<Replacement, Message> said = new LinkedHashMap<>();
+            for (ReplacementEvidence.Rewrite each : unsettledRewrites(evidence.replacement())) {
+                Citation at = rewritePlaces.get(each.replacement());
+                if (at == null) {
+                    throw new IllegalStateException("this report was not assembled with the"
+                            + " rewrite " + each.replacement() + " of `" + name + "`");
+                }
+                said.put(each.replacement(), new ReportMessage.Then(
+                        rewriteSaid(each.written(), each.reportAt(),
+                                at.said(page.rendering(), declaredIn), module, page),
+                        RewriteVocabulary.apart(evidence.replacement().measured().made()
+                                .orElseThrow().toldApartBy(each.replacement()))));
+            }
+            Set<Message> apart = new HashSet<>(said.values());
+            if (apart.size() != said.size()) {
+                throw new IllegalStateException("two rewrites of `" + name + "` are said alike: "
+                        + apart);
+            }
+            Map<Replacement, String> out = new LinkedHashMap<>();
+            said.forEach((rewrite, words) -> out.put(rewrite, page.say(words)));
+            return out;
         }
 
         /** Where this report shows a row of the module that does not hold — see
@@ -953,6 +1081,176 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 overall, List.copyOf(modules));
     }
 
+    /**
+     * The helpers {@code behavior}'s lines are written in that a function applied outside them
+     * calls on more than one element, by helper; nothing where its lines were not read.
+     */
+    private static Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
+            helpersCalledOnEachElement(Compilation compilation, String name, String behavior) {
+        List<HelpersReadOnApplicationsAroundThem.Told> told = compilation.db()
+                .ask(new HelpersReadOnApplicationsAroundThem(name, behavior)).value();
+        Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told> out =
+                new LinkedHashMap<>();
+        if (told != null) {
+            told.forEach(each -> out.put(each.named().helper(), each));
+        }
+        return out;
+    }
+
+    /** What of {@code behavior} stopped at a figure; nothing where its body was not read. */
+    private static ConditionsStoppedAtAFigure.Stopped stoppedAtAFigure(Compilation compilation,
+                                                                       String name,
+                                                                       String behavior) {
+        ConditionsStoppedAtAFigure.Stopped stopped = compilation.db()
+                .ask(new ConditionsStoppedAtAFigure(name, behavior)).value();
+        return stopped == null ? ConditionsStoppedAtAFigure.Stopped.NOTHING : stopped;
+    }
+
+    /** What to declare, one sentence after another. */
+    private static String suggestedSaid(WhatToDeclare declare, Page page) {
+        StringBuilder out = new StringBuilder();
+        for (WhatToDeclare.HelperToDeclare each : declare.helpers()) {
+            out.append(page.say(new ReportMessage.DeclaredAsABehaviorItIsOneAnswer(
+                    each.helper().name(), each.conditions(), each.calls(),
+                    each.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                            : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                    each.calledInside().stream()
+                                            .map(helper -> "`" + helper.name() + "`")
+                                            .toList())))));
+        }
+        if (declare.inABehavior() > 0) {
+            out.append(page.say(new ReportMessage.WrittenInABehaviorItIsReadOnce(
+                    declare.inABehavior())));
+        }
+        return out.toString();
+    }
+
+    /** What of a behavior stopped at a figure, as the document writes it; absent where nothing
+     *  did. */
+    private static void stoppedAtAFigure(ObjectNode behavior,
+                                         ConditionsStoppedAtAFigure.Stopped stopped) {
+        if (stopped.conditions() == 0) {
+            return;
+        }
+        ObjectNode out = behavior.putObject("conditionsStoppedAtAFigure");
+        out.put("conditions", stopped.conditions());
+        figuresMet(out, stopped.figures());
+        whatToDeclare(out, stopped.declare());
+    }
+
+    /** What is left for the author to change before the behavior is measured, as the document
+     *  writes it; absent where the behavior is measured. */
+    private static void leftToBeChanged(ObjectNode behavior, ToBeChangedFirst.Left left) {
+        if (left.figure().isEmpty()) {
+            return;
+        }
+        ObjectNode out = behavior.putObject("toBeChangedFirst");
+        figuresMet(out, List.of(left.figure().get()));
+        out.put("conditions", left.choices().conditions());
+        whatToDeclare(out, left.choices());
+        ArrayNode applied = out.putArray("helpersAppliedToEachElement");
+        for (HelpersReadOnApplicationsAroundThem.Told each : left.helpers()) {
+            ObjectNode one = applied.addObject();
+            one.put("helper", each.named().helper().toString());
+            one.put("applicationsAtMost", each.applicationsAtMost());
+            ArrayNode inside = one.putArray("calledInside");
+            each.calledInside().forEach(caller -> inside.add(caller.toString()));
+        }
+    }
+
+    /** What is left for the author to change before the behavior is measured, one sentence after
+     *  another. */
+    private static String leftSaid(ToBeChangedFirst.Left left, Page page) {
+        StringBuilder out = new StringBuilder(suggestedSaid(left.choices(), page));
+        for (HelpersReadOnApplicationsAroundThem.Told each : left.helpers()) {
+            out.append(page.say(new ReportMessage.DeclaredAsABehaviorItReadsItsComparisonsOnce(
+                    each.named().helper().name(), each.applicationsAtMost(),
+                    each.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                            : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                    each.calledInside().stream()
+                                            .map(helper -> "`" + helper.name() + "`")
+                                            .toList())))));
+        }
+        return out.toString();
+    }
+
+    /** The helpers to declare and the conditions to write in a behavior. */
+    private static void whatToDeclare(ObjectNode out, WhatToDeclare declare) {
+        ArrayNode helpers = out.putArray("helpersToDeclare");
+        for (WhatToDeclare.HelperToDeclare each : declare.helpers()) {
+            ObjectNode one = helpers.addObject();
+            one.put("helper", each.helper().toString());
+            one.put("conditions", each.conditions());
+            one.put("calls", each.calls());
+            ArrayNode inside = one.putArray("calledInside");
+            each.calledInside().forEach(caller -> inside.add(caller.toString()));
+        }
+        out.put("conditionsToWriteInABehavior", declare.inABehavior());
+    }
+
+    /**
+     * The helper a comparison is written in that a function applied outside it calls on each
+     * element, as a reading of the comparison tells of it beside what the other rules suggest at
+     * that reading.
+     *
+     * @param named           the helper, with each copy the reading was read at and the call around
+     *                        it
+     * @param calledInside    the helpers that call the helper, out to a behavior, which a call of
+     *                        it moves out of
+     * @param leftReadAgainBy the helpers the other rules suggest at the reading that, declared as
+     *                        a behavior, leave the comparison read again on each of those
+     *                        applications ({@link AHelperReadOnApplicationsAroundIt#leftReadAgainBy})
+     */
+    private record OnEachElement(AHelperReadOnApplicationsAroundIt named,
+                                 List<ValueName.Helper> calledInside,
+                                 List<ValueName.Helper> leftReadAgainBy) {
+
+        OnEachElement {
+            Objects.requireNonNull(named, "some helper");
+            calledInside = List.copyOf(calledInside);
+            leftReadAgainBy = List.copyOf(leftReadAgainBy);
+        }
+    }
+
+    /**
+     * What a reading of the comparison read at {@code readAt} tells of the helper it is written in
+     * that a function applied outside it calls on each element, beside {@code suggested}, the
+     * helpers the other rules suggest at the same reading; empty where {@code helpers} says
+     * nothing of the helper, or where it is among {@code suggested}, which says it already.
+     *
+     * <p>The one place a reading's suggestions are put beside each other, so that every place a
+     * reading is told of says the same of them.
+     */
+    private static Optional<OnEachElement> calledOnEachElement(
+            Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told> helpers,
+            List<ModelOccurrence> readAt, List<ValueName.Helper> suggested) {
+        Set<Optional<ValueName.Helper>> writers = new LinkedHashSet<>();
+        readAt.forEach(copy -> writers.add(AHelperReadOnApplicationsAroundIt.writtenIn(copy)));
+        if (writers.size() != 1) {
+            return Optional.empty();
+        }
+        Optional<HelpersReadOnApplicationsAroundThem.Told> told = writers.iterator().next()
+                .filter(helper -> !suggested.contains(helper))
+                .map(helpers::get);
+        // Of the copies this reading was read at alone: a call around another copy of the helper
+        // is nothing this reading was read on.
+        return told.flatMap(each -> each.named().restrictedTo(readAt)
+                .map(here -> new OnEachElement(here, each.calledInside(),
+                        here.leftReadAgainBy(suggested))));
+    }
+
+    /** The helpers the rules of a case not worked out suggest at one reading of it: those its
+     *  choices multiply the readings of, and the one holding every choice. */
+    private static List<ValueName.Helper> suggestedAt(CaseExpansion.CameTo answer,
+                                                      List<ModelOccurrence> readAt) {
+        List<ValueName.Helper> out = new ArrayList<>();
+        if (answer.attributed() instanceof CaseExpansion.Attributed made) {
+            made.multiplied().forEach(each -> out.add(each.helper()));
+        }
+        answer.helperHoldingEveryChoice(readAt).ifPresent(declared -> out.add(declared.helper()));
+        return out;
+    }
+
     private static ModuleReport moduleReport(Compilation compilation, String name,
                                              CheckSurface module, Offering offered) {
         // The same reading every measure beside them reads, asked for rather than made again. Two
@@ -1062,6 +1360,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     decisions == null ? null : decisions.get(behavior.name()),
                     meetings == null ? null : meetings.get(behavior.name()),
                     rewrites == null ? null : rewrites.get(behavior.name()));
+            List<UnobservedGroup> unobserved = unobserved(compilation, name, behavior.name(),
+                    evidence.combinations(), reported);
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(new ValueName.Behavior(module.name(), behavior.name())),
                     evidence,
@@ -1074,17 +1374,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
                     reported,
                     armPlaces(compilation, branch),
-                    conditionPlaces(compilation, name, linesOf(read), requirements, reported),
+                    conditionPlaces(compilation, name, linesOf(read), requirements, reported,
+                            partition == null ? List.of() : partition.caseExpansions(),
+                            decisions == null ? null : decisions.get(behavior.name())),
                     rulePlaces(compilation, citedBy(evidence, reported)),
-                    partPlaces(compilation, partition, reported),
+                    partPlaces(compilation, partition, reported,
+                            evidence.account() == null ? List.of()
+                                    : evidence.account().made().orElseGet(List::of)),
                     ruleReadings(compilation, name, behavior.name(),
                             decisions == null ? null : decisions.get(behavior.name()),
                             reported, requirements),
                     requirements,
                     reachShownWrong(arrived, behavior.name()),
                     combinationReadings(compilation, name, behavior.name(),
-                            evidence.combinations(), reported),
-                    rowPlaces));
+                            evidence.combinations(), unobserved),
+                    unobserved,
+                    rowPlaces,
+                    // What the rows fix of the weights of each computation the partition left
+                    // owing them, asked of the one answer the findings read.
+                    Optional.ofNullable(compilation.db()
+                            .ask(new Adequacy.Weights(name, behavior.name())).value())
+                            .orElse(List.of()),
+                    rewritePlaces(compilation, name, behavior.name(), evidence.replacement()),
+                    // Where every run along each way of the decision that stops stops, as the
+                    // places a run is said to stop at: resolved here, where the texts are held.
+                    wayStops(compilation, decisions == null ? null
+                            : decisions.get(behavior.name())),
+                    helpersCalledOnEachElement(compilation, name, behavior.name()),
+                    stoppedAtAFigure(compilation, name, behavior.name()),
+                    Adequacy.leftToBeChanged(compilation.db(), name, behavior.name())));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -1099,9 +1417,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // under are the debts' rather than any behavior's.
                 new DeclarationsShown(declared,
                         conditionPlaces(compilation, name, declaredLines(declared), Map.of(),
-                                List.of()),
+                                List.of(), List.of(), null),
                         rulePlaces(compilation, citedByDeclarations(declared, owed)),
-                        rowPlaces));
+                        rowPlaces),
+                Adequacy.ToldApart.of(compilation.db(), name));
     }
 
     /** The lines a module's declarations were read at, which is where the block about them looks
@@ -1151,6 +1470,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .map(each -> reported(compilation, module, each, offered)).toList();
     }
 
+    /** Where every run along each way of {@code decision} through a construction no input gets
+     *  past stops, or would stop were some input to take it ({@link Adequacy#whereRunsStopAt}). */
+    private static Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops(
+            Compilation compilation, DecisionEvidence decision) {
+        if (decision == null) {
+            return Map.of();
+        }
+        Map<DecisionReading.Ruled, List<WhereARunStopped>> out = new LinkedHashMap<>();
+        for (DecisionReading.Excluded each : decision.read().excluded()) {
+            switch (each) {
+                case DecisionReading.EveryRunStops it -> out.put(it.way(),
+                        Adequacy.whereRunsStopAt(compilation.db(), it.stoppedAt()));
+                case DecisionReading.UndecidedAtAFigure it -> out.put(it.way(),
+                        Adequacy.whereRunsStopAt(compilation.db(), it.stoppedAt()));
+                // No run goes down it, so none stops anywhere along it.
+                case DecisionReading.ImpossiblePath _ -> { }
+            }
+        }
+        return out;
+    }
+
     /**
      * How each rule a line of this behavior's page is about is told to a reader.
      *
@@ -1195,9 +1535,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : CoveredOnlyByRowsThatDoNotHold.rulesOf(decision)) {
             about.add(taken.obligation().display());
         }
-        // And every way no input takes, each of which the page writes out as a rule's conditions.
-        List<DecisionReading.Ruled> ways = decision.read().impossible().stream()
-                .map(DecisionReading.ImpossiblePath::way).toList();
+        // And every way no rule past which is owed a row — no input takes it, or every run of it
+        // stops — each of which the page writes out as a rule's conditions.
+        List<DecisionReading.Ruled> ways = decision.read().excluded().stream()
+                .map(DecisionReading.Excluded::way).toList();
         if (about.isEmpty() && ways.isEmpty()) {
             return Map.of();
         }
@@ -1255,9 +1596,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /**
      * How a page says each combination of {@code behavior}'s decisions one of its lines is about:
-     * the ones no row makes and the ones only rows that do not hold make.
+     * the ones no row makes that are alone in their pattern, and the ones only rows that do not
+     * hold make.
      *
-     * <p>Which those are is the findings' answer and the witnesses', as it is for a rule, and what
+     * <p>Which those are is the patterns' answer and the witnesses', as it is for a rule, and what
      * each is said by is the ways the measure holds it under. The requirement and not the
      * conditions it is told apart by: those are in the terms the account keys on, and the ways are
      * the places a run is seen at, which are what the author wrote.
@@ -1268,14 +1610,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Map<ObligationIdentity.OfACombinationOfDecisions, List<List<ShownCondition>>>
             combinationReadings(Compilation compilation, String module, String behavior,
-                                CombinationCriterion criterion, List<ReportedFinding> reported) {
+                                CombinationCriterion criterion,
+                                List<UnobservedGroup> unobserved) {
         if (!(criterion instanceof CombinationCriterion.Interactions(var meetings))) {
             return Map.of();
         }
         Set<ObligationIdentity.OfACombinationOfDecisions> about = new LinkedHashSet<>();
-        for (ReportedFinding each : reported) {
-            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
-                about.add(combination);
+        for (UnobservedGroup group : unobserved) {
+            for (UnobservedChoices each : group.choices()) {
+                if (each.combination() != null) {
+                    about.add(each.combination());
+                }
             }
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
@@ -1292,6 +1637,211 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.put(combination, waysOf(compilation.db(), module, places, meetings, combination));
         }
         return out;
+    }
+
+    /**
+     * What a group of the body's decisions has no row making, as sets of its choices.
+     *
+     * <p>The group is the unit and the pattern is how it is said ({@link ChoicePattern}): the
+     * choices the rows were not seen making, in one standing, are each stated by the outcomes some
+     * factors take, and a set that no outcome of a factor tells apart is not told one choice at a
+     * time. A set that is one choice names every factor, so a group with a few choices missing is
+     * said choice by choice and a group with most of them missing is said by what they have in
+     * common — by one rule, and the same for both.
+     *
+     * <p>The standing is what a finding of the choice says besides that no row makes it: what its
+     * reading went without and what is open about whether a row making it can be written. Two
+     * choices in different standing are two patterns, so that a gap the rows established and one
+     * nobody could decide are never counted as one.
+     *
+     * <p>Read off the findings the measure raised, one to a combination, which are not changed:
+     * what a build refuses over and what a row is generated for are those, and this is how they
+     * are said.
+     */
+    private static List<UnobservedGroup> unobserved(Compilation compilation, String module,
+                                                   String behavior,
+                                                   CombinationCriterion criterion,
+                                                   List<ReportedFinding> reported) {
+        if (!(criterion instanceof CombinationCriterion.Interactions(var meetings))
+                || meetings.made().made().isEmpty()) {
+            return List.of();
+        }
+        Map<ObligationIdentity.OfACombinationOfDecisions, ReportedFinding> findingOf =
+                new LinkedHashMap<>();
+        for (ReportedFinding each : reported) {
+            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
+                findingOf.putIfAbsent(combination, each);
+            }
+        }
+        Set<ObligationIdentity.OfACombinationOfDecisions> made =
+                meetings.made().made().orElseThrow().met();
+        Adequacy.MeetingsSearchedFor.WhatTheSearchSaid searched =
+                Adequacy.MeetingsSearchedFor.WhatTheSearchSaid.of(compilation.db(), module,
+                        behavior);
+        DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
+        Object madeState = new Object();
+        List<UnobservedGroup> out = new ArrayList<>();
+        List<InteractionRequirements.OfferedGroup> offeredGroups = meetings.asked().groups();
+        for (int ordinal = 0; ordinal < offeredGroups.size(); ordinal++) {
+            InteractionRequirements.OfferedGroup offered = offeredGroups.get(ordinal);
+            Map<Standing, ReportedFinding> standingOf = new LinkedHashMap<>();
+            List<Object> states = new ArrayList<>();
+            for (ObligationIdentity.OfACombinationOfDecisions each : offered.at()) {
+                if (each == null) {
+                    // A choice whose factors leave a position nothing: no combination of the
+                    // body, and nothing to say of it.
+                    states.add(null);
+                } else if (made.contains(each)) {
+                    states.add(madeState);
+                } else if (!searched.owesARow(each)) {
+                    // The rules of its decisions leave no value: no combination, and the measure
+                    // raises no finding of it ({@link Adequacy.MeetingsSearchedFor}).
+                    states.add(null);
+                } else {
+                    // A combination of the body no row made has the finding that says so: the
+                    // measure raises one for every combination it states that the rows did not
+                    // make. One without is this report and the measure disagreeing, and left out
+                    // it would be a combination the build refuses over and no page names.
+                    ReportedFinding finding = findingOf.get(each);
+                    if (finding == null) {
+                        throw new IllegalStateException("`" + behavior + "` states a combination"
+                                + " no row made and raised no finding about it: " + each);
+                    }
+                    Standing standing = new Standing(finding.finding().weakenedBy(),
+                            finding.finding().open());
+                    standingOf.putIfAbsent(standing, finding);
+                    states.add(standing);
+                }
+            }
+            List<UnobservedChoices> choices = new ArrayList<>();
+            for (ChoicePattern.Found<Object> found
+                    : ChoicePattern.of(offered.widths(), states, each -> each != madeState)) {
+                choices.add(new UnobservedChoices(standingOf.get(found.state()),
+                        found.pattern().fixed(), found.pattern().count(),
+                        found.pattern().count() == 1 ? offered.at().get(indexOf(found.pattern(),
+                                offered.widths())) : null));
+            }
+            if (!choices.isEmpty()) {
+                List<List<FactorOutcome>> factors = new ArrayList<>();
+                for (List<InteractionRequirements.Outcome> factor : offered.byFactor()) {
+                    factors.add(factor.stream().map(outcome -> new FactorOutcome(
+                            shownWay(compilation.db(), module, places, outcome.claims()),
+                            outcome.settles())).toList());
+                }
+                out.add(new UnobservedGroup(ordinal,
+                        shownWay(compilation.db(), module, places, offered.reach().claims()),
+                        offered.reach().settles(), factors, choices));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Which choice of its group a pattern of one choice is, the first factor varying fastest. */
+    private static int indexOf(ChoicePattern pattern, List<Integer> widths) {
+        int index = 0;
+        int stride = 1;
+        for (int factor = 0; factor < widths.size(); factor++) {
+            index += pattern.fixed().get(factor) * stride;
+            stride *= widths.get(factor);
+        }
+        return index;
+    }
+
+    /** What two findings of a choice share when they are said as one: what the reading went
+     *  without and what is open about the choice. */
+    private record Standing(WeakeningSet weakening,
+                            CanonicalSelection<ObligationDisposition.Uncertainty> open) {
+    }
+
+    /**
+     * One outcome of one factor of a group, as a reader is told it and as the document names it.
+     *
+     * @param shown   the conditions a run that took it is seen at
+     * @param settles the decisions it settles
+     */
+    public record FactorOutcome(List<ShownCondition> shown, List<Condition> settles) {
+
+        public FactorOutcome {
+            shown = List.copyOf(shown);
+            settles = List.copyOf(settles);
+        }
+    }
+
+    /**
+     * The choices of one group that no row makes, in one standing.
+     *
+     * <p>Told apart by the group it belongs to and the outcome it takes at each factor, and by
+     * nothing else: the decisions two patterns share say nothing of whether they are one set, since
+     * two groups can share a decision and differ in every other.
+     *
+     * @param finding     the first finding of a choice in it, which says what its standing is
+     * @param fixed       the outcome taken at each factor of the group, in the group's order, or
+     *                    null where the pattern holds the factor either way
+     * @param count       how many choices of the group are in it
+     * @param combination the combination it is, where it holds exactly one choice; null otherwise.
+     *                    Only a pattern of one choice is an obligation of the body, and the
+     *                    obligation is where the ways to it are
+     */
+    public record UnobservedChoices(ReportedFinding finding, List<Integer> fixed, int count,
+                                    ObligationIdentity.OfACombinationOfDecisions combination) {
+
+        public UnobservedChoices {
+            Objects.requireNonNull(finding, "a pattern of missing choices has a finding");
+            fixed = Collections.unmodifiableList(new ArrayList<>(fixed));
+            if (count < 1 || (count == 1) != (combination != null)) {
+                throw new IllegalArgumentException("a pattern holds " + count + " choices and is "
+                        + (combination == null ? "no" : "a") + " combination");
+            }
+        }
+    }
+
+    /**
+     * One group of the body's decisions and what no row makes of it.
+     *
+     * @param ordinal      which of the body's groups it is, in the order the measure met them
+     * @param wayIn        the conditions every choice of the group is under, said once
+     * @param wayInSettles the decisions of the way in
+     * @param factors      the outcomes of each factor of the group, which are what a pattern's
+     *                     {@code fixed} indexes
+     * @param choices      the patterns, the choices in different standing apart
+     */
+    public record UnobservedGroup(int ordinal, List<ShownCondition> wayIn,
+                                  List<Condition> wayInSettles, List<List<FactorOutcome>> factors,
+                                  List<UnobservedChoices> choices) {
+
+        public UnobservedGroup {
+            wayIn = List.copyOf(wayIn);
+            wayInSettles = List.copyOf(wayInSettles);
+            factors = factors.stream().map(List::copyOf).toList();
+            choices = List.copyOf(choices);
+        }
+
+        /** The conditions the outcomes a pattern names are seen at, which is what sets it apart
+         *  from the rest of the group. */
+        public List<ShownCondition> fixedConditionsOf(UnobservedChoices pattern) {
+            List<ShownCondition> out = new ArrayList<>();
+            for (int factor = 0; factor < pattern.fixed().size(); factor++) {
+                Integer outcome = pattern.fixed().get(factor);
+                if (outcome != null) {
+                    factors.get(factor).get(outcome).shown().stream()
+                            .filter(each -> !out.contains(each)).forEach(out::add);
+                }
+            }
+            return out;
+        }
+    }
+
+    /** The conditions a run along {@code claims} is seen at, as a reader is told them. */
+    private static List<ShownCondition> shownWay(Db db, String module,
+                                                 DecisionRuleReading.Places places,
+                                                 List<ControlClaim> claims) {
+        List<ShownCondition> shown = new ArrayList<>();
+        for (DecisionRuleReading.Seen each : DecisionRuleReading.ofAWay(claims, places)) {
+            shown.add(new ShownCondition(each.read(), whereItIsWritten(db, each.read()),
+                    each.through().isEmpty() ? List.of()
+                            : List.of(callsOf(db, module, each.through()))));
+        }
+        return shown;
     }
 
     /**
@@ -1313,14 +1863,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         List<List<ShownCondition>> read = new ArrayList<>();
         for (InteractionRequirements.Way way : ways) {
-            List<ShownCondition> shown = new ArrayList<>();
-            for (DecisionRuleReading.Seen each
-                    : DecisionRuleReading.ofAWay(way.claims(), places)) {
-                shown.add(new ShownCondition(each.read(), whereItIsWritten(db, each.read()),
-                        each.through().isEmpty() ? List.of()
-                                : List.of(callsOf(db, module, each.through()))));
-            }
-            read.add(shown);
+            read.add(shownWay(db, module, places, way.claims()));
         }
         return distinctWays(read);
     }
@@ -1342,7 +1885,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Map<ModelOccurrence, CopyShown> copiesShown(
             Compilation compilation, String module, Map<DecisionRule, SettledAcross> settled,
-            List<BorderAssessment> lines, List<ReportedFinding> reported) {
+            List<BorderAssessment> lines, List<ReportedFinding> reported,
+            List<CasesAtARule<CaseExpansion.CameTo>> expanded) {
         ModelOccurrences.Gathering copies = new ModelOccurrences.Gathering();
         for (SettledAcross rule : settled.values()) {
             for (SettledAt each : rule.places()) {
@@ -1361,11 +1905,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             copies.add(switch (each.about()) {
                 case About.ARuleWithoutALine(var it) -> it.finding().readAt();
                 case About.ARuleNothingClassified(var it) -> it.finding().readAt();
-                case About.ARuleThatMayStopARun(var it) -> it.readAt();
                 case About.AQuestionNothingAnswered(var asked) -> asked.asked().readAt();
                 default -> ModelOccurrences.NONE;
             });
         }
+        // And the copies each case of a line not worked out was read at, and those of the helpers
+        // its choices multiply.
+        expanded.forEach(each -> each.readings().forEach(reading -> {
+            copies.add(reading.readAt());
+            if (reading.answer().attributed() instanceof CaseExpansion.Attributed attributed) {
+                attributed.multiplied().forEach(helper -> helper.madeAt().forEach(copies::add));
+            }
+        }));
         Map<ModelOccurrence, CopyShown> out = new LinkedHashMap<>();
         for (ModelOccurrence copy : copies.gathered()) {
             out.computeIfAbsent(copy, _ -> new CopyShown(
@@ -1466,10 +2017,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * made at two names this compiler could not place would read alike and a reader would be
          * shown one where there are two.
          */
-        String said(SourceRendering rendering, SourceId declaredIn) {
+        String said(Page page, SourceId declaredIn) {
             return at == null
-                    ? name + " (no place to send you to; " + StepIdentity.inWords(step) + ")"
-                    : name + "@" + at.said(rendering, declaredIn);
+                    ? page.say(new ReportMessage.CallWithNoPlace(name, StepIdentity.inWords(step)))
+                    : name + "@" + at.said(page.rendering(), declaredIn);
         }
     }
 
@@ -1482,22 +2033,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static String inCopies(ModelOccurrences readAt,
                                    Map<ModelOccurrence, CopyShown> copies,
-                                   SourceRendering rendering, SourceId declaredIn) {
+                                   Page page, SourceId declaredIn) {
         List<String> calls = new ArrayList<>();
         for (ModelOccurrence copy : readAt) {
             List<CallSite> through = callsAt(copies, copy).calls();
             if (!through.isEmpty()) {
-                calls.add(chain(through, rendering, declaredIn));
+                calls.add(chain(through, page, declaredIn));
             }
         }
-        return calls.isEmpty() ? "" : " in " + String.join(", ", calls);
+        return calls.isEmpty() ? ""
+                : page.say(new ReportMessage.InCopies(listed(page, calls)));
     }
 
     /** One copy's calls, innermost first, each in the one after it. */
-    private static String chain(List<CallSite> calls, SourceRendering rendering,
-                                SourceId declaredIn) {
-        return String.join(" in ",
-                calls.stream().map(each -> each.said(rendering, declaredIn)).toList());
+    private static String chain(List<CallSite> calls, Page page, SourceId declaredIn) {
+        return page.say(chained(calls, page, declaredIn));
+    }
+
+    /** The calls a copy was made at, or nothing where it stands in none. */
+    private static Message calledAt(List<CallSite> calls, Page page, SourceId declaredIn) {
+        return calls.isEmpty() ? new ReportMessage.Nothing() : chained(calls, page, declaredIn);
+    }
+
+    /** The same as a message, for a line that is told apart by what it says. */
+    private static Message chained(List<CallSite> calls, Page page, SourceId declaredIn) {
+        Message said = new ReportMessage.Verbatim(calls.getLast().said(page, declaredIn));
+        for (int i = calls.size() - 2; i >= 0; i--) {
+            said = new ReportMessage.CallInside(calls.get(i).said(page, declaredIn), said);
+        }
+        return said;
     }
 
     /**
@@ -1605,6 +2169,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * Where this report shows each rewrite of a body that no row was shown to tell apart or that
+     * was left open.
+     *
+     * <p>Built from the rewrites themselves, so that every one the page may name has an entry and
+     * nothing else does. The place is the one a finding that no row tells the rewrite apart is
+     * shown at, asked of the same question.
+     */
+    private static Map<Replacement, Citation> rewritePlaces(Compilation compilation,
+                                                            String module, String behavior,
+                                                            ReplacementEvidence evidence) {
+        Map<Replacement, Citation> places = new LinkedHashMap<>();
+        for (ReplacementEvidence.Rewrite each : unsettledRewrites(evidence)) {
+            places.put(each.replacement(),
+                    Adequacy.placeOfRewrite(compilation.db(), module, behavior, each.reportAt()));
+        }
+        return places;
+    }
+
+    /**
+     * The rewrites of a body that no row was shown to tell apart or that were left open, in the
+     * order the measure read them. The ones a row tells apart are not said.
+     */
+    private static List<ReplacementEvidence.Rewrite> unsettledRewrites(
+            ReplacementEvidence evidence) {
+        if (evidence == null) {
+            return List.of();
+        }
+        return evidence.measured().made()
+                .map(summary -> summary.rewrites().stream()
+                        .filter(each -> !(each.outcome() instanceof ReplacementEvidence.Noticed))
+                        .toList())
+                .orElse(List.of());
+    }
+
+    /** The rewrites of a body the rows left open. */
+    private static List<ReplacementEvidence.Rewrite> undecidedRewrites(
+            ReplacementEvidence evidence) {
+        return unsettledRewrites(evidence).stream()
+                .filter(each -> each.outcome() instanceof ReplacementEvidence.Undecided)
+                .toList();
+    }
+
+    /**
      * Where this report shows each condition on the way to one of these lines.
      *
      * <p>Built from the searches themselves, so that every condition the page may name has an entry
@@ -1618,8 +2225,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static ConditionsShown conditionPlaces(
             Compilation compilation, String module, List<BorderAssessment> lines,
-            Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported) {
+            Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported,
+            List<CasesAtARule<CaseExpansion.CameTo>> expanded, DecisionEvidence decision) {
         Map<ConditionReportAnchor, Citation> places = new LinkedHashMap<>();
+        // And where the conditions are written that a statement of the decision lacks cases of,
+        // which the decision's line says by where, since the statement itself is spelled by the
+        // compiler and not by the author.
+        if (decision != null) {
+            decision.took().made().ifPresent(rows -> {
+                for (CasesTheRowsTook.StatementShort lacking : rows.lacking()) {
+                    lacking.at().ifPresent(anchor -> {
+                        Citation at = Sites.placeIfKnown(compilation.db(), anchor);
+                        if (at != null) {
+                            places.putIfAbsent(anchor, at);
+                        }
+                    });
+                }
+            });
+        }
         // What a search for a rule of the decision was arrived at without, which is named on the
         // decision's own line and is about the same conditions the points below name. Every
         // search's, and not the ones a page prints: which of them is worth a sentence is decided
@@ -1655,7 +2278,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return new ConditionsShown(places,
-                copiesShown(compilation, module, settled, lines, reported));
+                copiesShown(compilation, module, settled, lines, reported, expanded));
     }
 
     /**
@@ -1811,7 +2434,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * the part, and two readers naming one part name one place.
      */
     private static Map<RuleSite, Citation> partPlaces(
-            Compilation compilation, PartitionEvidence partition, List<ReportedFinding> found) {
+            Compilation compilation, PartitionEvidence partition, List<ReportedFinding> found,
+            List<BorderObligationPointAssessment> account) {
         Map<RuleSite, Citation> places = new LinkedHashMap<>();
         Consumer<RuleSite> take = sentTo -> {
             switch (sentTo) {
@@ -1832,7 +2456,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 if (each instanceof PartitionEvidence.NotRead.ARule rule) {
                     take.accept(rule.finding().sentTo());
                 }
+                if (each instanceof PartitionEvidence.NotRead.AnUnclassifiedRule rule) {
+                    take.accept(rule.sentTo());
+                }
             });
+            // And each construct a line read at a cost names a helper's readings at.
+            partition.costlyReadings().forEach(each -> each.readings().forEach(reading ->
+                    reading.answer().forEach(helper -> helper.madeAt().forEach(
+                            construct -> whereItIsWritten(construct).ifPresent(take)))));
+            // And each construct a count of a line's cases says made its parts.
+            partition.caseExpansions().forEach(each -> each.readings().forEach(reading -> {
+                if (reading.answer().attributed()
+                        instanceof CaseExpansion.Attributed attributed) {
+                    attributed.constructsNamed().forEach(
+                            construct -> whereItIsWritten(construct).ifPresent(take));
+                }
+            }));
+        }
+        // And each call whose applications an obligation's readings were read on.
+        for (BorderObligationPointAssessment point : account) {
+            for (BorderAssessment reading : point.met().values()) {
+                for (AnApplicationOfAClosure application : reading.readOn().each()) {
+                    for (AnApplicationOfAClosure.Made made : application.by()) {
+                        whereItIsWritten(made.construct()).ifPresent(take);
+                    }
+                }
+            }
         }
         if (found != null) {
             found.stream().map(ReportedFinding::finding).map(Adequacy.Finding::about)
@@ -1855,17 +2504,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param untouched what is said where the body sends every class one way
      */
     private static void widerThanToldApart(StringBuilder out, PartitionEvidence.AxisCoverage axis,
-                                           List<ReaderDisposition.Wider> wider, String untouched) {
+                                           List<ReaderDisposition.Wider> wider, Page page,
+                                           Message untouched) {
         for (ReaderDisposition.Wider each : wider) {
             if (!each.axis().at().equals(axis.at())) {
                 continue;
             }
-            out.append(each.groups() <= 1
-                    ? String.format("      · %s holds %d classes and %s%n",
-                            axis.name(), axis.classes().size(), untouched)
-                    : String.format("      · %s holds %d classes and this behavior tells them"
-                                    + " apart as %d groups%n",
-                            axis.name(), axis.classes().size(), each.groups()));
+            noted(out, page, each.groups() <= 1 ? untouched
+                    : new ReportMessage.ToldApartInGroups(axis.name(), axis.classes().size(),
+                            each.groups()));
         }
     }
 
@@ -1934,7 +2581,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>After the behaviors, so that a reader who has just read what each body is short of reads
      * what the model itself is short of once.
      */
-    private void declared(StringBuilder out, ModuleReport module, SourceRendering rendering,
+    private void declared(StringBuilder out, ModuleReport module, Page page,
                           PublishedRuleHandle.WhereARuleIs places, MarksWritten marks) {
         // What the declarations are owed, folded the way a behavior's own account is and by the same
         // fold. Here rather than in the blocks above, because that is where the work is: a line a
@@ -1945,9 +2592,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<Adequacy.DeclaredLine> lines = module.declaredLines();
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
-        if (!debts.isEmpty() || !lines.isEmpty() || !module.declaredExclusions().isEmpty()) {
-            out.append(String.format("  declarations   borders %d   obligations %d/%d%s%n",
-                    lines.size(), account.met().size(), account.counted(), refuted(account)));
+        boolean counted = !debts.isEmpty() || !lines.isEmpty()
+                || !module.declaredExclusions().isEmpty();
+        WeakeningSet went = module.declarationsWeakenedBy();
+        // A heading wherever something is said under it. A reading that went without and found
+        // nothing owes no count, since nothing was found is not nothing is owed: the heading then
+        // says only whose account the lines under it are of, and not how many it holds.
+        if (counted || !went.isEmpty()) {
+            out.append("  ").append(counted
+                    ? DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15)
+                    + page.say(new ReportMessage.BorderCounts(lines.size(),
+                            account.met().size() + "/" + account.counted()))
+                    + refuted(account, page)
+                    : page.say(new ReportMessage.Declarations())).append(NEW_LINE);
+            wentWithout(out, "      ", went, page);
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -1960,34 +2618,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And the declarations' own points the rules leave no value at, said the same way as a
         // behavior's: counted, answered, and nothing for anybody to write.
         for (Adequacy.DeclaredDebt each : account.refuted()) {
-            out.append(String.format("      · %s%n", cannotBeWritten(pointOf(each,
-                    RuleHandleProse.said(each.debt().describe(places), rendering, null)))));
-            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+            noted(out, page, cannotBeWritten(pointOf(each,
+                    RuleHandleProse.said(each.debt().describe(places), page.rendering(),
+                            page.language(), null))));
+            readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
-                    rendering, null),
-                    Map.of(), rendering, null);
+                    page, null, places),
+                    Map.of(), page, null);
         }
         for (Adequacy.DeclaredDebt each : account.undecided()) {
-            for (String said : undecidedBecause(each.debt().owed().disposition(),
-                    pointOf(each, RuleHandleProse.said(each.debt().describe(places),
-                            rendering, null)))) {
-                out.append(String.format("      ? %s%n", said));
+            for (Message said : undecidedBecause(each.debt().owed().disposition(),
+                    pointOf(each, RuleHandleProse.said(each.debt().describe(places), page.rendering(),
+                            page.language(), null)), page)) {
+                out.append("      ? ").append(page.say(said)).append(NEW_LINE);
             }
-            readings(out, each.debt(), _ -> true, at -> whatWasTried(
+            readings(out, module.apart(), each.debt(),_ -> true, at -> whatWasTried(
                     each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
-                    rendering, null),
-                    Map.of(), rendering, null);
+                    page, null, places),
+                    Map.of(), page, null);
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<Adequacy.DeclaredDebt> covered
                 : CoveredOnlyByRowsThatDoNotHold.debtsOf(debts)) {
-            out.append(String.format("      %s at the %s: %s%n",
-                    onlyRowsThatDoNotHold(marks, covered.by(),"is", "are"),
-                    pointOf(covered.obligation(), RuleHandleProse.said(
-                            covered.obligation().debt().describe(places), rendering, null)),
-                    rowsThatDoNotHold(covered.by(), module.owedByDeclarations().rowPlace(),
-                            rendering, null)));
+            Message point = pointOf(covered.obligation(),
+                    RuleHandleProse.said(
+                            covered.obligation().debt().describe(places), page.rendering(),
+                            page.language(), null));
+            String rows = rowsThatDoNotHold(covered.by(), module.owedByDeclarations().rowPlace(),
+                    page, null);
+            onlyRowsThatDoNotHold(out, marks, covered.by(), page,
+                    new ReportMessage.OnlyARowThatDoesNotHoldIsAtThe(point, rows),
+                    new ReportMessage.OnlyRowsThatDoNotHoldAreAtThe(point, rows));
         }
         // And the points no row is owed at that are the declarations' fact, once each, in the words a
         // behavior's own are said in. They are not obligations and are in neither number above.
@@ -1996,33 +2658,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // bound leaves out on its own and the same point a record's clause empties as well are two
         // facts.
         for (Adequacy.DeclaredExclusion each : module.declaredExclusions()) {
-            String rule = RuleHandleProse.said(each.read().describe(places), rendering, null)
-                    + each.stoppedAt();
-            out.append(String.format("      · no %s point%s%s: %s%n", each.role(), each.whichSide(),
-                    onADeclaredLine("is owed", each.namesItsLevel(), each.said(), rule),
-                    whyNotOwed(each.point().reason())));
+            String rule = RuleHandleProse.said(each.read().describe(places), page.rendering(),
+                    page.language(), null) + page.say(each.stoppedAt());
+            String role = each.role().name();
+            Message why = whyNotOwed(each.point().reason());
+            noted(out, page, each.namesItsLevel()
+                    ? new ReportMessage.NoPointIsOwed(role, each.whichSide(), each.said(), rule,
+                            why)
+                    : new ReportMessage.NoPointOfTheRuleIsOwed(role, each.whichSide(), rule, why));
         }
         // The roles a line has no point in, which its own rule settles alone.
         for (Adequacy.DeclaredLine each : lines) {
-            String exists = onADeclaredLine("exists", each.namesItsLevel(), each.said(),
-                    RuleHandleProse.said(each.read().describe(places), rendering, null));
-            each.noPoint().forEach((role, none) -> out.append(String.format(
-                    "      · no %s point%s: %s%n", role, exists, whyNoPoint(none.why()))));
+            String rule = RuleHandleProse.said(each.read().describe(places), page.rendering(),
+                    page.language(), null);
+            each.noPoint().forEach((role, none) -> noted(out, page, each.namesItsLevel()
+                    ? new ReportMessage.NoPointExists(role.name(), each.said(), rule,
+                            whyNoPoint(none.why()))
+                    : new ReportMessage.NoPointOfTheRuleExists(role.name(), rule,
+                            whyNoPoint(none.why()))));
         }
         Map<String, List<Adequacy.Finding>> byDeclaration = new LinkedHashMap<>();
         for (ReportedFinding each : module.declarations()) {
             byDeclaration.computeIfAbsent(each.finding().named(), _ -> new ArrayList<>())
                     .add(each.finding());
         }
-        byDeclaration.forEach((declaration, findings) -> {
-            out.append(String.format("  %s%n", declaration));
+        byDeclaration.forEach((_, findings) -> {
+            out.append("  ").append(page.say(findings.getFirst().subject().told()))
+                    .append(NEW_LINE);
             for (Adequacy.Finding f : findings) {
                 if (f.about() instanceof About.APointOfADeclaredBorder(var owed)) {
                     // What the point asks, in its own words. A point against the line names a value
                     // and a point beside it names a run, and a sentence that wrote `=` for both said
                     // a run was one value.
-                    out.append(String.format("      %s no row is at the %s%n",
-                            mark(f), pointOf(owed, owed.debt().id().saidWithoutAPlace())));
+                    marked(out, f, page, new ReportMessage.NoRowIsAtThe(
+                            pointOf(owed, page.say(owed.debt().id().toldWithoutAPlace()))));
                 }
             }
         });
@@ -2037,11 +2706,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * level is a distance from the other position, which is a reading's name for it — so the line
      * and the role on it is the whole of what there is to say (issue #1251).
      */
-    private static String pointOf(Adequacy.DeclaredDebt owed, String rule) {
+    private static Message pointOf(Adequacy.DeclaredDebt owed, String rule) {
         return owed.namesItsQuantity()
-                ? owed.debt().role() + " point" + owed.debt().whichSide() + " " + owed.said()
-                        + " (" + rule + ")"
-                : owed.debt().role() + " point of " + rule;
+                ? new ReportMessage.DeclaredPointAt(owed.debt().role().name(),
+                        owed.debt().whichSide(), owed.said(), rule)
+                : new ReportMessage.DeclaredPointOf(owed.debt().role().name(), rule);
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -2084,7 +2753,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             : m.owedByDeclarations().owed().keptFor(names),
                             m.owedByDeclarations().conditionPlaces(),
                             m.owedByDeclarations().rulePlaces(),
-                            m.owedByDeclarations().rowPlaces()));
+                            m.owedByDeclarations().rowPlaces()),
+                    m.apart());
             kept.add(one);
             overall = overall.union(one.weakenedBy());
         }
@@ -2136,6 +2806,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *  that something the rows are asked for is not there. */
     public List<Adequacy.Finding> adequacyGaps() {
         return findings().stream().filter(Adequacy.Finding::isAdequacyGap).toList();
+    }
+
+    /**
+     * The behaviors whose body was left unread for their author to change ({@link
+     * ToBeChangedFirst}), in the order they are reported.
+     *
+     * <p>No gap of the model and no part of what {@link #adequacy()} is decided by beyond what the
+     * measures of the body went without: nothing was shown of them either way. Held apart so that
+     * a run refusing what is not covered can refuse what nobody looked at for this.
+     */
+    public List<String> leftToBeChanged() {
+        return modules.stream().flatMap(module -> module.behaviors().stream()
+                        .filter(behavior -> behavior.leftToBeChanged().figure().isPresent())
+                        .map(behavior -> module.module() + "." + behavior.name()))
+                .toList();
     }
 
     /**
@@ -2434,13 +3119,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     List<AdequacyUncertainty> whatKeepsTheVerdictOpenInOrder(
             SourceRendering rendering, PublishedRuleHandle.WhereARuleIs places) {
         DocumentSources sources = new DocumentSources(rendering);
+        // Without where a fact was met: the order reads the kind, the reason, the sensitivity and
+        // what it is about, so walking every behavior for the rest would be work nobody reads.
         return PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
-                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places));
+                whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places, Map.of()));
     }
 
     /** The same, for a reader holding no places of its own. */
     List<AdequacyUncertainty> whatKeepsTheVerdictOpenInOrder(SourceRendering rendering) {
         return whatKeepsTheVerdictOpenInOrder(rendering, rulePlaces());
+    }
+
+    /**
+     * Every rewrite this report holds that was left open, in the words a page says it in.
+     *
+     * <p>Gathered from every page rather than the one an entry is about: an entry that holds a
+     * verdict open names the rewrite and not the page it was found on. Keyed by the subject the
+     * entry carries, module and all, and said by the page's own saying of it, so the two lines of
+     * one rewrite cannot differ.
+     */
+    private Map<Subject.OfAReplacement, String> everyUndecidedRewriteSaid(Page page) {
+        Map<Subject.OfAReplacement, String> out = new LinkedHashMap<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                Map<Replacement, String> said = behavior.rewritesSaid(module.module(),
+                        module.declaredIn(), page);
+                for (ReplacementEvidence.Rewrite each
+                        : undecidedRewrites(behavior.evidence().replacement())) {
+                    out.put(new Subject.OfAReplacement(module.module(),
+                                    new ObligationIdentity.OfAReplacement(behavior.name(),
+                                            each.replacement())),
+                            said.get(each.replacement()));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -2462,6 +3175,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * How a reader is sent to each point whose rule the author wrote and did not name: the handle
+     * the border section of the behavior writes for it, chosen the one way
+     * {@link BorderObligationPointAssessment#handle} chooses it.
+     *
+     * <p>A point of a comparison in a body is told apart from the others by the behavior and the
+     * place of its comparison, and the line the point is on says neither.
+     *
+     * <p>Only for the points asked for: choosing a handle weighs every reading's citation of the
+     * point, and a model has far more points than the few that hold a verdict open.
+     */
+    private Map<BorderObligationPoint, PublishedRuleHandle> handlesOfWrittenPoints(
+            PublishedRuleHandle.WhereARuleIs places, Set<BorderObligationPoint> wanted) {
+        Map<BorderObligationPoint, List<BorderObligationPointAssessment>> assessed =
+                new LinkedHashMap<>();
+        for (BorderObligationPointAssessment point : everyAssessedPoint()) {
+            if (wanted.contains(point.point())
+                    && point.point().line().provenance() instanceof RuleRef.Written) {
+                assessed.computeIfAbsent(point.point(), _ -> new ArrayList<>()).add(point);
+            }
+        }
+        Map<BorderObligationPoint, PublishedRuleHandle> out = new LinkedHashMap<>();
+        assessed.forEach((point, each) ->
+                out.put(point, BorderObligationPointAssessment.handleOf(each, places)));
+        return out;
+    }
+
+    /**
      * Where each point a behavior is owed was read: every copy any reading of its line was made in.
      *
      * <p>Every reading, which is what an entry open on all of them is about. A showing that
@@ -2469,20 +3209,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private Map<BorderObligationPoint, ModelOccurrences> whereEachPointIsRead() {
         Map<BorderObligationPoint, ModelOccurrences.Gathering> gathering = new LinkedHashMap<>();
-        for (ModuleReport module : modules) {
-            for (BehaviorReport behavior : module.behaviors()) {
-                if (behavior.partition() == null) {
-                    continue;
-                }
-                for (BorderObligationPointAssessment point : behavior.account()) {
-                    ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
-                            each -> new ModelOccurrences.Gathering());
-                    point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
-                }
-            }
+        for (BorderObligationPointAssessment point : everyAssessedPoint()) {
+            ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
+                    each -> new ModelOccurrences.Gathering());
+            point.readingsInSteadyOrder().forEach(
+                    where -> readAt.add(point.met().get(where).readAt()));
         }
         Map<BorderObligationPoint, ModelOccurrences> out = new LinkedHashMap<>();
         gathering.forEach((point, readAt) -> out.put(point, readAt.gathered()));
+        return out;
+    }
+
+    /**
+     * Every point any behavior of this report is owed, in the order the behaviors are written.
+     *
+     * <p>A point of a module's declaration is owed to the declaration and not to a behavior, so it
+     * is not here ({@link Adequacy.DeclaredDebt}).
+     */
+    private List<BorderObligationPointAssessment> everyAssessedPoint() {
+        List<BorderObligationPointAssessment> out = new ArrayList<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.partition() != null) {
+                    out.addAll(behavior.account());
+                }
+            }
+        }
         return out;
     }
 
@@ -2507,8 +3259,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                  Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                  Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
-                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _ ->
-                    ModelOccurrences.NONE;
+                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _,
+                 Subject.OfAReplacement _ -> ModelOccurrences.NONE;
         };
     }
 
@@ -2723,6 +3475,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     // --- rendering --------------------------------------------------------------------------------
 
+    /** The report a person reads, in the catalog's base language ({@link #human}). */
+    public String humanInEnglish(SourceRendering rendering) {
+        return human(rendering, Messages.BASE_LANGUAGE);
+    }
+
     /**
      * The report as a person reads it, with the sources under the names {@code rendering} gives them.
      *
@@ -2731,8 +3488,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * — and what to call one of them is neither of those: it is the shortest thing that tells this
      * reader's files apart, so it is a fact about the set in front of them. A caller with no names to
      * give says so with {@link SourceNameResolver#identity}, and the ids stand for themselves.
+     *
+     * <p>And in the language {@code language} names, which the caller resolved for this reader. The
+     * words are the catalog's; which lines are said, and in which order, is not a question of the
+     * language ({@link Page}).
      */
-    public String human(SourceRendering rendering) {
+    public String human(SourceRendering rendering, Locale language) {
+        Page page = new Page(rendering, language);
         StringBuilder out = new StringBuilder();
         Map<BehaviorImplementation, Integer> counted = new EnumMap<>(BehaviorImplementation.class);
         for (BehaviorImplementation each : BehaviorImplementation.values()) {
@@ -2740,54 +3502,68 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         MarksWritten marks = new MarksWritten();
         for (ModuleReport module : modules) {
-            out.append(String.format("%s measurement: %s%n",
-                    DisplayColumns.padRight(module.module(), 56),
-                    wire(ReportMeasurement.statusOf(module.weakenedBy()))));
+            out.append(DisplayColumns.padRight(module.module(), 56)).append(' ')
+                    .append(page.say(new ReportMessage.ModuleMeasurement(
+                            measured(ReportMeasurement.statusOf(module.weakenedBy())))))
+                    .append(NEW_LINE);
             for (BehaviorReport behavior : module.behaviors()) {
                 counted.merge(behavior.implementation(), 1, Integer::sum);
                 // A number where the rows were read, and what stopped them being read where they
                 // were not. Written as `0` for both, this line said an author had written no row
                 // for a behavior whose rows nobody had looked at.
-                out.append(String.format("  %s %s %s%n",
-                        DisplayColumns.padRight(behavior.name(), 24),
-                        DisplayColumns.padRight(behavior.implementation().written(), 13),
-                        behavior.rowCount().isPresent()
-                                ? String.format("rows %-4d pending %d",
-                                        behavior.rowCount().getAsInt(),
-                                        behavior.pending().getAsInt())
-                                : "rows not read"));
-                signature(out, behavior);
+                out.append("  ").append(DisplayColumns.padRight(behavior.name(), 24)).append(' ')
+                        .append(DisplayColumns.padRight(
+                                page.say(implemented(behavior.implementation())), 13))
+                        .append(' ')
+                        .append(page.say(behavior.rowCount().isPresent()
+                                ? new ReportMessage.RowsAndPending(
+                                        String.format("%-4d", behavior.rowCount().getAsInt()),
+                                        Integer.toString(behavior.pending().getAsInt()))
+                                : new ReportMessage.RowsNotRead()))
+                        .append(NEW_LINE);
+                signature(out, behavior, page);
                 // Read once for every section that marks what rests on rows that do not hold.
                 CoveredOnlyByRowsThatDoNotHold onlyBy = behavior.coveredOnlyByRowsThatDoNotHold();
-                partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace(),
+                partition(out, behavior, module.apart(), module.declaredIn(), page,
+                        behavior.rulePlace(),
                         onlyBy, marks);
-                branch(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
-                decision(out, behavior, module.declaredIn(), rendering, onlyBy, marks);
-                replacement(out, behavior, module.module(), module.declaredIn(), rendering);
+                stops(out, behavior, module.declaredIn(), page);
+                branch(out, module.module(), behavior, module.declaredIn(), page, onlyBy,
+                        marks);
+                decision(out, behavior, module.declaredIn(), page, onlyBy, marks);
+                replacement(out, behavior, module.module(), module.declaredIn(), page);
+                wentWithout(out, "    ", behavior.weakenedBy(), page);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
                 said(out, module.incompleteness().written().stream()
                         .filter(gap -> gap.fact().behavior()
                                 .map(behavior.name()::equals).orElse(false))
-                        .toList(), rendering);
+                        .toList(), page);
             }
-            declared(out, module, rendering, module.owedByDeclarations().rulePlace(), marks);
+            declared(out, module, page, module.owedByDeclarations().rulePlace(), marks);
             said(out, module.incompleteness().written().stream()
-                    .filter(gap -> gap.fact().behavior().isEmpty()).toList(), rendering);
+                    .filter(gap -> gap.fact().behavior().isEmpty()).toList(), page);
         }
         int total = counted.values().stream().mapToInt(Integer::intValue).sum();
-        out.append(String.format("%n%d %s: %d implemented, %d unimplemented, %d injected;"
-                        + " %d %s waiting for a `let`.%n",
-                total, total == 1 ? "behavior" : "behaviors",
-                counted.get(BehaviorImplementation.IMPLEMENTED),
-                counted.get(BehaviorImplementation.UNIMPLEMENTED),
-                counted.get(BehaviorImplementation.INJECTION_TARGET),
-                pendingRows(), pendingRows() == 1 ? "row" : "rows"));
+        int implemented = counted.get(BehaviorImplementation.IMPLEMENTED);
+        int unimplemented = counted.get(BehaviorImplementation.UNIMPLEMENTED);
+        int injected = counted.get(BehaviorImplementation.INJECTION_TARGET);
+        out.append(NEW_LINE).append(page.say(new ReportMessage.Tally(
+                total == 1
+                        ? new ReportMessage.OneBehaviorTallied(implemented, unimplemented, injected)
+                        : new ReportMessage.BehaviorsTallied(total, implemented, unimplemented,
+                                injected),
+                pendingRows() == 1 ? new ReportMessage.OneRowWaitingForALet()
+                        : new ReportMessage.RowsWaitingForALet(pendingRows()))))
+                .append(NEW_LINE);
         // Last, and its own line. What the measurement managed is said above, per module; this is the
         // other question, and the two were one word until they disagreed in front of a reader.
-        out.append(String.format("adequacy: %s%n",
-                adequacy().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
+        out.append(page.say(new ReportMessage.AdequacyVerdict(switch (adequacy()) {
+            case SATISFIED -> new ReportMessage.Satisfied();
+            case NOT_SATISFIED -> new ReportMessage.NotSatisfied();
+            case UNDETERMINED -> new ReportMessage.Undetermined();
+        }))).append(NEW_LINE);
         // And what it is open on, split by the one thing a reader of `undetermined` wants to know:
         // whether a figure of this compiler's is what stopped it. The word covers a space too large
         // to walk and a rule this compiler has no reading for alike, and the first is a figure the
@@ -2806,11 +3582,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             PublishedRuleHandle.WhereARuleIs places = rulePlaces();
             Map<ModelOccurrence, CopyShown> copies = everyCopyShown();
             Map<BorderObligationPoint, ModelOccurrences> pointsReadAt = whereEachPointIsRead();
-            out.append("  what keeps it open\n");
-            out.append(String.format("    stopped at a figure of this compiler   %3d%n",
-                    open.atAFigure()));
-            out.append(String.format("    stopped at no figure                   %3d%n",
-                    open.atNoFigure()));
+            Map<Subject.OfAReplacement, String> rewrites = everyUndecidedRewriteSaid(page);
+            List<AdequacyUncertainty> opened = whatKeepsTheVerdictOpenInOrder(rendering, places);
+            Set<BorderObligationPoint> openedPoints = new HashSet<>();
+            for (AdequacyUncertainty each : opened) {
+                if (each.subject() instanceof Subject.AtAPoint it) {
+                    openedPoints.add(it.point());
+                }
+            }
+            Map<BorderObligationPoint, PublishedRuleHandle> writtenPoints =
+                    handlesOfWrittenPoints(places, openedPoints);
+            out.append("  ").append(page.say(new ReportMessage.WhatKeepsItOpen())).append('\n');
+            out.append("    ").append(DisplayColumns.padRight(
+                            page.say(new ReportMessage.StoppedAtAFigureOfThisCompiler()), 36))
+                    .append(String.format("   %3d", open.atAFigure())).append(NEW_LINE);
+            out.append("    ").append(DisplayColumns.padRight(
+                            page.say(new ReportMessage.StoppedAtNoFigure()), 36))
+                    .append(String.format("   %3d", open.atNoFigure())).append(NEW_LINE);
             // And which they are. The counts alone told a reader how many things held the verdict
             // open and nothing about what they were, with no mark in the body to find them by; the
             // lines below name each one and say where it leaves them, both read from what the
@@ -2818,7 +3606,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             //
             // In the order the document writes them in. The facts are a set, so the order they
             // come in is no order at all, and the page and the document list them alike.
-            for (AdequacyUncertainty each : whatKeepsTheVerdictOpenInOrder(rendering, places)) {
+            for (AdequacyUncertainty each : opened) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
@@ -2827,10 +3615,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // And the calls of a helper it was read at, after what it is about. One rule of a
                 // helper read alike at two calls is one fact, and two facts at one rule and one
                 // position read alike but for the calls.
-                out.append(String.format("      %s%s — %s%n",
-                        said(each.subject(), rendering, places),
-                        inCopies(readAt(each, pointsReadAt), copies, rendering, null),
-                        next(each)));
+                out.append("      ")
+                        .append(said(each.subject(), page, places, rewrites, writtenPoints))
+                        .append(inCopies(readAt(each, pointsReadAt), copies, page, null))
+                        .append(" — ").append(next(each, page)).append(NEW_LINE);
             }
         }
         // What the mark above means, said by the report that wrote it. The count was said only by
@@ -2843,23 +3631,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // would be the same sentence twice with nothing to tell a reader which surface said it.
         List<Adequacy.Finding> refused = adequacyGaps();
         if (!refused.isEmpty()) {
-            out.append(String.format("%d %s marked `!`: what a strict build refuses over.%n",
-                    refused.size(), refused.size() == 1 ? "gap" : "gaps"));
+            out.append(page.say(refused.size() == 1 ? new ReportMessage.OneGapMarked()
+                    : new ReportMessage.GapsMarked(refused.size()))).append(NEW_LINE);
         }
         // And whether the rows hold, which the verdict above does not answer. Last, because the
         // last lines are what a terminal or a build log leaves in front of a reader, and a report
         // ending on `satisfied` over a row that does not hold reads as examples that pass.
         List<RowOutcome> notHolding = rowsThatDoNotHold();
         if (!notHolding.isEmpty()) {
-            out.append(String.format("%d %s not hold:%n", notHolding.size(),
-                    notHolding.size() == 1 ? "row does" : "rows do"));
+            out.append(page.say(notHolding.size() == 1 ? new ReportMessage.OneRowDoesNotHold()
+                    : new ReportMessage.RowsDoNotHold(notHolding.size()))).append(NEW_LINE);
             // With where each stopped. Not every one of them is a wrong answer: a row whose input
             // could not be built never applied the behavior, and is fixed somewhere else.
             for (RowOutcome row : notHolding) {
                 WhereARowIs.Shown shown = WhereARowIs.Shown.of(row);
-                out.append(String.format("  %s: %s%n",
-                        aRowSaid(RowRef.of(row), shown.at(), rendering, null),
-                        shown.failed().said()));
+                out.append("  ").append(aRowSaid(RowRef.of(row), shown.at(), page, null))
+                        .append(": ").append(page.say(shown.failed().said())).append(NEW_LINE);
             }
         }
         // Counted here as well as marked where each is, for a report narrowed to a behavior whose
@@ -2868,19 +3655,39 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // what the sentence is about.
         int resting = marks.restingOnRowsThatDoNotHoldWritten();
         if (resting > 0) {
-            out.append(String.format("%d %s counted as met %s covered only by rows that do not hold,"
-                            + " marked `~`.%n",
-                    resting, resting == 1 ? "obligation" : "obligations",
-                    resting == 1 ? "is" : "are"));
+            out.append(page.say(resting == 1
+                    ? new ReportMessage.OneObligationRestsOnRowsThatDoNotHold()
+                    : new ReportMessage.ObligationsRestOnRowsThatDoNotHold(resting)))
+                    .append(NEW_LINE);
         }
         return out.toString();
     }
 
+    /** The end of a line of the page, as the page has always ended one. */
+    private static final String NEW_LINE = System.lineSeparator();
+
+    /** What a page calls how far a module was measured. */
+    private static Message measured(MeasurementStatus status) {
+        return switch (status) {
+            case COMPLETE -> new ReportMessage.MeasurementComplete();
+            case PARTIAL -> new ReportMessage.MeasurementPartial();
+            case NOT_APPLICABLE, NOT_MEASURED -> new ReportMessage.MeasurementUnavailable();
+        };
+    }
+
+    /** What a page calls whether a behavior's body is written, and by whom. */
+    private static Message implemented(BehaviorImplementation implementation) {
+        return switch (implementation) {
+            case IMPLEMENTED -> new ReportMessage.Implemented();
+            case UNIMPLEMENTED -> new ReportMessage.Unimplemented();
+            case INJECTION_TARGET -> new ReportMessage.Injected();
+        };
+    }
+
     /** The reasons, in the one shape a reason is printed in wherever it sits. */
-    private void said(StringBuilder out, List<PublishedIncompleteness> gaps,
-                             SourceRendering rendering) {
+    private void said(StringBuilder out, List<PublishedIncompleteness> gaps, Page page) {
         for (PublishedIncompleteness gap : gaps) {
-            out.append(String.format("    · %s%n", Reasons.said(gap.fact(), rendering)));
+            out.append("    · ").append(Reasons.said(gap.fact(), page)).append(NEW_LINE);
         }
     }
 
@@ -2892,7 +3699,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * second says somebody has, and nothing has confirmed the model gives it. For a behavior with no
      * body only the first can be answered at all, so the second is not printed against one.
      */
-    private void signature(StringBuilder out, BehaviorReport behavior) {
+    private void signature(StringBuilder out, BehaviorReport behavior, Page page) {
         Adequacy.SignatureEvidence signature = behavior.signature();
         if (signature == null) {
             return;
@@ -2905,7 +3712,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // three, with nothing saying the fourth did not apply — and hid the fact worth reading,
             // which is that a behavior answering a bare primitive gets less scrutiny than one
             // answering a sum.
-            sayWhy(out, "signature", counted.reason());
+            sayWhy(out, new ReportMessage.Signature(), counted.reason(), page);
             return;
         }
         boolean decided = counted.inFull();
@@ -2913,22 +3720,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (!output.declared().isEmpty() && output.cases().made().isPresent()) {
             // Each numerator is the evidence's count out of the same cases as the denominator, and
             // never the size of what the rows reached, which can hold a case this is not out of.
-            out.append(String.format("    signature   out specified %d/%d  observed %d/%d "
-                            + " verified %d/%d%s%n",
-                    output.specifiedCount(), output.declared().size(),
-                    output.observedCount(), output.declared().size(),
-                    output.verifiedCount(), output.declared().size(),
-                    decided ? "" : "   (partial)"));
+            int of = output.declared().size();
+            measureLine(out, new ReportMessage.Signature(), page,
+                    page.say(new ReportMessage.OutputCases(
+                            output.specifiedCount() + "/" + of, output.observedCount() + "/" + of,
+                            output.verifiedCount() + "/" + of))
+                            + (decided ? "" : "   " + page.say(new ReportMessage.Partial())));
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.ACaseNoRowExpects(var _, var missing)) {
-                    out.append(String.format("      %s %sexpects `%s`%n",
-                            mark(f), noRow(f), missing.name()));
+                    marked(out, f, page, f.established()
+                            ? new ReportMessage.NoRowExpects(missing.name())
+                            : new ReportMessage.UndecidedWhetherARowExpects(missing.name()));
                 }
             }
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.ACaseNothingWasSeenToProduce(var missing)) {
-                    out.append(String.format("      %s %sconfirms `%s`%n",
-                            mark(f), noRow(f), missing.name()));
+                    marked(out, f, page, f.established()
+                            ? new ReportMessage.NoRowConfirms(missing.name())
+                            : new ReportMessage.UndecidedWhetherARowConfirms(missing.name()));
                 }
             }
         }
@@ -2951,23 +3760,47 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Counted against the cases a row can be written at. A case the body answers `unreachable`
             // for is one the compiler refuses a row for, so leaving it in the denominator would ask
             // for work that cannot be done and hold the model one case short for ever.
-            out.append(String.format("                in #%d specified %d/%d%s%n", input.at() + 1,
-                    input.specifiedCount(), input.coverable().size(),
-                    input.excluded().isEmpty() ? ""
-                            : "   excluded " + input.excluded().size()));
+            out.append("                ").append(page.say(new ReportMessage.InputCases(
+                            inputSaid(input.at()),
+                            input.specifiedCount() + "/" + input.coverable().size())))
+                    .append(input.excluded().isEmpty() ? ""
+                            : "   " + page.say(new ReportMessage.Excluded(input.excluded().size())))
+                    .append(NEW_LINE);
             for (Adequacy.Finding f : behavior.findings()) {
                 // Told apart by the input the finding is about rather than by a number written
                 // beside it: which one it is, is the evidence's own answer on both sides.
                 if (f.about() instanceof About.ACaseNoRowAppliesItTo(var at, var missing, var _)
                         && at.at() == input.at()) {
-                    out.append(String.format("      %s %suses `%s`%s%n",
-                            mark(f), noRow(f), missing.name(), onAPremise(f)));
+                    marked(out, f, page, f.established()
+                            ? new ReportMessage.NoRowUses(missing.name(), onAPremise(f))
+                            : new ReportMessage.UndecidedWhetherARowUses(missing.name(),
+                                    onAPremise(f)));
                 }
             }
             for (TypeSymbol ruled : input.excluded()) {
-                out.append(String.format("      · `%s` is declared unreachable%n", ruled.name()));
+                noted(out, page, new ReportMessage.DeclaredUnreachable(ruled.name(),
+                        new ReportMessage.Nothing()));
             }
         }
+    }
+
+    /** A line under a measure that a finding is marked on, in the mark that says what a build does
+     *  about it. */
+    private void marked(StringBuilder out, Adequacy.Finding finding, Page page, Message said) {
+        out.append("      ").append(mark(finding)).append(' ').append(page.say(said))
+                .append(NEW_LINE);
+    }
+
+    /** A line under a measure that is no finding, which is marked `·`. */
+    private static void noted(StringBuilder out, Page page, Message said) {
+        out.append("      · ").append(page.say(said)).append(NEW_LINE);
+    }
+
+    /** A measure's own line: its name, and what it counted. */
+    private static void measureLine(StringBuilder out, Message measure, Page page,
+                                    String counted) {
+        out.append("    ").append(DisplayColumns.padRight(page.say(measure), 12)).append(counted)
+                .append(NEW_LINE);
     }
 
     /**
@@ -2994,17 +3827,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * be asked for — a row there reaches the {@code unreachable} — and that nothing has proved the
      * inputs there do not arise, which is the work left.
      */
-    private static String onAPremise(Adequacy.Finding finding) {
+    private static Message onAPremise(Adequacy.Finding finding) {
         return onAPremise(finding.premises());
     }
 
     /** The same, of whatever obligation every row of which rests on {@code premises}. */
-    private static String onAPremise(List<WhereNothingIsAnswered.Premise> premises) {
+    private static Message onAPremise(List<WhereNothingIsAnswered.Premise> premises) {
         List<String> said = premises.stream()
                 .flatMap(premise -> premise.reasons().stream()).distinct().toList();
-        return said.isEmpty() ? ""
-                : ": a row there reaches `unreachable` (" + String.join("; ", said)
-                        + "), and nothing here proves no input arrives there";
+        return said.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.OnAPremise(String.join("; ", said));
     }
 
     /**
@@ -3020,8 +3852,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Empty where there are none, because a number that is nearly always zero printed on every
      * block is a word a reader learns to skip.
      */
-    private static String refuted(ObligationSummary<?> owed) {
-        return owed.refuted().isEmpty() ? "" : "   refuted " + owed.refuted().size();
+    private static String refuted(ObligationSummary<?> owed, Page page) {
+        return owed.refuted().isEmpty() ? ""
+                : "   " + page.say(new ReportMessage.Refuted(owed.refuted().size()));
     }
 
     /**
@@ -3032,19 +3865,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * way to it is under the point, one line per reading. Which part of the model leaves it
      * nothing is not said — a rule, or a type with too few values and no rule written.
      */
-    private static String cannotBeWritten(String point) {
-        return "no row can stand at the " + point + " — " + NoValue.standsThere();
-    }
-
-    /**
-     * How a finding names what nothing did, given how far its measure got.
-     *
-     * <p>Where some rows could not be read, a case nothing here claims is a case nothing *seen*
-     * claims. The summary already says partial; each line has to say it too, or the lines read as the
-     * finding and the word in the margin as a footnote.
-     */
-    private String noRow(Adequacy.Finding finding) {
-        return finding.established() ? "no row " : "undecided whether a row ";
+    private static Message cannotBeWritten(Message point) {
+        return new ReportMessage.NoRowCanStandAt(point, NoValue.standsThere());
     }
 
     /**
@@ -3072,38 +3894,74 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /**
      * How a line says an obligation counted as met is covered by rows that do not hold and no
-     * others, with the verb agreeing with however many there are, and the line counted.
+     * others, as the sentence for one such row or the one for several, and the line counted.
      *
      * <p>Marked `~` and never `!`. Nothing here is a gap: the obligation is met, the count says so,
      * and a strict build refuses nothing over it. What the line tells a reader is what the count has
      * only through those rows — taken away, the obligation is not covered. Correcting a row's stated
      * answer alone leaves where it goes as it was, so that is not always what correcting it does.
      */
-    private static String onlyRowsThatDoNotHold(MarksWritten marks,
-                                                RowWitnesses.OnlyRowsThatDoNotHold by,
-                                                String one, String many) {
+    private static void onlyRowsThatDoNotHold(StringBuilder out, MarksWritten marks,
+                                              RowWitnesses.OnlyRowsThatDoNotHold by, Page page,
+                                              Message one, Message many) {
         marks.restingOnRowsThatDoNotHold();
-        return by.witnesses().size() == 1
-                ? "~ only a row that does not hold " + one
-                : "~ only rows that do not hold " + many;
+        out.append("      ~ ").append(page.say(by.witnesses().size() == 1 ? one : many))
+                .append(NEW_LINE);
     }
 
     /** Which rows, each sent to where it is written. A row of another behavior says whose it is
      *  like any other, so it reads the same wherever the obligation it covers is. */
     private static String rowsThatDoNotHold(RowWitnesses.OnlyRowsThatDoNotHold by,
-                                            WhereARowIs places, SourceRendering rendering,
+                                            WhereARowIs places, Page page,
                                             SourceId declaredIn) {
-        return by.witnesses().stream()
-                .map(row -> aRowSaid(row, places.of(row).at(), rendering, declaredIn))
-                .collect(Collectors.joining(", "));
+        return listed(page, by.witnesses().stream()
+                .map(row -> aRowSaid(row, places.of(row).at(), page, declaredIn)).toList());
     }
 
-    /** One row as a line of this report names it — in the words {@link RowRef#shown} keeps, so two
+    /** One row as a line of this report names it — in the parts {@link RowRef#shown} keeps, so two
      *  rows never read as one — and where it is written. */
-    private static String aRowSaid(RowRef row, Citation at, SourceRendering rendering,
-                                   SourceId declaredIn) {
-        return row.shown(rendering.names().nameOf(row.source())) + " ("
-                + at.said(rendering, declaredIn) + ")";
+    private static String aRowSaid(RowRef row, Citation at, Page page, SourceId declaredIn) {
+        return rowShown(row, page) + " (" + at.said(page.rendering(), declaredIn) + ")";
+    }
+
+    /**
+     * One row as a person is shown it: the parts {@link RowRef#shown} takes, in the words of the
+     * page's language. A named row is its behavior and its name; a row written without one is
+     * numbered within its source, so the source is said with it.
+     */
+    static String rowShown(RowRef row, Page page) {
+        return page.say(rowNamed(row, page));
+    }
+
+    /** The same as a message, for a line that is told apart by what it says. */
+    static Message rowNamed(RowRef row, Page page) {
+        return row.identity() instanceof RowIdentity.Named
+                ? new ReportMessage.Verbatim(row.behavior() + " " + row.identity().shown())
+                : new ReportMessage.RowInSource(row.behavior(), row.identity().shown(),
+                        page.rendering().names().nameOf(row.source()));
+    }
+
+    /**
+     * Things said one after the other, in the page's language: {@code a, b, c} where a list is
+     * written so.
+     */
+    static String listed(Page page, List<String> each) {
+        return page.say(Joined.listed(Joined.asWritten(each)));
+    }
+
+    /** The same, of things said together: {@code a and b and c}. */
+    static String both(Page page, List<String> each) {
+        return page.say(Joined.both(Joined.asWritten(each)));
+    }
+
+    /** The same, of things one of which holds: {@code a or b or c}. */
+    static String either(Page page, List<String> each) {
+        return page.say(Joined.either(Joined.asWritten(each)));
+    }
+
+    /** The same, of reasons said one after another: {@code a; b; c}. */
+    static String reasons(Page page, List<String> each) {
+        return page.say(Joined.reasons(Joined.asWritten(each)));
     }
 
     /** The positions this report has an axis for, which is what tells a claim it can print beside
@@ -3113,24 +3971,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** The model's own words for a claim, where there is one to print. */
-    private String because(List<String> reasons) {
-        return reasons.size() == 1 ? ": " + reasons.get(0)
-                : reasons.isEmpty() ? "" : " on every path";
+    private static Message because(List<String> reasons) {
+        return reasons.size() == 1 ? new ReportMessage.BecauseOfOne(reasons.get(0))
+                : reasons.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.OnEveryPath();
     }
 
     /** What a reader is told about a claim nothing settled, in this report's own words. */
-    static String unproven(ClaimAnnotations.Why why) {
+    static Message unproven(ClaimAnnotations.Why why) {
         return switch (why) {
-            case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
+            case A_RULE_WENT_UNREAD -> new ReportMessage.ARuleAboutThePositionWentUnread();
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
-                    "the rules leave this position no value at all";
-            case NOTHING_WAS_READ_ABOUT_THE_CASE -> "nothing was read about this case";
-            case THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED ->
-                    "this arm is inside another, and what reaches it is not read here";
+                    new ReportMessage.TheRulesLeaveThePositionNoValue();
+            case NOTHING_WAS_READ_ABOUT_THE_CASE -> new ReportMessage.NothingWasReadAboutTheCase();
+            case THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED -> new ReportMessage.TheArmIsInsideAnother();
             case THE_ALTERNATIVES_WERE_NOT_KEPT_APART ->
-                    "every rule here was read, and what they leave this position together is not"
-                            + " what is held of it";
+                    new ReportMessage.WhatTheRulesLeaveIsNotWhatIsHeld();
         };
+    }
+
+    /** What a page says of a claim of the model that a case is never reached. */
+    private static Message declaredUnreachable(ClaimAnnotations.Said said, String at) {
+        Message because = because(said.reasons());
+        if (at == null) {
+            return said.settled()
+                    ? new ReportMessage.DeclaredUnreachable(said.classId(), because)
+                    : new ReportMessage.DeclaredUnreachableUnproven(said.classId(), because,
+                            unproven(said.why()));
+        }
+        return said.settled()
+                ? new ReportMessage.DeclaredUnreachableAt(said.classId(), at, because)
+                : new ReportMessage.DeclaredUnreachableAtUnproven(said.classId(), at, because,
+                        unproven(said.why()));
     }
 
     /**
@@ -3139,8 +4011,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
-    private void partition(StringBuilder out, BehaviorReport behavior,
-                                  SourceId declaredIn, SourceRendering rendering,
+    private void partition(StringBuilder out, BehaviorReport behavior, WhereTheReadingsDiffer apart,
+                                  SourceId declaredIn, Page page,
                                   PublishedRuleHandle.WhereARuleIs places,
                                   CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold,
                                   MarksWritten marks) {
@@ -3158,7 +4030,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A measure with no number says why, rather than showing a nought that reads as a
             // measurement. `axes 0   single-axis 0/0` was the same three characters a behavior gets
             // when every position it has was measured and every class covered.
-            sayWhy(out, "partition", partitioned.reason());
+            sayWhy(out, new ReportMessage.Partition(), partitioned.reason(), page);
         } else {
             // Counted over the positions that were measured. A position nothing was measured at
             // contributes no classes to the denominator: nought out of two reads as two gaps, and a
@@ -3174,14 +4046,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             int excluded = (int) measuredAxes.stream()
                     .flatMap(each -> behavior.claimed().at(each.path()).stream())
                     .filter(ClaimAnnotations.Said::settled).count();
-            out.append(String.format("    partition   axes %d   equivalence partitions %d/%d%s%s%s%n",
-                    partition.axes().size(), covered, classes,
-                    excluded == 0 ? "" : "   excluded " + excluded,
-                    notes(partition.axes().stream()
-                                    .filter(a -> a.reached().made().isEmpty()).toList(),
-                            a -> ReasonProse.of(ReportMeasurement.of(a.reached()).reason())
-                                    .clause()),
-                    inFull(partitioned.status())));
+            measureLine(out, new ReportMessage.Partition(), page,
+                    page.say(new ReportMessage.PartitionCounts(partition.axes().size(),
+                            covered + "/" + classes))
+                            + (excluded == 0 ? ""
+                                    : "   " + page.say(new ReportMessage.Excluded(excluded)))
+                            + notes(partition.axes().stream()
+                                            .filter(a -> a.reached().made().isEmpty()).toList(),
+                                    a -> ReasonProse.of(
+                                            ReportMeasurement.of(a.reached()).reason()).clause(),
+                                    page)
+                            + inFull(partitioned.status(), page));
             // The position as well as the class. A class name alone is the same words about two
             // positions of one behavior whose types divide into classes named after the same cases,
             // and a reader told one of them cannot say which position to write the row at. Which
@@ -3189,17 +4064,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // are for different readers, and this one writes the term a row is written against.
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.AClassNoRowIsIn(var missing)) {
-                    out.append(String.format("      %s %sis in `%s` at %s%s%n", mark(f), noRow(f),
-                            missing.name(), missing.axis().name(), onAPremise(f)));
+                    marked(out, f, page, f.established()
+                            ? new ReportMessage.NoRowIsInPartition(missing.name(),
+                                    missing.axis().name(), onAPremise(f))
+                            : new ReportMessage.UndecidedWhetherARowIsInPartition(missing.name(),
+                                    missing.axis().name(), onAPremise(f)));
                 }
             }
             for (CoveredOnlyByRowsThatDoNotHold.Covered<PartitionEvidence.AxisClass> onlyBy
                     : onlyByRowsThatDoNotHold.classes()) {
-                out.append(String.format("      %s in `%s` at %s: %s%n",
-                        onlyRowsThatDoNotHold(marks, onlyBy.by(),"is", "are"),
-                        onlyBy.obligation().name(), onlyBy.obligation().axis().name(),
-                        rowsThatDoNotHold(onlyBy.by(), behavior.rowPlace(), rendering,
-                                declaredIn)));
+                String name = onlyBy.obligation().name();
+                String at = onlyBy.obligation().axis().name();
+                String rows = rowsThatDoNotHold(onlyBy.by(), behavior.rowPlace(), page,
+                        declaredIn);
+                onlyRowsThatDoNotHold(out, marks, onlyBy.by(), page,
+                        new ReportMessage.OnlyARowThatDoesNotHoldIsInPartition(name, at, rows),
+                        new ReportMessage.OnlyRowsThatDoNotHoldAreInPartition(name, at, rows));
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
             // decided rather than something the rows left undone.
@@ -3215,14 +4095,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // the answer is told apart by nothing and owed a row at every class, and a line
                 // saying only the first would read as the second's contradiction.
                 switch (axis.use()) {
-                    case InputUse.NotRead _ -> out.append(String.format("      · %s holds %d"
-                                    + " classes and nothing this behavior states reads it, so no"
-                                    + " row is owed at any of them%n",
-                            axis.name(), axis.classes().size()));
-                    case InputUse.Read _ -> widerThanToldApart(out, axis, wider,
-                            "this behavior reads it without telling them apart");
-                    case InputUse.NotKnown _ -> widerThanToldApart(out, axis, wider,
-                            "this behavior does not tell them apart");
+                    case InputUse.NotRead _ -> noted(out, page,
+                            new ReportMessage.NothingReadsThePosition(axis.name(),
+                                    axis.classes().size()));
+                    case InputUse.Read _ -> widerThanToldApart(out, axis, wider, page,
+                            new ReportMessage.ReadWithoutTellingApart(axis.name(),
+                                    axis.classes().size()));
+                    case InputUse.NotKnown _ -> widerThanToldApart(out, axis, wider, page,
+                            new ReportMessage.NotToldApart(axis.name(), axis.classes().size()));
                 }
                 // Which rule composed the classes, for a reader told that no row is in one of them.
                 // The lines above name the class; this names what made it, so that a reader sent
@@ -3233,19 +4113,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // handles onto one rule, and which of them a document writes is settled where that
                 // choice is made.
                 for (Set<RuleCitation> rule : dividedBy(axis)) {
-                    out.append(String.format("      · %s is divided by %s%n",
-                            axis.name(), cited(rule, rendering, declaredIn, places)));
+                    noted(out, page, new ReportMessage.DividedBy(axis.name(),
+                            cited(rule, page, declaredIn, places)));
                 }
                 for (ClaimAnnotations.Said said : behavior.claimed().at(axis.path())) {
                     // A case out of the denominator says what the author wrote about it; one still
                     // counted says that too, and that nothing settled it — a reader is told both
                     // rather than left to find out by writing the row.
-                    out.append(said.settled()
-                            ? String.format("      · `%s` is declared unreachable%s%n",
-                                    said.classId(), because(said.reasons()))
-                            : String.format("      · `%s` is declared unreachable%s, and nothing"
-                                            + " here proves it: %s%n",
-                                    said.classId(), because(said.reasons()), unproven(said.why())));
+                    noted(out, page, declaredUnreachable(said, null));
                 }
             }
         }
@@ -3255,15 +4130,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // nothing to count and the same claims to answer for, and printing them only beside a count
         // is how a verdict came to be reached and then not said.
         for (ClaimAnnotations.Said said : behavior.claimed().notAt(measuredPaths(partition))) {
-            out.append(said.settled()
-                    ? String.format("      · `%s` at `%s` is declared unreachable%s%n",
-                            said.classId(), said.at(), because(said.reasons()))
-                    : String.format("      · `%s` at `%s` is declared unreachable%s, and nothing"
-                                    + " here proves it: %s%n",
-                            said.classId(), said.at(), because(said.reasons()),
-                            unproven(said.why())));
+            noted(out, page, declaredUnreachable(said, said.at()));
         }
-        undivided(out, behavior, rendering, declaredIn, places, behavior.partPlace());
+        undivided(out, behavior, page, declaredIn, places, behavior.partPlace());
         // On a line of its own, and this is the whole of why it has one. Counting combinations
         // across two positions is the neighbouring technique rather than this one, and printed at
         // the end of the partition line it sat beside the border counts where a reader could add
@@ -3286,14 +4155,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (behavior.evidence().combinations()) {
         case CombinationCriterion.Interactions(var meetings) ->
                 interaction(out, behavior, meetings,
-                        onlyByRowsThatDoNotHold.combinationsOfDecisions(), declaredIn, rendering,
+                        onlyByRowsThatDoNotHold.combinationsOfDecisions(), declaredIn, page,
                         marks);
         case null -> { }
         case CombinationCriterion.PairFallback _ -> {
             if (partitioned.counted()) {
-                String combinations = combinations(partition.pairs());
-                if (!combinations.isEmpty()) {
-                    out.append(String.format("    combination %s%n", combinations));
+                Optional<Message> combinations = combinations(partition.pairs());
+                if (combinations.isPresent()) {
+                    measureLine(out, new ReportMessage.Combination(), page,
+                            page.say(combinations.get()));
                     // And which of them no row is in, one to a line, as every gap is named.
                     // Summed, the count says how much of the space the rows cover and nothing
                     // about where the rest of it is — and where it is is what a reader acts on.
@@ -3306,22 +4176,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     for (ReportedFinding f : behavior.reported()) {
                         if (f.finding().about() instanceof
                                 About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
-                            out.append(String.format("      %s %sis in %s%s%n",
-                                    mark(f.finding()), noRow(f.finding()),
-                                    twoClasses(combination), onAPremise(f.finding())));
+                            String classes = twoClasses(combination, page);
+                            marked(out, f.finding(), page, f.finding().established()
+                                    ? new ReportMessage.NoRowIsInCombination(classes,
+                                            onAPremise(f.finding()))
+                                    : new ReportMessage.UndecidedWhetherARowIsInCombination(
+                                            classes, onAPremise(f.finding())));
                             for (WhyKept why : kept.getOrDefault(combination, List.of())) {
-                                out.append(String.format("          · kept: %s%n",
-                                        whyKept(why, rendering, declaredIn)));
+                                out.append("          · ").append(page.say(new ReportMessage.Kept(
+                                        whyKept(why, page, declaredIn)))).append(NEW_LINE);
                             }
                         }
                     }
                     for (CoveredOnlyByRowsThatDoNotHold.Covered<PartitionEvidence.PairSpace.Cell>
                             onlyBy : onlyByRowsThatDoNotHold.combinationsOfClasses()) {
-                        out.append(String.format("      %s in %s: %s%n",
-                                onlyRowsThatDoNotHold(marks, onlyBy.by(),"is", "are"),
-                                twoClasses(onlyBy.obligation().owedBy(behavior.name())),
-                                rowsThatDoNotHold(onlyBy.by(), behavior.rowPlace(), rendering,
-                                        declaredIn)));
+                        String classes = twoClasses(onlyBy.obligation().owedBy(behavior.name()),
+                                page);
+                        String rows = rowsThatDoNotHold(onlyBy.by(), behavior.rowPlace(), page,
+                                declaredIn);
+                        onlyRowsThatDoNotHold(out, marks, onlyBy.by(), page,
+                                new ReportMessage.OnlyARowThatDoesNotHoldIsInCombination(classes,
+                                        rows),
+                                new ReportMessage.OnlyRowsThatDoNotHoldAreInCombination(classes,
+                                        rows));
                     }
                 }
             }
@@ -3348,14 +4225,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
             // behavior takes has, and which is the shape of every behavior that validates raw input.
-            sayWhy(out, "border", bounded.reason());
+            sayWhy(out, new ReportMessage.Border(), bounded.reason(), page);
         } else {
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
             // sentence; each is said under the block, by the reading it is a point of.
-            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
-                    lines.size(), owed.met().size(), owed.counted(), refuted(owed),
-                    inFull(bounded.status())));
+            measureLine(out, new ReportMessage.Border(), page,
+                    page.say(new ReportMessage.BorderCounts(lines.size(),
+                            owed.met().size() + "/" + owed.counted()))
+                            + refuted(owed, page) + inFull(bounded.status(), page));
         }
         // And the lines the rows stand at every point of and still do not pin down. Beside the
         // count rather than in it: what the count measures is rows at the points of a line, and a
@@ -3369,12 +4247,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // where nothing is offered. One input and never two: a reader shown one and handed
                 // a row at another has been shown two answers about one line.
                 String shown = f.offered() != null ? f.offered().said() : untold.sawThemPartSaid();
-                out.append(String.format("      %s no row tells `%s` from `%s`%s%n",
-                        mark(f.finding()), untold.line().border().label(),
-                        untold.allowed().label(),
-                        shown == null ? "" : ", and a row at `" + shown + "` would"));
+                marked(out, f.finding(), page, new ReportMessage.NoRowTellsApart(
+                        untold.line().border().label(), untold.allowed().label(),
+                        shown == null ? new ReportMessage.Nothing()
+                                : new ReportMessage.ARowAtWould(shown)));
+            }
+            // And the weights of a value derived from several positions and cut at several places,
+            // beside the count for the same reason: every point of every border can be stood at
+            // and a position's weight in the value still be fixed by no rows.
+            if (f.finding().about() instanceof About.ATiltOfADerivedValueNoRowShows tilt) {
+                marked(out, f.finding(), page, new ReportMessage.NoRowFixesTheWeight(
+                        String.valueOf(tilt.position()), String.valueOf(tilt.into().left())));
             }
         }
+        weightsNotDecided(out, behavior.weights(), page);
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
@@ -3382,28 +4268,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // the same block and beside the questions, because both are the difference between the two
         // numbers — what differs is that this one is answered.
         for (BorderObligationPointAssessment point : owed.refuted()) {
-            out.append(String.format("      · %s%n", cannotBeWritten(point.role() + " point ("
-                    + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")));
-            readings(out, point, _ -> true, at -> whatWasTried(
+            noted(out, page, cannotBeWritten(new ReportMessage.PointOfALine(point.role().name(),
+                    new ReportMessage.Nothing(),
+                    RuleHandleProse.said(point.describe(places), page.rendering(),
+                            page.language(), declaredIn))));
+            readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
-                    behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
-                    behavior.conditionPlaces().copies(), rendering, declaredIn);
+                    behavior.conditionPlaces().along(at.saidOnTheWay()), page, declaredIn,
+                    places),
+                    behavior.conditionPlaces().copies(), page, declaredIn);
         }
         for (BorderObligationPointAssessment point : owed.undecided()) {
-            for (String said : undecidedBecause(point.owed().disposition(),
-                    point.role() + " point ("
-                            + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")) {
-                out.append(String.format("      ? %s%n", said));
+            for (Message said : undecidedBecause(point.owed().disposition(),
+                    new ReportMessage.PointOfALine(point.role().name(), new ReportMessage.Nothing(),
+                            RuleHandleProse.said(point.describe(places), page.rendering(),
+                            page.language(), declaredIn)),
+                    page)) {
+                out.append("      ? ").append(page.say(said)).append(NEW_LINE);
             }
-            readings(out, point, _ -> true, at -> whatWasTried(
+            readings(out, apart, point,_ -> true, at -> whatWasTried(
                     point.owedAt(at).searches(),
-                    behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
-                    behavior.conditionPlaces().copies(), rendering, declaredIn);
+                    behavior.conditionPlaces().along(at.saidOnTheWay()), page, declaredIn,
+                    places),
+                    behavior.conditionPlaces().copies(), page, declaredIn);
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
         // it. It is exactly where none did that the question stands, so this cannot be written by
         // walking the borders.
-        unaccounted(out, behavior, rendering, declaredIn,
+        unaccounted(out, behavior, page, declaredIn,
                 asked -> asked.holdsOpen(CoverageObligation.Measure.BOUNDARY), places,
                 behavior.partPlace());
         // The rule as this report writes it. The finding carries the rule and not words about it,
@@ -3435,12 +4327,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // rule that names a value is owed a row outside it on each side, and the two
                     // are different work. Said with the role alone, the same sentence printed twice
                     // and neither of them said which value was being asked for.
-                    out.append(String.format("      %s no row is at %s %s point%s (%s)%n",
-                            mark(f), againstTheLine ? "the" : "an", point.role(),
-                            point.whichSide(),
-                            RuleHandleProse.said(point.describe(places), rendering, declaredIn)));
-                    readings(out, point, _ -> true, _ -> "",
-                            behavior.conditionPlaces().copies(), rendering, declaredIn);
+                    Message said = new ReportMessage.PointOfALine(point.role().name(),
+                            point.whichSide(), RuleHandleProse.said(point.describe(places), page.rendering(),
+                            page.language(), declaredIn));
+                    marked(out, f, page, againstTheLine ? new ReportMessage.NoRowIsAtThe(said)
+                            : new ReportMessage.NoRowIsAtAn(said));
+                    readings(out, apart, point,_ -> true, _ -> "",
+                            behavior.conditionPlaces().copies(), page, declaredIn);
                 }
             }
         }
@@ -3449,11 +4342,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (CoveredOnlyByRowsThatDoNotHold.Covered<BorderObligationPointAssessment> covered
                 : onlyByRowsThatDoNotHold.points()) {
             BorderObligationPointAssessment point = covered.obligation();
-            out.append(String.format("      %s at %s %s point%s (%s): %s%n",
-                    onlyRowsThatDoNotHold(marks, covered.by(),"is", "are"),
-                    point.role().againstTheLine() ? "the" : "an", point.role(), point.whichSide(),
-                    RuleHandleProse.said(point.describe(places), rendering, declaredIn),
-                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
+            Message said = new ReportMessage.PointOfALine(point.role().name(), point.whichSide(),
+                    RuleHandleProse.said(point.describe(places), page.rendering(),
+                            page.language(), declaredIn));
+            String rows = rowsThatDoNotHold(covered.by(), behavior.rowPlace(), page, declaredIn);
+            if (point.role().againstTheLine()) {
+                onlyRowsThatDoNotHold(out, marks, covered.by(), page,
+                        new ReportMessage.OnlyARowThatDoesNotHoldIsAtThe(said, rows),
+                        new ReportMessage.OnlyRowsThatDoNotHoldAreAtThe(said, rows));
+            } else {
+                onlyRowsThatDoNotHold(out, marks, covered.by(), page,
+                        new ReportMessage.OnlyARowThatDoesNotHoldIsAtAn(said, rows),
+                        new ReportMessage.OnlyRowsThatDoNotHoldAreAtAn(said, rows));
+            }
         }
         // A point some row answers, at a reading nothing stands at. Not a gap — the line is owed
         // once and a row stands at it — and still a fact about that position: a reader who wants
@@ -3462,12 +4363,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderObligationPointAssessment point : owed.met()) {
             if (point.readings().stream().anyMatch(
                     at -> !point.owedAt(at).hasRowWitness())) {
-                out.append(String.format("      · the %s point (%s) is answered, and not at every"
-                                + " reading of the line%n",
-                        point.role(),
-                        RuleHandleProse.said(point.describe(places), rendering, declaredIn)));
-                readings(out, point, at -> !point.owedAt(at).hasRowWitness(), _ -> "",
-                        behavior.conditionPlaces().copies(), rendering, declaredIn);
+                noted(out, page, new ReportMessage.ThePointIsAnsweredNotAtEveryReading(
+                        point.role().name(),
+                        RuleHandleProse.said(point.describe(places), page.rendering(),
+                            page.language(), declaredIn)));
+                readings(out, apart, point,at -> !point.owedAt(at).hasRowWitness(), _ -> "",
+                        behavior.conditionPlaces().copies(), page, declaredIn);
             }
         }
         // What the model itself answered, which is not a row anybody is behind on. Named by the
@@ -3479,9 +4380,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             for (LeftOutPoint left : line.border().leavesOut()) {
                 if (left.owedToTheReading()) {
                     DomainPoint at = left.point().point();
-                    out.append(String.format("      · no %s point%s is owed at %s (%s): %s%n",
-                            line.border().roleOf(at), line.border().whichSide(at), line.label(),
-                            RuleHandleProse.said(line.describe(places), rendering, declaredIn),
+                    noted(out, page, new ReportMessage.NoPointIsOwed(
+                            line.border().roleOf(at).name(), line.border().sideOf(at),
+                            line.label(),
+                            RuleHandleProse.said(line.describe(places), page.rendering(),
+                                    page.language(), declaredIn),
                             whyNotOwed(left.point().reason())));
                 }
             }
@@ -3493,33 +4396,89 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (BorderAssessment line : lines) {
             line.border().inEachRole().forEach((role, answer) -> {
                 if (answer instanceof RoleAnswer.NoPoint none) {
-                    out.append(String.format("      · no %s point exists at %s (%s): %s%n",
-                            role, line.label(),
-                            RuleHandleProse.said(line.describe(places), rendering, declaredIn),
+                    noted(out, page, new ReportMessage.NoPointExists(role.name(), line.label(),
+                            RuleHandleProse.said(line.describe(places), page.rendering(),
+                                    page.language(), declaredIn),
                             whyNoPoint(none.why())));
                 }
             });
         }
     }
 
-    /**
-     * The rest of a sentence about a point of a declaration's line, after its role: where on what
-     * the declaration wrote, and the rule — or the rule alone, where the declaration has no quantity
-     * to say the line on, as a debt on such a line is said ({@link #pointOf}).
-     */
-    private static String onADeclaredLine(String verb, boolean namesItsLevel, String said,
-                                          String rule) {
-        return namesItsLevel ? " " + verb + " at " + said + " (" + rule + ")"
-                : " of " + rule + " " + verb;
-    }
-
     /** Why a line has no point in one of the four roles, in the report's own words. */
-    private static String whyNoPoint(RoleAnswer.Reason why) {
+    private static Message whyNoPoint(RoleAnswer.Reason why) {
         return switch (why) {
             case THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE ->
-                    "the class at the line holds the value the rule names and nothing else, so"
-                            + " there is no row in it away from the line";
+                    new ReportMessage.TheClassAtTheLineHoldsOneValue();
         };
+    }
+
+    /**
+     * The weights the rows leave neither fixed nor shown unfixed, with what each went without.
+     *
+     * <p>One entry for the positions of a computation that went without the same things, and the
+     * positions under it: a comparison weighing many positions in several places has the same
+     * reason at every one, and one entry per position would write it as many times. The reasons are
+     * the weight's own and what the borders of the computation went without, which the weight
+     * carries as the borders said it.
+     *
+     * <p>The form a position is said to weigh into is the widest of the forms it is in, which is
+     * the one {@link ReportMessage.NoRowFixesTheWeight} names for a weight no row shows, so the
+     * two lines about one position name one form. A position in two forms is one entry under that
+     * form and not one under each.
+     */
+    static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
+                                  Page page) {
+        for (TiltOfADerivedValue each : weights) {
+            Map<UndecidedWeighing, List<NumericTerm>> together = new LinkedHashMap<>();
+            each.positions().forEach((position, standing) -> {
+                if (standing instanceof TiltOfADerivedValue.Standing.Undecided it) {
+                    together.computeIfAbsent(
+                            new UndecidedWeighing(each.widestWith(position), it),
+                            _ -> new ArrayList<>()).add(position);
+                }
+            });
+            together.forEach((weighing, positions) -> {
+                out.append("      ? ").append(page.say(new ReportMessage.TheWeightsAreNotDecided(
+                        String.valueOf(weighing.into().left())))).append(NEW_LINE);
+                for (NumericTerm position : positions) {
+                    out.append("          · ").append(position).append(NEW_LINE);
+                }
+                for (Weakening.AWeightNotDecided.Why why : weighing.standing().own().written()) {
+                    out.append("          ").append(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            switch (why) {
+                                case NO_BORDER_OF_IT_WAS_READ ->
+                                        new ReportMessage.NoBorderOfTheComputationWasRead();
+                                case A_BORDER_WAS_NOT_READ_IN_FULL ->
+                                        new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
+                                case A_RUN_WAS_NOT_WATCHED ->
+                                        new ReportMessage.ARowOfTheComputationWasNotWatched();
+                                case THE_ARITHMETIC_GAVE_OUT ->
+                                        new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
+                            }))).append(NEW_LINE);
+                }
+                // What the borders went without, in the words the document publishes for it. The
+                // borders say it themselves under the line they are at, so what is said here is
+                // that the weight waits on them.
+                if (!weighing.standing().carried().isEmpty()) {
+                    out.append("          ").append(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            new ReportMessage.TheBordersOfTheComputationWentWithout(String.join(", ",
+                                    weakeningWords(weighing.standing().carried())))))).append(NEW_LINE);
+                }
+            });
+        }
+    }
+
+    /**
+     * Positions that are weighed into one value and are undecided for the same things.
+     *
+     * <p>Keyed by the weighing and by the standing itself, which is what the reasons are asked of.
+     * A computation holds several weighings, and a position is weighed into one of them: positions
+     * of different weighings are not one group however alike their reasons read, and neither are
+     * two whose borders went without different things.
+     */
+    private record UndecidedWeighing(LinearQuantity into,
+                                     TiltOfADerivedValue.Standing.Undecided standing) {
     }
 
     /**
@@ -3537,35 +4496,61 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param beside what to say after each, which is what that reading's search came to where one
      *               was made
      */
-    private static void readings(StringBuilder out, BorderObligationPointAssessment point,
+    private static void readings(StringBuilder out, WhereTheReadingsDiffer apart,
+                                 BorderObligationPointAssessment point,
                                  Predicate<BorderAssessment> shown,
                                  Function<BorderAssessment, String> beside,
                                  Map<ModelOccurrence, CopyShown> copies,
-                                 SourceRendering rendering, SourceId declaredIn) {
-        List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid().stream()
+                                 Page page, SourceId declaredIn) {
+        List<BorderObligationPointAssessment.ReadingSaid> said = point.readingsSaid(apart).stream()
                 .filter(each -> shown.test(point.met().get(each.where()))).toList();
         int say = Math.min(said.size(), BorderObligationPointAssessment.READINGS_SAID);
         for (BorderObligationPointAssessment.ReadingSaid each : said.subList(0, say)) {
             // And which calls of a helper the line was read at, after what it asks. The comparison
             // that drew it is one place for every call, so two readings of a helper's line read
             // alike but for the calls.
-            out.append(String.format("          · read as %s: %s%s%s%n", each.at(), each.asks(),
-                    inCopies(each.readAt(), copies, rendering, declaredIn),
-                    beside.apply(point.met().get(each.where()))));
+            BorderAssessment reading = point.met().get(each.where());
+            out.append("          · ").append(page.say(new ReportMessage.ReadAs(each.at(),
+                            each.asked() == null ? each.asks()
+                                    : Messages.text(each.asked(), page.language()),
+                            inCopies(each.readAt(), copies, page, declaredIn),
+                            beside.apply(reading), boundWritten(reading))))
+                    .append(NEW_LINE);
         }
         if (said.size() > say) {
-            out.append(String.format("          · %d more readings%n", said.size() - say));
+            out.append("          · ").append(page.say(new ReportMessage.MoreReadings(
+                    said.size() - say))).append(NEW_LINE);
         }
     }
 
+    /**
+     * The bound a table holds, where the reading is a threshold of one: the number the reading is
+     * cut at is the bound weighed by the positions it was made of, and it is the bound a reader
+     * changes in the table. And where the bound is read out of data, which data, since that is what
+     * tells the bound of one table from the alike bound of another.
+     */
+    private static Message boundWritten(BorderAssessment reading) {
+        return reading.border().threshold().<Message>map(each -> switch (each) {
+            case ThresholdOfADerivedValue.WrittenAt written ->
+                    new ReportMessage.TheBoundWrittenIs(written.level().spelled(),
+                            written.heldIn().map(AdequacyReport::boundHeldIn)
+                                    .orElse(new ReportMessage.Nothing()));
+            case ThresholdOfADerivedValue.CutAt _ -> new ReportMessage.Nothing();
+            case ThresholdOfADerivedValue.HeldIn held -> boundHeldIn(held.data());
+        }).orElse(new ReportMessage.Nothing());
+    }
+
+    private static Message boundHeldIn(BoundHeldIn data) {
+        return new ReportMessage.TheBoundIsReadOutOf(String.join(", ", data.said()));
+    }
+
     /** What settled a point nobody is owed a row at, in the words the report promises its reader. */
-    static String whyNotOwed(NotOwedReason reason) {
+    static Message whyNotOwed(NotOwedReason reason) {
         return switch (reason) {
             // Not what proved it: a reader told a rule refuses the point goes looking for one, and
             // a Set<Bool> asked for three elements has none to find.
-            case NO_VALUE_CAN_STAND_THERE -> "excluded — " + NoValue.standsThere();
-            case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
-                    "this order names no value there, so the point cannot be written";
+            case NO_VALUE_CAN_STAND_THERE -> new ReportMessage.ExcludedBecause(NoValue.standsThere());
+            case THE_CARRIER_NAMES_NO_NEIGHBOUR -> new ReportMessage.TheOrderNamesNoValueThere();
         };
     }
 
@@ -3578,8 +4563,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * very comparison drew — one measure's silence printed as though it were the other's.
      */
     private void undivided(StringBuilder out, BehaviorReport behavior,
-                                  SourceRendering rendering, SourceId declaredIn,
+                                  Page page, SourceId declaredIn,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
+        SourceRendering rendering = page.rendering();
+        WentWithout wentWithout = new WentWithout(behavior);
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
                 // What was found and not what was missed. This line is written from
@@ -3587,7 +4574,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // dividing the position — a conclusion about the model. It said `not derivable`,
                 // which is the word for a derivation this compiler could not make, so the sentence
                 // said the opposite of the value it was written from (issue #1249).
-                out.append(String.format("      %s divided no way: %s%n", mark(f), position.at()));
+                marked(out, f, page, new ReportMessage.DividedNoWay(String.valueOf(position.at())));
             }
         }
         // Said apart from the line above it, which is the whole of what this pair is for: one names
@@ -3611,41 +4598,129 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // And which calls of a helper the rule was read at, after the position: a rule a
                 // helper writes is one place for every call, and the readings of it at different
                 // calls are told apart by the call and by nothing else on the line.
-                out.append(String.format("      %s %s: %s — %s%s, about `%s`%s%s%n",
-                        mark(f), it.readingStopped() ? "not read" : "no line",
-                        cited(it.cited(), rendering, declaredIn, places),
-                        whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
-                        inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
-                                rendering, declaredIn),
-                        sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
+                String rule = cited(it.cited(), page, declaredIn, places);
+                Message why = whyUnread(it.reason());
+                Message stopped = stoppedAt(it.figures());
+                Message runs = runsStoppedSaid(it.runsStopped(), page);
+                Message shown = shownReached(it.shownReachedAt());
+                String copies = inCopies(it.finding().readAt(),
+                        behavior.conditionPlaces().copies(), page, declaredIn);
+                Message sentTo = sentTo(it.finding().sentTo(), parts, rendering, declaredIn);
+                marked(out, f, page, it.readingStopped()
+                        ? new ReportMessage.RuleNotRead(rule, why, stopped, runs, shown, it.at(),
+                                copies, sentTo)
+                        : new ReportMessage.RuleDrawsNoLine(rule, why, stopped, runs, shown,
+                                it.at(), copies, sentTo));
+                decisionWentWithout(out, it.finding().readAt(), wentWithout, behavior, page,
+                        declaredIn);
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
-                out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%n",
-                        mark(f), cited(it.cited(), rendering, declaredIn, places),
-                        whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
+                marked(out, f, page, new ReportMessage.RuleNotRead(
+                        cited(it.cited(), page, declaredIn, places), whyUnread(it.reason()),
+                        stoppedAt(it.figures()), runsStoppedSaid(it.runsStopped(), page),
+                        shownReached(it.shownReachedAt()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
-                                rendering, declaredIn)));
+                                page, declaredIn),
+                        sentTo(it.sentTo(), parts, rendering, declaredIn)));
+                decisionWentWithout(out, it.finding().readAt(), wentWithout, behavior, page,
+                        declaredIn);
             }
         }
-        // And a rule that a run may stop in. Whatever else is said of the rule, and whatever line it
-        // draws, this is what the line leaves out: a possibility the ways before it do not rule
-        // out, not a run shown to exist.
-        for (Adequacy.Finding f : behavior.findings()) {
-            if (f.about() instanceof About.ARuleThatMayStopARun(var it)) {
-                out.append(String.format("      %s may stop a run: %s — a run that reaches it may"
-                                + " stop in an operation it is read through%s%n",
-                        mark(f), cited(it.cited(), rendering, declaredIn, places),
-                        inCopies(it.readAt(), behavior.conditionPlaces().copies(),
-                                rendering, declaredIn)));
+        // And, for a rule a line of which was not worked out because its cases were too many, what
+        // those cases were: a line of its own under the rule's, since the count is about the cases
+        // and not about why the line was not worked out.
+        PartitionEvidence partition = behavior.partition();
+        if (partition != null) {
+            List<CasesAtARule<CaseExpansion.CameTo>> expanded = partition.caseExpansions();
+            List<CaseOfALine> numbered = casesNumbered(expanded);
+            for (int at = 0; at < expanded.size(); at++) {
+                CasesAtARule<CaseExpansion.CameTo> each = expanded.get(at);
+                // A line for each reading of the case, each with the calls it was read in: one
+                // case, which the number says, and what it came to at each copy of the rule.
+                for (CasesAtARule.Reading<CaseExpansion.CameTo> reading : each.readings()) {
+                    out.append("      ").append(page.say(new ReportMessage.CaseExpansion(
+                            cited(each.cited(), page, declaredIn, places), each.line(),
+                            each.cutAt(), armsSaid(each.which().line().written(), page),
+                            numbered.get(at).ordinal(), numbered.get(at).of(),
+                            inCopies(reading.readAt(), behavior.conditionPlaces().copies(),
+                                    page, declaredIn),
+                            caseExpansionSaid(reading.answer(), construct -> writtenInSaid(
+                                    construct, parts, page, declaredIn),
+                                    copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
+                                            copy).calls(), page, declaredIn), page)
+                                    + reading.answer()
+                                            .helperHoldingEveryChoice(reading.readAt().inOrder())
+                                            .map(declared -> helperToDeclareSaid(declared, page))
+                                            .orElse("")
+                                    + calledOnEachElement(behavior.helpersCalledOnEachElement(),
+                                            reading.readAt().inOrder(),
+                                            suggestedAt(reading.answer(),
+                                                    reading.readAt().inOrder()))
+                                            .map(told -> helperOnEachElementSaid(told,
+                                                    construct -> writtenInSaid(construct, parts,
+                                                            page, declaredIn), page))
+                                            .orElse(""))))
+                            .append(NEW_LINE);
+                }
+            }
+            // And, for a rule a line of which was read all the same at a cost, the helper its
+            // cases choose among: a line of its own, since it is no reason the line was not read.
+            for (CasesAtARule<List<CaseExpansion.MultipliedHelper>> each
+                    : partition.costlyReadings()) {
+                for (CasesAtARule.Reading<List<CaseExpansion.MultipliedHelper>> reading
+                        : each.readings()) {
+                    String helpers = String.join("", reading.answer().stream()
+                            .map(helper -> multipliedHelperSaid(helper, construct ->
+                                    writtenInSaid(construct, parts, page, declaredIn),
+                                    copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
+                                            copy).calls(), page, declaredIn), page))
+                            .toList())
+                            + calledOnEachElement(behavior.helpersCalledOnEachElement(),
+                                    reading.readAt().inOrder(), reading.answer().stream()
+                                            .map(CaseExpansion.MultipliedHelper::helper).toList())
+                                    .map(told -> helperOnEachElementSaid(told,
+                                            construct -> writtenInSaid(construct, parts, page,
+                                                    declaredIn), page))
+                                    .orElse("");
+                    out.append("      ").append(page.say(new ReportMessage.CostlyReading(
+                            cited(each.cited(), page, declaredIn, places), each.line(),
+                            each.cutAt(), armsSaid(each.which().line().written(), page),
+                            inCopies(reading.readAt(), behavior.conditionPlaces().copies(),
+                                    page, declaredIn),
+                            helpers))).append(NEW_LINE);
+                }
+            }
+            // And where a run stops only past what the representation holds: said once, of each
+            // operation, and of no relation it comes before.
+            if (!partition.stopsPastTheRepresentation().isEmpty()) {
+                noted(out, page, new ReportMessage.StopsOnlyPastWhatARepresentationHolds(
+                        String.join(", ", partition.stopsPastTheRepresentation().stream()
+                                .map(each -> each.operation() + "@"
+                                        + writtenAtSaid(each.at(), rendering, declaredIn))
+                                .toList())));
             }
         }
+        // And the conditions a figure stopped, with what to do about them: once for the body,
+        // whichever measures met them.
+        ConditionsStoppedAtAFigure.Stopped stopped = behavior.stoppedAtAFigure();
+        if (stopped.conditions() > 0) {
+            noted(out, page, new ReportMessage.ConditionsStoppedAtAFigure(stopped.conditions(),
+                    figuresSaid(stopped.figures(), page),
+                    suggestedSaid(stopped.declare(), page)));
+        }
+        // And a body left unread for its author to change, with the change: what every measure of
+        // the body below went without, said once.
+        behavior.leftToBeChanged().figure().ifPresent(figure ->
+                noted(out, page, new ReportMessage.LeftToBeChanged(
+                        figuresSaid(List.of(figure), page),
+                        leftSaid(behavior.leftToBeChanged(), page))));
         // And a position whose rules this reading never arrived at, which names no rule because
         // nothing observed one. Its own line, so that a reader is not left reading an absent rule
         // to work out which of the two they are being told.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionThisCouldNotRead(var it)) {
-                out.append(String.format("      %s not read: %s (%s%s)%n",
-                        mark(f), it.at(), whyUnread(it.reason()), stoppedAt(it.figures())));
+                marked(out, f, page, new ReportMessage.PositionNotRead(it.at(),
+                        whyUnread(it.reason()), stoppedAt(it.figures())));
             }
         }
         // And a third thing, said apart from both: a rule written about a position the axes did
@@ -3655,15 +4730,180 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // what an author edits.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionWhoseRulesWereNotReached(var gap)) {
-                out.append(String.format("      %s rules not reached: %s%n",
-                        mark(f), gap.at()));
+                marked(out, f, page, new ReportMessage.RulesNotReached(String.valueOf(gap.at())));
             }
         }
         // The questions this measure answers: which values may stand where, which classes hold
         // them, and which value a rule tells from every other. A border is the section below's.
-        unaccounted(out, behavior, rendering, declaredIn,
+        unaccounted(out, behavior, page, declaredIn,
                 asked -> asked.holdsOpen(CoverageObligation.Measure.PARTITION), places,
                 behavior.partPlace());
+    }
+
+    /**
+     * The searches the decision section tells a reader about, in the order it tells them: the
+     * places of the rules nothing settled, each as the decision's own reading ordered them.
+     *
+     * <p>The one place that says which searches a page shows. What the decision section prints and
+     * what a line of the partition points at are both read off this, so a page cannot point at a
+     * search it does not show, nor show one in an order the pointer does not follow. Empty where
+     * the section says nothing of the rules: a reading that stopped, or a body with none.
+     */
+    private static List<SettledAt> unsettledShown(BehaviorReport behavior) {
+        DecisionEvidence decision = behavior.evidence().decision();
+        if (!rulesAreTold(decision)) {
+            return List.of();
+        }
+        List<SettledAt> shown = new ArrayList<>();
+        for (DecisionReading.Stated stated : decision.read().stated()) {
+            SettledAcross rule = behavior.ruleSettlements().get(stated.rule());
+            if (rule != null && rule.requirement() instanceof RuleRequirement.Unsettled) {
+                shown.addAll(rule.places());
+            }
+        }
+        return shown;
+    }
+
+    /**
+     * Whether the decision section says anything of the rules: a reading that stopped comes back
+     * with none of them, and a body that decides nothing has none to say.
+     *
+     * <p>The one definition, which the section's own ending and every pointer to it ask, so that
+     * a pointer is made exactly where the section it points to is written.
+     */
+    private static boolean rulesAreTold(DecisionEvidence decision) {
+        return decision != null && decision.derivation().isEmpty() && !decision.rules().isEmpty();
+    }
+
+    /**
+     * What the decision's searches went without at the comparison a line of the partition is
+     * about, said under that line and naming the rule each search was of.
+     *
+     * <p>The partition says why the rule is no line over the position and the decision says which
+     * reading stopped. Neither is the other's cause, so the line keeps its classification and this
+     * adds the second fact where the first is read. Asked of what was read at and not of the
+     * reason the line gives: the word a document promises is coarser than what produced it, and
+     * which analysis has something to say of a comparison is not a question it answers.
+     *
+     * <p>Said in the words of the decision section's own entry, so the sentence a reader is sent
+     * to is the one they find there.
+     */
+    private static void decisionWentWithout(StringBuilder out, ModelOccurrences readAt,
+                                            WentWithout wentWithout, BehaviorReport behavior,
+                                            Page page, SourceId declaredIn) {
+        for (WentWithout.Told told : wentWithout.at(readAt)) {
+            String rule = both(page, behavior.readingsOf(told.search().at()).stream()
+                    .map(read -> said(read, declaredIn, page)).toList());
+            // The entry the decision section writes for each gap, which says it of every gap that
+            // reads alike and with every call: what a reader is sent to is that line, not a
+            // narrower sentence of this one's.
+            Map<SaidAlike, String> entries = leftOutBy(told.search(), behavior, page, declaredIn);
+            entriesOf(told.gaps(), entries).forEach(entry -> out.append("          · ")
+                    .append(page.say(new ReportMessage.TheDecisionWentWithout(rule, entry)))
+                    .append(NEW_LINE));
+        }
+    }
+
+    /**
+     * The entries of {@code entries} that {@code gaps} are told in, one for each entry and in the
+     * order of the first gap told in it.
+     *
+     * <p>Kept apart by the key the decision section keeps its entries apart by and not by what
+     * they say: two gaps keyed differently are two entries there even when the words come out
+     * alike, because the sentence leaves out part of what they differ in. Counted by their words,
+     * a pointer would tell a reader of one entry where the section writes two.
+     *
+     * <p>Open to this package so that the identity can be asked of keys that read alike.
+     */
+    static List<String> entriesOf(List<ConditionGap> gaps, Map<SaidAlike, String> entries) {
+        Set<SaidAlike> keys = new LinkedHashSet<>();
+        gaps.forEach(gap -> keys.add(SaidAlike.of(gap)));
+        return entriesOf(keys, entries);
+    }
+
+    /** The same, of keys already taken. */
+    static List<String> entriesOf(Set<SaidAlike> keys, Map<SaidAlike, String> entries) {
+        List<String> told = new ArrayList<>();
+        for (SaidAlike key : keys) {
+            told.add(Objects.requireNonNull(entries.get(key),
+                    "an entry is written for every gap a search went without"));
+        }
+        return told;
+    }
+
+    /**
+     * What each search the decision section shows went without, by the copies of the model's code
+     * it is about.
+     *
+     * <p>Joined on the copies and not on a condition's number: the two readings number their
+     * conditions apart, and the copies are what both of them name. A gap is told of a comparison
+     * only when every copy it is about is one the comparison was read at, so a condition that
+     * several comparisons put on the way does not carry the reason of one of them to another.
+     * Kept with the search it came from, which is what tells the rules apart.
+     */
+    private static final class WentWithout {
+
+        /** What one search went without at the comparison asked about. */
+        record Told(SettledAt search, List<ConditionGap> gaps) { }
+
+        /** Compared by identity: one is made per gap met, and a gap is a deep value to hash. */
+        private record Detail(int met, SettledAt search, ConditionGap gap,
+                              ModelOccurrences copies) { }
+
+        private final BehaviorReport behavior;
+        private Map<ModelOccurrence, List<Detail>> byCopy;
+
+        /** Built on the first ask, which a page with no line to point from never makes. */
+        WentWithout(BehaviorReport behavior) {
+            this.behavior = behavior;
+        }
+
+        private Map<ModelOccurrence, List<Detail>> byCopy() {
+            if (byCopy == null) {
+                byCopy = new HashMap<>();
+                int met = 0;
+                for (SettledAt came : unsettledShown(behavior)) {
+                    for (ConditionGap gap : came.leftOut()) {
+                        ModelOccurrences copies = came.at().saidOnTheWay().of(gap);
+                        Detail detail = new Detail(met++, came, gap, copies);
+                        for (ModelOccurrence copy : copies) {
+                            byCopy.computeIfAbsent(copy, _ -> new ArrayList<>()).add(detail);
+                        }
+                    }
+                }
+            }
+            return byCopy;
+        }
+
+        /**
+         * What each search went without that is about nothing but copies of {@code readAt}, in the
+         * order the decision section shows the searches and, within one, the order of its gaps.
+         */
+        List<Told> at(ModelOccurrences readAt) {
+            Set<ModelOccurrence> read = new HashSet<>(readAt.inOrder());
+            Set<Detail> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            List<Detail> about = new ArrayList<>();
+            for (ModelOccurrence copy : readAt) {
+                for (Detail each : byCopy().getOrDefault(copy, List.of())) {
+                    if (read.containsAll(each.copies().inOrder()) && seen.add(each)) {
+                        about.add(each);
+                    }
+                }
+            }
+            about.sort(Comparator.comparingInt(Detail::met));
+            List<Told> told = new ArrayList<>();
+            List<ConditionGap> gaps = null;
+            SettledAt of = null;
+            for (Detail each : about) {
+                if (each.search() != of) {
+                    of = each.search();
+                    gaps = new ArrayList<>();
+                    told.add(new Told(of, gaps));
+                }
+                gaps.add(each.gap());
+            }
+            return told;
+        }
     }
 
     /**
@@ -3674,110 +4914,79 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * phrase travelled inside the finding, which is how a value that was never words came to be
      * printed by whoever called {@code String.valueOf} on it.
      */
-    static String whyUnread(UndividedPosition.Reason reason) {
+    static Message whyUnread(UndividedPosition.Reason reason) {
         return switch (reason) {
             // The three a rule reaches, written about the rule: the line these appear on names it,
             // so a sentence saying "a rule about it" would name the rule and then not say so.
-            case UNSUPPORTED_SYNTAX -> "written in a form this compiler does not read";
+            case UNSUPPORTED_SYNTAX -> new ReportMessage.WrittenInAFormNotRead();
             // Written about the choice and not about the rule at this position: that one was read,
             // and an author sent after its form would rewrite what is not the difficulty.
-            case UNREAD_ALTERNATIVE_OF_A_CHOICE -> "left open by a choice in it whose other"
-                    + " alternative this compiler does not read";
+            case UNREAD_ALTERNATIVE_OF_A_CHOICE -> new ReportMessage.LeftOpenByAnUnreadAlternative();
             // Written about the rules together and not about this one. What ran out is the
             // allowance for the values they leave between them, and two rules cheap on their own
             // can have an answer that is not — so a sentence naming this rule would be telling a
             // reader to change something that may not be why.
-            case EXACT_VALUES_TOO_COSTLY -> "read to the end, and the values the rules about this"
-                    + " position leave between them are more than this compiler will work out";
-            case BEHAVIOR_DISTINCTIONS_TOO_COSTLY -> "read to the end, and what the behavior's rules"
-                    + " about this position tell apart is more than this compiler will work out";
-            case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
-            case LINE_AT_A_NUMBER_NO_RATIO_HOLDS -> "its line falls at a number this compiler has no"
-                    + " exact representation for";
-            case LINE_SIDE_NOT_WORKED_OUT -> "its line is placed, and a value beside it is one this"
-                    + " compiler could not write out";
-            case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
-                    + "how those positions pair up is not worked out";
-            case SEVERAL_LINES_IN_ONE_RULE -> "what it states was read, and it is several lines"
-                    + " held together, which this compiler does not divide the input by here";
-            case RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE -> "what it states was read, and it relates"
-                    + " the value here to another value not shown to reach every value here, so"
-                    + " which values here settle it on their own is not worked out";
-            case RULE_RELATING_TWO_VALUES ->
-                    "it relates the value here to another value rather than dividing the values here";
-            case RULE_RELATING_ELEMENTS -> "it says how the elements here stand to each other,"
-                    + " and which containers it leaves is not worked out";
-            case RULE_ABOUT_A_RUN ->
-                    "it is about what the values here come to rather than about any one of them,"
-                            + " so it draws its line and divides none of them";
-            case RULE_ABOUT_A_REMAINDER ->
-                    "it is about what a division leaves of a number made of the values here, so it"
-                            + " draws its line on that remainder and divides none of them";
+            case EXACT_VALUES_TOO_COSTLY -> new ReportMessage.TheValuesLeftAreMoreThanWorkedOut();
+            case BEHAVIOR_DISTINCTIONS_TOO_COSTLY ->
+                    new ReportMessage.WhatTheRulesTellApartIsMoreThanWorkedOut();
+            case UNSUPPORTED_DOMAIN -> new ReportMessage.ComparedAgainstValuesNoLineIsDrawnOn();
+            case LINE_AT_A_NUMBER_NO_RATIO_HOLDS -> new ReportMessage.TheLineFallsAtAnInexactNumber();
+            case LINE_SIDE_NOT_WORKED_OUT -> new ReportMessage.AValueBesideTheLineIsNotWritten();
+            case UNRESOLVED_CASE_PAIRING -> new ReportMessage.HowTheCasePositionsPairIsUnknown();
+            case SEVERAL_LINES_IN_ONE_RULE -> new ReportMessage.SeveralLinesHeldTogether();
+            case RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE ->
+                    new ReportMessage.ARelationNotShownToReachEveryValue();
+            case RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE ->
+                    new ReportMessage.ARelationNotShownReachedFromEveryValue();
+            case RELATION_SHOWN_OVER_A_REGION -> new ReportMessage.ARelationShownOverARegion();
+            case RULE_RELATING_TWO_VALUES -> new ReportMessage.ItRelatesTwoValues();
+            case RULE_RELATING_ELEMENTS -> new ReportMessage.ItRelatesTheElements();
+            case RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER ->
+                    new ReportMessage.ItRelatesTwoElementsOfOneContainer();
+            case RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS ->
+                    new ReportMessage.ItIsAboutARemainderNoPositionHolds();
+            case EVALUATION_STOPS_NOT_FULLY_READ ->
+                    new ReportMessage.WhatARunWorksOutToEvaluateItIsNotReadToTheEnd();
+            case RULE_ABOUT_A_RUN -> new ReportMessage.ItIsAboutWhatTheValuesComeTo();
+            case RULE_ABOUT_A_REMAINDER -> new ReportMessage.ItIsAboutARemainder();
+            case RULE_MEASURED_ON_ITS_RUNS -> new ReportMessage.ItComparesWhatARunWorksOut();
             // What the rule does to the position, and not what this measure could not hold. An
             // author reading "this compiler does not read it" would go and rewrite a rule that was
             // read from end to end, and one told the position is divided would go looking for the
             // class on the other side of a rule that refuses everything there.
             case POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS ->
-                    "it restricts this position to the values it admits, and no other value can be"
-                            + " built here";
-            case RULE_ABOUT_A_DERIVED_VALUE ->
-                    "it is about a value made from this one, and what it says about the values here"
-                            + " is not worked out";
+                    new ReportMessage.ItRestrictsThePosition();
+            case RULE_ABOUT_A_DERIVED_VALUE -> new ReportMessage.ItIsAboutADerivedValue();
             case RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS ->
-                    "it is written inside a block handed to more than one walk, so it is about an"
-                            + " element of this position or of another and nothing says which";
-            case RULE_CUTS_NOTHING ->
-                    "it was read to the end and cuts nothing this position appears in";
-            case RULE_ANSWERS_NOWHERE ->
-                    "it was read to the end, and every run that reaches it stops in an operation"
-                            + " it is read through";
-            case RULE_TELLS_NOTHING_APART ->
-                    "it was read to the end and every value this position holds comes out one side"
-                            + " of it";
-            case CLASSES_NOT_COMPOSED ->
-                    "it was read to the end, and what it says and what the rules beside it say are"
-                            + " not one list of classes";
+                    new ReportMessage.ItIsAboutAnElementOfOneOfSeveral();
+            case RULE_CUTS_NOTHING -> new ReportMessage.ItCutsNothing();
+            case RULE_ANSWERS_NOWHERE -> new ReportMessage.EveryRunReachingItStops();
+            case RULE_TELLS_NOTHING_APART -> new ReportMessage.EveryValueComesOutOneSide();
+            case CLASSES_NOT_COMPOSED -> new ReportMessage.TheClassesAreNotOneList();
             case RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS ->
-                    "it was read to the end and draws its line outside what the quantity it cuts"
-                            + " ever holds";
-            case NOTHING_ARRIVES_AT_THE_RULES_LINE ->
-                    "it was read to the end, and no row that arrives at it holds a value at its"
-                            + " line — what holds on the way there, the conditions and what a run"
-                            + " got past working out, rules those values out";
-            case NOTHING_ARRIVES_AT_THE_RELATION ->
-                    "it was read to the end and relates the value here to another value, and no"
-                            + " row that arrives at it takes the way to the comparison — what holds"
-                            + " on the way there, the conditions and what a run got past working"
-                            + " out, rules those rows out";
-            case RULE_NEVER_TURNS_ON_THIS_LINE ->
-                    "it was read to the end and states several things at once, and wherever a row"
-                            + " reaches its line here the rest of it already decides the outcome";
-            case RULE_MEANING_NOT_READ ->
-                    "a part of what it states was not read";
-            case NON_AFFINE_PRODUCT ->
-                    "it compares a product of two values that are not constants, which no line on"
-                            + " the values here says";
-            case NON_CONSTANT_DIVISOR ->
-                    "it compares a quotient by a value that is not a constant, which no line on the"
-                            + " values here says";
-            case NON_CONSTANT_REMAINDER_DIVISOR ->
-                    "it compares a remainder by a value that is not a constant, which has no period"
-                            + " for a line on the values here to be drawn at";
+                    new ReportMessage.ItCutsOutsideWhatTheQuantityHolds();
+            case NOTHING_ARRIVES_AT_THE_RULES_LINE -> new ReportMessage.NoRowArrivesAtItsLine();
+            case NOTHING_ARRIVES_AT_THE_RELATION -> new ReportMessage.NoRowArrivesAtTheRelation();
+            case RULE_NEVER_TURNS_ON_THIS_LINE -> new ReportMessage.ItNeverTurnsOnThisLine();
+            case RULE_MEANING_NOT_READ -> new ReportMessage.APartOfItWasNotRead();
+            case NON_AFFINE_PRODUCT -> new ReportMessage.ItComparesAProductOfTwoValues();
+            case NON_CONSTANT_DIVISOR -> new ReportMessage.ItComparesAQuotientByAValue();
+            case NON_CONSTANT_REMAINDER_DIVISOR -> new ReportMessage.ItComparesARemainderByAValue();
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.
-            case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
-            case TYPE_UNRESOLVED -> "its type could not be worked out here";
+            case RULES_NOT_READ_AT_ALL -> new ReportMessage.TheRulesWereNotReached();
+            case TYPE_UNRESOLVED -> new ReportMessage.ItsTypeWasNotWorkedOut();
         };
     }
 
-    /** What a rule left open, in the words this document promises its reader. Here for the reason
-     *  {@link #whyUnread} gives. */
-    private static String asked(StandingQuestion question) {
+    /** What a rule left open about {@code subject}, in the words this document promises its
+     *  reader. Here for the reason {@link #whyUnread} gives. */
+    private static Message asked(StandingQuestion question, String subject) {
         return switch (question) {
             case StandingQuestion.Exact it -> switch (it.obligation()) {
-                case ADMITTED_VALUES -> "which values may stand at";
-                case BOUNDARY -> "where the values stop on";
+                case ADMITTED_VALUES -> new ReportMessage.WhichValuesMayStandAt(subject);
+                case BOUNDARY -> new ReportMessage.WhereTheValuesStopOn(subject);
             };
             // Neither phrase names the place, which is why they do not read like the two above:
             // what such a rule asks is what nothing worked out, and the place beside this is where
@@ -3788,9 +4997,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // whether it also puts an end; the other says nothing worked out what the rule does at
             // all.
             case StandingQuestion.BoundaryUndetermined _ ->
-                    "whether the values stop on";
+                    new ReportMessage.WhetherTheValuesStopOn(subject);
             case StandingQuestion.NothingClassifiesIt _ ->
-                    "what this rule states about";
+                    new ReportMessage.WhatThisRuleStatesAbout(subject);
+            // A third: the rule's classes stand, and what nothing worked out is which of them some
+            // values are in.
+            case StandingQuestion.RegionUndetermined _ ->
+                    new ReportMessage.WhichClassSomeValuesAreIn(subject);
         };
     }
 
@@ -3805,6 +5018,123 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return asked.measure() != null ? asked.measure() : asked.at();
     }
 
+    /** Where the step a stop finding is said of is written. */
+    private static SourcePos whereTheStepIs(Adequacy.Finding finding) {
+        return switch (finding.about()) {
+            case About.AStepThatMayStopARun(var it) -> it.at();
+            case About.AStepWhoseStopIsNotShown(var it) -> it.at();
+            default -> throw new IllegalArgumentException("no step: " + finding.about());
+        };
+    }
+
+    /**
+     * Where a run of the behavior stops short of an answer: how many steps some run is shown to
+     * stop at, and at how many whether one does is not resolved, and under that each of them, in
+     * the order they are written. Nothing where neither is said of any step.
+     *
+     * <p>Each step is named where it is written, and said whatever comes after it: a run stopped
+     * there gets to no rule after it. The region that keeps the step's runs going is the step's,
+     * said once: under the stop shown where there is one.
+     */
+    void stops(StringBuilder out, BehaviorReport behavior, SourceId declaredIn, Page page) {
+        SourceRendering rendering = page.rendering();
+        // In the order the steps are written. The walk meets a closure's body where the closure
+        // is written and a run gets to it where the closure is applied, so the order the walk met
+        // them in is no order of the run's, and two ways of writing one call would list the same
+        // steps apart.
+        List<Adequacy.Finding> said = behavior.findings().stream()
+                .filter(f -> f.about() instanceof About.AStepThatMayStopARun
+                        || f.about() instanceof About.AStepWhoseStopIsNotShown)
+                .sorted(Comparator.comparing(AdequacyReport::whereTheStepIs,
+                        SourcePos.IN_A_STEADY_ORDER))
+                .toList();
+        if (said.isEmpty()) {
+            return;
+        }
+        Set<SourcePos> aStopShown = new HashSet<>();
+        for (Adequacy.Finding f : said) {
+            if (f.about() instanceof About.AStepThatMayStopARun(var it)) {
+                aStopShown.add(it.at());
+            }
+        }
+        measureLine(out, new ReportMessage.Stops(), page,
+                page.say(new ReportMessage.StopCounts(aStopShown.size(),
+                        said.size() - aStopShown.size())));
+        for (Adequacy.Finding f : said) {
+            if (f.about() instanceof About.AStepThatMayStopARun(var it)) {
+                String step = writtenAtSaid(it.at(), rendering, declaredIn);
+                Message how = it.shown().isEmpty()
+                        ? new ReportMessage.StopsAtThisConstruction(constructionsAsk(
+                                constructionsAsked(it.constructions()), page, rendering,
+                                declaredIn))
+                        : it.shown().getFirst().at().isEmpty()
+                                && it.shown().getFirst().structure().isEmpty()
+                                ? new ReportMessage.AnyRunStopsInAnOperation(
+                                        it.shown().getFirst().operation())
+                                : new ReportMessage.StopsInAnOperationAt(
+                                        it.shown().getFirst().operation(),
+                                        valuesSaid(it.shown().getFirst(), page));
+                marked(out, f, page, new ReportMessage.StepMayStopARun(step, how,
+                        everyRunStopsAt(it.everyRunStops(), page)));
+                keepingSaid(it, page, out);
+            }
+            if (f.about() instanceof About.AStepWhoseStopIsNotShown(var it)) {
+                marked(out, f, page, new ReportMessage.StepStopNotShown(
+                        writtenAtSaid(it.at(), rendering, declaredIn),
+                        stopsNotShownSaid(it.notShown(), page, rendering, declaredIn),
+                        aRunGettingThereStopsAt(it.everyRunStops(), page),
+                        constructionsNotShownSaid(it.asks(), page, rendering, declaredIn)));
+                if (!aStopShown.contains(it.at())) {
+                    keepingSaid(it, page, out);
+                }
+            }
+        }
+    }
+
+    /** The value of the input {@code shown} rests on, as a reader would write it: the number at
+     *  each place it is asked of, in the order the input declares its places. */
+    private static String valuesSaid(AStopShown shown, Page page) {
+        List<String> each = new ArrayList<>();
+        for (AStopShown.NumberAt at : shown.at()) {
+            each.add(at.place() + " = " + at.number());
+        }
+        each.addAll(listsSaid(shown.structure()));
+        return listed(page, each);
+    }
+
+    /**
+     * The lists a value of the input holds, as {@code structure} says them: a list whose length is
+     * said written out whole, an element nothing fixes written {@code …}; and an element of a list
+     * whose length is not said, by its index.
+     */
+    private static List<String> listsSaid(List<InputFact> structure) {
+        Map<TermPath, Integer> lengths = new LinkedHashMap<>();
+        Map<TermPath, Map<Integer, BigInteger>> elements = new LinkedHashMap<>();
+        for (InputFact fact : structure) {
+            switch (fact) {
+                case InputFact.ListLength(var list, int length) -> lengths.put(list, length);
+                case InputFact.ListElement(var list, int index, var number) ->
+                        elements.computeIfAbsent(list, _ -> new TreeMap<>()).put(index, number);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<TermPath, Integer> length : lengths.entrySet()) {
+            Map<Integer, BigInteger> held = elements.getOrDefault(length.getKey(), Map.of());
+            List<String> written = new ArrayList<>();
+            for (int index = 0; index < length.getValue(); index++) {
+                BigInteger number = held.get(index);
+                written.add(number == null ? "…" : number.toString());
+            }
+            out.add(length.getKey() + " = [" + String.join(", ", written) + "]");
+        }
+        elements.forEach((list, held) -> {
+            if (!lengths.containsKey(list)) {
+                held.forEach((index, number) -> out.add(list + "[" + index + "] = " + number));
+            }
+        });
+        return out;
+    }
+
     /**
      * Which arms of the body the rows go through.
      *
@@ -3812,10 +5142,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * arms and says nothing about their combinations, and a report that said "paths covered" would
      * invite an author to stop looking exactly where there is more to find.
      */
-    void branch(StringBuilder out, BehaviorReport behavior,
-                               SourceId declaredIn, SourceRendering rendering,
+    void branch(StringBuilder out, String module, BehaviorReport behavior,
+                               SourceId declaredIn, Page page,
                                CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold,
                                MarksWritten marks) {
+        SourceRendering rendering = page.rendering();
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
             return;
@@ -3825,7 +5156,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The measure's own answer, translated. Nothing here works out why from the row count or
             // the kind of behavior: those correlate with the reason and are not it, and the line an
             // author reads is the one place that difference shows.
-            sayWhy(out, "branch", measured.reason());
+            sayWhy(out, new ReportMessage.Branch(), measured.reason(), page);
             return;
         }
         // The two numbers, and nothing beside them qualifying every arm at once. What is uncertain
@@ -3835,24 +5166,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // rows all ran and a fork nobody could tell apart, and the arms it certainly does not reach
         // went unnamed under it.
         ArmSummary arms = measured.get();
-        out.append(String.format("    branch      %d/%d%n", arms.covered(), arms.counted()));
+        measureLine(out, new ReportMessage.Branch(), page,
+                arms.covered() + "/" + arms.counted());
         // What the numbers are counted out of, where something has shown that set to be short of an
         // arm. Said before the arms themselves, since it qualifies the denominator rather than
         // adding to what is missing from it, and it says what it is: the model is not wrong here,
         // an analysis this compiler made is.
         if (!arms.census().settled()) {
-            out.append("      · a row went through an arm this compiler had proven nothing reaches,"
-                    + " so what these arms are counted out of may be short of one\n");
+            out.append("      · ")
+                    .append(page.say(new ReportMessage.ARowWentThroughAnArmProvenUnreached()))
+                    .append('\n');
         }
         // Arms this counts as one that it cannot show are one, said once per fork rather than once
         // per arm of it: a count holding two predicates where it says one is what would otherwise
         // report a behavior complete over something nothing ran.
         for (ArmExclusion left : arms.exclusions()) {
-            out.append(String.format(
-                    "      · a fork `%s` wrote decides by a rule its caller supplies, and which"
-                            + " rule decides here could not be worked out: what its arms come to is"
-                            + " read over however many rules that is%n",
-                    left.fork().module()));
+            noted(out, page, new ReportMessage.WhichRuleDecidesTheForkIsUnknown(
+                    left.fork().module(), module + "." + behavior.name()));
         }
         // Every arm the count holds and no row goes through, said here or under the findings below.
         // An arm a row that never finished might have gone through is a question and not a gap, so
@@ -3860,10 +5190,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // have written, and left to the number alone a reader is shown a difference with nothing
         // under it to act on.
         for (ArmObligation.Counted open : arms.undecided()) {
-            out.append(String.format("      ? undecided whether a row goes through `%s` (%s)%s%n",
-                    ArmVocabulary.label(open.display()),
-                    behavior.placeOf(open.display()).said(rendering, declaredIn),
-                    onAPremise(open.premises())));
+            out.append("      ? ").append(page.say(new ReportMessage.UndecidedWhetherARowGoesThrough(
+                            ArmVocabulary.label(open.display()),
+                            behavior.placeOf(open.display()).said(rendering, declaredIn),
+                            onAPremise(open.premises()))))
+                    .append(NEW_LINE);
         }
         // Whatever findings there are, and no second opinion about whether there may be any. Which
         // arms may be named is settled where they are collected, so a condition repeated here would
@@ -3876,18 +5207,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // is named with it.
         for (ReportedFinding f : behavior.reported()) {
             if (f.about() instanceof About.AnArmNoRowGoesThrough(var arm)) {
-                out.append(String.format("      %s no row goes through `%s` (%s)%n",
-                        mark(f.finding()), ArmVocabulary.label(arm),
-                        f.at().said(rendering, declaredIn)));
+                marked(out, f.finding(), page, new ReportMessage.NoRowGoesThrough(
+                        ArmVocabulary.label(arm), f.at().said(rendering, declaredIn)));
             }
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<ArmObligation.Counted> covered
                 : onlyByRowsThatDoNotHold.arms()) {
-            out.append(String.format("      %s through `%s` (%s): %s%n",
-                    onlyRowsThatDoNotHold(marks, covered.by(),"goes", "go"),
-                    ArmVocabulary.label(covered.obligation().display()),
-                    behavior.placeOf(covered.obligation().display()).said(rendering, declaredIn),
-                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
+            String arm = ArmVocabulary.label(covered.obligation().display());
+            String at = behavior.placeOf(covered.obligation().display()).said(rendering,
+                    declaredIn);
+            String rows = rowsThatDoNotHold(covered.by(), behavior.rowPlace(), page, declaredIn);
+            onlyRowsThatDoNotHold(out, marks, covered.by(), page,
+                    new ReportMessage.OnlyARowThatDoesNotHoldGoesThrough(arm, at, rows),
+                    new ReportMessage.OnlyRowsThatDoNotHoldGoThrough(arm, at, rows));
         }
     }
 
@@ -3897,10 +5229,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Both positions and both classes, and in a steady order: a class id is unique within its
      * axis and not across two, and what a combination is of is a pair rather than an order of them.
      */
-    private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination) {
-        return combination.inOrder().stream()
-                .map(each -> "`" + each.classId() + "` at " + each.at())
-                .collect(java.util.stream.Collectors.joining(" with "));
+    private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination,
+                                     Page page) {
+        List<String> each = combination.inOrder().stream()
+                .map(one -> page.say(new ReportMessage.ClassAt(one.classId(),
+                        String.valueOf(one.at())))).toList();
+        String said = each.getLast();
+        for (int i = each.size() - 2; i >= 0; i--) {
+            said = page.say(new ReportMessage.With(each.get(i), said));
+        }
+        return said;
     }
 
     /**
@@ -3911,61 +5249,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * function is written somewhere a reader can open, and the other reasons are about a way, which
      * has no one place.
      */
-    private static String whyKept(WhyKept why, SourceRendering rendering, SourceId declaredIn) {
-        return switch (why) {
+    private static String whyKept(WhyKept why, Page page, SourceId declaredIn) {
+        return page.say(switch (why) {
             case WhyKept.AFunctionReadAsAWhole function ->
-                    "the ways inside the function at " + function.at().said(rendering, declaredIn)
-                            + " were read as a whole: " + function.shortfalls().stream()
-                                    .map(AdequacyReport::shortfall)
-                                    .collect(Collectors.joining("; "));
-            case WhyKept.AWayReadInPart(var cause) -> wayReadInPart(cause)
-                    + ", and what that way reads together was not read";
-            case WhyKept.ADecisionNothingNames() -> "a decision on a way of the body is about"
-                    + " something no position of the input names, and what that way reads"
-                    + " together was not read";
-            case WhyKept.ARuleNoDecisionReads(var at) -> "the body wrote a rule dividing " + at
-                    + " that no decision on its ways reads, and what " + at + " is read beside"
-                    + " was not read";
-        };
+                    new ReportMessage.TheFunctionWasReadAsAWhole(
+                            function.at().said(page.rendering(), declaredIn),
+                            reasons(page, function.shortfalls().stream()
+                                    .map(each -> page.say(shortfall(each))).toList()));
+            case WhyKept.AWayReadInPart(var cause) ->
+                    new ReportMessage.WhatTheWayReadsTogetherWasNotRead(wayReadInPart(cause));
+            case WhyKept.ADecisionNothingNames() -> new ReportMessage.ADecisionNothingNames();
+            case WhyKept.ARuleNoDecisionReads(var at) ->
+                    new ReportMessage.ARuleNoDecisionReads(String.valueOf(at));
+        });
     }
 
     /** One use of a function that is not an operation applying it once to each element of a
      *  position, as the line under a combination says it. */
-    private static String shortfall(WhyKept.Shortfall shortfall) {
+    private static Message shortfall(WhyKept.Shortfall shortfall) {
         return switch (shortfall) {
             case WhyKept.Shortfall.NotOnlyByOperations() ->
-                    "something other than an operation of the language applies it";
+                    new ReportMessage.SomethingElseAppliesIt();
             case WhyKept.Shortfall.ToSomeOfTheElements(var operation, var applied) ->
-                    "`" + operation + "` applies it " + switch (applied) {
-                        case TO_EVERY_ELEMENT -> "to every element";
-                        case UNTIL_ONE_HOLDS -> "to each element only until one application holds";
-                        case UNTIL_ONE_FAILS -> "to each element only until one application fails";
-                        case AT_MOST_ONE -> "to one element at most";
-                        case TO_SOME -> "to some of the elements";
+                    switch (applied) {
+                        case TO_EVERY_ELEMENT -> new ReportMessage.ItAppliesToEveryElement(operation);
+                        case UNTIL_ONE_HOLDS -> new ReportMessage.ItAppliesUntilOneHolds(operation);
+                        case UNTIL_ONE_FAILS -> new ReportMessage.ItAppliesUntilOneFails(operation);
+                        case AT_MOST_ONE -> new ReportMessage.ItAppliesToOneAtMost(operation);
+                        case TO_SOME -> new ReportMessage.ItAppliesToSome(operation);
                     };
             case WhyKept.Shortfall.OverNoPosition(var operation) ->
-                    "`" + operation + "` applies it over what is no position of the input";
+                    new ReportMessage.ItAppliesOverNoPosition(operation);
         };
     }
 
     /** What a way of the body holds that the reading has no words for, by what it is short of. */
-    private static String wayReadInPart(PathAccess.Unsupported.Why cause) {
+    private static Message wayReadInPart(PathAccess.Unsupported.Why cause) {
         return switch (cause) {
-            case NO_WAY_IN_CAN_BE_NAMED ->
-                    "a way of the body goes to a fork no position of the input could be named for";
-            case WAYS_NOT_ENUMERABLE ->
-                    "the ways to a value the body answers with could not all be written down";
-            case WAYS_NOT_TOLD_APART ->
-                    "a way of the body goes to an arm whose ways in a run is not seen to tell"
-                            + " apart";
-            case MORE_WAYS_IN_THAN_ARE_READ ->
-                    "a fork of the body has more ways into it than one reading holds at once";
-            case RUNS_WHERE_SOMETHING_CALLS_IT ->
-                    "a way of the body runs inside a function value, under whatever it is called"
-                            + " with";
-            case THE_CONSTRUCTION_DECIDES_IT ->
-                    "a way of the body is taken by whether an attempted construction held its"
-                            + " value's rules";
+            case NO_WAY_IN_CAN_BE_NAMED -> new ReportMessage.AWayGoesToAForkNoPositionNames();
+            case WAYS_NOT_ENUMERABLE -> new ReportMessage.TheWaysCouldNotAllBeWrittenDown();
+            case WAYS_NOT_TOLD_APART -> new ReportMessage.AWayGoesToAnArmWhoseWaysAreNotToldApart();
+            case MORE_WAYS_IN_THAN_ARE_READ -> new ReportMessage.AForkHasMoreWaysInThanAreRead();
+            case RUNS_WHERE_SOMETHING_CALLS_IT -> new ReportMessage.AWayRunsInsideAFunctionValue();
+            case THE_CONSTRUCTION_DECIDES_IT -> new ReportMessage.AWayIsTakenByAnAttempt();
         };
     }
 
@@ -3978,7 +5304,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * showed it to be a gap; one shown to be is said under the line, one to a line.
      */
     private void replacement(StringBuilder out, BehaviorReport behavior, String module,
-                             SourceId declaredIn, SourceRendering rendering) {
+                             SourceId declaredIn, Page page) {
         ReplacementEvidence replacement = behavior.evidence().replacement();
         if (replacement == null) {
             return;
@@ -3986,89 +5312,182 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ReportMeasurement<ReplacementEvidence.Summary> measured =
                 ReportMeasurement.of(replacement.measured());
         if (!measured.counted()) {
-            sayWhy(out, "replacement", measured.reason());
+            sayWhy(out, new ReportMessage.Replacement(), measured.reason(), page);
             return;
         }
         ReplacementEvidence.Summary rewrites = measured.get();
         String open = rewrites.undecided() == 0 ? ""
-                : String.format("   %d left open", rewrites.undecided());
-        out.append(String.format("    replacement %d/%d%s%n", rewrites.noticed(),
-                rewrites.noticed() + rewrites.unnoticed(), open));
+                : "   " + page.say(new ReportMessage.LeftOpen(rewrites.undecided()));
+        measureLine(out, new ReportMessage.Replacement(), page, rewrites.noticed() + "/"
+                + (rewrites.noticed() + rewrites.unnoticed()) + open);
         // Each said by what tells it from the others of the body, in RewriteVocabulary's words. An
         // arm's by the arm and the arm it answered as, with the fork's place once: both arms are of
         // the one fork. A fork in code this build holds no source of has no place here to give, and
         // the place the finding is shown at is the behavior's, which is not where the fork is. The
         // body answering one value is told from another by the value, and said by the row that
         // came to it.
+        Map<Replacement, String> said = behavior.rewritesSaid(module, declaredIn, page);
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
-                    var _, var written, var reportAt, var _, var _)) {
-                out.append(String.format("      %s %s%n", mark(f.finding()), switch (written) {
-                    case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork _ -> String.format(
-                                "no row would come out differently if `%s` (%s) answered as `%s`",
-                                RewriteVocabulary.rewritten(rewrite),
-                                f.at().said(rendering, declaredIn),
-                                RewriteVocabulary.answeredAs(rewrite));
-                        case ReplacementReportAnchor.AtTheBehavior _ -> String.format(
-                                "no row would come out differently if `%s` answered as `%s` %s",
+                    var _, var written, var _, var _, var _)) {
+                marked(out, f.finding(), page, new ReportMessage.NoRowWouldComeOutDifferently(
+                        said.get(written.replacement())));
+            }
+        }
+        // A rewrite left open is said the same way, by what it is and where, and not marked as a
+        // gap: nothing showed that no row tells it apart, only that nothing here could decide.
+        for (ReplacementEvidence.Rewrite each : undecidedRewrites(replacement)) {
+            out.append("      ? ").append(page.say(
+                            new ReportMessage.NotDecidedWhetherARowWouldComeOutDifferently(
+                                    said.get(each.replacement()))))
+                    .append(NEW_LINE);
+        }
+    }
+
+    /**
+     * One rewrite of a body in the words a report uses for it, wherever it is said.
+     *
+     * <p>{@code at} is where the rewrite is shown, already said, and is used by the rewrites that
+     * have a place in a source this compilation holds. An arm by the arm and the arm it answered
+     * as, with the fork's place once: both arms are of the one fork. A fold by its place where it
+     * has one here, and by the definition that wrote it where it has not. The body answering one
+     * value is told from another by the value, and said by the row that came to it.
+     */
+    private static Message rewriteSaid(ReplacementAsWritten written,
+                                       ReplacementReportAnchor reportAt, String at, String module,
+                                       Page page) {
+        return switch (written) {
+            case ReplacementAsWritten.OfAnArm rewrite -> switch (reportAt) {
+                case ReplacementReportAnchor.AtTheFork _ -> new ReportMessage.AnArmAnsweredAs(
+                        RewriteVocabulary.rewritten(rewrite), at,
+                        RewriteVocabulary.answeredAs(rewrite));
+                case ReplacementReportAnchor.AtTheBehavior _ ->
+                        new ReportMessage.AnArmOutOfSightAnsweredAs(
                                 RewriteVocabulary.rewritten(rewrite),
                                 RewriteVocabulary.answeredAs(rewrite),
                                 RewriteVocabulary.outOfSight(rewrite, module));
-                    };
-                    case ReplacementAsWritten.ByOneAnswer one -> String.format(
-                            "no row would come out differently if the body always answered what"
-                                    + " `%s` answers",
-                            RewriteVocabulary.answeredBy(one, rendering));
-                }));
-            }
-        }
+                case ReplacementReportAnchor.AtTheWalk _ -> throw new IllegalStateException(
+                        "a rewrite of an arm shown at a walk: " + rewrite);
+            };
+            case ReplacementAsWritten.ByOneAnswer one -> new ReportMessage.TheBodyAlwaysAnswered(
+                    RewriteVocabulary.answeredBy(one, page));
+            case ReplacementAsWritten.OfAWalk walk -> switch (reportAt) {
+                case ReplacementReportAnchor.AtTheWalk _ ->
+                        new ReportMessage.TheFoldAt(at, RewriteVocabulary.walked(walk));
+                case ReplacementReportAnchor.AtTheBehavior _ -> new ReportMessage.TheFoldOutOfSight(
+                        RewriteVocabulary.outOfSight(walk, module),
+                        RewriteVocabulary.walked(walk));
+                case ReplacementReportAnchor.AtTheFork _ -> throw new IllegalStateException(
+                        "a rewrite of a walk shown at a fork: " + walk);
+            };
+        };
     }
 
     /**
      * How many of the combinations the body settles a value by the rows were seen making.
      *
-     * <p>The count and the gaps beside it, which the findings under the behavior name one to a
-     * line.
+     * <p>The count and the gaps beside it.
      *
-     * <p>The meetings the measure would not walk are said beside the count rather than folded into
-     * it. What they hold is combinations nobody counted, and a reader told only the ratio would
-     * take a behavior measured in part for one measured in full.
+     * <p>The meetings the measure would not walk, and the ones it could not join to what a run
+     * records, are said beside the count rather than folded into it. Each of the second is then
+     * said under it by where it is written and why. What they hold is combinations nobody
+     * counted, and a reader told only the ratio would take a behavior measured in part for one
+     * measured in full.
      *
-     * <p>Every meeting the count holds and no row makes, and every one only rows that do not hold
-     * make, said one to a line the way an arm or a decision rule is — and under it which
-     * combination it is, so that two of them are two things to act on. Said by the places a run
-     * making it is seen at and never by the decisions the account keys it on, which are in terms
-     * that would show an author comparisons they did not write ({@link BehaviorReport#waysOf}).
+     * <p>Every group that has combinations no row makes is said once, as what it is made of, and
+     * under it the sets of its choices that no row makes, one to a line the way an arm or a
+     * decision rule is. A set of one choice is a combination of the body and is said by the ways a
+     * run can make it; a set of more is said by the outcomes it takes. Then every combination only
+     * rows that do not hold make, one to a line and under it which combination it is, so that two
+     * of them are two things to act on. Said by the places a run making it is seen at and never by
+     * the decisions the account keys it on, which are in terms that would show an author
+     * comparisons they did not write ({@link BehaviorReport#waysOf}).
      */
     private void interaction(StringBuilder out, BehaviorReport behavior,
                              InteractionEvidence meetings,
                              List<CoveredOnlyByRowsThatDoNotHold.Covered<
                                      ObligationIdentity.OfACombinationOfDecisions>> onlyBy,
-                             SourceId declaredIn, SourceRendering rendering,
+                             SourceId declaredIn, Page page,
                              MarksWritten marks) {
         Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
-        String held = meetings.asked().notMeasured().isEmpty() ? ""
-                : String.format("   %d meetings not walked", meetings.asked().notMeasured().size());
-        out.append(made
-                .map(rows -> String.format("    interaction combinations %d/%d%s%n",
-                        rows.met().size(), meetings.counted(), held))
-                .orElseGet(() -> String.format("    interaction combinations %d   %s%s%n",
-                        meetings.counted(),
-                        ReasonProse.of(meetings.made().why()).sentence(), held)));
-        for (ReportedFinding f : behavior.reported()) {
-            if (f.finding().about() instanceof About.ACombinationNoRowMakes(var combination)) {
-                out.append(String.format("      %s %smakes this combination of the decisions%s%n",
-                        mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
-                ways(out, behavior.waysOf(combination), declaredIn, rendering);
+        // What the count leaves out, by both ways a meeting is left out of it.
+        StringBuilder held = new StringBuilder();
+        if (!meetings.asked().notMeasured().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotWalked(
+                    meetings.asked().notMeasured().size())));
+        }
+        if (!meetings.asked().notJoined().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotJoined(
+                    meetings.asked().notJoined().size())));
+        }
+        measureLine(out, new ReportMessage.Interaction(), page, page.say(made
+                .<Message>map(rows -> new ReportMessage.InteractionCombinations(
+                        rows.met().size() + "/" + meetings.counted()))
+                .orElseGet(() -> new ReportMessage.InteractionCombinationsUncounted(
+                        meetings.counted(), ReasonProse.of(meetings.made().why()).sentence())))
+                + held.toString());
+        // The meetings no combination is asked of, each by where it is written and why, since the
+        // count beside them says nothing of what is left unmeasured.
+        int number = 0;
+        for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+            number++;
+            out.append("      ? ").append(page.say(new ReportMessage.TheMeetingIsNotJoined(number,
+                    whereWritten(each.at(), page, declaredIn),
+                    phrase("not-joined", each.why())))).append(NEW_LINE);
+        }
+        for (UnobservedGroup group : behavior.unobserved()) {
+            decidedTogether(out, group, declaredIn, page);
+            for (UnobservedChoices missing : group.choices()) {
+                Adequacy.Finding finding = missing.finding().finding();
+                Message premise = onAPremise(finding);
+                marked(out, finding, page, missing.count() == 1
+                        ? finding.established()
+                                ? new ReportMessage.NoRowMakesThisCombination(premise)
+                                : new ReportMessage.UndecidedWhetherARowMakesThisCombination(
+                                        premise)
+                        : finding.established()
+                                ? new ReportMessage.NoRowMakesAnyOfTheseCombinations(
+                                        missing.count(), premise)
+                                : new ReportMessage.UndecidedWhetherARowMakesAnyOfThese(
+                                        missing.count(), premise));
+                // One combination is a requirement of the body, with the ways a run can make it;
+                // more are a set of them, which has what its outcomes share and nothing a single
+                // run is held to.
+                ways(out, missing.combination() != null ? behavior.waysOf(missing.combination())
+                        : List.of(group.fixedConditionsOf(missing)), declaredIn, page);
             }
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<ObligationIdentity.OfACombinationOfDecisions>
                 covered : onlyBy) {
-            out.append(String.format("      %s this combination of the decisions: %s%n",
-                    onlyRowsThatDoNotHold(marks, covered.by(),"makes", "make"),
-                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
-            ways(out, behavior.waysOf(covered.obligation()), declaredIn, rendering);
+            String rows = rowsThatDoNotHold(covered.by(), behavior.rowPlace(), page, declaredIn);
+            onlyRowsThatDoNotHold(out, marks, covered.by(), page,
+                    new ReportMessage.OnlyARowThatDoesNotHoldMakesThisCombination(rows),
+                    new ReportMessage.OnlyRowsThatDoNotHoldMakeThisCombination(rows));
+            ways(out, behavior.waysOf(covered.obligation()), declaredIn, page);
+        }
+    }
+
+    /**
+     * What a group of the body's decisions is made of, said once above the patterns of it.
+     *
+     * <p>The way in that every choice of the group is under, and for each factor the outcomes it
+     * can come out as. A pattern says which outcome it takes at the factors it names and leaves the
+     * others unsaid, so where it names none — every choice of the group is missing — this is all a
+     * reader is told of what the group is.
+     */
+    private static void decidedTogether(StringBuilder out, UnobservedGroup group,
+                                        SourceId declaredIn, Page page) {
+        out.append("      ").append(page.say(new ReportMessage.DecidedTogether()))
+                .append(NEW_LINE);
+        for (ShownCondition each : group.wayIn()) {
+            out.append("          · ").append(page.say(new ReportMessage.Under(
+                    said(each, declaredIn, page)))).append(NEW_LINE);
+        }
+        for (List<FactorOutcome> factor : group.factors()) {
+            out.append("          · ").append(factor.stream()
+                    .map(outcome -> listed(page, outcome.shown().stream()
+                            .map(each -> said(each, declaredIn, page)).toList()))
+                    .collect(Collectors.joining(" / "))).append(NEW_LINE);
         }
     }
 
@@ -4081,15 +5500,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * as one way a run has to do all of.
      */
     private static void ways(StringBuilder out, List<List<ShownCondition>> ways,
-                             SourceId declaredIn, SourceRendering rendering) {
+                             SourceId declaredIn, Page page) {
         for (int i = 0; i < ways.size(); i++) {
             if (ways.size() > 1) {
-                out.append(String.format(i == 0 ? "          either%n" : "          or%n"));
+                out.append("          ").append(page.say(i == 0 ? new ReportMessage.WaysEither()
+                        : new ReportMessage.WaysOr())).append(NEW_LINE);
             }
             for (ShownCondition read : ways.get(i)) {
-                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
+                condition(out, read, declaredIn, page);
             }
         }
+    }
+
+    /** One condition of a rule or a combination, on a line of its own under it. */
+    private static void condition(StringBuilder out, ShownCondition read, SourceId declaredIn,
+                                  Page page) {
+        out.append("          · ").append(said(read, declaredIn, page)).append(NEW_LINE);
     }
 
     /**
@@ -4108,7 +5534,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * settled either way is said after them in the words its own search came back with.
      */
     void decision(StringBuilder out, BehaviorReport behavior,
-                  SourceId declaredIn, SourceRendering rendering,
+                  SourceId declaredIn, Page page,
                   CoveredOnlyByRowsThatDoNotHold onlyByRowsThatDoNotHold, MarksWritten marks) {
         DecisionEvidence decision = behavior.evidence().decision();
         if (decision == null) {
@@ -4119,43 +5545,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // this compiler would not hold apart. Said before the count, because a reader shown
         // `rules 0` under a body of many ways has been told the opposite of what happened.
         if (!decision.derivation().isEmpty()) {
-            out.append("    decision    not fully read (the ways through this body could not all"
-                    + " be written down)\n");
+            measureLine(out, new ReportMessage.Decision(), page,
+                    page.say(new ReportMessage.DecisionNotFullyRead()));
             return;
         }
-        if (decision.rules().isEmpty()) {
+        // And a body every way of which stops states no rule and is told all the same: where its
+        // runs stop is what this section says of each such way. So is a way nothing decided about,
+        // which may be one.
+        if (!rulesAreTold(decision) && decision.read().everyRunStops().isEmpty()
+                && decision.read().undecided().isEmpty()) {
             return;
         }
         // Absent where nothing was read, which is not a count of none: a build that ran no row did
         // not see the rows take none of the rules, it saw nothing. Said the way every other
         // measure here says it, in the words the reason itself carries.
         Measure<DecisionEvidence.RowsPlaced> took = decision.took();
-        out.append(took.made()
-                .map(placed -> String.format("    decision    rules %d   taken %d%n",
-                        decision.rules().size(), placed.rules().size()))
-                .orElseGet(() -> String.format("    decision    rules %d   %s%n",
-                        decision.rules().size(), ReasonProse.of(took.why()).sentence())));
+        measureLine(out, new ReportMessage.Decision(), page, page.say(took.made()
+                .<Message>map(placed -> new ReportMessage.DecisionCounts(decision.rules().size(),
+                        placed.rules().size()))
+                .orElseGet(() -> new ReportMessage.DecisionCountsUntaken(decision.rules().size(),
+                        ReasonProse.of(took.why()).sentence()))));
         for (ReportedFinding f : behavior.reported()) {
             if (!(f.finding().about() instanceof About.ARuleNoRowTakes rule)) {
                 continue;
             }
-            out.append(String.format("      %s %stakes a decision rule%s%n",
-                    mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
+            marked(out, f.finding(), page, f.finding().established()
+                    ? new ReportMessage.NoRowTakesADecisionRule(onAPremise(f.finding()))
+                    : new ReportMessage.UndecidedWhetherARowTakesADecisionRule(
+                            onAPremise(f.finding())));
             // Every condition of it, so that two rules of one behavior are told apart by what a
             // reader is shown. The sentence above says only which behavior, because what tells the
             // rules apart is the proposition each condition is keyed on and that is written the
             // one way round an account needs rather than the way the author wrote it.
             for (ShownCondition read : behavior.readingsOf(rule.ruled())) {
-                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
+                condition(out, read, declaredIn, page);
             }
         }
         for (CoveredOnlyByRowsThatDoNotHold.Covered<DecisionReading.Stated> covered
                 : onlyByRowsThatDoNotHold.rules()) {
-            out.append(String.format("      %s a decision rule: %s%n",
-                    onlyRowsThatDoNotHold(marks, covered.by(),"takes", "take"),
-                    rowsThatDoNotHold(covered.by(), behavior.rowPlace(), rendering, declaredIn)));
+            String rows = rowsThatDoNotHold(covered.by(), behavior.rowPlace(), page, declaredIn);
+            onlyRowsThatDoNotHold(out, marks, covered.by(), page,
+                    new ReportMessage.OnlyARowThatDoesNotHoldTakesADecisionRule(rows),
+                    new ReportMessage.OnlyRowsThatDoNotHoldTakeADecisionRule(rows));
             for (ShownCondition read : behavior.readingsOf(covered.obligation().display())) {
-                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
+                condition(out, read, declaredIn, page);
             }
         }
         // And the rules nothing settled, one entry apiece and described the way a finding's rule
@@ -4168,24 +5601,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // along its own way — a helper's rule stands once per call of it — and what one search
         // came to and went without is not what another did, nor where an author would write the
         // row for it.
-        for (DecisionReading.Stated stated : decision.read().stated()) {
-            SettledAcross rule = behavior.ruleSettlements().get(stated.rule());
-            if (rule == null || !(rule.requirement() instanceof RuleRequirement.Unsettled)) {
-                continue;
+        for (SettledAt came : unsettledShown(behavior)) {
+            out.append("      ? ").append(page.say(
+                    new ReportMessage.NothingCouldShowARowAtADecisionRule(whatItCameTo(
+                            came.settlement(), page, behavior.rulePlace()).said())))
+                    .append(NEW_LINE);
+            // The place the search was made at, which is the one whose conditions it went
+            // without.
+            for (ShownCondition read : behavior.readingsOf(came.at())) {
+                condition(out, read, declaredIn, page);
             }
-            for (SettledAt came : rule.places()) {
-                out.append(String.format("      ? nothing could show a row can be written at a"
-                        + " decision rule — %s%n", whatItCameTo(came.settlement(), rendering,
-                                behavior.rulePlace()).text()));
-                // The place the search was made at, which is the one whose conditions it went
-                // without.
-                for (ShownCondition read : behavior.readingsOf(came.at())) {
-                    out.append(String.format("          · %s%n",
-                            said(read, declaredIn, rendering)));
-                }
-                for (String left : leftOut(came, behavior, rendering, declaredIn)) {
-                    out.append(String.format("          · not composed against: %s%n", left));
-                }
+            for (String left : leftOut(came, behavior, page, declaredIn)) {
+                out.append("          · ").append(page.say(new ReportMessage.NotComposedAgainst(
+                        left))).append(NEW_LINE);
             }
         }
         // And the rules the model owes no row, counted rather than listed. There is nothing for a
@@ -4194,8 +5622,194 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // front of somebody who can act on none of them, which is the account being shown as a
         // backlog. The numbers close over the count all the same, so nothing is lost and the rules
         // themselves are in the document.
-        excluded(out, behavior, decision, rendering, behavior.rulePlace(), declaredIn);
-        noInputTakes(out, behavior, decision, rendering, declaredIn);
+        excluded(out, behavior, decision, page, behavior.rulePlace(), declaredIn);
+        noInputTakes(out, behavior, decision, page, declaredIn);
+        everyRunStops(out, behavior, decision, page, declaredIn);
+        undecided(out, behavior, decision, page, declaredIn);
+        casesNoRowWasIn(out, behavior.conditionPlaces(), took, declaredIn, page);
+    }
+
+    /**
+     * What each statement of the decision lacks: the cases of a thing no row was seen in, and the
+     * statements no row can be asked about, each under a numbered line.
+     *
+     * <p>Every rule can be taken and the decision still be partial: the weakening says a case of a
+     * statement inside a rule has no row, and a reader told only that the rules are all taken has
+     * nothing to go on. The two are said apart because they are acted on apart — a row answers the
+     * first, and the second waits for this compiler to read further. The number is the entry's
+     * place in the document's {@code statementsNoRowIsIn}.
+     */
+    private static void casesNoRowWasIn(StringBuilder out, ConditionsShown places,
+                                        Measure<DecisionEvidence.RowsPlaced> took,
+                                        SourceId declaredIn, Page page) {
+        Optional<DecisionEvidence.RowsPlaced> made = took.made();
+        if (made.isEmpty()) {
+            return;
+        }
+        // Said by where the condition is written, which is what an author can open. Numbered as
+        // well, in the order the reading met them and the document's array holds them, for the
+        // statements there is no such place for.
+        int number = 0;
+        for (CasesTheRowsTook.StatementShort each : made.get().lacking()) {
+            number++;
+            Citation written = each.at().map(places.places()::get).orElse(null);
+            Message at = written == null ? new ReportMessage.Nothing()
+                    : whereWritten(written, page, declaredIn);
+            Message of = ofWhat(each, at);
+            out.append("      ? ").append(page.say(each.unseen().isEmpty()
+                    ? new ReportMessage.NoRowCanBeAskedAbout(number, of)
+                    : new ReportMessage.NoRowIsInTheseCases(number, of))).append(NEW_LINE);
+            for (CaseOfAStatement unseen : each.unseen()) {
+                out.append("          · ").append(page.say(switch (unseen) {
+                    case CaseOfAStatement.Search search -> switch (search.step()) {
+                        case AT_THE_NODE -> new ReportMessage.TheSearchFindsItAtTheNode();
+                        case BELOW_IT -> new ReportMessage.TheSearchFindsItBelowTheNode();
+                        case NOWHERE_AT_A_LEAF ->
+                                new ReportMessage.TheSearchComesBackEmptyAtANodeWithNothingBelow();
+                        case NOWHERE_BELOW ->
+                                new ReportMessage.TheSearchComesBackEmptyFromEveryNodeBelow();
+                    };
+                    case CaseOfAStatement.KeyOrder order -> switch (order.way()) {
+                        case HOLDS_BY_THE_LAST ->
+                                new ReportMessage.TheStatementHoldsByTheLastElementOfAKey();
+                        case FAILS_BY_THE_LAST ->
+                                new ReportMessage.TheStatementFailsByTheLastElementOfAKey();
+                    };
+                })).append(NEW_LINE);
+            }
+            // The statement's other cases, which no row can be asked for: said under the cases
+            // that can, since it is one statement with both to act on.
+            if (each.notAskable() && !each.unseen().isEmpty()) {
+                out.append("          · ").append(page.say(
+                        new ReportMessage.NoRowCanBeAskedForTheOthers())).append(NEW_LINE);
+            }
+        }
+    }
+
+    /**
+     * Where code is written, as a clause of a line about it.
+     *
+     * <p>Chosen by what the citation says. A place the code is written at is "written at"; code
+     * that is written elsewhere than where this compile met it has a citation that names where it
+     * is and the call it was reached at, and "written at" before that reads the call as the place
+     * the code is.
+     */
+    static Message whereWritten(Citation at, Page page, SourceId declaredIn) {
+        String place = at.said(page.rendering(), declaredIn);
+        return at instanceof Citation.Elsewhere
+                ? new ReportMessage.InAPlace(place) : new ReportMessage.AtAPlace(place);
+    }
+
+    /**
+     * The catalog's phrase for one value of an enum, found under {@code kind.<family>.} by the
+     * value's name.
+     *
+     * <p>A phrase is one entry per value and no code, so a value that is added is a phrase to
+     * write and nothing else to touch; {@code EveryWordOfThePageHasAPhraseInEveryCatalogTest} holds
+     * each family to having one for every value.
+     */
+    static Localizable phrase(String family, Enum<?> value) {
+        return Localizable.of("kind." + family + "." + word(value).replace('_', '-'));
+    }
+
+    /**
+     * One line for each thing a partial measure went without, said in a sentence.
+     *
+     * <p>The words are the ones the document's {@code weakening} array carries, from the same
+     * derivation, so a behavior's page and its document name the same things. A weakening that is
+     * an observation gone missing is not said here: the page says it under the behavior it names,
+     * as the reason it carries ({@link PublishedIncompleteness}).
+     *
+     * <p>Said under whatever the weakening is of, which is what {@code indent} places it under: a
+     * line that is not under the heading of its own account reads as the last behavior's.
+     */
+    private static void wentWithout(StringBuilder out, String indent, WeakeningSet weakenedBy,
+                                    Page page) {
+        for (WeakeningVocabulary each : weakeningsSaid(weakenedBy).written()) {
+            if (each instanceof WeakeningVocabulary.AWordOfThisDocuments said) {
+                Message line = new ReportMessage.ThePartialMeasureWentWithout(
+                        phrase("weakening", said.word()));
+                out.append(indent).append("? ").append(page.say(line)).append(NEW_LINE);
+            }
+        }
+    }
+
+    /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
+    private static Message ofWhat(CasesTheRowsTook.StatementShort lacking, Message at) {
+        if (!lacking.unseen().isEmpty()) {
+            return switch (lacking.unseen().getFirst()) {
+                case CaseOfAStatement.Search search -> ofASearch(search.statement(), at);
+                case CaseOfAStatement.KeyOrder order -> new ReportMessage.OfAnOrder(
+                        order.container().toString(), order.position().toString(), at);
+            };
+        }
+        return switch (lacking.kind()) {
+            case A_NODE_A_SEARCH_REACHES -> lacking.statement()
+                    instanceof Proposition.SomeReachable search
+                    ? ofASearch(search, at) : new ReportMessage.OfASearchNoPlaceIsSaidOf();
+            case THE_ORDER_OF_A_REPEATED_KEY -> new ReportMessage.OfAnOrderNoPlaceIsSaidOf();
+        };
+    }
+
+    private static Message ofASearch(Proposition.SomeReachable search, Message at) {
+        return new ReportMessage.OfASearch(search.writtenAt().toString(),
+                String.join(".", search.through()), at);
+    }
+
+    /**
+     * The ways through the body no input gets past where whether any input takes them was not
+     * decided, each with the figure the proof stopped at, where the runs along it would stop and
+     * the conditions the way came to.
+     *
+     * <p>A {@code ?} and not a {@code ·}: the way may be one every run of which stops or one no
+     * input takes, and the two are said apart, and nothing here says which. What left it open is
+     * the figure, said as every figure stop is said ({@link #next}). It holds no verdict open:
+     * the proof that no input both takes the conditions and gets past the constructions was had,
+     * so no rule past the way is owed a row whichever of the two it is.
+     */
+    private static void undecided(StringBuilder out, BehaviorReport behavior,
+                                  DecisionEvidence decision, Page page, SourceId declaredIn) {
+        for (DecisionReading.UndecidedAtAFigure each : decision.read().undecided()) {
+            List<WhereARunStopped> stops = behavior.wayStops().getOrDefault(each.way(), List.of());
+            Message why = new ReportMessage.StoppedAtWhichNoOptionSets(
+                    figuresSaid(List.of(each.figure()), page));
+            out.append("      ? ").append(page.say(
+                    new ReportMessage.WhetherAnyInputTakesAWayWasNotDecided(stops.isEmpty() ? why
+                            : new ReportMessage.Reasons(why,
+                                    new ReportMessage.EveryRunAlongItWouldStopAt(
+                                            GeneratedRows.placesStoppedAt(stops, page))))))
+                    .append(NEW_LINE);
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append("          · ").append(said(read, declaredIn, page)).append(NEW_LINE);
+            }
+        }
+    }
+
+    /**
+     * The ways through the body every run of which stops at a construction, each with the
+     * construction, the clause the way's inputs break there and the conditions the way came to.
+     *
+     * <p>Apart from the ways no input takes, which they are not: inputs bring the conditions out as
+     * the way does, and every run with one of them is refused where it builds a value. A {@code ·}
+     * and not a {@code !}, for the reason a comparison every run reaching which stops in an
+     * operation is one ({@link BlockReason.ComparisonAnswersNowhere}): no run gets past, so the
+     * rules past the way state nothing on either side and nothing is owed at them, and no row could
+     * answer the way, since every row down it stops too. What is wrong is the body. This is a fact
+     * about the model that stands by itself: the check of the model's invariants may or may not
+     * report the same construction as well. The verdict here is not changed.
+     * Each construction and clause said as a run stopped there says it
+     * ({@link GeneratedRows#stoppedAt}).
+     */
+    private static void everyRunStops(StringBuilder out, BehaviorReport behavior,
+                                      DecisionEvidence decision, Page page, SourceId declaredIn) {
+        for (DecisionReading.EveryRunStops each : decision.read().everyRunStops()) {
+            out.append("      · ").append(page.say(new ReportMessage.EveryRunAlongAWayStops(
+                    GeneratedRows.stoppedAt(behavior.wayStops().getOrDefault(each.way(),
+                            List.of()), page)))).append(NEW_LINE);
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append("          · ").append(said(read, declaredIn, page)).append(NEW_LINE);
+            }
+        }
     }
 
     /**
@@ -4207,31 +5821,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * as a rule is, so that what a reader is shown is which conditions came out which way.
      */
     private static void noInputTakes(StringBuilder out, BehaviorReport behavior,
-                                     DecisionEvidence decision, SourceRendering rendering,
+                                     DecisionEvidence decision, Page page,
                                      SourceId declaredIn) {
         List<DecisionReading.ImpossiblePath> impossible = decision.read().impossible();
         if (impossible.isEmpty()) {
             return;
         }
-        out.append(String.format("      · no input takes %d way%s through this body, and no row"
-                + " is owed at a rule past %s%n", impossible.size(),
-                impossible.size() == 1 ? "" : "s", impossible.size() == 1 ? "it" : "them"));
+        noted(out, page, impossible.size() == 1 ? new ReportMessage.NoInputTakesOneWay()
+                : new ReportMessage.NoInputTakesTheseWays(impossible.size()));
         for (DecisionReading.ImpossiblePath each : impossible) {
-            out.append(String.format("          · %s:%n", whyNoInputTakes(each.why())));
+            out.append("          · ").append(page.say(whyNoInputTakes(each.why()))).append(':')
+                    .append(NEW_LINE);
             for (ShownCondition read : behavior.readingsOf(each.way())) {
-                out.append(String.format("              · %s%n",
-                        said(read, declaredIn, rendering)));
+                out.append("              · ").append(said(read, declaredIn, page))
+                        .append(NEW_LINE);
             }
         }
     }
 
     /** Why no input takes a way, in the words the page says it in. */
-    private static String whyNoInputTakes(NoInputTakesIt why) {
+    private static Message whyNoInputTakes(NoInputTakesIt why) {
         return switch (why) {
-            case NoInputTakesIt.TheConditionsClash _ ->
-                    "the conditions on the way ask for what no input is at once";
-            case NoInputTakesIt.TheNumbersLeaveNone _ ->
-                    "the declarations and the conditions on the way leave no value";
+            case NoInputTakesIt.TheConditionsClash _ -> new ReportMessage.TheConditionsClash();
+            case NoInputTakesIt.TheNumbersLeaveNone _ -> new ReportMessage.TheNumbersLeaveNone();
         };
     }
 
@@ -4240,9 +5852,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * ({@link #saidOnce}), with the calls of the conditions of the way that said each of them.
      */
     private static List<String> leftOut(SettledAt came, BehaviorReport behavior,
-                                        SourceRendering rendering, SourceId declaredIn) {
+                                        Page page, SourceId declaredIn) {
+        return List.copyOf(leftOutBy(came, behavior, page, declaredIn).values());
+    }
+
+    /** The same, each entry under the key that made it one. */
+    private static Map<SaidAlike, String> leftOutBy(SettledAt came, BehaviorReport behavior,
+                                                    Page page, SourceId declaredIn) {
         ConditionsShown shown = behavior.conditionPlaces().along(came.at().saidOnTheWay());
-        return saidOnce(came.leftOut(), shown::copiesOf, shown.places(), rendering, declaredIn);
+        Map<SaidAlike, String> out = new LinkedHashMap<>();
+        saidOnceBy(came.leftOut(), shown::copiesOf, shown.places(), page, declaredIn)
+                .forEach((key, said) -> out.put(key, page.say(said)));
+        return out;
     }
 
     /**
@@ -4258,7 +5879,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param anchor   where the condition is written, which is the place a reader is sent
      * @param madeFrom what the sentence about it is made from
      */
-    private record SaidAlike(ConditionReportAnchor anchor, Object madeFrom) {
+    record SaidAlike(ConditionReportAnchor anchor, Object madeFrom) {
 
         static SaidAlike of(ConditionGap gap) {
             return new SaidAlike(gap.anchor(), switch (gap) {
@@ -4289,10 +5910,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * are.
      */
     private static void excluded(StringBuilder out, BehaviorReport behavior,
-                                 DecisionEvidence decision, SourceRendering rendering,
+                                 DecisionEvidence decision, Page page,
                                  PublishedRuleHandle.WhereARuleIs places, SourceId declaredIn) {
         Set<Said> order = new java.util.TreeSet<>(Said.IN_ORDER);
-        Map<String, Integer> counted = new LinkedHashMap<>();
+        Map<Message, Integer> counted = new LinkedHashMap<>();
         int all = 0;
         // Each rule once, however many places state it: what is counted is the rules. And said with
         // what left each of its places no row, each once — the model may leave two calls of a
@@ -4303,28 +5924,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (rule == null || !(rule.requirement() instanceof RuleRequirement.Excluded)) {
                 continue;
             }
-            Said said = everyReason(rule.places().stream().map(came -> said(came, rendering,
+            Said said = everyReason(rule.places().stream().map(came -> said(came, page,
                     places, behavior.conditionPlaces(), declaredIn)).toList());
             order.add(said);
-            counted.merge(said.text(), 1, Integer::sum);
+            counted.merge(said.said(), 1, Integer::sum);
             all++;
         }
         if (all == 0) {
             return;
         }
-        String line = String.format("      · no row is owed at %d decision rule%s%n", all,
-                all == 1 ? "" : "s");
+        String line = "      · " + page.say(all == 1 ? new ReportMessage.NoRowIsOwedAtOneRule()
+                : new ReportMessage.NoRowIsOwedAtTheseRules(all));
         // One reason on the line it is about. Written under it, the count would be said twice for
         // the same ways — which is what a body with one answer for all of them has, and that is
         // most of them.
         if (counted.size() == 1) {
-            out.append(line.stripTrailing()).append(" — ")
-                    .append(order.iterator().next().text()).append('\n');
+            out.append(line).append(" — ")
+                    .append(page.say(order.iterator().next().said())).append('\n');
             return;
         }
-        out.append(line);
+        out.append(line).append(NEW_LINE);
         order.forEach(said -> out.append(String.format("          · %d — %s%n",
-                counted.get(said.text()), said.text())));
+                counted.get(said.said()), page.say(said.said()))));
     }
 
     /**
@@ -4334,14 +5955,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * answer is; the rest are what left its other places no row, which a reader is owed as much.
      */
     static Said everyReason(List<Said> atEach) {
-        List<String> reasons = new ArrayList<>();
-        atEach.forEach(each -> {
-            if (!reasons.contains(each.text())) {
-                reasons.add(each.text());
-            }
-        });
+        Set<Message> told = new LinkedHashSet<>();
+        atEach.forEach(each -> told.add(each.said()));
         return new Said(atEach.getFirst().family(), atEach.getFirst().within(),
-                String.join("; ", reasons));
+                Joined.reasons(List.copyOf(told)));
     }
 
     /**
@@ -4355,21 +5972,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * kind of answer it is, is said here, and where a word stands among the words of its own kind
      * is that kind's own order to give — asked of {@link PublicationOrders} the way every other
      * plurality this report says together is.
+     *
+     * <p>What tells two answers apart is what the sentence says, and never how a language words
+     * it: the message, which a page renders when it writes the line.
+     *
+     * @param said what the sentence says
      */
-    record Said(int family, int within, String text) {
+    record Said(int family, int within, Message said) {
 
         /**
          * The order these are said in: by what kind of answer, then within it.
          *
-         * <p>And by the sentence last, which orders nothing a reader sees and is what keeps two
-         * answers two. A comparator that called them one where their places agree would drop a
-         * sentence the count beside it still holds, and the numbers under a block would stop
-         * adding up to the block.
+         * <p>And by what each says last ({@link MessageOrder}), which is what keeps two answers
+         * two. A comparator that called them one where their places agree would drop a sentence
+         * the count beside it still holds, and the numbers under a block would stop adding up to
+         * the block.
          */
-        static final java.util.Comparator<Said> IN_ORDER =
-                java.util.Comparator.comparingInt(Said::family)
-                        .thenComparingInt(Said::within)
-                        .thenComparing(Said::text);
+        static final Comparator<Said> IN_ORDER = Comparator.comparingInt(Said::family)
+                .thenComparingInt(Said::within)
+                .thenComparing(Said::said, MessageOrder.OF_WHAT_IS_SAID);
     }
 
     /**
@@ -4387,59 +6008,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * rule this compiler could not read is named there, an allowance spent on composing a value is
      * named nowhere, and a sentence that relied on the neighbour would be complete for one of them.
      */
-    private static Said said(SettledAt came, SourceRendering rendering,
+    private static Said said(SettledAt came, Page page,
                              PublishedRuleHandle.WhereARuleIs places,
                              ConditionsShown shown, SourceId declaredIn) {
-        Said said = whatItCameTo(came.settlement(), rendering, places);
+        Said said = whatItCameTo(came.settlement(), page, places);
         // And what it was arrived at without, after what it came to. The word says what happened
         // and the clause says what the row it happened to was composed short of, which is the pair
         // a point line is written as for the same reason: opened on the word alone, a reader is
         // told a search had everything and reached nothing.
-        String left = whatWasLeftOut("rule", came.leftOut(),
-                shown.along(came.at().saidOnTheWay()), rendering, declaredIn);
-        return left.isEmpty() ? said
-                : new Said(said.family(), said.within(), said.text() + "; " + left);
+        if (came.leftOut().isEmpty()) {
+            return said;
+        }
+        return new Said(said.family(), said.within(), Joined.reasons(List.of(said.said(),
+                whatWasLeftOut(WhatWasLeftOut.OF_A_RULE, came.leftOut(),
+                        shown.along(came.at().saidOnTheWay()), page, declaredIn))));
     }
 
-    private static Said whatItCameTo(RuleSettlement came, SourceRendering rendering,
+    private static Said whatItCameTo(RuleSettlement came, Page page,
                                      PublishedRuleHandle.WhereARuleIs places) {
         return switch (came.requirement()) {
             // Composed and run first, because they are what a reader can tell this compiler about:
             // a row that went elsewhere is a way this steered wrong and the model may be fine.
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->
-                    new Said(0, 0, "a row composed for one took another rule of the same body");
+                    new Said(0, 0, new ReportMessage.AComposedRowWentElsewhere());
             // Beside it and after it, because the difference is what a reader may conclude: this
             // row met less than the way asks, so where it went is what such a row does and not
             // something about the rule. What it was short of follows this sentence.
             case RuleRequirement.Unsettled.AComposedRowWasShortOfTheWay _ ->
-                    new Said(0, 1, "a row was composed and run, and what it was composed against"
-                            + " was less than the way asks");
+                    new Said(0, 1, new ReportMessage.AComposedRowWasShortOfTheWay());
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
-                    nothingToTry(came.synthesisShortfalls(), rendering, places);
+                    nothingToTry(came.synthesisShortfalls(), page, places);
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(var reading) ->
                     new Said(2, PublicationOrders.positionOf(reading), switch (reading) {
                         case NO_RULE_IS_RECOGNISABLE ->
-                                "a row was composed and run, and every rule of this body turns on"
-                                        + " something no run through it is recorded at";
+                                new ReportMessage.EveryRuleTurnsOnSomethingUnrecorded();
                         case NO_RECOGNISABLE_RULE_MATCHES ->
-                                "a row was composed and run, and this reading found no rule the"
-                                        + " run did all of";
+                                new ReportMessage.NoRuleTheRunDidAllOf();
                         case A_CONDITION_CAME_OUT_BOTH_WAYS ->
-                                "a row was composed and run, and it answered a condition of this"
-                                        + " body both ways, so it went down more than one rule";
+                                new ReportMessage.AConditionCameOutBothWays();
                         case MORE_THAN_ONE_RULE_MATCHES ->
-                                "a row was composed and run, and this reading placed it at more"
-                                        + " than one rule, which one run cannot have taken";
+                                new ReportMessage.ItWasPlacedAtMoreThanOneRule();
                         case ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT ->
-                                "a row was composed and run, and it went down a way this reading"
-                                        + " proved no input takes";
+                                new ReportMessage.ItWentDownAWayNoInputTakes();
                     });
             case RuleRequirement.Unsettled.NothingWatchedTheRow _ ->
-                    new Said(3, 0,
-                            "a row was composed and run, and nothing watched where it went");
+                    new Said(3, 0, new ReportMessage.NothingWatchedTheRow());
             // The model's own answers, after the ones that are about what this compiler managed.
-            case RuleRequirement.Excluded.OnePositionCannotBeBoth one -> new Said(4, 0, readOff(one));
-            case RuleRequirement.Excluded.AnArmNothingReaches arm -> new Said(5, 0, readOff(arm));
+            case RuleRequirement.Excluded.OnePositionCannotBeBoth one ->
+                    new Said(4, 0, readOff(one));
+            case RuleRequirement.Excluded.AnArmNothingReaches arm ->
+                    new Said(5, 0, readOff(arm));
             // The same reading as the arm's, asked where a comparison comes out one way.
             case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches outcome ->
                     new Said(5, 0, readOff(outcome));
@@ -4456,7 +6074,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // standing the dependencies in may prove it with different words, and a sentence that
             // said one of them would be saying whichever the walk met first.
             case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
-                    proved(((RuleSearch.CameToNothing) came.search()), rendering, places);
+                    proved(((RuleSearch.CameToNothing) came.search()), page, places);
             case RuleRequirement.Required _ ->
                     throw new IllegalArgumentException(
                             "a rule owed a row is said as the finding it is");
@@ -4470,23 +6088,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * case the source wrote takes, one a condition on entering it leaves empty, or one whose cases a
      * rule refuses, and a reader does the same about the rule whichever it was.
      */
-    static String readOff(RuleRequirement.Excluded excluded) {
+    static Message readOff(RuleRequirement.Excluded excluded) {
         return switch (excluded) {
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
-                    "its way would need one position to be two things at once, so "
-                            + NoValue.goesThatWay();
+                    new ReportMessage.ItsWayNeedsOnePositionToBeTwoThings(NoValue.goesThatWay());
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
-                    "its way goes through an arm, but " + NoValue.reaches("that arm")
-                            + ", so the branch count is made without it";
+                    new ReportMessage.ItsWayGoesThroughAnArmNothingReaches(
+                            NoValue.reachesThatArm());
             case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches _ ->
-                    "its way needs a comparison to come out one way, but "
-                            + NoValue.reaches("it coming out so");
+                    new ReportMessage.ItsWayNeedsAComparisonToComeOutOneWay(
+                            NoValue.reachesItComingOutSo());
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
-                    "its way goes past a condition that comes out the other way for every row, so "
-                            + NoValue.goesThatWay();
+                    new ReportMessage.ItsWayGoesPastAConditionThatNeverComesOutSo(
+                            NoValue.goesThatWay());
             case RuleRequirement.Excluded.TheNumbersOfTheWayLeaveNone _ ->
-                    "the statements of numbers on its way leave no value, so "
-                            + NoValue.goesThatWay();
+                    new ReportMessage.TheNumbersOnItsWayLeaveNoValue(NoValue.goesThatWay());
             case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
                     throw new IllegalArgumentException(
                             "what the composings proved is said in the words they came back with");
@@ -4507,17 +6123,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>Where the sentence sits among the others is the first word's place, as for a proof.
      */
-    static Said nothingToTry(List<RuleSearch.Came> came, SourceRendering rendering,
+    static Said nothingToTry(List<RuleSearch.Came> came, Page page,
                              PublishedRuleHandle.WhereARuleIs places) {
-        List<String> clauses = new ArrayList<>();
+        List<Message> clauses = new ArrayList<>();
         for (RuleSearch.Came each
                 : RuleSearch.Came.joinedAsShown(came, AdequacyReport::shownOnThePage)) {
-            clauses.add(Reasons.met(each.figures(), each.populations(), each.unheld(),
-                    each.planCut())
-                    + GeneratedRows.beside(saidOrWhy(each.why()), each.why(), rendering, places));
+            clauses.add(Reasons.opening(Reasons.met(each.figures(), each.populations(),
+                    each.unheld(), each.planCut()),
+                    GeneratedRows.beside(saidOrWhy(each.why()), each.why(), page, places)));
         }
         return new Said(1, PublicationOrders.positionOf(came.get(0).why().reason()),
-                String.join("; ", clauses));
+                Joined.reasons(clauses));
     }
 
     /**
@@ -4526,8 +6142,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
      */
     static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
-        return why.said().isPresent() ? List.of(why.said().get(), why.alsoShort())
-                : List.of(why.reason(), why.subject(), why.alsoShort());
+        return why.told().isPresent() ? List.of(why.told().get(), why.beside())
+                : List.of(why.reason(), why.subject(), why.beside());
     }
 
     /**
@@ -4535,7 +6151,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * ({@link #synthesisShortfalls}). Not the sentence beside the word, and not what it is about.
      */
     static List<Object> shownInTheDocument(Generator.UnresolvedCombination why) {
-        return List.of(why.reason(), why.alsoShort());
+        return List.of(why.reason(), why.beside());
     }
 
     /**
@@ -4548,16 +6164,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Where the sentence sits among the others is the first word's place, which is the same
      * place whichever order the ways were walked in.
      */
-    private static Said proved(RuleSearch.CameToNothing proofs, SourceRendering rendering,
+    private static Said proved(RuleSearch.CameToNothing proofs, Page page,
                                PublishedRuleHandle.WhereARuleIs places) {
-        List<String> clauses = new ArrayList<>();
+        List<Message> clauses = new ArrayList<>();
         for (RuleSearch.Came proof
                 : RuleSearch.Came.joinedAsShown(proofs.ways(), AdequacyReport::shownOnThePage)) {
             Generator.UnresolvedCombination why = proof.why();
-            clauses.add(GeneratedRows.beside(saidOrWhy(why), why, rendering, places));
+            clauses.add(GeneratedRows.beside(saidOrWhy(why), why, page, places));
         }
         return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).why().reason()),
-                String.join("; ", clauses));
+                Joined.reasons(clauses));
     }
 
     /**
@@ -4570,43 +6186,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Exhaustive with no {@code default}, so a shape added to the reading is one somebody words
      * rather than one that goes quiet.
      */
-    static String said(ShownCondition shown, SourceId declaredIn, SourceRendering rendering) {
+    static String said(ShownCondition shown, SourceId declaredIn, Page page) {
         // And which call of the helper it is in, after what it is. A helper called three times is
         // one place in the source, and three conditions of a rule sent there alike are three a
         // reader cannot tell apart.
-        List<String> calls = shown.through().stream().filter(each -> !each.isEmpty())
-                .map(each -> chain(each, rendering, declaredIn)).distinct().toList();
-        return what(shown, declaredIn, rendering)
-                + (calls.isEmpty() ? "" : " in " + String.join(", ", calls));
+        List<Message> calls = shown.through().stream().filter(each -> !each.isEmpty())
+                .map(each -> chained(each, page, declaredIn)).distinct().toList();
+        Message what = what(shown, declaredIn, page.rendering());
+        return page.say(calls.isEmpty() ? what
+                : new ReportMessage.WhatInCalls(what, Joined.listed(calls)));
     }
 
-    /** {@code n} counted in words, as a person counts evaluations: 1st, 2nd, 3rd, 4th. */
-    private static String ordinal(int n) {
+    /** {@code n} counted as a person counts evaluations: the 1st, the 2nd, the 3rd, the 4th. */
+    private static Message ordinal(int n) {
         int lastTwo = n % 100;
-        String suffix = lastTwo >= 11 && lastTwo <= 13 ? "th" : switch (n % 10) {
-            case 1 -> "st";
-            case 2 -> "nd";
-            case 3 -> "rd";
-            default -> "th";
+        return lastTwo >= 11 && lastTwo <= 13 ? new ReportMessage.NthOrdinal(n) : switch (n % 10) {
+            case 1 -> new ReportMessage.FirstOrdinal(n);
+            case 2 -> new ReportMessage.SecondOrdinal(n);
+            case 3 -> new ReportMessage.ThirdOrdinal(n);
+            default -> new ReportMessage.NthOrdinal(n);
         };
-        return n + suffix;
     }
 
-    private static String what(ShownCondition shown, SourceId declaredIn,
-                               SourceRendering rendering) {
+    private static Message what(ShownCondition shown, SourceId declaredIn,
+                                SourceRendering rendering) {
         return switch (shown.read()) {
-            case DecisionRuleReading.AComparisonCameOut(var _, var evaluation, var held) ->
-                    "the comparison at " + shown.at().said(rendering, declaredIn)
-                            + (held ? " holds" : " does not hold")
-                            + (evaluation.isPresent()
-                                    ? " on its " + ordinal(evaluation.getAsInt() + 1)
-                                            + " evaluation" : "");
-            case DecisionRuleReading.AnApplicationAnswered(var _, var held) ->
-                    "the operation applied at " + shown.at().said(rendering, declaredIn)
-                            + (held ? " answers true" : " answers false");
+            case DecisionRuleReading.AComparisonCameOut(var _, var evaluation, var held) -> {
+                String at = shown.at().said(rendering, declaredIn);
+                if (evaluation.isPresent()) {
+                    Message nth = ordinal(evaluation.getAsInt() + 1);
+                    yield held ? new ReportMessage.TheComparisonHoldsOnItsEvaluation(at, nth)
+                            : new ReportMessage.TheComparisonDoesNotHoldOnItsEvaluation(at, nth);
+                }
+                yield held ? new ReportMessage.TheComparisonHolds(at)
+                        : new ReportMessage.TheComparisonDoesNotHold(at);
+            }
+            case DecisionRuleReading.AnApplicationAnswered(var _, var held) -> held
+                    ? new ReportMessage.TheOperationAnswersTrue(shown.at().said(rendering,
+                            declaredIn))
+                    : new ReportMessage.TheOperationAnswersFalse(shown.at().said(rendering,
+                            declaredIn));
             case DecisionRuleReading.AForkTookAnArm(var arm, var _) ->
-                    "it goes through `" + ArmVocabulary.label(arm) + "` ("
-                            + shown.at().said(rendering, declaredIn) + ")";
+                    new ReportMessage.ItGoesThrough(ArmVocabulary.label(arm),
+                            shown.at().said(rendering, declaredIn));
             // Every shape with nothing to send a reader to. What differs between them is which
             // part of this compiler fell short, which is not something an author acts on — and a
             // line is written for each so that the rule is never described by fewer conditions
@@ -4614,7 +6236,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case DecisionRuleReading.AConditionIsNotShown _,
                     DecisionRuleReading.AnOutcomeIsNotPlaced _,
                     DecisionRuleReading.AForkIsNotPlaced _ ->
-                    "one condition of it is one this compiler has nothing to send you to";
+                    new ReportMessage.AConditionWithNowhereToSendYou();
         };
     }
 
@@ -4625,9 +6247,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * has not been shown unreachable, only untried. Printing 3/8 would read as five gaps when it may
      * be five impossibilities.
      */
-    private static String combinations(PartitionEvidence.PairSpace pairs) {
+    private static Optional<Message> combinations(PartitionEvidence.PairSpace pairs) {
         if (pairs == null || pairs.total() == 0) {
-            return "";
+            return Optional.empty();
         }
         // A space too large to walk says so, and says it from the reason the measure has no number
         // rather than from what weakened it. The two used to be one thing here because the measure
@@ -4635,13 +6257,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // before believing it.
         if (pairs.counted() instanceof Measurement.FailedToMeasure<?>(
                 PartitionEvidence.PairSpace.TooLarge _, WeakeningSet _)) {
-            return String.format("pairs %d, too many to enumerate", pairs.total());
+            return Optional.of(new ReportMessage.PairsTooManyToEnumerate(pairs.total()));
         }
         if (pairs.counted().made().isEmpty()) {
-            return "";
+            return Optional.empty();
         }
         if (pairs.decided()) {
-            return String.format("pairs %d/%d", pairs.counts().covered(), pairs.total());
+            return Optional.of(new ReportMessage.PairsCounted(
+                    pairs.counts().covered() + "/" + pairs.total()));
         }
         // Two numbers, because there are two facts: what the rows reach, and what is left. The
         // second is what this behavior is behind on — where the pair space is the criterion, a
@@ -4651,9 +6274,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And whose rows, where not all of them were read. A combination none of the rows seen
         // reaches is not one none of the rows reaches, and the same number means the smaller thing.
         boolean whole = pairs.counted() instanceof Measurement.Complete<?>;
-        return String.format("pairs %d covered, %d uncovered%s",
-                pairs.counts().covered(), pairs.unknown(),
-                whole ? "" : " of the rows that were read");
+        return Optional.of(whole
+                ? new ReportMessage.PairsCoveredAndUncovered(pairs.counts().covered(),
+                        pairs.unknown())
+                : new ReportMessage.PairsCoveredAndUncoveredOfTheRowsRead(
+                        pairs.counts().covered(), pairs.unknown()));
     }
 
     /**
@@ -4661,17 +6286,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>Grouped rather than summed. Two lines left unmeasured for two different reasons are two
      * facts, and one count over both would be a number whose sentence is true of only some of what it
-     * counts — which is the shape of the thing this report stopped doing.
+     * counts — which is the shape of the thing this report stopped doing. Grouped by the reason's
+     * message, which is one entry per thing a reason says.
      */
-    private static <T> String notes(List<T> unmeasured,
-                                    Function<T, String> why) {
-        Map<String, Long> counted = new LinkedHashMap<>();
+    private static <T> String notes(List<T> unmeasured, Function<T, Message> why, Page page) {
+        Map<Message, Long> counted = new LinkedHashMap<>();
         for (T each : unmeasured) {
             counted.merge(why.apply(each), 1L, Long::sum);
         }
         StringBuilder out = new StringBuilder();
-        counted.forEach((said, count) ->
-                out.append("   (").append(count).append(" not measured: ").append(said).append(')'));
+        counted.forEach((said, count) -> out.append("   ")
+                .append(page.say(new ReportMessage.NotMeasuredHowMany(count, said))));
         return out.toString();
     }
 
@@ -4690,11 +6315,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * disposition and not the assessment it came from: the evidence is not in reach of the sentence
      * at all, rather than in reach and left alone.
      */
-    private static List<String> undecidedBecause(ObligationDisposition disposition, String point) {
+    private static List<Message> undecidedBecause(ObligationDisposition disposition,
+                                                  Message point, Page page) {
         if (!(disposition instanceof ObligationDisposition.Undecided it)) {
             return List.of();
         }
-        List<String> said = new ArrayList<>();
+        List<Message> said = new ArrayList<>();
         for (ObligationDisposition.Uncertainty each : it.because().written()) {
             said.add(switch (each) {
                 // And what the readings met, which is what makes it undecided rather than missed.
@@ -4702,43 +6328,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // here, and a sentence that stopped at "undecided" would be the last step of the
                 // carrying dropping it.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                        ReadingReasons met) ->
-                        "undecided whether a row is at the " + point
-                                + whyTheReadingsDidNotSettle(met);
+                        ReadingReasons met) -> new ReportMessage.UndecidedWhetherARowIsAt(point,
+                        whyTheReadingsDidNotSettle(met, page));
                 // And why nobody read, where nobody did. Off the question and not off the coverage
                 // beside it: what a question is open on travels with the question, so a sentence
                 // that reached past it for the evidence would be one more reader working the
                 // answer out on its own terms.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
-                        UnaskedReasons why) ->
-                        "undecided whether a row is at the " + point + " — "
-                                + ReasonProse.of(why.asOne()).clause();
+                        UnaskedReasons why) -> new ReportMessage.UndecidedBecauseNothingWasRead(
+                        point, ReasonProse.of(why.asOne()).clause());
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where
                 // none was. So the sentence is the gap's, and the gaps say which they are.
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                         WritabilityKnowledge.Prevented stopped) ->
-                        "nothing could show a row can be written at the " + point
-                                + " — " + why(stopped);
+                        new ReportMessage.NothingCouldShowARowCanBeWrittenAt(point,
+                                why(stopped, page));
                 // And where nothing was stopped there is no budget to name. What the searches came
                 // to is said under the point, a line per reading, so a summary here would be that
                 // sentence written twice with less in it.
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
-                        "nothing could show a row can be written at the " + point
-                                + " — no search of it established one";
+                        new ReportMessage.NoSearchEstablishedARowAt(point);
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop
-                        stops -> "nothing could show a row gets to the " + point + " — a run may"
-                                + " stop on the way, at " + String.join(" or ", stops.at()
-                                        .written().stream().map(WhatMayStopARun::said).toList())
-                                + " worked out before it, on values this compiler does not say";
+                        stops -> new ReportMessage.ARunMayStopOnTheWayTo(point,
+                        eitherOf(page, stops.at().written().stream()
+                                .map(stop -> page.say(stop.said())).toList()));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
                         .EveryRowReachesAnUnreachable resting ->
-                        "no row can be written at the " + point + " — every row there reaches"
-                                + " `unreachable` (" + String.join("; ", resting.premises().stream()
+                        new ReportMessage.EveryRowThereReachesAnUnreachable(point,
+                                String.join("; ", resting.premises().stream()
                                         .flatMap(premise -> premise.reasons().stream())
-                                        .distinct().toList())
-                                + "), and nothing here proves no input arrives there";
+                                        .distinct().toList()));
             });
         }
         return said;
@@ -4754,10 +6375,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * has its reason said where the row stopped, and repeating it here would be one gap wearing two
      * sentences.
      */
-    private static String whyTheReadingsDidNotSettle(ReadingReasons met) {
+    private static Message whyTheReadingsDidNotSettle(ReadingReasons met, Page page) {
         List<String> said = new ArrayList<>();
         for (ReadingGap each : met.eachKindOnce().written()) {
-            said.add(atTheBorder(each));
+            said.add(page.say(atTheBorder(each)));
         }
         // And the readings nobody made, said after what the ones that were made came to and never
         // instead of them. A row can stop a reading and hold more readings than a point is tried
@@ -4765,10 +6386,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // where nothing they raise reaches the value, or to look at a value nobody was stopped
         // from reading.
         if (met.tried() instanceof StandingAtAPoint.ReadingsTried.StoppedAtTheLimit _) {
-            said.add("the readings of the row ran past what one point is tried against,"
-                    + " so the rest of them were never tried");
+            said.add(page.say(new ReportMessage.TheReadingsRanPastTheLimit()));
         }
-        return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
+        return said.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.AndThen(also(page, said));
+    }
+
+    /** Things that each hold, said one after another: {@code a, and b, and c}. */
+    static String also(Page page, List<String> each) {
+        return page.say(Joined.also(Joined.asWritten(each)));
     }
 
     /**
@@ -4779,41 +6405,54 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * this is what says it. So it is open to the census that holds every reason to a sentence
      * nothing else writes.
      */
-    static String atTheBorder(ReadingGap why) {
+    static Message atTheBorder(ReadingGap why) {
         return switch (why) {
             case ReadingGap.Observation(Incompleteness.Code code, List<Figure> _) ->
                     whatStopped(code);
             // Nothing was observed here, so nothing about an observation is said. What a reader is
             // owed is that no value arrived at all, which no budget would have changed.
-            case ReadingGap.NoValue _ -> "the walk reached no value there to read";
+            case ReadingGap.NoValue _ -> new ReportMessage.TheWalkReachedNoValue();
             // And where nothing was looked at, what a reader is owed is that the position was never
             // read -- said the way it happened, since "no value there" is a claim about the row and
             // nothing here found anything out about one.
-            case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
-            case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
+            case ReadingGap.CouldNotWalk _ -> new ReportMessage.TheWalkCouldNotBeTaken();
+            case ReadingGap.CouldNotReadRow _ -> new ReportMessage.NoRowCameBackToReadThere();
+            // The values were there and are numbers; which keys the maps hold in common is what
+            // the observation of a key does not say.
+            case ReadingGap.KeysNotTold _ -> new ReportMessage.TheKeysCouldNotBeToldApart();
+            // Both values were read in full; whether they are the same value is what the
+            // declaration of their type says and a row does not carry.
+            case ReadingGap.SamenessNotTold _ ->
+                    new ReportMessage.WhetherTheTwoValuesAreTheSameIsNotToldByARow();
             // The value was read; what is not known is whether the run compared anything through
             // the element it stands in, and what that turned on is what is said.
-            case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread) -> "whether the run"
-                    + " got to the rule through that reading turns on " + switch (unread) {
-                        case A_PART_NOT_READ -> "a part of the way that was not read";
-                        case MORE_READINGS_THAN_ARE_MADE -> "a part of the way reading which took"
-                                + " more readings than are made";
-                        case MORE_TOTAL_READINGS_THAN_ARE_MADE -> "a part of the way reading which"
-                                + " took more readings in all than are made";
-                        case MORE_PARTS_THAN_ARE_CONCLUDED -> "a part of the way whose statement"
-                                + " comes to more parts than a step is concluded with";
-                        case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> "a part of the way about a"
-                                + " container holding more than is written out";
-                        case NO_VALUE_OF_THE_ROW -> "something the row does not write";
-                    };
+            case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread, var _) ->
+                    new ReportMessage.WhetherTheRunGotToTheRuleTurnsOn(switch (unread) {
+                        case A_PART_NOT_READ -> new ReportMessage.APartOfTheWayNotRead();
+                        case MORE_READINGS_THAN_ARE_MADE ->
+                                new ReportMessage.APartTakingMoreReadingsThanAreMade();
+                        case MORE_TOTAL_READINGS_THAN_ARE_MADE ->
+                                new ReportMessage.APartTakingMoreReadingsInAllThanAreMade();
+                        case MORE_PARTS_THAN_ARE_CONCLUDED ->
+                                new ReportMessage.APartComingToMorePartsThanAreConcluded();
+                        case MORE_WAYS_THAN_ARE_WRITTEN_OUT ->
+                                new ReportMessage.APartOverMoreWaysThanAreWrittenOut();
+                        case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
+                                new ReportMessage.APartAboutALargerContainer();
+                        case NO_VALUE_OF_THE_ROW -> new ReportMessage.SomethingTheRowDoesNotWrite();
+                        case APPLICATIONS_NOT_TOLD_APART ->
+                                new ReportMessage.WhichApplicationBelongsToTheElement();
+                    });
             // The values were there, so nothing is said about the row: what stopped is the number
             // they come to, and whether a host with more room would hold it is said with it.
             case ReadingGap.CouldNotWorkOut(UnheldNumber unheld) -> switch (unheld) {
-                case MORE_ROOM_COULD_ANSWER -> "the values there come to a number this host had no"
-                        + " room to work out";
-                case NO_REPRESENTATION_EXISTS -> "the values there come to a number this compiler"
-                        + " has no way to hold";
+                case MORE_ROOM_COULD_ANSWER -> new ReportMessage.ANumberThisHostHadNoRoomFor();
+                case NO_REPRESENTATION_EXISTS -> new ReportMessage.ANumberThisCompilerCannotHold();
             };
+            // The row is at the point where cases nobody worked out are; which of them the line
+            // turns the statement in is what was not worked out, so a row in one it turns nothing
+            // in would stand there as well.
+            case ReadingGap.CasesNotWorkedOut _ -> new ReportMessage.WhichCaseIsNotWorkedOut();
         };
     }
 
@@ -4824,15 +6463,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * a reading of one value that did not come back, a composing for another that never started —
      * and what a reader wants is everything that would have to give for the point to be settled.
      */
-    private static String why(WritabilityKnowledge.Prevented stopped) {
+    private static String why(WritabilityKnowledge.Prevented stopped, Page page) {
         List<String> out = new ArrayList<>();
         for (EstablishmentGap each : stopped.by().written()) {
             out.add(switch (each) {
                 case EstablishmentGap.Observation(CanonicalSelection<Incompleteness.Code> causes,
                                                   List<Figure> _) ->
-                        "a row was built for it, and " + causes.written().stream()
-                                .map(AdequacyReport::whatStopped)
-                                .collect(Collectors.joining(", and "));
+                        page.say(new ReportMessage.ARowWasBuiltForIt(also(page,
+                                causes.written().stream()
+                                        .map(code -> page.say(whatStopped(code))).toList())));
                 // What this compiler declined to build, and which figure decided it. An author does
                 // nothing about this; what it says is that the point is open because of a policy
                 // here, which is what keeps it out of the work they are told they owe.
@@ -4851,29 +6490,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // raises reaches the rest of it. Run together, an author reads the second as
                 // something to raise and finds that raising it changes nothing.
                 case EstablishmentGap.Composition(var budgets, var repertoires, var capacities) ->
-                        "nothing here settled it"
-                                + (budgets.isEmpty() ? ""
-                                        : ", and a figure of this compiler's is why: "
-                                                + Reasons.said(budgets))
-                                + (repertoires.isEmpty() ? ""
-                                        : ", and this compiler writes some of "
-                                                + Reasons.writes(repertoires)
-                                                + " rather than all of them")
-                                + (capacities.isEmpty() ? ""
-                                        : ", and this compiler could not hold "
-                                                + Reasons.unheld(capacities));
+                        page.say(new ReportMessage.NothingHereSettledIt(
+                                budgets.isEmpty() ? new ReportMessage.Nothing()
+                                        : new ReportMessage.AFigureIsWhy(
+                                                Reasons.said(budgets, page)),
+                                repertoires.isEmpty() ? new ReportMessage.Nothing()
+                                        : new ReportMessage.ThisCompilerWritesSomeOf(
+                                                Reasons.writes(repertoires, page)),
+                                capacities.isEmpty() ? new ReportMessage.Nothing()
+                                        : new ReportMessage.ThisCompilerCouldNotHold(
+                                                Reasons.unheld(capacities, page))));
             });
         }
-        return String.join(", and ", out);
+        return also(page, out);
     }
 
     /** What one observation gap cost, said as what it stopped rather than as its code. */
-    private static String whatStopped(Incompleteness.Code code) {
+    private static Message whatStopped(Incompleteness.Code code) {
         return switch (code) {
-            case VALUE_TRUNCATED -> "the observation of it was stopped by a limit, "
-                    + "so where it stands could not be read";
-            case VALUE_UNREADABLE -> "nothing could read it back, "
-                    + "so where it stands could not be read";
+            case VALUE_TRUNCATED -> new ReportMessage.TheObservationWasStoppedByALimit();
+            case VALUE_UNREADABLE -> new ReportMessage.NothingCouldReadItBack();
             // Nothing else stops a value being read back at a point: the rest are about a row that
             // did not run or a module nothing observed, and neither reaches a value just composed.
             default -> throw new IllegalStateException(
@@ -4895,10 +6531,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * obligation and an axis are printed because they are owed, and the reason is what that line is
      * short of whatever the reason is about.
      */
-    private static void sayWhy(StringBuilder out, String measure, MeasureReason reason) {
+    private static void sayWhy(StringBuilder out, Message measure, MeasureReason reason,
+                               Page page) {
         if (reason.about() == MeasureReason.About.THE_BEHAVIOR) {
-            out.append(String.format("    %s%s%n",
-                    DisplayColumns.padRight(measure, 12), ReasonProse.of(reason).sentence()));
+            measureLine(out, measure, page, page.say(ReasonProse.of(reason).sentence()));
         }
     }
 
@@ -4911,20 +6547,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * Why it was not is beside it already — the rules nothing took in, the positions the walk
      * could not reach into — so this says which measure they cost rather than saying them again.
      */
-    private static String inFull(MeasurementStatus status) {
-        return status == MeasurementStatus.PARTIAL ? "   (not all of it was measured)" : "";
+    private static String inFull(MeasurementStatus status, Page page) {
+        return status == MeasurementStatus.PARTIAL
+                ? "   " + page.say(new ReportMessage.NotAllOfItWasMeasured()) : "";
     }
 
     /** What the search for a value at an edge came to, where it ran and found none. */
     private static String whatWasTried(SearchOutcomes outcomes,
                                        ConditionsShown shown,
-                                       SourceRendering rendering, SourceId declaredIn) {
+                                       Page page, SourceId declaredIn,
+                                       PublishedRuleHandle.WhereARuleIs places) {
         // Which searches are worth a sentence is the outcomes' answer, not this one's. Told apart
         // here, two of them would be one piece of news whenever the words for them happened to
         // match — a report deciding what happened from what it was about to write.
         List<String> said = new ArrayList<>();
         for (ItemAssessment.Attempt each : outcomes.worthSaying()) {
-            said.add(whatWasTried(each, shown, rendering, declaredIn));
+            said.add(whatWasTried(each, shown, page, declaredIn, places));
         }
         // One sentence per search, with the readings' own separator between them. Run together,
         // two searches of one reading read as one clause that says two things.
@@ -4934,7 +6572,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** The same, of one search of the point. */
     private static String whatWasTried(ItemAssessment.Attempt attempt,
                                        ConditionsShown shown,
-                                       SourceRendering rendering, SourceId declaredIn) {
+                                       Page page, SourceId declaredIn,
+                                       PublishedRuleHandle.WhereARuleIs places) {
         // One opening per outcome, and not one for everything that came back without a row. A
         // search this compiler stopped and a search that had everything and reached nothing are
         // different news, and a proof is not a failure at all — read under one opening, an author
@@ -4949,36 +6588,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And what it separately writes some of, where it does. Both are things the offer is
             // short of and only one is a number, so the second is said in its own clause rather
             // than folded into the figures or left out because a figure was there to name.
-            case ItemAssessment.Attempt.Stopped it ->
-                    " — this compiler stopped at " + Reasons.said(it.stoppedBy())
-                            + andWritesSomeOf(it.notAllOf()) + andCouldNotHold(it.unheld()) + ": "
-                            + saidOrWhy(it.why())
-                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+            case ItemAssessment.Attempt.Stopped it -> page.say(new ReportMessage.ThisCompilerStoppedAt(
+                    Reasons.said(it.stoppedBy(), page), andWritesSomeOf(it.notAllOf(), page),
+                    andCouldNotHold(it.unheld(), page),
+                    page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page, places)),
+                    alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
             // offer. What would change this is somebody writing the rest of what it walks, and the
             // sentence says so. And a number it could not hold is said in its own clause, since
             // what reaches it is a wider run or nothing.
-            case ItemAssessment.Attempt.Unexhausted it ->
-                    " — this compiler " + leftUntried(it.notAllOf(), it.unheld()) + ": "
-                            + saidOrWhy(it.why())
-                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+            case ItemAssessment.Attempt.Unexhausted it -> page.say(
+                    new ReportMessage.ThisCompilerLeftUntried(
+                            leftUntried(it.notAllOf(), it.unheld(), page),
+                            page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
+                                    places)),
+                            alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // Both halves, because neither says what the other does. The word is what the search
             // itself came to; the figure is why that word is not about the whole of the point. Said
             // as the word alone, an author reads a proof about a value this compiler never planned
             // for; said as the figure alone, they go looking for a search that stopped.
-            case ItemAssessment.Attempt.Limited it ->
-                    " — over less than the point had, which stops at "
-                            + Reasons.said(it.limitedBy()) + andWritesSomeOf(it.notAllOf())
-                            + andCouldNotHold(it.unheld()) + ": "
-                            + saidOrWhy(it.why())
-                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+            case ItemAssessment.Attempt.Limited it -> page.say(
+                    new ReportMessage.OverLessThanThePointHad(Reasons.said(it.limitedBy(), page),
+                            andWritesSomeOf(it.notAllOf(), page),
+                            andCouldNotHold(it.unheld(), page),
+                            page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
+                                    places)),
+                            alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
-            case ItemAssessment.Attempt.Unplanned it ->
-                    " — nothing was planned for it, because this compiler stops at "
-                            + Reasons.said(it.limitedBy())
-                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+            case ItemAssessment.Attempt.Unplanned it -> page.say(
+                    new ReportMessage.NothingWasPlannedForIt(Reasons.said(it.limitedBy(), page),
+                            alsoLeftOut(it.unaccountedFor(), shown, page, declaredIn)));
             // What the search was over comes first here, and only here. Every outcome above opens
             // on something of this compiler's — a figure it stopped at, a population it writes
             // some of, a plan it never made — so a reader of one of those already knows the word
@@ -4995,11 +6636,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what a search with them in would have found is not something to say — and the word
             // that follows keeps saying an empty search does not make the point unreachable.
             case ItemAssessment.Attempt.Unresolved it -> {
-                String word = (it.why().reason().provesInfeasible() ? "" : "nothing composed one: ")
-                        + saidOrWhy(it.why());
+                String said = page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
+                        places));
+                String word = it.why().reason().provesInfeasible() ? said
+                        : page.say(new ReportMessage.NothingComposedOne(said));
                 String leftOut =
-                        whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
-                yield " — " + (leftOut.isEmpty() ? word : leftOut + "; " + word);
+                        whatTheRegionLeftOut(it.unaccountedFor(), shown, page, declaredIn);
+                yield " — " + (leftOut.isEmpty() ? word : reasons(page, List.of(leftOut, word)));
             }
         };
     }
@@ -5013,11 +6656,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * word beside it is not the whole of the point, so what the way left out reads after it; an
      * outcome that opens on what the search came to has not, and puts the same clause first.
      */
-    private static String alsoLeftOut(
+    private static Message alsoLeftOut(
             List<ConditionGap> left, ConditionsShown shown,
-            SourceRendering rendering, SourceId declaredIn) {
-        String said = whatTheRegionLeftOut(left, shown, rendering, declaredIn);
-        return said.isEmpty() ? "" : "; " + said;
+            Page page, SourceId declaredIn) {
+        String said = whatTheRegionLeftOut(left, shown, page, declaredIn);
+        return said.isEmpty() ? new ReportMessage.Nothing() : new ReportMessage.AlsoLeftOut(said);
     }
 
     /**
@@ -5035,9 +6678,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static String whatTheRegionLeftOut(
             List<ConditionGap> left, ConditionsShown shown,
-            SourceRendering rendering, SourceId declaredIn) {
-        return whatWasLeftOut("line", left, shown, rendering, declaredIn);
+            Page page, SourceId declaredIn) {
+        return page.say(whatWasLeftOut(WhatWasLeftOut.OF_A_LINE, left, shown, page,
+                declaredIn));
     }
+
+    /** What a way led to that the conditions on it were left out of the composing for. */
+    private enum WhatWasLeftOut { OF_A_LINE, OF_A_RULE }
 
     /**
      * The same, of a way to whatever a caller was searching for.
@@ -5048,16 +6695,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>Each thing to say once, with the calls of a helper it was met at ({@link #saidOnce}).
      */
-    private static String whatWasLeftOut(
-            String toWhat, List<ConditionGap> gaps, ConditionsShown shown,
-            SourceRendering rendering, SourceId declaredIn) {
+    private static Message whatWasLeftOut(
+            WhatWasLeftOut toWhat, List<ConditionGap> gaps, ConditionsShown shown,
+            Page page, SourceId declaredIn) {
         if (gaps.isEmpty()) {
-            return "";
+            return new ReportMessage.Nothing();
         }
-        return "not every condition on the way to the " + toWhat
-                + " is one the row was composed against: "
-                + String.join(", ", saidOnce(gaps, shown::copiesOf, shown.places(), rendering,
-                        declaredIn));
+        Message said = Joined.listed(saidOnce(gaps, shown::copiesOf, shown.places(), page,
+                declaredIn));
+        return switch (toWhat) {
+            case OF_A_LINE -> new ReportMessage.NotEveryConditionOnTheWayToTheLine(said);
+            case OF_A_RULE -> new ReportMessage.NotEveryConditionOnTheWayToTheRule(said);
+        };
     }
 
     /**
@@ -5083,45 +6732,58 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param copiesOf each copy what a gap is about was read off, with where its construct is
      *                 written and the calls it was made at
      */
-    private static List<String> saidOnce(List<ConditionGap> gaps,
-                                         Function<ConditionGap, List<CopyShown>> copiesOf,
-                                         Map<ConditionReportAnchor, Citation> places,
-                                         SourceRendering rendering, SourceId declaredIn) {
+    private static List<Message> saidOnce(List<ConditionGap> gaps,
+                                          Function<ConditionGap, List<CopyShown>> copiesOf,
+                                          Map<ConditionReportAnchor, Citation> places,
+                                          Page page, SourceId declaredIn) {
+        return List.copyOf(saidOnceBy(gaps, copiesOf, places, page, declaredIn).values());
+    }
+
+    /** The same, each under the key that made it one: what finds the entry a gap is told in. */
+    private static Map<SaidAlike, Message> saidOnceBy(
+            List<ConditionGap> gaps, Function<ConditionGap, List<CopyShown>> copiesOf,
+            Map<ConditionReportAnchor, Citation> places,
+            Page page, SourceId declaredIn) {
+        SourceRendering rendering = page.rendering();
         // For each sentence, every place it was asked at, the gap's own first, with the calls of
         // each: one condition consulted at two places is one sentence that sends a reader to both.
-        Map<SaidAlike, Map<String, Set<String>>> where = new LinkedHashMap<>();
+        Map<SaidAlike, Map<String, Set<Message>>> where = new LinkedHashMap<>();
         Map<SaidAlike, ConditionGap> first = new LinkedHashMap<>();
         for (ConditionGap gap : gaps) {
             SaidAlike key = SaidAlike.of(gap);
             first.putIfAbsent(key, gap);
-            Map<String, Set<String>> at = where.computeIfAbsent(key, _ -> new LinkedHashMap<>());
+            Map<String, Set<Message>> at =
+                    where.computeIfAbsent(key, _ -> new LinkedHashMap<>());
             Citation written = places.get(gap.anchor());
             String own = written == null ? "" : written.said(rendering, declaredIn);
             at.computeIfAbsent(own, _ -> new LinkedHashSet<>());
             for (CopyShown copy : copiesOf.apply(gap)) {
                 String place = copy.written() == null ? own
                         : copy.written().said(rendering, declaredIn);
-                Set<String> calls = at.computeIfAbsent(place, _ -> new LinkedHashSet<>());
+                Set<Message> calls = at.computeIfAbsent(place, _ -> new LinkedHashSet<>());
                 if (!copy.calls().isEmpty()) {
-                    calls.add(chain(copy.calls(), rendering, declaredIn));
+                    calls.add(chained(copy.calls(), page, declaredIn));
                 }
             }
         }
-        List<String> out = new ArrayList<>();
+        Map<SaidAlike, Message> out = new LinkedHashMap<>();
         first.forEach((key, gap) -> {
-            List<String> said = new ArrayList<>();
+            List<Message> said = new ArrayList<>();
             where.get(key).forEach((place, calls) -> {
-                String in = calls.isEmpty() ? "" : "in " + String.join(", ", calls);
-                if (place.isEmpty() || in.isEmpty()) {
-                    if (!(place + in).isEmpty()) {
-                        said.add(place + in);
+                if (calls.isEmpty()) {
+                    if (!place.isEmpty()) {
+                        said.add(new ReportMessage.Verbatim(place));
                     }
                 } else {
-                    said.add(place + " " + in);
+                    Message in = Joined.listed(List.copyOf(calls));
+                    said.add(place.isEmpty() ? new ReportMessage.InCalls(in)
+                            : new ReportMessage.PlaceInCalls(new ReportMessage.Verbatim(place),
+                                    in));
                 }
             });
-            out.add(whyLeftOut(gap) + (said.isEmpty() ? "" : " (" + String.join(", ", said)
-                    + ")"));
+            Message why = whyLeftOut(gap);
+            out.put(key, said.isEmpty() ? why
+                    : new ReportMessage.WhyLeftOutAt(why, Joined.listed(said)));
         });
         return out;
     }
@@ -5138,7 +6800,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * is what these sentences are — a way added with nothing to say would be one an author meets as
      * whichever sentence the arm beside it had.
      */
-    static String whyLeftOut(ConditionGap gap) {
+    static Message whyLeftOut(ConditionGap gap) {
         return switch (gap) {
             case ConditionGap.OfTheInput(var of) -> whatTheInputSideLeftOut(of);
             case ConditionGap.OfADemand(var of) -> whatTheAnswerSideLeftOut(of);
@@ -5152,49 +6814,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * positions of the row, and an author told that a condition is over positions nothing composed
      * a value at would go looking for positions the condition is not over.
      */
-    private static String whatTheAnswerSideLeftOut(DemandGap gap) {
+    private static Message whatTheAnswerSideLeftOut(DemandGap gap) {
         return switch (gap) {
             case DemandGap.Unstated(var _, var why) -> switch (why) {
                 case DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer _ ->
-                        "a comparison over more than one answer, which nothing here composes"
-                                + " values to together";
+                        new ReportMessage.AComparisonOverMoreThanOneAnswer();
                 case DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder _ ->
-                        "a place on the order an answer's own values stand on";
+                        new ReportMessage.APlaceOnTheAnswersOwnOrder();
                 case DemandGap.WhyNotStated.AStatementOfSeveralParts _ ->
-                        "a statement about an answer that is also about another answer, a value"
-                                + " the body works out, or a value of the input other than its"
-                                + " numbers, which nothing here composes values to together";
+                        new ReportMessage.AStatementAboutSeveralAnswers();
             };
             case DemandGap.Uncomposed(var _, var why) -> switch (why) {
                 // The term the region named is not said. What it is spelled in is the subject the
                 // answer was composed over, whose head is a name of this reading's own — put in
                 // front of an author, it would name a position nothing in the model is called.
                 case DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer _ ->
-                        "a comparison of places inside an answer whose values stand on no order"
-                                + " this measures them on";
+                        new ReportMessage.AComparisonInsideAnAnswerOnNoOrder();
                 case DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _ ->
-                        "a condition on places inside an answer nothing here composed a value at";
+                        new ReportMessage.AConditionInsideAnAnswerWithNoValue();
                 case DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer _ ->
-                        "a condition on what a dependency answers, which nothing here composed a"
-                                + " value of";
+                        new ReportMessage.AConditionOnADependencyWithNoValue();
                 case DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded(var figures) ->
-                        "a condition on what a dependency answers and a number of the input —"
-                                + " this compiler stopped looking at the values of that number at "
-                                + Reasons.said(figures);
+                        new ReportMessage.AConditionOnADependencyAndANumber(
+                                Reasons.budgets(figures));
                 case DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(var figures) ->
-                        "a condition on places inside an answer that asks of more ways than this"
-                                + " compiler looks along — it stopped splitting at "
-                                + Reasons.said(figures);
+                        new ReportMessage.AConditionInsideAnAnswerOverMoreWays(
+                                Reasons.budgets(figures));
                 case DemandGap.WhyNotComposed.OneValueAnswersEveryCall _ ->
-                        "a condition on what a dependency answers at one call, where the row"
-                                + " writes one value for every call it makes";
+                        new ReportMessage.AConditionOnOneCall();
             };
         };
     }
 
-    private static String whatTheInputSideLeftOut(ReachabilityGap gap) {
+    private static Message whatTheInputSideLeftOut(ReachabilityGap gap) {
         return switch (gap) {
-            case ReachabilityGap.Unstated(var condition) -> String.join("; ",
+            case ReachabilityGap.Unstated(var condition) -> Joined.reasons(
                     condition.whys().stream().map(AdequacyReport::whyDeclined).toList());
             // The model's word and not this compiler's. Every other sentence here says what was not
             // managed and leaves the condition owed; this one says the rules leave nothing, which is
@@ -5205,93 +6859,93 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // when they are told is where the proof was met rather than what it is about — so a
             // sentence naming this one as the impossible condition would say more than was shown.
             case ReachabilityGap.ProvedImpossible _ ->
-                    "a condition on a way whose conditions leave nothing standing together";
+                    new ReportMessage.AConditionOnAWayThatLeavesNothing();
             // What stopped the looking, as a figure is said: raising it looks along each way.
             case ReachabilityGap.LookedAlongWhole(var _, var figure) ->
-                    "a condition that is one of several things, past which a row was looked for"
-                            + " along the whole way and not along each of them ("
-                            + Reasons.said(PublicationOrders.COMPOSITION_BUDGETS.keep(
-                                    List.of(figure))) + ")";
+                    new ReportMessage.LookedForAlongTheWholeWay(Reasons.budgets(
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(List.of(figure))));
             case ReachabilityGap.Uncomposed(var _, var why) ->
                     switch (why) {
                         case ReachabilityGap.Why
                                 .NoValueComposedForItsPositions _ ->
-                                "a condition on positions nothing here composed a value at";
+                                new ReportMessage.AConditionOnPositionsWithNoValue();
                         case ReachabilityGap.Why
                                 .TwoNumbersAtOneLocation _ ->
-                                "a condition on another number taken where this row is already"
-                                        + " being written for one";
+                                new ReportMessage.AnotherNumberWhereTheRowIsWritten();
                         // Not that the rules leave nothing: rows whose elements differ were not
                         // looked through, and an author may well write one.
                         case ReachabilityGap.Why.ElementsWrittenAlike _ ->
-                                "a condition on a container's elements that no row of elements"
-                                        + " written alike meets";
+                                new ReportMessage.ElementsWrittenAlike();
                         // Asked of the run and of nothing composed: the condition was read to the
                         // end, and what is missing is a composer for its kind — with where the
                         // reading of what its values were made from stopped, which is what a row
                         // would have to be composed past.
                         case ReachabilityGap.Why.NoComposerWritesIt(var what, var past) ->
-                                "a condition the run decides, since nothing here composes a row"
-                                        + " for " + switch (what) {
+                                new ReportMessage.AConditionTheRunDecides(switch (what) {
                                     case A_VALUE_THE_BODY_WORKS_OUT ->
-                                            "a value the body works out, which no position holds";
+                                            new ReportMessage.AValueTheBodyWorksOut();
                                     case A_VALUE_AN_OPERATION_ANSWERS ->
-                                            "what an operation answers of the input, which no"
-                                                    + " position holds";
+                                            new ReportMessage.WhatAnOperationAnswers();
                                     case A_COUNT_OF_ELEMENTS ->
-                                            "how many elements of a container meet something";
+                                            new ReportMessage.ACountOfElements();
                                     case A_COUNT_AGAINST_A_NUMBER_NOT_HELD ->
-                                            "a count of elements held against a number with no"
-                                                    + " exact representation";
+                                            new ReportMessage.ACountAgainstANumberNotHeld();
                                     case A_COUNT_WITHIN_AN_ELEMENT ->
-                                            "how many elements of a container inside an"
-                                                    + " element of another meet something";
+                                            new ReportMessage.ACountWithinAnElement();
                                     case A_NUMBER_OVER_ELEMENTS ->
-                                            "how many different values the elements of a"
-                                                    + " container come to, or what a number of"
-                                                    + " each adds up to";
+                                            new ReportMessage.ANumberOverElements();
                                     case A_REMAINDER_OF_A_FORM ->
-                                            "what a division leaves of a form of several"
-                                                    + " numbers";
+                                            new ReportMessage.ARemainderOfAForm();
                                     case A_REMAINDER_BY_AN_INPUT ->
-                                            "what one number leaves of another divided by it";
+                                            new ReportMessage.ARemainderByAnInput();
                                     case A_PRODUCT_OF_TWO_NUMBERS ->
-                                            "what two numbers come to multiplied";
-                                    case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
+                                            new ReportMessage.AProductOfTwoNumbers();
+                                    case TWO_SUBJECTS_ONE_VALUE ->
+                                            new ReportMessage.TwoValuesBeingOne();
+                                    case A_STRING_IN_A_LANGUAGE ->
+                                            new ReportMessage.AStringInALanguage();
+                                    case A_STRING_INSIDE_ANOTHER ->
+                                            new ReportMessage.AStringInsideAnother();
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
-                                            "a place on an order of a term that is no one"
-                                                    + " position";
-                                } + (past.isEmpty() ? "" : ", made from what the reading stopped"
-                                        + " at: " + String.join("; ", past.stream()
-                                                .map(AdequacyReport::whyNotRead).toList()));
+                                            new ReportMessage.AnOrderOfNoOnePosition();
+                                }, past.isEmpty() ? new ReportMessage.Nothing()
+                                        : new ReportMessage.MadeFromWhatTheReadingStoppedAt(
+                                                Joined.reasons(past.stream()
+                                                        .map(AdequacyReport::whyNotRead)
+                                                        .toList())));
                         // What stopped the looking, and not that nothing was found. An author does
                         // nothing about the first and may do something about the second.
                         // A value it could not hold is said after the figures and apart from them,
                         // since raising a figure does not reach it.
                         case ReachabilityGap.Why
                                 .TheWalkForItsPositionsWasStopped(var by, var writes, var unheld) ->
-                                "a condition on positions this compiler stopped looking at ("
-                                        + stoppedAt(by, writes, unheld) + ")";
+                                new ReportMessage.PositionsThisCompilerStoppedLookingAt(
+                                        stoppedAt(by, writes, unheld));
                     };
         };
     }
 
+
     /** The figures a walk met, the populations it wrote some of, and the values it could not
      *  hold, each in its own words, figures first. */
-    private static String stoppedAt(CanonicalSelection<CompositionBudget> by,
-                                    CanonicalSelection<CompositionRepertoire> writes,
-                                    CanonicalSelection<CompositionCapacity> unheld) {
-        List<String> out = new ArrayList<>();
+    private static Message stoppedAt(CanonicalSelection<CompositionBudget> by,
+                                     CanonicalSelection<CompositionRepertoire> writes,
+                                     CanonicalSelection<CompositionCapacity> unheld) {
+        List<Message> out = new ArrayList<>();
         if (!by.isEmpty()) {
-            out.add(Reasons.said(by));
+            out.add(Reasons.budgets(by));
         }
         if (!writes.isEmpty()) {
-            out.add("writes some of " + Reasons.writes(writes) + " rather than all of them");
+            out.add(new ReportMessage.WritesSomeOf(Reasons.populations(writes)));
         }
         if (!unheld.isEmpty()) {
-            out.add("could not hold " + Reasons.unheld(unheld));
+            out.add(new ReportMessage.CouldNotHold(Reasons.capacities(unheld)));
         }
-        return String.join("; and ", out);
+        Message said = out.getLast();
+        for (int i = out.size() - 2; i >= 0; i--) {
+            said = new ReportMessage.AndAlso(out.get(i), said);
+        }
+        return said;
     }
 
     /**
@@ -5301,31 +6955,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * stop that also wrote some of a population is a point where raising the figure is worth doing
      * and is not the whole of what is missing.
      */
-    private static String andWritesSomeOf(
-            CanonicalSelection<CompositionRepertoire> repertoires) {
-        return repertoires.isEmpty() ? ""
-                : ", and writes some of " + Reasons.writes(repertoires)
-                        + " rather than all of them";
+    private static Message andWritesSomeOf(
+            CanonicalSelection<CompositionRepertoire> repertoires, Page page) {
+        return repertoires.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.AndWritesSomeOf(Reasons.writes(repertoires, page));
     }
 
     /** What a search with no figure to name left untried: what it writes some of and what it
      *  could not hold, each in its own clause. */
     private static String leftUntried(CanonicalSelection<CompositionRepertoire> repertoires,
-                                      CanonicalSelection<CompositionCapacity> capacities) {
+                                      CanonicalSelection<CompositionCapacity> capacities,
+                                      Page page) {
         List<String> out = new ArrayList<>();
         if (!repertoires.isEmpty()) {
-            out.add("writes some of " + Reasons.writes(repertoires) + " rather than all of them");
+            out.add(page.say(new ReportMessage.WritesSomeOf(Reasons.populations(repertoires))));
         }
         if (!capacities.isEmpty()) {
-            out.add("could not hold " + Reasons.unheld(capacities));
+            out.add(page.say(new ReportMessage.CouldNotHold(Reasons.capacities(capacities))));
         }
-        return String.join(", and ", out);
+        return also(page, out);
     }
 
     /** What a search also could not hold, said after whatever came before it, or nothing. Its own
      *  clause for the reason the one above has one: no figure reaches it. */
-    private static String andCouldNotHold(CanonicalSelection<CompositionCapacity> capacities) {
-        return capacities.isEmpty() ? "" : ", and could not hold " + Reasons.unheld(capacities);
+    private static Message andCouldNotHold(CanonicalSelection<CompositionCapacity> capacities,
+                                           Page page) {
+        return capacities.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.AndCouldNotHold(Reasons.unheld(capacities, page));
     }
 
     /**
@@ -5338,7 +6994,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * not read" for all of them is the vocabulary being kept apart in the compiler and put back
      * together on the way out.
      */
-    private static String whyDeclined(WhyNotTaken why) {
+    private static Message whyDeclined(WhyNotTaken why) {
         // Noun phrases, because what the line above them says is "not every condition ... is
         // represented", and each of these names one of those conditions. Written as sentences, the
         // place in brackets after them lands after a verb and reads as part of what is being said
@@ -5349,46 +7005,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // missing is in the domain. An author acts on the types here rather than on how the
             // condition was written.
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> switch (limit) {
-                case A_QUANTITY_ON_NO_ORDER ->
-                        "a comparison whose quantity stands on no order this compiler measures";
-                case A_PATH_KNOWS_NO_ALTERNATIVES -> "a condition that comes to one of several"
-                        + " things, or to some element, which no fact a path knows says";
-                case AN_ANSWER_A_ROW_STANDS_IN -> "a condition on what a dependency answered,"
-                        + " which a row stands in rather than writes";
-                case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "a search that some node further down"
-                        + " than a row is written meets the condition";
-                case A_PLACE_THE_PATH_DOES_NOT_READ -> "a condition on a place the path does not"
-                        + " read";
-                case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "a value being none of some cases,"
-                        + " which a path knows only as the cases it may still be";
-                case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "two values being one, which no fact a"
-                        + " path knows says";
-                case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "a place on an order no range says,"
-                        + " which no fact a path knows says";
-                case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "how many elements of a container meet"
-                        + " something, which no fact a path knows says";
-                case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS -> "how many different values the"
-                        + " elements of a container come to, or what a number of each adds up to,"
-                        + " which no fact a path knows says";
-                case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "what every element meets, which a"
-                        + " path holds only as the closure it was written with";
-                case A_NUMBER_THE_PATH_CANNOT_HOLD -> "a relation of numbers whose weights, added"
-                        + " on what a path knows, come to a number the exact arithmetic could not"
-                        + " hold";
+                case A_QUANTITY_ON_NO_ORDER -> new ReportMessage.AQuantityOnNoOrder();
+                case A_PATH_KNOWS_NO_ALTERNATIVES -> new ReportMessage.APathKnowsNoAlternatives();
+                case AN_ANSWER_A_ROW_STANDS_IN -> new ReportMessage.AnAnswerARowStandsIn();
+                case A_NODE_BELOW_WHAT_A_ROW_WRITES ->
+                        new ReportMessage.ANodeBelowWhatARowWrites();
+                case ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS ->
+                        new ReportMessage.AnotherElementThanTheWayHolds();
+                case A_PLACE_THE_PATH_DOES_NOT_READ ->
+                        new ReportMessage.APlaceThePathDoesNotRead();
+                case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT ->
+                        new ReportMessage.APathKnowsNoCaseAValueIsNot();
+                case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES ->
+                        new ReportMessage.APathKnowsNoSamenessOfValues();
+                case A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER ->
+                        new ReportMessage.APathKnowsNoStringInsideAnother();
+                case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER ->
+                        new ReportMessage.APathKnowsNoPlaceOnAnOrder();
+                case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS ->
+                        new ReportMessage.APathKnowsNoCountOfElements();
+                case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS ->
+                        new ReportMessage.APathKnowsNoNumberOverElements();
+                case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN ->
+                        new ReportMessage.APathHoldsElementFactsAsWritten();
+                case A_NUMBER_THE_PATH_CANNOT_HOLD -> new ReportMessage.ANumberThePathCannotHold();
             };
             // Its own words: the rule was read and a row has words for it, and raising a figure
             // lifts it.
-            case WhyNotTaken.MoreWaysThanAreRead _ -> "a condition on some or every element that"
-                    + " comes to more ways an element may meet it than this compiler takes one by"
-                    + " one";
+            case WhyNotTaken.MoreWaysThanAreRead _ -> new ReportMessage.MoreWaysThanAreTaken();
             // The same kind: read, in a path's words, and stopped at a figure.
-            case WhyNotTaken.MoreAlternativesThanAreTried _ -> "a condition that is one of"
-                    + " several things, inside one another past "
-                    + CompositionBudget.ALTERNATIVES_A_PATH_TRIES.counts();
+            case WhyNotTaken.MoreAlternativesThanAreTried(Figure stoppedAt) ->
+                    new ReportMessage.MoreAlternativesThanAreTried(stoppedAt.countsSaid());
             // The same kind: read, and taken apart into choices past a figure.
-            case WhyNotTaken.MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
-                    "a condition counting how many of some statements hold, taken apart into the"
-                            + " choices of which do, past " + figure.counts();
+            case WhyNotTaken.MoreChoicesThanAreWrittenOut(Figure.Budget stoppedAt) ->
+                    new ReportMessage.MoreChoicesThanAreWrittenOut(stoppedAt.countsSaid());
         };
     }
 
@@ -5399,97 +7049,85 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * find in what they wrote. Which law or which step of composing it was missing is the
      * compiler's own account and is not said here.
      */
-    private static String whyNotRead(WhyUnread why) {
+    private static Message whyNotRead(WhyUnread why) {
         return switch (why) {
             case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place what) -> switch (what) {
-                case CONTAINER -> "a condition about what a container holds, over a container that"
-                        + " stands at no position";
-                case VALUE -> "a condition about whether a container holds a value, where the value"
-                        + " stands at no position";
-                case SCRUTINEE ->
-                        "an arm of a fork this reading could not read as a narrowing of a position";
-                case SUBJECT -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+                case CONTAINER -> new ReportMessage.AContainerAtNoPosition();
+                case VALUE -> new ReportMessage.AValueAtNoPosition();
+                case STRING -> new ReportMessage.AStringOfNoInput();
+                case SCRUTINEE -> new ReportMessage.AnArmNotReadAsANarrowing();
+                case SUBJECT -> new ReportMessage.NeitherAComparisonNorACombination();
             };
-            case WhyUnread.NoMeasureOfItsSize _ ->
-                    "a condition about what a container holds that comes to how many it holds,"
-                            + " which is no number this reading measures";
+            case WhyUnread.NoMeasureOfItsSize _ -> new ReportMessage.HowManyAContainerHolds();
             case WhyUnread.OutsideTheLinearFragment(var operation) -> switch (operation) {
-                case PRODUCT_OF_NON_CONSTANT_VALUES -> "a comparison over a product of two values"
-                        + " that are not constants, which no linear form says";
-                case DIVISION_BY_NON_CONSTANT_VALUE -> "a comparison over a quotient by a value"
-                        + " that is not a constant, which no linear form says";
-                case REMAINDER_BY_NON_CONSTANT_VALUE -> "a comparison over a remainder by a value"
-                        + " that is not a constant, which has no period";
+                case PRODUCT_OF_NON_CONSTANT_VALUES -> new ReportMessage.AProductOfNonConstants();
+                case DIVISION_BY_NON_CONSTANT_VALUE -> new ReportMessage.AQuotientByANonConstant();
+                case REMAINDER_BY_NON_CONSTANT_VALUE ->
+                        new ReportMessage.ARemainderByANonConstant();
             };
-            case WhyUnread.NotArithmetic _ -> "a comparison over something that is no arithmetic,"
-                    + " which no linear form says";
-            case WhyUnread.ANumberNotHeld _ -> "a comparison over a number worked out exactly and"
-                    + " too large to hold";
-            case WhyUnread.NoNumberOnARun _ -> "a comparison over a quotient by nought, which no"
-                    + " run has a number for";
-            case WhyUnread.NoFormOfWhatItAnswers(var operation) -> "a comparison over what "
-                    + operation.qualified() + " answers, which the library states no form of";
+            case WhyUnread.NotArithmetic _ -> new ReportMessage.SomethingThatIsNoArithmetic();
+            case WhyUnread.ANumberNotHeld _ -> new ReportMessage.ANumberTooLargeToHold();
+            case WhyUnread.NoNumberOnARun _ -> new ReportMessage.AQuotientByNought();
+            case WhyUnread.NoFormOfWhatItAnswers(var operation) ->
+                    new ReportMessage.WhatItAnswersHasNoForm(operation.qualified());
             case WhyUnread.ANumberOfWhatAnOperationAnswers(var measure, var madeBy) ->
-                    "a comparison over " + measure.qualified() + " of what " + madeBy.qualified()
-                            + " answers, which the library states no law of";
-            case WhyUnread.CodePointsOfWhatAnOperationAnswers(var madeBy) -> "a comparison over"
-                    + " how many code points of a class what " + madeBy.qualified() + " answers"
-                    + " holds, which the library states no law of";
-            case WhyUnread.TwoElementsOfOneContainer _ -> "a condition on two elements of one"
-                    + " container at once";
-            case WhyUnread.NoLawFor(var operation, var _) -> "a condition on what "
-                    + operation.qualified() + " answers, whose declaration gives it no such side";
-            case WhyUnread.NotProvedOfItsBody(var operation, var _) -> "a condition on what "
-                    + operation.qualified() + " answers, whose law is stated and not proved of"
-                    + " its body";
-            case WhyUnread.WhatARecursiveHelperAnswers _ -> "a condition on what a recursive"
-                    + " helper answers";
-            case WhyUnread.AClauseOfAnInvariant(var clause, var how) -> "an arm of an attempt,"
-                    + " decided by a clause of `" + clause.id().declaredOn().name() + "`"
-                    + clause.name().map(name -> " named `" + name + "`").orElse("") + switch (how) {
-                        case NO_FORM -> ", which this compiler has no form for";
-                        case A_FIELD_LEFT_OUT -> ", which reads a field the construction leaves out";
-                    };
-            case WhyUnread.AnInvariantNotReached _ -> "an arm of an attempt, decided by an"
-                    + " invariant whose declarations were not all reached";
-            case WhyUnread.InACalledBody(var what) -> "what another behavior answers, "
-                    + switch (what) {
-                        case WHAT_ITS_DEPENDENCY_ANSWERS -> "turning on what its own dependency"
-                                + " answers";
-                        case ITSELF -> "which reaches itself while it is read";
-                        case AN_ANSWER_NOT_READ -> "whose body was not read";
-                    };
+                    new ReportMessage.ANumberOfWhatItAnswersHasNoLaw(measure.qualified(),
+                            madeBy.qualified());
+            case WhyUnread.ADateMovedByMonths(var operation) ->
+                    new ReportMessage.ADateMovedByMonths(operation.qualified());
+            case WhyUnread.APartOfADateMovedByMonths(var measure, var madeBy) ->
+                    new ReportMessage.APartOfADateMovedByMonths(measure.qualified(),
+                            madeBy.qualified());
+            case WhyUnread.CodePointsOfWhatAnOperationAnswers(var madeBy) ->
+                    new ReportMessage.CodePointsOfWhatItAnswers(madeBy.qualified());
+            case WhyUnread.TwoElementsOfOneContainer _ ->
+                    new ReportMessage.TwoElementsOfOneContainer();
+            case WhyUnread.NoLawFor(var operation, var _) ->
+                    new ReportMessage.ItsDeclarationGivesItNoSuchSide(operation.qualified());
+            case WhyUnread.NotProvedOfItsBody(var operation, var _) ->
+                    new ReportMessage.ItsLawIsNotProvedOfItsBody(operation.qualified());
+            case WhyUnread.WhatARecursiveHelperAnswers _ ->
+                    new ReportMessage.WhatARecursiveHelperAnswers();
+            case WhyUnread.AClauseOfAnInvariant(var clause, var how) -> {
+                Message which = clause.name().<Message>map(name ->
+                                new ReportMessage.AClauseNamed(clause.id().declaredOn().name(),
+                                        name.value()))
+                        .orElse(new ReportMessage.AClauseOf(clause.id().declaredOn().name()));
+                yield switch (how) {
+                    case NO_FORM -> new ReportMessage.AnArmDecidedByAClauseWithNoForm(which);
+                    case A_FIELD_LEFT_OUT ->
+                            new ReportMessage.AnArmDecidedByAClauseReadingAFieldLeftOut(which);
+                };
+            }
+            case WhyUnread.AnInvariantNotReached _ -> new ReportMessage.AnInvariantNotReached();
+            case WhyUnread.WhatACalledBehaviorAnswers _ ->
+                    new ReportMessage.WhatACalledBehaviorAnswers();
             // Its own words: what the condition comes to is known, and it is the domain that has
             // no words for it.
             case WhyUnread.NoWordsFor(var operation, var _, var proposition) ->
-                    "a condition on what " + operation.qualified() + " answers, which comes to "
-                            + proposition.proposition() + " — no condition here says that";
+                    new ReportMessage.NoConditionHereSaysThat(operation.qualified(),
+                            proposition.proposition());
             // Its own words: nothing the author wrote is wanting, and raising a figure lifts it.
-            case WhyUnread.MoreReadingsThanAreMade _ -> "a condition that would be read once for each"
-                    + " of more values or cases than this compiler reads one by one";
-            case WhyUnread.MoreTotalReadingsThanAreMade _ -> "a condition whose values or cases,"
-                    + " counted along every way together, come to more readings than this compiler"
-                    + " makes of one condition";
-            case WhyUnread.MorePartsThanAreConcluded _ -> "a condition whose statement, with"
-                    + " every part written out as often as it is held, comes to more parts than"
-                    + " this compiler concludes one step of a reading with";
-            case WhyUnread.MoreElementsThanAreWrittenOut _ -> "a condition about a container"
-                    + " holding more than this compiler writes out one element at a time";
+            case WhyUnread.MoreReadingsThanAreMade _ ->
+                    new ReportMessage.MoreValuesThanAreReadOneByOne();
+            case WhyUnread.MoreTotalReadingsThanAreMade _ ->
+                    new ReportMessage.MoreReadingsInAllThanAreMade();
+            case WhyUnread.MorePartsThanAreConcluded _ ->
+                    new ReportMessage.MorePartsThanAStepConcludes();
+            case WhyUnread.MoreWaysThanAreWrittenOut _ ->
+                    new ReportMessage.MoreWaysOfKeepingElements();
+            case WhyUnread.MoreElementsThanAreWrittenOut _ ->
+                    new ReportMessage.MoreElementsThanAreWrittenOut();
             // Not a figure: nothing was counted, and the reading did not go in.
-            case WhyUnread.SeveralValuesNotGoneInto _ -> "a condition over a value that is one of"
-                    + " several, which this reading did not read on each of them";
-            case WhyUnread.CopiesStateDifferentThings _ -> "a condition of a helper that states"
-                    + " different things where the helper is written";
-            case WhyUnread.NotMetByTheReading _ -> "a condition the reading of what conditions"
-                    + " mean did not meet";
-            case WhyUnread.WhichElementARunStopsAt _ -> "a condition over the elements of a"
-                    + " container, where what is stated of one answers nothing on some rows and"
-                    + " nothing here says which element a run reaches first";
+            case WhyUnread.SeveralValuesNotGoneInto _ ->
+                    new ReportMessage.AValueThatIsOneOfSeveral();
+            case WhyUnread.CopiesStateDifferentThings _ ->
+                    new ReportMessage.AHelperThatStatesDifferentThings();
+            case WhyUnread.NotMetByTheReading _ -> new ReportMessage.AConditionTheReadingDidNotMeet();
+            case WhyUnread.WhichElementARunStopsAt _ ->
+                    new ReportMessage.WhichElementARunReachesFirst();
         };
     }
-
-    private static final String NEITHER_A_COMPARISON_NOR_A_COMBINATION =
-            "a condition that is neither a comparison nor a combination of them";
 
     /**
      * What a search that came to nothing said of itself, and the category it came back with where
@@ -5498,94 +7136,77 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>The one reading for every sentence about such a search. A reader that wrote the category
      * alone would drop the one part an author can act on.
      */
-    private static String saidOrWhy(Generator.UnresolvedCombination why) {
-        return why.said().orElseGet(() -> whyUnresolved(why));
+    private static Message saidOrWhy(Generator.UnresolvedCombination why) {
+        return why.told().<Message>map(told -> told).orElseGet(() -> whyUnresolved(why));
     }
 
     /** The category a search came back with, where the class it was about said nothing itself. */
-    static String whyUnresolved(Generator.UnresolvedCombination why) {
+    static Message whyUnresolved(Generator.UnresolvedCombination why) {
         String at = why.subject();
         return switch (why.reason()) {
-            case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
-            case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
+            case NOTHING_COMPOSES_ONE -> new ReportMessage.NothingCouldBuildARepresentative(at);
+            case ALL_CANDIDATES_REJECTED -> new ReportMessage.EveryValueTriedWasRefused(at);
             // The same refusals and one claim fewer. A rule about the position composed nothing, so
             // what was tried came from the rules beside it — and an author told the line above
             // would go looking for the rule that refuses those values, which is not what happened.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried at " + at + " was refused, but the values offered were not"
-                            + " shown to be exhaustive";
+                    new ReportMessage.EveryValueTriedWasRefusedOfSome(at);
             // What the row is short of, and not what the model is short of. A row that stands
             // nothing in for a dependency its target requires is one nothing applies, so it is
             // held back rather than handed over to be pasted and refused.
             case NOTHING_STANDS_IN_FOR_A_DEPENDENCY ->
-                    "nothing here could answer for a behavior " + at + " depends on, and a row"
-                            + " that stands none in is a row nothing applies";
+                    new ReportMessage.NothingCouldAnswerForADependency(at);
             // What this compiler does not write, and not what the model cannot have. An author
             // writes such an environment by hand, so the sentence says what it would be.
-            case A_TABLE_IS_WHAT_THIS_NEEDS ->
-                    at + " needs a behavior it depends on to answer by what it was applied to,"
-                            + " which is a table written for the module and not a line on a row";
+            case A_TABLE_IS_WHAT_THIS_NEEDS -> new ReportMessage.ATableIsWhatThisNeeds(at);
             // Not "stopped", which is one of the two ways a search leaves something untried and is
             // the only one with a number in it. Said as a stop, a walk that went to the end of what
             // this compiler writes is reported as one that halted, and an author looks for the
             // figure that halted it.
             case THE_SEARCH_LEFT_SOMETHING_UNTRIED ->
-                    "the search left something untried before reaching " + at;
+                    new ReportMessage.TheSearchLeftSomethingUntried(at);
             // What is missing here, and not what cannot exist. The combinations are there and this
             // declined to walk them, so a reader is told the offer was not made rather than that
             // nothing reaches the arm — and told that raising the row budget is not what lifts it.
-            case THE_GROUP_WAS_NOT_OFFERED ->
-                    "the decisions that settle " + at + " have more combinations together than this"
-                            + " offers a row for, so none of them was looked in";
+            case THE_GROUP_WAS_NOT_OFFERED -> new ReportMessage.TheGroupWasNotOffered(at);
             // What the partition divides this body's positions into, and not whether a run gets
             // there. Some decision on the way places at no class, so there is nothing to put a
             // value at that steers a row along it — a row put at what the rest of the way leaves
             // may go the other way round that fork.
-            case THE_WAY_IN_PLACES_AT_NO_CLASS ->
-                    "the way to " + at + " holds a decision that no class of any position stands"
-                            + " for, so nothing here can steer a row along it";
+            case THE_WAY_IN_PLACES_AT_NO_CLASS -> new ReportMessage.TheWayInPlacesAtNoClass(at);
             // The value is in hand and the list is as long as one block gets. Not said as a search
             // that stopped: nothing about this one was left untried, and an author who raised what
             // the search may walk would see the same line again.
             case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE ->
-                    "a value was found for " + at + " and this block offers as many rows as it may";
-            case NO_VALUE_CAN_STAND_THERE ->
-                    NoValue.standsAt(at);
+                    new ReportMessage.TheBlockIsAsLongAsItMayBe(at);
+            case NO_VALUE_CAN_STAND_THERE -> NoValue.standsAt(at);
             // What the model settles, said as that. A class under one case of a sum and a class
             // under another are classes of positions that are not in one value, so there is no row
             // to go looking for.
             case ONE_POSITION_CANNOT_BE_BOTH ->
-                    at + " would need one position to be two things at once, so "
-                            + NoValue.standsThere();
+                    new ReportMessage.ItWouldNeedOnePositionToBeTwoThings(at,
+                            NoValue.standsThere());
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
-                    at + " is past a condition that comes out the other way for every row, so "
-                            + NoValue.goesThatWay();
+                    new ReportMessage.ItIsPastAConditionThatNeverComesOutSo(at,
+                            NoValue.goesThatWay());
             // What the body states, said as the body's and not as the model's. Nothing proves the
             // inputs there do not arise; what is known is that a row there is refused.
             case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
-                    "every row composed for " + at + " reaches an `unreachable`, which the compiler"
-                            + " refuses";
-            case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
-            case NO_VALUES_WERE_ASKED_FOR ->
-                    "this build composed no values, so no row was written for " + at;
-            case LINKAGE_FAILED -> "the generated classes would not link";
+                    new ReportMessage.EveryRowComposedReachesAnUnreachable(at);
+            case NOTHING_TO_BUILD_AGAINST -> new ReportMessage.NothingToBuildACandidateAgainst();
+            case NO_VALUES_WERE_ASKED_FOR -> new ReportMessage.ThisBuildComposedNoValues(at);
+            case LINKAGE_FAILED -> new ReportMessage.TheGeneratedClassesWouldNotLink();
             // "it" and not "the combination": a point of a line gets this word too, and a row
             // composed for one is not composed for a combination of classes.
-            case NO_CERTIFIED_WITNESS ->
-                    "no row composed for " + at + " was seen reaching it, which does not make it"
-                            + " unreachable";
-            case THE_POSITION_WAS_WITHHELD ->
-                    "a row's value at that position could not be read, so no class of it was"
-                            + " looked for";
-            case THE_ROWS_WERE_NOT_READ -> "the rows were not read, so nothing was looked for";
-            case NO_CANDIDATE_WAS_OFFERED ->
-                    "the walk over what could stand there put no value forward";
+            case NO_CERTIFIED_WITNESS -> new ReportMessage.NoRowComposedWasSeenReachingIt(at);
+            case THE_POSITION_WAS_WITHHELD -> new ReportMessage.ThePositionWasWithheld();
+            case THE_ROWS_WERE_NOT_READ -> new ReportMessage.TheRowsWereNotRead();
+            case NO_CANDIDATE_WAS_OFFERED -> new ReportMessage.NoCandidateWasOffered();
             // What this run could look at, and not what the line admits. A line is owed once over
             // every behavior carrying the type, and the search of every one this asked about had
             // no answer — so nothing was looked for at the point.
             case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
-                    "no reading of the line this asked about could be searched, so nothing was"
-                            + " looked for at " + at;
+                    new ReportMessage.NoReadingOfTheLineCouldBeSearched(at);
         };
     }
 
@@ -5635,11 +7256,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * model asked.
      */
     private void unaccounted(StringBuilder out, BehaviorReport behavior,
-                                    SourceRendering rendering,
+                                    Page page,
                                     SourceId declaredIn,
                                     Predicate<PartitionEvidence.Unanswered> mine,
                                     PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
-
+        SourceRendering rendering = page.rendering();
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
                     && mine.test(asked)) {
@@ -5648,20 +7269,47 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // reader running their eye down a list takes the entries in order and there is no
                 // order between the two. Written into the same list, the limit the rules ran into
                 // together would be the last thing the author wrote, and it is nothing they wrote.
-                out.append(String.format("      %s not accounted for: %s — %s %s%s: %s%s%n",
-                        mark(f), cited(asked.cited(), rendering, declaredIn, places),
-                        asked(asked.asked()), subjectOf(asked),
+                marked(out, f, page, new ReportMessage.NotAccountedFor(
+                        cited(asked.cited(), page, declaredIn, places),
+                        asked(asked.asked(), subjectOf(asked)),
                         inCopies(asked.asked().readAt(), behavior.conditionPlaces().copies(),
-                                rendering, declaredIn),
-                        publishedStops(asked, parts).stream()
-                                .map(stop -> whyUnread(stop.reason()) + stoppedAt(stop.figures())
-                                        + sentTo(stop.sentTo(), rendering, declaredIn))
-                                .collect(Collectors.joining("; ")),
-                        whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
-                                .map(each -> ", and the answer at its position: " + each)
-                                .orElse("")));
+                                page, declaredIn),
+                        reasons(page, publishedStops(asked, parts).stream()
+                                .map(stop -> page.say(whyUnread(stop.reason()))
+                                        + page.say(stoppedAt(stop.figures()))
+                                        + imagesNotShownSaid(stop.leftOpen(), page)
+                                        + numbersNotShownComputedSaid(stop.notShownComputed(),
+                                                page)
+                                        + page.say(runsStoppedSaid(stop.runsStopped(), page))
+                                        + page.say(sentTo(stop.sentTo(), rendering, declaredIn)))
+                                .toList()),
+                        whatItsPositionWasShortOf(asked).<Message>map(each ->
+                                        new ReportMessage.AndTheAnswerAtItsPosition(
+                                                whyUnread(each)))
+                                .orElse(new ReportMessage.Nothing())));
             }
         }
+    }
+
+    /** What a page calls a side of a line. */
+    private static Message sideNamed(Towards side) {
+        return switch (side) {
+            case ABOVE -> new ReportMessage.SideAbove();
+            case BELOW -> new ReportMessage.SideBelow();
+        };
+    }
+
+    /** What a page calls a measure, where a line names one. */
+    private static Message measureNamed(MeasureWord measure) {
+        return switch (measure) {
+            case READING -> new ReportMessage.MeasureReading();
+            case SIGNATURE -> new ReportMessage.Signature();
+            case BRANCH -> new ReportMessage.Branch();
+            case BOUNDARY -> new ReportMessage.MeasureBoundary();
+            case PARTITION -> new ReportMessage.Partition();
+            case DECISION -> new ReportMessage.Decision();
+            case REPLACEMENT -> new ReportMessage.Replacement();
+        };
     }
 
     /**
@@ -5751,9 +7399,302 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param figures every figure the stops of this entry were met at, each once and in
      *                {@link Figure#inOrder}: what is said beside the entry and not what tells it
      *                from another
+     * @param leftOpen which values a relation shown over some of them was not shown over, which
+     *                 tells two entries apart: two of them leave two sets of values open
+     * @param notShownComputed which numbers a relation settles by the terms' ends with no row
+     *                 shown computed in them, which tells two entries apart likewise
+     * @param runsStopped where the runs of the rows tried for the stops of this entry stopped,
+     *                 each once and in {@link WhereARunStopped#IN_A_STEADY_ORDER}: said beside the
+     *                 entry as the figures are, and for their reason — they are what lifting it
+     *                 takes, and not what tells it from another
      */
     private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
-                                 List<Figure> figures) {
+                                 List<Figure> figures,
+                                 Optional<BlockReason.RelationShownOverARegion> leftOpen,
+                                 Optional<NumberRegion> notShownComputed,
+                                 List<WhereARunStopped> runsStopped) {
+    }
+
+    /** Where {@code at} is written, as a page says a place: the source and line and column a
+     *  reader is sent to, or where the layouts put it where it is out of sight. */
+    private static String writtenAtSaid(SourcePos at, SourceRendering rendering,
+                                        SourceId declaredIn) {
+        return PublishedAt.of(Citation.of(at))
+                .map(place -> PlaceProse.said(place, rendering, declaredIn))
+                .orElseGet(() -> String.valueOf(rendering.layouts().resolve(at)));
+    }
+
+    /**
+     * What each construction on the way to a rule asks of a run, as the human report says it after
+     * the rule: where the construction is written and what the numbers it is made of have to be.
+     * Told from the condition the finding holds and nothing else, so the words and the document
+     * say one thing.
+     */
+    private static Message constructionsAsk(List<WhatAConstructionAsks> asks, Page page,
+                                            SourceRendering rendering, SourceId declaredIn) {
+        if (asks.isEmpty()) {
+            return new ReportMessage.Nothing();
+        }
+        List<String> each = new ArrayList<>();
+        for (WhatAConstructionAsks one : asks) {
+            String at = writtenAtSaid(one.at(), rendering, declaredIn);
+            String made = one.construction().name();
+            each.add(page.say(one.asks() instanceof WhatAConstructionAsks.Never
+                    ? new ReportMessage.ConstructionNeverPassed(made, at)
+                    : new ReportMessage.ConstructionAsks(made, at, askedSaid(one.asks(), page))));
+        }
+        return new ReportMessage.Verbatim(String.join("", each));
+    }
+
+    /**
+     * Each construction on the way to a rule of which neither that a run stops there nor that none
+     * does is shown, as the human report says it after the rule: where it is written, what the
+     * numbers it is made of have to be where that is read, and why neither is shown. Told from the
+     * finding and nothing else, so the words and the document say one thing.
+     */
+    private static Message constructionsNotShownSaid(List<AConstructionStopNotShown> notShown,
+                                                     Page page, SourceRendering rendering,
+                                                     SourceId declaredIn) {
+        StringBuilder out = new StringBuilder();
+        for (AConstructionStopNotShown one : notShown) {
+            String at = writtenAtSaid(one.at(), rendering, declaredIn);
+            Message why = switch (one.why()) {
+                case REACH_NOT_SHOWN -> new ReportMessage.NoRunIsShownToGetToIt();
+                case ASKS_NOT_READ -> new ReportMessage.WhatItsTypeAsksIsNotRead();
+                case SOMETHING_BEFORE_IT_MAY_STOP ->
+                        new ReportMessage.SomethingBeforeTheConstructionMayStopARun();
+                case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
+                case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
+                case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedIsRefusedByIt();
+                case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED ->
+                        new ReportMessage.TheInputsTriedRanOutBeforeOneWasRefused();
+            };
+            String made = one.construction().name();
+            out.append(page.say(one.asked()
+                    .<Message>map(asked -> asked instanceof WhatAConstructionAsks.Never
+                            ? new ReportMessage.ConstructionNeverPassedAndNotShown(made, at, why)
+                            : new ReportMessage.ConstructionAsksAndNotShown(made, at,
+                                    askedSaid(asked, page), why))
+                    .orElseGet(() -> new ReportMessage.ConstructionNotShown(made, at, why))));
+        }
+        return new ReportMessage.Verbatim(out.toString());
+    }
+
+    /** What each construction a run on the way is shown to stop at asks, as a finding that it is
+     *  not resolved would say it. */
+    private static List<WhatAConstructionAsks> constructionsAsked(
+            List<AConstructionStopShown> shown) {
+        return shown.stream().map(AConstructionStopShown::asks).toList();
+    }
+
+    /** What is asked, in the page's words: the parts of a conjunction said together and of a
+     *  disjunction one or the other, a part of one kind set off inside the other. */
+    private static String askedSaid(WhatAConstructionAsks.Asked asked, Page page) {
+        return switch (asked) {
+            case WhatAConstructionAsks.Is(var form, var rel, var against) -> page.say(
+                    switch (rel) {
+                        case GE -> new ReportMessage.ItIsAtLeast(form, against);
+                        case GT -> new ReportMessage.ItIsAbove(form, against);
+                        case LE -> new ReportMessage.ItIsAtMost(form, against);
+                        case LT -> new ReportMessage.ItIsBelow(form, against);
+                        case EQ -> new ReportMessage.ItIs(form, against);
+                        case NE -> new ReportMessage.ItIsNot(form, against);
+                    });
+            case WhatAConstructionAsks.AllOf(var each) -> both(page, each.stream()
+                    .map(one -> askedSaidInside(one, page)).toList());
+            case WhatAConstructionAsks.OneOf(var each) -> either(page, each.stream()
+                    .map(one -> askedSaidInside(one, page)).toList());
+            case WhatAConstructionAsks.Never _ -> throw new IllegalStateException(
+                    "that no run gets past is said of a construction whole and is no part of what"
+                            + " one asks");
+        };
+    }
+
+    /** One part of a conjunction or of a disjunction, set off where it is itself one: what is asked
+     *  never nests one kind in the same kind, so a part that is more than one form is the other. */
+    private static String askedSaidInside(WhatAConstructionAsks.Asked part, Page page) {
+        String said = askedSaid(part, page);
+        return part instanceof WhatAConstructionAsks.Is ? said
+                : page.say(new ReportMessage.Grouped(said));
+    }
+
+    /**
+     * The clause {@code bound} is, as an author writes it in the data's invariant: the place, the
+     * side, and the value as a literal of its type — a whole number, or a date as it is written.
+     */
+    static String invariantWritten(ABoundThatKeepsEveryRunGoing bound) {
+        String value = switch (bound.bound()) {
+            case ObservedValue.Integer whole -> String.valueOf(whole.value());
+            case ObservedValue.Temporal temporal -> temporal.written();
+            default -> throw new IllegalStateException("a bound kept on an input is a whole number"
+                    + " or a date: " + bound.bound());
+        };
+        RuleKey named = bound.holder().named();
+        return "invariant " + (named.isTheValueItself() ? "value" : named.toString())
+                + (bound.atMost() ? " <= " : " >= ")
+                + value;
+    }
+
+    /** Where the stops of {@code it} are where the representation of a number stops, the
+     *  invariants that keep every run from them, under the line that says the rule. */
+    private static void keepingSaid(WhatIsShownOfAStop it, Page page, StringBuilder out) {
+        Optional<WhatKeepsEveryRunGoing> said = it.keeping().flatMap(WhatKeepsEveryRunGoing::said);
+        if (said.isEmpty()) {
+            return;
+        }
+        WhatKeepsEveryRunGoing region = said.get();
+        for (ABoundThatKeepsEveryRunGoing bound : region.bounds()) {
+            out.append("          · ").append(page.say(keepingSaid(bound,
+                    region.asFarOutAsCanBe(bound)))).append(NEW_LINE);
+        }
+    }
+
+    /** The line that says {@code bound}: on the data that holds the place, or on a data the
+     *  author introduces for a parameter no data holds; as far out as one can be where
+     *  {@code furthestOut}. */
+    private static ReportMessage keepingSaid(ABoundThatKeepsEveryRunGoing bound,
+                                             boolean furthestOut) {
+        Message furthest = furthestOut ? new ReportMessage.AFurtherBoundLetsInAStop()
+                : new ReportMessage.Nothing();
+        return switch (bound.holder()) {
+            case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
+                    new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(data.data().key().qualified(),
+                            invariantWritten(bound), furthest);
+            case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter ->
+                    new ReportMessage.ABoundOnAParameterKeepsEveryRunGoing(parameter.parameter(),
+                            parameter.type(), invariantWritten(bound), furthest);
+        };
+    }
+
+    /** Each operation of a rule whether a run stops in is not resolved, and why, as the human
+     *  report says it after the rule: of the operation, and never of the rule as a whole. */
+    private static Message stopsNotShownSaid(List<AStopNotShown> notShown, Page page,
+                                             SourceRendering rendering, SourceId declaredIn) {
+        StringBuilder out = new StringBuilder();
+        for (AStopNotShown each : notShown) {
+            Message place = each.restsOn()
+                    .map(origin -> placeSaid(origin, page, rendering, declaredIn)).orElse(null);
+            Message why = switch (each.why()) {
+                case NO_OPERATION_TOLD -> place == null ? new ReportMessage.NoOperationIsReadThere()
+                        : new ReportMessage.NoOperationIsReadAt(place);
+                case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
+                case REACH_NOT_SHOWN -> new ReportMessage.NoRunIsShownToGetToIt();
+                case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
+                case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
+                case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedStopsARunThere();
+                case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED -> new ReportMessage.TheInputsTriedRanOut();
+            };
+            out.append(page.say(each.operation()
+                    .<Message>map(operation -> new ReportMessage.StopNotShownIn(operation, why))
+                    .orElseGet(() -> new ReportMessage.StopNotShownInWhatItWorksOut(why))));
+        }
+        return new ReportMessage.Verbatim(out.toString());
+    }
+
+    /**
+     * A place a run may stop at, as the words after a stop not resolved say it, and, where it is a
+     * call, what each behavior on the way is told
+     * of, one after another and not one inside another: the words of a language that puts the verb
+     * last do not hold a call inside what is said of the call before it.
+     */
+    private static Message placeSaid(StopOrigin place, Page page, SourceRendering rendering,
+                                     SourceId declaredIn) {
+        StringBuilder out = new StringBuilder(page.say(placeNamed(place, rendering, declaredIn)));
+        StopOrigin at = place;
+        while (at instanceof StopOrigin.ACall(var _, var behavior, var passage)) {
+            String called = behavior.name();
+            at = passage instanceof CallPassage.Open(CallPassage.WhyOpen.MayStopAt(var next))
+                    ? next : null;
+            out.append(page.say(switch (passage) {
+                case CallPassage.Past _ -> new ReportMessage.TheCalledBehaviorIsGottenPast(called);
+                case CallPassage.Open(var why) -> switch (why) {
+                    case CallPassage.WhyOpen.NoBody _ ->
+                            new ReportMessage.TheCalledBehaviorHasNoBody(called);
+                    case CallPassage.WhyOpen.OnACycle _ ->
+                            new ReportMessage.TheCalledBehaviorReachesItself(called);
+                    case CallPassage.WhyOpen.NotRead _ ->
+                            new ReportMessage.TheCalledBehaviorIsNotRead(called);
+                    case CallPassage.WhyOpen.MayStopAt(var next) ->
+                            new ReportMessage.TheCalledBehaviorMayStopAt(called,
+                                    placeNamed(next, rendering, declaredIn));
+                };
+            }));
+        }
+        return new ReportMessage.Verbatim(out.toString());
+    }
+
+    /** A place a run may stop at, by what it is and where it is written. */
+    private static Message placeNamed(StopOrigin place, SourceRendering rendering,
+                                      SourceId declaredIn) {
+        String at = writtenAtSaid(place.at(), rendering, declaredIn);
+        return switch (place) {
+            case StopOrigin.AConstruction(var _, var type) ->
+                    new ReportMessage.TheConstructionOf(type.name(), at);
+            case StopOrigin.ACall(var _, var behavior, var _) ->
+                    new ReportMessage.TheCallOf(behavior.name(), at);
+            case StopOrigin.SomethingWorkedOut _ -> new ReportMessage.WhatIsWorkedOutAt(at);
+        };
+    }
+
+    /** Where every run getting to a rule stops, as the human report says it after the rule. */
+    private static Message everyRunStopsAt(List<EveryRunStops> stops, Page page) {
+        return stops.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.EveryRunStops(stopsSaid(stops, page));
+    }
+
+    /** The same, of a rule where no run is shown to get there: a run that does stops there, and
+     *  that one does is not said. */
+    private static Message aRunGettingThereStopsAt(List<EveryRunStops> stops, Page page) {
+        return stops.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.ARunGettingThereStops(stopsSaid(stops, page));
+    }
+
+    /** Each of {@code stops}, its operation and the values it stops every run at, listed. */
+    private static String stopsSaid(List<EveryRunStops> stops, Page page) {
+        List<String> each = new ArrayList<>();
+        for (EveryRunStops stop : stops) {
+            List<String> where = new ArrayList<>();
+            for (EveryRunStops.Within within : stop.where()) {
+                where.add(page.say(
+                        within.least() != null && within.least().equals(within.greatest())
+                                ? new ReportMessage.ItIs(within.form(),
+                                        String.valueOf(within.least()))
+                                : within.least() != null && within.greatest() != null
+                                ? new ReportMessage.ItIsFromTo(within.form(),
+                                        String.valueOf(within.least()),
+                                        String.valueOf(within.greatest()))
+                                : within.least() != null
+                                ? new ReportMessage.ItIsAtLeast(within.form(),
+                                        String.valueOf(within.least()))
+                                : new ReportMessage.ItIsAtMost(within.form(),
+                                        String.valueOf(within.greatest()))));
+            }
+            each.add(page.say(new ReportMessage.StopsIn(stop.operation(), both(page, where))));
+        }
+        return listed(page, each);
+    }
+
+    /**
+     * Where the values a relation shown over some of them was not shown over lie, as an entry of a
+     * question's {@code stopped} writes it: past which length some are, short of which some are,
+     * and whether some are open whatever their length. A bound on them, as
+     * {@link BlockReason.RelationShownOverARegion} says, and not which they are.
+     */
+    private static void leftOpen(ObjectNode into, BlockReason.RelationShownOverARegion open) {
+        ObjectNode left = into.putObject("leftOpen");
+        if (open.longerThan() != null) {
+            left.put("longerThan", open.longerThan());
+        }
+        if (open.shorterThan() != null) {
+            left.put("shorterThan", open.shorterThan());
+        }
+        left.put("atAnyLength", open.atAnyLength());
+        if (!open.imagesNotShown().isEmpty()) {
+            ArrayNode names = left.putArray("imagesNotShown");
+            open.imagesNotShown().forEach(names::add);
+        }
     }
 
     /**
@@ -5766,20 +7707,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>Two stops one entry writes are met at every figure either was. An entry is one thing to
      * lift, and the figures are what lifting it would take, so two stops under one word at one
-     * place stopped at two figures are one entry naming both.
+     * place stopped at two figures are one entry naming both. So are the places their runs
+     * stopped at, for the same reason: what lifting the entry takes, and not what it is.
      */
     private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
                                                       WhereAPartIs parts) {
-        record WordAtAPlace(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {}
+        record WordAtAPlace(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
+                            Optional<BlockReason.RelationShownOverARegion> leftOpen,
+                            Optional<NumberRegion> notShownComputed) {}
         Map<WordAtAPlace, List<Figure>> out = new LinkedHashMap<>();
+        Map<WordAtAPlace, Set<WhereARunStopped>> runs = new LinkedHashMap<>();
         for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
-            out.computeIfAbsent(
-                    new WordAtAPlace(each.reason(), placeInTheRule(each.sentTo(), parts)),
-                    _ -> new ArrayList<>()).addAll(each.figures());
+            WordAtAPlace entry = new WordAtAPlace(each.reason(),
+                    placeInTheRule(each.sentTo(), parts), each.leftOpen(),
+                    each.notShownComputed());
+            out.computeIfAbsent(entry, _ -> new ArrayList<>()).addAll(each.figures());
+            runs.computeIfAbsent(entry, _ -> new LinkedHashSet<>()).addAll(each.runsStopped());
         }
         List<PublishedStop> written = new ArrayList<>();
-        out.forEach((entry, figures) -> written.add(
-                new PublishedStop(entry.reason(), entry.sentTo(), Figure.inOrder(figures))));
+        out.forEach((entry, figures) -> written.add(new PublishedStop(entry.reason(),
+                entry.sentTo(), Figure.inOrder(figures), entry.leftOpen(),
+                entry.notShownComputed(), runs.get(entry).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList())));
         return List.copyOf(written);
     }
 
@@ -5825,11 +7774,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * partition's and one rule has as many of those as it has readings.
      */
     private static String cited(Set<RuleCitation> offered,
-                                SourceRendering rendering,
+                                Page page,
                                 SourceId declaredIn,
                                 PublishedRuleHandle.WhereARuleIs places) {
         return RuleHandleProse.said(PublishedRuleHandle.of(handle(offered, places), places),
-                rendering, declaredIn);
+                page.rendering(), page.language(), declaredIn);
     }
 
     /**
@@ -5860,7 +7809,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     family.forEach(each -> standing.put(each, "not_due"));
             case AnotherLineTheRowsAllow.NotApplicable(var family, var _) ->
                     family.forEach(each -> standing.put(each, "not_applicable"));
-            case AnotherLineTheRowsAllow.NoSuchQuestion _, AnotherLineTheRowsAllow.CouldNotTell _ -> {
+            case AnotherLineTheRowsAllow.NoSuchQuestion _, AnotherLineTheRowsAllow.CouldNotTell _,
+                 AnotherLineTheRowsAllow.OwedByTheComputation _ -> {
             }
         }
         standing.forEach((direction, word) -> {
@@ -5870,6 +7820,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     sources);
             one.put("standing", word);
         });
+    }
+
+    /**
+     * The obligations each computation is owed, one per position, and where each stands.
+     *
+     * <p>Every position of the computation, and never only the ones a finding names: which
+     * positions it weighs is the model's own answer and no row moves it, so what changes with the
+     * rows is the word beside each. Not written where the rules cut no computation at several
+     * places.
+     */
+    private static void weightsOfTheComputations(ObjectNode into, List<TiltOfADerivedValue> weights,
+                                                 DocumentSources sources) {
+        if (weights.isEmpty()) {
+            return;
+        }
+        ArrayNode written = into.putArray("weights");
+        for (TiltOfADerivedValue each : weights) {
+            each.positions().forEach((position, standing) -> {
+                ObjectNode one = written.addObject();
+                obligationId(one.putObject("obligationId"),
+                        new ObligationIdentity.OfATiltAtAPosition(each.value(), position),
+                        sources);
+                one.put("standing", switch (standing) {
+                    case TiltOfADerivedValue.Standing.Shown _ -> "shown";
+                    case TiltOfADerivedValue.Standing.NotShown _ -> "not_shown";
+                    case TiltOfADerivedValue.Standing.Undecided _ -> "undecided";
+                });
+                // Why, beside the word: the weight's own reasons, and what the borders of the
+                // computation went without as they said it. Either may be absent, never both.
+                if (standing instanceof TiltOfADerivedValue.Standing.Undecided undecided) {
+                    if (!undecided.own().isEmpty()) {
+                        ArrayNode own = one.putArray("undecidedBecause");
+                        undecided.own().written().forEach(why -> own.add(word(why)));
+                    }
+                    weakening(one, undecided.carried());
+                }
+            });
+        }
     }
 
     /**
@@ -5903,6 +7891,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 authoredLineId(into.putObject("line"), line.line());
                 line.at().ifPresent(at -> level(into.putObject("level"), at));
                 into.put("direction", OrderedAffineBoundary.spelled(direction.direction()));
+            }
+            // The computation — the comparison and every copy of it a call made that is cut at the
+            // same places — and the position whose weight is owed: no threshold, which moves with
+            // the rows, and no level, which a body's comparison has none of.
+            case ObligationIdentity.OfATiltAtAPosition(var value, var position) -> {
+                authoredLineId(into.putObject("line"), value.line());
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("position", position.toString());
             }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
             // The axis and which class of it, which is what an axis of the document is keyed by.
@@ -5942,6 +7939,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
+            // The behavior and the case, spelled whole: no finding of a document is about one, and
+            // a key written here is what tells two cases of one statement apart if one ever is.
+            case ObligationIdentity.OfACaseOfAStatement(var behavior, var which) -> {
+                into.put("behavior", behavior);
+                into.put("case", which.spelled());
+            }
             case ObligationIdentity.OfACombinationOfDecisions(var behavior, var settled) ->
                     combinationId(into, behavior, settled);
             // The behavior and the two classes, which is what a combination of two positions is
@@ -5957,12 +7960,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
             // The behavior and which rewrite: an arm answering as one of its siblings, written
-            // with the fork the way an arm is and the sibling by its part, or the body answering
-            // one value, written as the first row that answered it — a rewrite per value, named
-            // by the row that sends a reader to the value, in the words a row is named by.
+            // with the fork the way an arm is and the sibling by its part, a fold run another way,
+            // written with the fold's coordinates the same way and the way it is run by the word,
+            // or the body answering one value, written as the first row that answered it — a
+            // rewrite per value, named by the row that sends a reader to the value, in the words a
+            // row is named by.
             case ObligationIdentity.OfAReplacement(var behavior, var replacement) -> {
                 into.put("behavior", behavior);
                 switch (replacement) {
+                    case Replacement.OfAWalk(var walk, var how) -> {
+                        WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(walk.owner());
+                        into.put("rewrite", switch (how) {
+                            case STOPS_AFTER_ONE_STEP -> "fold_after_one_step";
+                            case STEPS_FROM_THE_SEED -> "fold_from_the_seed";
+                        });
+                        into.put("module", body.module());
+                        into.put("definition", body.definition());
+                        into.put("construct", walk.ordinal());
+                        into.put("lowered", walk.lowered());
+                    }
                     case Replacement.OfAnArm(var fork, var part, var with) -> {
                         WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(fork.owner());
                         into.put("rewrite", "arm_as_sibling");
@@ -6003,13 +8019,81 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void combinationId(ObjectNode into, String behavior,
                                       Set<Condition> settled) {
         into.put("behavior", behavior);
-        ArrayNode decisions = into.putArray("decisions");
-        // Sorted by what each is written as here, which is every field of it. What a run has to
-        // have done is a set, so the order a walk met them is no part of the identity — and two
-        // documents of one model have to write it the same way round for a consumer to join on it.
+        decisions(into.putArray("decisions"), settled);
+    }
+
+    /**
+     * Some decisions, each written as a combination writes them and in the one order.
+     *
+     * <p>Sorted by what each is written as here, which is every field of it. What a run has to have
+     * done is a set, so the order a walk met them is no part of what is written — and two documents
+     * of one model have to write it the same way round for a consumer to join on it.
+     */
+    private static void decisions(ArrayNode into, Collection<Condition> decisions) {
         PublicationOrders.DECISIONS_OF_A_COMBINATION
-                .arrange(settled.stream().map(AdequacyReport::decisionId).toList())
-                .written().forEach(decisions::add);
+                .arrange(decisions.stream().map(AdequacyReport::decisionId).toList())
+                .written().forEach(into::add);
+    }
+
+    /**
+     * The groups of the body's decisions, and where a reading was made the combinations of each
+     * that no row makes, as the sets of choices they come to.
+     *
+     * <p>A group is its way in and its factors, each factor the outcomes it can come out as, and it
+     * is written whether or not anything was read of the rows: the combinations the body has are
+     * the choices of its groups, and written one by one they would be as many as the choices
+     * multiplied out. A pattern is the outcome it takes at each factor, by the position of the
+     * outcome among the factor's, and null where it holds the factor either way. So a pattern is
+     * told apart from every other by its group and what it takes, and which choices it holds can be
+     * worked out from the document alone. Only a pattern of one choice is a combination of the
+     * body, and then it names that combination as the combinations of the account are named.
+     */
+    private static void groups(ObjectNode into, BehaviorReport behavior,
+                               InteractionEvidence meetings) {
+        List<InteractionRequirements.OfferedGroup> offered = meetings.asked().groups();
+        if (offered.isEmpty()) {
+            return;
+        }
+        Map<Integer, UnobservedGroup> missingOf = new HashMap<>();
+        behavior.unobserved().forEach(group -> missingOf.put(group.ordinal(), group));
+        boolean read = meetings.made().made().isPresent();
+        ArrayNode groups = into.putArray("groups");
+        for (int ordinal = 0; ordinal < offered.size(); ordinal++) {
+            InteractionRequirements.OfferedGroup group = offered.get(ordinal);
+            ObjectNode one = groups.addObject();
+            one.put("group", ordinal);
+            decisions(one.putArray("wayIn"), group.reach().settles());
+            ArrayNode factors = one.putArray("factors");
+            for (List<InteractionRequirements.Outcome> factor : group.byFactor()) {
+                ArrayNode outcomes = factors.addObject().putArray("outcomes");
+                for (InteractionRequirements.Outcome outcome : factor) {
+                    decisions(outcomes.addArray(), outcome.settles());
+                }
+            }
+            one.put("choices", group.at().stream().filter(Objects::nonNull).count());
+            if (!read) {
+                continue;
+            }
+            ArrayNode missing = one.putArray("unobserved");
+            UnobservedGroup unobserved = missingOf.get(ordinal);
+            for (UnobservedChoices pattern
+                    : unobserved == null ? List.<UnobservedChoices>of() : unobserved.choices()) {
+                ObjectNode each = missing.addObject();
+                ArrayNode fixed = each.putArray("fixed");
+                pattern.fixed().forEach(outcome -> {
+                    if (outcome == null) {
+                        fixed.addNull();
+                    } else {
+                        fixed.add(outcome);
+                    }
+                });
+                each.put("combinations", pattern.count());
+                if (pattern.combination() != null) {
+                    combinationId(each.putObject("obligationId"), pattern.combination().behavior(),
+                            pattern.combination().settled());
+                }
+            }
+        }
     }
 
     /**
@@ -6062,7 +8146,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what it states — which is what makes it and its denial one column.
             case DecidedCondition.Held(var condition, var held) -> {
                 out.put("kind", "statement");
-                out.put("condition", condition.statement().key());
+                out.put("condition", condition.statement().spelledOut());
                 out.put("outcome", held ? "held" : "denied");
             }
             // A condition this compiler had no words for, named by the reading that met it. Two
@@ -6090,74 +8174,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (why) {
             case WhyNotTaken.MeaningUnread(WhyUnread unread) -> {
                 out.put("kind", "meaning_unread");
-                out.put("reason", switch (unread) {
-                    case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place place) ->
-                            switch (place) {
-                                case CONTAINER -> "container_at_no_position";
-                                case VALUE -> "value_at_no_position";
-                                case SCRUTINEE -> "scrutinee_at_no_position";
-                                case SUBJECT -> "subject_at_no_position";
-                            };
-                    case WhyUnread.NoMeasureOfItsSize _ -> "no_measure_of_its_size";
-                    case WhyUnread.OutsideTheLinearFragment _ -> "outside_the_linear_fragment";
-                    case WhyUnread.NotArithmetic _ -> "not_arithmetic";
-                    case WhyUnread.ANumberNotHeld _ -> "number_not_held";
-                    case WhyUnread.NoNumberOnARun _ -> "no_number_on_a_run";
-                    case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
-                    case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
-                    case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
-                    case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
-                    case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
-                    // A count of code points is a number of what the operation answered, and the
-                    // document's word for it is that one.
-                    case WhyUnread.ANumberOfWhatAnOperationAnswers _,
-                         WhyUnread.CodePointsOfWhatAnOperationAnswers _ ->
-                            "number_of_what_an_operation_answers";
-                    case WhyUnread.WhatARecursiveHelperAnswers _ ->
-                            "what_a_recursive_helper_answers";
-                    case WhyUnread.AClauseOfAnInvariant(var _, var how) -> switch (how) {
-                        case NO_FORM -> "clause_with_no_form";
-                        case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
-                    };
-                    case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
-                    case WhyUnread.InACalledBody(var what) -> switch (what) {
-                        case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
-                        case ITSELF -> "called_body_reaches_itself";
-                        case AN_ANSWER_NOT_READ -> "called_body_not_read";
-                    };
-                    case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
-                    case WhyUnread.MoreTotalReadingsThanAreMade _ ->
-                            "more_total_readings_than_are_made";
-                    case WhyUnread.MorePartsThanAreConcluded _ ->
-                            "more_parts_than_are_concluded";
-                    case WhyUnread.MoreElementsThanAreWrittenOut _ ->
-                            "more_elements_than_are_written_out";
-                    case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";
-                    case WhyUnread.CopiesStateDifferentThings _ ->
-                            "copies_state_different_things";
-                    case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
-                    case WhyUnread.WhichElementARunStopsAt _ ->
-                            "which_element_a_run_stops_at";
-                });
+                out.put("reason", meaningUnreadWord(unread));
             }
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> {
                 out.put("kind", "outside_domain");
-                out.put("reason", switch (limit) {
-                    case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
-                    case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
-                    case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
-                    case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "node_below_what_a_row_writes";
-                    case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
-                    case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "path_knows_no_case_a_value_is_not";
-                    case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
-                    case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
-                    case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
-                    case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS ->
-                            "path_knows_no_number_over_elements";
-                    case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN ->
-                            "path_holds_element_facts_as_written";
-                    case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";
-                });
+                out.put("reason", outsideDomainWord(limit));
             }
             case WhyNotTaken.MoreWaysThanAreRead _ -> {
                 out.put("kind", "past_a_figure");
@@ -6173,6 +8194,74 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return out;
+    }
+
+    /** The word a document writes for a condition whose meaning was not read, for
+     *  {@code unread}: what the schema's {@code meaning_unread} reasons are held to. */
+    public static String meaningUnreadWord(WhyUnread unread) {
+        return switch (unread) {
+            case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place place) -> switch (place) {
+                case CONTAINER -> "container_at_no_position";
+                case VALUE -> "value_at_no_position";
+                case STRING -> "string_at_no_position";
+                case SCRUTINEE -> "scrutinee_at_no_position";
+                case SUBJECT -> "subject_at_no_position";
+            };
+            case WhyUnread.NoMeasureOfItsSize _ -> "no_measure_of_its_size";
+            case WhyUnread.OutsideTheLinearFragment _ -> "outside_the_linear_fragment";
+            case WhyUnread.NotArithmetic _ -> "not_arithmetic";
+            case WhyUnread.ANumberNotHeld _ -> "number_not_held";
+            case WhyUnread.NoNumberOnARun _ -> "no_number_on_a_run";
+            case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
+            case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
+            case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
+            case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
+            case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
+            case WhyUnread.ADateMovedByMonths _ -> "date_moved_by_months";
+            case WhyUnread.APartOfADateMovedByMonths _ -> "part_of_a_date_moved_by_months";
+            // A count of code points is a number of what the operation answered, and the
+            // document's word for it is that one.
+            case WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                 WhyUnread.CodePointsOfWhatAnOperationAnswers _ ->
+                    "number_of_what_an_operation_answers";
+            case WhyUnread.WhatARecursiveHelperAnswers _ -> "what_a_recursive_helper_answers";
+            case WhyUnread.AClauseOfAnInvariant(var _, var how) -> switch (how) {
+                case NO_FORM -> "clause_with_no_form";
+                case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
+            };
+            case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
+            case WhyUnread.WhatACalledBehaviorAnswers _ -> "called_body_not_read";
+            case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
+            case WhyUnread.MoreTotalReadingsThanAreMade _ -> "more_total_readings_than_are_made";
+            case WhyUnread.MorePartsThanAreConcluded _ -> "more_parts_than_are_concluded";
+            case WhyUnread.MoreWaysThanAreWrittenOut _ -> "more_ways_than_are_written_out";
+            case WhyUnread.MoreElementsThanAreWrittenOut _ -> "more_elements_than_are_written_out";
+            case WhyUnread.SeveralValuesNotGoneInto _ -> "several_values_not_gone_into";
+            case WhyUnread.CopiesStateDifferentThings _ -> "copies_state_different_things";
+            case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
+            case WhyUnread.WhichElementARunStopsAt _ -> "which_element_a_run_stops_at";
+        };
+    }
+
+    /** The word a document writes for a condition the reader's domain has no words for, for
+     *  {@code limit}: what the schema's {@code outside_domain} reasons are held to. */
+    public static String outsideDomainWord(WhyNotTaken.DomainLimit limit) {
+        return switch (limit) {
+            case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
+            case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
+            case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
+            case A_NODE_BELOW_WHAT_A_ROW_WRITES -> "node_below_what_a_row_writes";
+            case ANOTHER_ELEMENT_THAN_THE_WAY_HOLDS -> "another_element_than_the_way_holds";
+            case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
+            case A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT -> "path_knows_no_case_a_value_is_not";
+            case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "path_knows_no_sameness_of_values";
+            case A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER -> "path_knows_no_string_inside_another";
+            case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "path_knows_no_place_on_an_order";
+            case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
+            case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS -> "path_knows_no_number_over_elements";
+            case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "path_holds_element_facts_as_written";
+            case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";
+        };
     }
 
     /**
@@ -6210,7 +8299,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A fork the reading could not name a position for. There is nothing to name it by but
             // where it is, which is what the reading already decided rather than a second answer
             // here.
-            case Condition.Arm(var arm, var _) -> {
+            case Condition.Arm(var arm, var _, var _) -> {
                 out.put("kind", "arm");
                 constructId(out.putObject("construct"), arm.fork());
                 out.put("part", arm.part());
@@ -6228,13 +8317,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     static void constructId(ObjectNode into,
                             souther.compiler.types.ConstructOccurrence occurrence) {
-        into.put("module", occurrence.origin().owner().module());
+        constructId(into, occurrence.origin(), StepOfACopy.of(occurrence.lineage()));
+    }
+
+    /** The same of a copy of a construct of the model, which is the construct and the calls it was
+     *  made through. */
+    static void copyId(ObjectNode into, ModelOccurrence copy) {
+        constructId(into, copy.origin(), StepOfACopy.of(copy.lineage()));
+    }
+
+    private static void constructId(ObjectNode into,
+                                    souther.compiler.types.SourceConstructOrigin origin,
+                                    List<StepOfACopy> steps) {
+        into.put("module", origin.owner().module());
         // The definition whose body wrote it, asked of the owner the way an arm's identity asks:
         // two definitions' first constructs are one identity under the module alone.
         into.put("definition", souther.compiler.types.WrittenOwner
-                .theBodyThatWrote(occurrence.origin().owner()).definition());
-        into.put("construct", occurrence.origin().ordinal());
-        into.put("lowered", occurrence.origin().lowered());
+                .theBodyThatWrote(origin.owner()).definition());
+        into.put("construct", origin.ordinal());
+        into.put("lowered", origin.lowered());
         // Everything the copy was made through, calls and builds together, in the order they were
         // made, and absent where the construct is where it was written. An empty array and an absent one read
         // alike to a person and not to a consumer that asks whether the field is there.
@@ -6245,7 +8346,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // follows how the compiler shares them.
         //
         // The steps a page names a copy by, read off the same list.
-        List<StepOfACopy> steps = StepOfACopy.of(occurrence.lineage());
         if (steps.isEmpty()) {
             return;
         }
@@ -6268,11 +8368,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Absent for a comparison a body wrote, which is at whatever value a call put it at.
         point.line().at().ifPresent(at -> level(into.putObject("level"), at));
         location(into.putObject("location"), point.point());
+        // Absent for a point of a comparison cut at one place. A computation cut at several owes
+        // these points once for each threshold, and the threshold is what tells two of them apart.
+        if (point instanceof BorderObligationPoint.AtLine(var _, var _, var threshold)) {
+            threshold.ifPresent(each -> thresholdId(into.putObject("threshold"), each));
+        }
         // Absent for a point at a value of the quantity, which has no run to be stopped, and for a
         // comparison a body wrote, whose run stops wherever each call's values stop it.
         if (point instanceof BorderObligationPoint.InRegion(var _, var _, var region)) {
             region.ifPresent(stops -> farEnd(into.putObject("stops"), stops));
         }
+    }
+
+    /**
+     * Which threshold of a computation cut at several places a point is owed at: the bound the
+     * comparison was written against where there is one, and the computation with the place it is
+     * cut at where there is not.
+     */
+    private static void thresholdId(ObjectNode into, ThresholdOfADerivedValue threshold) {
+        switch (threshold) {
+            case ThresholdOfADerivedValue.WrittenAt(var value, var level, var heldIn) -> {
+                into.put("kind", "written_at");
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("bound", level.spelled());
+                heldIn.ifPresent(data -> heldIn(into, data));
+            }
+            case ThresholdOfADerivedValue.HeldIn(var data) -> {
+                into.put("kind", "held_in");
+                heldIn(into, data);
+            }
+            case ThresholdOfADerivedValue.CutAt(var value, var place) -> {
+                into.put("kind", "cut_at");
+                ArrayNode copies = into.putArray("copies");
+                value.copies().forEach(copy -> copyId(copies.addObject(), copy));
+                into.put("quantity", OrderedAffineBoundary.spelled(place.expression().direction()));
+                level(into.putObject("level"), place.at().at());
+            }
+        }
+    }
+
+    /** The data the bound of a threshold is read out of, in one order whatever the walk was. */
+    private static void heldIn(ObjectNode into, BoundHeldIn held) {
+        ArrayNode data = into.putArray("heldIn");
+        held.locations().forEach(data::add);
     }
 
     /**
@@ -6337,6 +8476,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case AuthoredPlacement.NotShown _ ->
                     into.putObject("placement").put("kind", "not_shown");
         }
+        line.threshold().ifPresent(each -> thresholdId(into.putObject("threshold"), each));
     }
 
     /** Every point a line can have, in the order the technique names them. */
@@ -6392,6 +8532,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
+    /** The code points counted, by the class and, where the class leaves one out, which. */
+    private static void codePointClass(ObjectNode into, CodePointClass counted) {
+        switch (counted) {
+            case CodePointClass.NotWhitespace _ -> into.put("class", "not_whitespace");
+            case CodePointClass.NotWhitespaceNorEqualTo apart -> {
+                into.put("class", "not_whitespace_nor_equal_to");
+                into.put("separator", apart.separator());
+            }
+            case CodePointClass.OneOf set -> {
+                into.put("class", "one_of");
+                ArrayNode ranges = into.putArray("ranges");
+                set.held().ranges().forEach(range -> ranges.addArray()
+                        .add(range.from()).add(range.to()));
+            }
+        }
+    }
+
     /**
      * A number a line is drawn on, by what makes two of them one term.
      *
@@ -6403,6 +8560,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.ValueOf it -> {
                 into.put("kind", "value");
                 into.put("position", it.position().discriminated());
+            }
+            // Two forms multiplied: each as the numbers it is of at their weights, and its
+            // constant.
+            case NumericTerm.ProductOf it -> {
+                into.put("kind", "product");
+                ArrayNode factors = into.putArray("factors");
+                for (LinearForm<NumericTerm> form : it.factors()) {
+                    ObjectNode factor = factors.addObject();
+                    factor.put("constant", form.constant().spelled());
+                    ArrayNode weighed = factor.putArray("terms");
+                    for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                        ObjectNode one = weighed.addObject();
+                        termId(one.putObject("term"), each.getKey());
+                        one.put("coefficient", each.getValue().spelled());
+                    }
+                }
             }
             // And what the operation was given beside the value, by where each argument stands in
             // the call: a quotient by two and a quotient by three are two numbers of one place.
@@ -6432,23 +8605,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.CodePointClassCount it -> {
                 into.put("kind", "code_points");
                 into.put("position", it.position().discriminated());
-                switch (it.counted()) {
-                    case CodePointClass.NotWhitespace _ -> into.put("class", "not_whitespace");
-                    case CodePointClass.NotWhitespaceNorEqualTo apart -> {
-                        into.put("class", "not_whitespace_nor_equal_to");
-                        into.put("separator", apart.separator());
-                    }
-                    case CodePointClass.OneOf set -> {
-                        into.put("class", "one_of");
-                        ArrayNode ranges = into.putArray("ranges");
-                        set.held().ranges().forEach(range -> ranges.addArray()
-                                .add(range.from()).add(range.to()));
-                    }
-                }
+                codePointClass(into, it.counted());
             }
             // What the code points of the string at the place come to.
             case NumericTerm.CodePointValueSum it -> {
                 into.put("kind", "code_point_sum");
+                into.put("position", it.position().discriminated());
+            }
+            // The code point the string at the place holds at an index of its code points.
+            case NumericTerm.CodePointAt it -> {
+                into.put("kind", "code_point_at");
+                into.put("position", it.position().discriminated());
+                into.put("index", it.index());
+            }
+            // The step of the coarser order the operation answers on that the value falls in.
+            case NumericTerm.WholeUnitsOf it -> {
+                into.put("kind", "whole_units");
+                operationId(into.putObject("operation"), it.operation());
                 into.put("position", it.position().discriminated());
             }
             // How often the value at the place occurs among the elements of its container.
@@ -6482,19 +8655,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 });
                 into.put("position", it.value().discriminated());
                 into.put("key", it.key().discriminated());
+                // The steps of the values the end is taken of, where it is not the values.
+                if (it.through() != null) {
+                    operationId(into.putObject("through"), it.through());
+                }
             }
             // What the elements of a run come to among those alike at a place of each: their
             // total or an end, of what each element is made to contribute.
             case NumericTerm.GatheredUnderItsKey it -> {
                 into.put("kind", "gathered_under_its_key");
-                into.put("gathering", switch (it.gathering()) {
-                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
-                    case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
-                            switch (extreme) {
-                                case Extreme.Least _ -> "least";
-                                case Extreme.Greatest _ -> "greatest";
-                            };
-                });
+                gathering(into, it.gathering(), it.elements());
                 into.put("elements", it.elements().discriminated());
                 into.put("key", it.key().spelledFrom(it.elements()));
                 if (it.key() instanceof ElementKey.ByCase chosen) {
@@ -6518,14 +8688,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.GatheredUnderAKey it -> {
                 NumericTerm.GatheredUnderItsKey gathered = it.gathered();
                 into.put("kind", "gathered_under_a_key");
-                into.put("gathering", switch (gathered.gathering()) {
-                    case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
-                    case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
-                            switch (extreme) {
-                                case Extreme.Least _ -> "least";
-                                case Extreme.Greatest _ -> "greatest";
-                            };
-                });
+                gathering(into, gathered.gathering(), gathered.elements());
                 into.put("elements", gathered.elements().discriminated());
                 into.put("key", it.key().from(gathered.elements()).discriminated());
                 into.put("asked", it.asked().discriminated());
@@ -6548,6 +8711,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         over.put("kind", "computed_occurrences");
                         over.put("elements", run.elements().discriminated());
                         elementComputation(over.putObject("computation"), run.computation());
+                        if (run.order() != null) {
+                            over.put("handed", wire(run.order().direction()));
+                        }
+                    }
+                    case RunSource.JoinedOccurrences run -> {
+                        over.put("kind", "joined_occurrences");
+                        over.put("elements", run.elements().discriminated());
+                        over.put("alongside", run.alongside().discriminated());
                     }
                     case RunSource.ReachableNodes run -> {
                         over.put("kind", "reachable_nodes");
@@ -6557,9 +8728,68 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ArrayNode container = over.putArray("container");
                         run.container().forEach(container::add);
                     }
+                    case RunSource.SearchedLine run -> {
+                        over.put("kind", "searched_line");
+                        over.put("root", run.root().discriminated());
+                        over.put("through", run.through());
+                        ArrayNode matchAt = over.putArray("match_at");
+                        run.matchAt().forEach(matchAt::add);
+                        over.put("key", run.key().discriminated());
+                    }
                 }
             }
         }
+    }
+
+    /** How the numbers of a key are put together, written of the elements at {@code elements}:
+     *  the word, and where some elements put theirs in place of the ones before, which. */
+    private static void gathering(ObjectNode into,
+                                  NumericTerm.GatheredUnderItsKey.Gathering gathering,
+                                  TermPath elements) {
+        into.put("gathering", switch (gathering) {
+            case NumericTerm.GatheredUnderItsKey.Gathering.Total _ -> "total";
+            case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
+                    "total_from_the_last_put";
+            case NumericTerm.GatheredUnderItsKey.Gathering.End(Extreme extreme) ->
+                    switch (extreme) {
+                        case Extreme.Least _ -> "least";
+                        case Extreme.Greatest _ -> "greatest";
+                    };
+        });
+        if (gathering instanceof NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut(
+                ElementProjection subject, List<CasesLeft> puts, RunSource.TraversalOrder order)) {
+            ObjectNode put = into.putObject("put_by");
+            put.put("subject", subject.from(elements).discriminated());
+            ArrayNode taken = put.putArray("taken");
+            puts.forEach(cases -> taken.add(subject.narrowedTo(cases).from(elements)
+                    .discriminated()));
+            put.put("handed", wire(order.direction()));
+        }
+    }
+
+    /** Which end of the elements a walk whose number turns on their order was handed first, in
+     *  the one word every such number is written with. Written out for the reason the status's
+     *  word is: what a document says is not what a constant inside the compiler is called. */
+    public static String wire(TraversalDirection direction) {
+        return switch (direction) {
+            case FORWARD -> "as_written";
+            case REVERSE -> "from_the_far_end";
+        };
+    }
+
+    /** A way of rounding, in the one word this document names it by. Written out for the reason
+     *  {@link #wire(TraversalDirection)} is, and in the document's own words: what the library
+     *  calls its cases is the library's to say. */
+    private static String wire(WholeRounding way) {
+        return switch (way) {
+            case HALF_UP -> "half_up";
+            case HALF_EVEN -> "half_even";
+            case HALF_DOWN -> "half_down";
+            case UP -> "away_from_nought";
+            case DOWN -> "toward_nought";
+            case CEILING -> "toward_the_greater";
+            case FLOOR -> "toward_the_lesser";
+        };
     }
 
     /**
@@ -6584,20 +8814,60 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             term.put("weight", each.getValue().spelled());
                         });
             }
-            case ElementValue.Choose it -> {
-                into.put("kind", "choose");
-                into.put("flag", it.flag().spelled());
-                elementComputation(into.putObject("whenSet"), it.whenSet());
-                elementComputation(into.putObject("otherwise"), it.otherwise());
+            case ElementValue.Multilinear it -> {
+                into.put("kind", "products");
+                into.put("constant", it.form().constant().spelled());
+                ArrayNode terms = into.putArray("terms");
+                it.form().coefs().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey(
+                                Comparator.comparing(ElementValue.Monomial::toString)))
+                        .forEach(each -> {
+                            ObjectNode term = terms.addObject();
+                            ElementValue.Rounding rounding = each.getKey().rounding();
+                            if (rounding == null) {
+                                ArrayNode fields = term.putArray("fields");
+                                each.getKey().fields().stream().map(ElementProjection::spelled)
+                                        .sorted().forEach(fields::add);
+                            } else {
+                                ObjectNode rounds = term.putObject("rounding");
+                                rounds.put("scale", rounding.scale().toString());
+                                rounds.put("mode", wire(rounding.way()));
+                                elementComputation(rounds.putObject("value"), rounding.inner());
+                            }
+                            term.put("weight", each.getValue().spelled());
+                        });
             }
-            case ElementValue.ByPosition it -> {
-                into.put("kind", "position");
-                if (it.test().divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
-                    into.put("divisor", it.test().divisor());
+            case ElementValue.Choose it -> {
+                switch (it.test()) {
+                    case ElementValue.Test.Flag flag -> {
+                        into.put("kind", "choose");
+                        into.put("flag", flag.place().spelled());
+                        elementComputation(into.putObject("whenSet"), it.whenHolds());
+                    }
+                    case ElementValue.Test.Compared compared -> {
+                        into.put("kind", "compared");
+                        elementComputation(into.putObject("form"),
+                                new ElementValue.Affine(compared.form()));
+                        into.put("relation", compared.relation().written());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
+                    case ElementValue.Test.Written written -> {
+                        into.put("kind", "written");
+                        into.put("place", written.place().spelled());
+                        into.put("value", written.written());
+                        into.put("equal", written.equal());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
+                    case ElementValue.PositionTest test -> {
+                        into.put("kind", "position");
+                        if (test.divisor() != ElementValue.PositionTest.THE_POSITION_ITSELF) {
+                            into.put("divisor", test.divisor());
+                        }
+                        into.put("relation", test.relation().written());
+                        into.put("against", test.against());
+                        elementComputation(into.putObject("whenHolds"), it.whenHolds());
+                    }
                 }
-                into.put("relation", it.test().relation().written());
-                into.put("against", it.test().against());
-                elementComputation(into.putObject("whenHolds"), it.whenHolds());
                 elementComputation(into.putObject("otherwise"), it.otherwise());
             }
             case ElementValue.Indexed it -> {
@@ -6736,16 +9006,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case souther.compiler.check.DeclaredLine.OfAStatement it -> {
                 into.put("kind", "statement");
                 into.put("statement", it.statement().ordinal());
+                if (!it.statement().inside().isEmpty()) {
+                    insideStatements(into.putArray("inside"), it.statement());
+                }
             }
             case souther.compiler.check.DeclaredLine.OfAConjunct it -> {
                 into.put("kind", "conjunct");
                 ArrayNode paired = into.putArray("pairedWith");
                 it.pairedWith().stream()
-                        .map(souther.compiler.check.InvariantStatementId::ordinal)
-                        .sorted()
-                        .forEach(paired::add);
+                        .sorted(Comparator
+                                .comparingInt(souther.compiler.check.InvariantStatementId::ordinal)
+                                .thenComparing(each -> each.inside().toString()))
+                        .forEach(each -> {
+                            if (each.inside().isEmpty()) {
+                                paired.add(each.ordinal());
+                            } else {
+                                ObjectNode inner = paired.addObject();
+                                inner.put("statement", each.ordinal());
+                                insideStatements(inner.putArray("inside"), each);
+                            }
+                        });
             }
         }
+    }
+
+    /** The statements {@code statement} is within, the outermost first. */
+    private static void insideStatements(ArrayNode into,
+                                         souther.compiler.check.InvariantStatementId statement) {
+        statement.inside().forEach(into::add);
     }
 
     /** A level, as the thing it is a level of writes it: a place on a carrier, or a number. */
@@ -7033,7 +9321,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // neither has a subject. What the `path` beside this names is where a reader is sent to
             // look, which is one word because it is one thing.
             case StandingQuestion.BoundaryUndetermined _,
-                 StandingQuestion.NothingClassifiesIt _ -> "filedAt";
+                 StandingQuestion.NothingClassifiesIt _,
+                 StandingQuestion.RegionUndetermined _ -> "filedAt";
         };
     }
 
@@ -7056,6 +9345,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case StandingQuestion.Exact it -> word(it.obligation());
             case StandingQuestion.BoundaryUndetermined _ -> "boundaryNotDetermined";
             case StandingQuestion.NothingClassifiesIt _ -> "notDetermined";
+            case StandingQuestion.RegionUndetermined _ -> "regionNotDetermined";
         };
     }
 
@@ -7153,15 +9443,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 weakening(b, behavior.weakenedBy());
                 signature(b, behavior.name(), behavior.signature(), sources);
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
-                        behavior.account(), behavior.claimed(), sources,
+                        behavior.weights(), behavior.account(), behavior.claimed(), sources,
                         behavior.rulePlace(), behavior.partPlace(),
-                        behavior.evidence().combinations(), behavior.rowPlace());
+                        behavior.evidence().combinations(), behavior.rowPlace(),
+                        behavior.helpersCalledOnEachElement());
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
                 interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
+                stoppedAtAFigure(b, behavior.stoppedAtAFigure());
+                leftToBeChanged(b, behavior.leftToBeChanged());
                 reachProofsContradicted(b, behavior.name(), behavior.reachShownWrong(),
                         waysGoneDown(behavior));
+                walkProofsContradicted(b, behavior.reachShownWrong());
                 findings(b, behavior, sources);
             }
         }
@@ -7321,14 +9615,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * this compilation cannot point at — which is the state {@link PublishedAt} answers for and not
      * one decided again here.
      */
-    private static String sentTo(RuleSite sentTo, WhereAPartIs parts, SourceRendering rendering,
-                                 SourceId declaredIn) {
+    private static Message sentTo(RuleSite sentTo, WhereAPartIs parts, SourceRendering rendering,
+                                  SourceId declaredIn) {
         return sentTo(placeInTheRule(sentTo, parts), rendering, declaredIn);
     }
 
-    private static String sentTo(Optional<PublishedAt> sentTo, SourceRendering rendering,
-                                 SourceId declaredIn) {
-        return sentTo.map(at -> ", at " + PlaceProse.said(at, rendering, declaredIn)).orElse("");
+    /**
+     * The words for a place that is laid out, and none for one the layouts hold no text of: a
+     * rendering with nothing to count lines in cannot say where a place is, and "at null" is not a
+     * place.
+     */
+    private static Message sentTo(Optional<PublishedAt> sentTo, SourceRendering rendering,
+                                  SourceId declaredIn) {
+        return sentTo.filter(at -> rendering.layouts().resolve(at.at()) != null)
+                .<Message>map(at -> new ReportMessage.SentTo(
+                        PlaceProse.said(at, rendering, declaredIn)))
+                .orElse(new ReportMessage.Nothing());
     }
 
     /**
@@ -7451,10 +9753,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     private void partition(ObjectNode behavior, PartitionEvidence partition,
                                   Measure<List<BorderAssessment>> lines,
+                                  List<TiltOfADerivedValue> weights,
                                   List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts,
-                                  CombinationCriterion criterion, WhereARowIs rowsAt) {
+                                  CombinationCriterion criterion, WhereARowIs rowsAt,
+                                  Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
+                                          helpersCalledOnEachElement) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
         if (!(PartitionSection.of(partition) instanceof PartitionSection.Present)) {
@@ -7575,6 +9880,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ObjectNode standsOn = stopped.addObject();
                         standsOn.put("reason", word(stop.reason()));
                         figuresMet(standsOn, stop.figures());
+                        stop.leftOpen().ifPresent(open -> leftOpen(standsOn, open));
+                        stop.notShownComputed().ifPresent(
+                                numbers -> numbersNotShownComputed(standsOn, numbers));
+                        runsStopped(standsOn, stop.runsStopped(), sources);
                         stop.sentTo().ifPresent(
                                 at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
@@ -7684,6 +9993,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
+        // What each computation of a value derived from several positions is owed, where the rule
+        // cuts it at several places: a weight for each position, in place of the classes the
+        // thresholds would have divided it into. Beside the borders and not under them, because a
+        // computation is owed its weights whether or not a border of it was drawn.
+        weightsOfTheComputations(out, weights, sources);
         // What this behavior is owed, once per point, with every reading of it. A second layer
         // and not a rewrite of `boundaries`: that array is the lines at coordinates, which is what
         // a border is, and this is the account — a guard on a name every case of a sum spreads is
@@ -7691,7 +10005,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // here, on the point, where on the line and the rule; and every reading is published, so
         // nothing a text report left out for room is missing from the document.
         obligations(DocumentPart.OBLIGATIONS.putArray(out), account, null, sources, places,
-                rowsAt);
+                rowsAt, Optional.of(parts));
         // Written where the pair space is what this behavior is held to, and left out where its
         // decisions meet: the criterion is one or the other, and a document carrying both would
         // hand a consumer a second universe of combinations nobody is owed a row in.
@@ -7795,6 +10109,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And the figures it stopped at, which the word is coarser than: a consumer told a
             // part of a rule was not read is told which figure a wider run would have to allow.
             figuresMet(said, each.figures());
+            // And where the runs of the rows tried for it stopped, which is no figure: each is an
+            // input the model has not decided about, and the word does not say which.
+            runsStopped(said, each.runsStopped(), sources);
+            // And the values a row built and run got to the rule at, as the model writes them,
+            // where what stopped it is that not every value is shown to: absent where none was,
+            // and never a claim about any value it does not list.
+            if (!each.shownReachedAt().isEmpty()) {
+                ArrayNode shown = said.putArray("shownReachedAt");
+                each.shownReachedAt().forEach(shown::add);
+            }
             // And which rule, where one was read and could not be used. Absent where the reading
             // never arrived at the rules of the position: there is nothing to name, and a field
             // holding a placeholder would say this compiler had looked at a rule it never saw.
@@ -7816,8 +10140,518 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 RuleHandleSurface.NOT_READ_RULE.put(
                         row, PublishedRuleHandle.of(handle(rule.cited(), places), places), sources.rendering(), null);
                 ruleId(said.putObject("ruleId"), rule.rule());
+                sentTo(said, rule.sentTo(), parts, sources);
             }
         });
+        // And what the cases of each line not worked out for their number were, an entry per line
+        // and per case asked, beside the entries above and joined to them by the rule. Never put
+        // into those: two of them about one rule are one finding, and two counts are two counts.
+        DocumentArray expanded = DocumentPart.CASE_EXPANSIONS.putArray(out);
+        List<CasesAtARule<CaseExpansion.CameTo>> told = partition.caseExpansions();
+        List<CaseOfALine> numbered = casesNumbered(told);
+        for (int at = 0; at < told.size(); at++) {
+            caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
+                    parts, sources, helpersCalledOnEachElement);
+        }
+        // And, where a line was read all the same at a cost, the helper its cases choose among:
+        // beside the entries above, which say why a line was not read, and written only where
+        // there is one.
+        if (!partition.costlyReadings().isEmpty()) {
+            DocumentArray costly = DocumentPart.COSTLY_READINGS.putArray(out);
+            for (CasesAtARule<List<CaseExpansion.MultipliedHelper>> each
+                    : partition.costlyReadings()) {
+                costlyReadingRow(costly.addObject(), each, places, parts, sources,
+                        helpersCalledOnEachElement);
+            }
+        }
+        // And where a run stops only past what the representation holds, once each, where there
+        // is any.
+        if (!partition.stopsPastTheRepresentation().isEmpty()) {
+            ArrayNode stops = out.putArray("stopsPastTheRepresentation");
+            for (StopPastTheRepresentation each : partition.stopsPastTheRepresentation()) {
+                ObjectNode one = stops.addObject();
+                one.put("operation", each.operation());
+                // Where a reader can be sent: a place the sources lay out at a line.
+                PublishedAt.of(Citation.of(each.at()))
+                        .filter(place -> sources.layouts().resolve(place.at()) != null)
+                        .ifPresent(place -> at(one, place, sources));
+            }
+        }
+    }
+
+    /** One rule's line and what one of its cases was, as a row of {@code caseExpansions}. */
+    private static void caseExpansionRow(DocumentItem row, CasesAtARule<CaseExpansion.CameTo> each,
+                                         CaseOfALine which,
+                                         PublishedRuleHandle.WhereARuleIs places,
+                                         WhereAPartIs parts, DocumentSources sources,
+                                         Map<ValueName.Helper,
+                                                 HelpersReadOnApplicationsAroundThem.Told>
+                                                 helpersCalledOnEachElement) {
+        ObjectNode said = caseRowOf(row, RuleHandleSurface.CASE_EXPANSION_RULE, each, places,
+                sources);
+        said.put("case", which.ordinal());
+        said.put("casesOfTheLine", which.of());
+        // What the case came to, at each copy of the rule it was read at: one case, and an
+        // answer for each copy that answered it differently.
+        readingsOfACase(said, each, (one, reading) -> {
+            caseExpansion(one.putObject("caseExpansion"), reading.answer(), parts, sources);
+            reading.answer().helperHoldingEveryChoice(reading.readAt().inOrder())
+                    .ifPresent(declared -> {
+                        ObjectNode helper = one.putObject("helperToDeclare");
+                        helper.put("helper", declared.helper().toString());
+                        ArrayNode inside = helper.putArray("calledInside");
+                        declared.calledInside().forEach(caller -> inside.add(caller.toString()));
+                    });
+            calledOnEachElement(helpersCalledOnEachElement, reading.readAt().inOrder(),
+                    suggestedAt(reading.answer(), reading.readAt().inOrder()))
+                    .ifPresent(onEach -> helperCalledOnEachElement(one, onEach, parts, sources));
+        });
+    }
+
+    /** One rule's line read at a cost and the helpers its cases choose among, as a row of
+     *  {@code costlyReadings}. */
+    private static void costlyReadingRow(DocumentItem row,
+                                         CasesAtARule<List<CaseExpansion.MultipliedHelper>> each,
+                                         PublishedRuleHandle.WhereARuleIs places,
+                                         WhereAPartIs parts, DocumentSources sources,
+                                         Map<ValueName.Helper,
+                                                 HelpersReadOnApplicationsAroundThem.Told>
+                                                 helpersCalledOnEachElement) {
+        ObjectNode said = caseRowOf(row, RuleHandleSurface.COSTLY_READING_RULE, each, places,
+                sources);
+        readingsOfACase(said, each, (one, reading) -> {
+            ArrayNode out = one.putArray("helpers");
+            reading.answer().forEach(helper ->
+                    multipliedHelper(out.addObject(), helper, parts, sources));
+            calledOnEachElement(helpersCalledOnEachElement, reading.readAt().inOrder(),
+                    reading.answer().stream().map(CaseExpansion.MultipliedHelper::helper)
+                            .toList())
+                    .ifPresent(onEach -> helperCalledOnEachElement(one, onEach, parts, sources));
+        });
+    }
+
+    /** The helper a comparison is written in that a function applied outside it calls on each
+     *  element, as a reading of the comparison says it. */
+    private static void helperCalledOnEachElement(ObjectNode one, OnEachElement said,
+                                                  WhereAPartIs parts, DocumentSources sources) {
+        ObjectNode helper = one.putObject("helperCalledOnEachElement");
+        helper.put("helper", said.named().helper().toString());
+        ArrayNode calls = helper.putArray("calls");
+        for (ModelOccurrence call : said.named().calls()) {
+            ObjectNode at = calls.addObject();
+            copyId(at.putObject("construct"), call);
+            writtenAt(at, call, parts, sources);
+        }
+        ArrayNode inside = helper.putArray("calledInside");
+        said.calledInside().forEach(caller -> inside.add(caller.toString()));
+        ArrayNode left = helper.putArray("leftReadAgainBy");
+        said.leftReadAgainBy().forEach(other -> left.add(other.toString()));
+    }
+
+    /** What every row about a case of a line says first: the rule, the line, where on it, and
+     *  which of the author's lines, as the arms on the way to it, since two lines written apart
+     *  can come to one relation and these are told apart by it. */
+    private static ObjectNode caseRowOf(DocumentItem row, RuleHandleSurface surface,
+                                        CasesAtARule<?> each,
+                                        PublishedRuleHandle.WhereARuleIs places,
+                                        DocumentSources sources) {
+        ObjectNode said = row.node();
+        surface.put(row, PublishedRuleHandle.of(handle(each.cited(), places), places),
+                sources.rendering(), null);
+        ruleId(said.putObject("ruleId"), each.rule());
+        said.put("line", each.line());
+        said.put("cutAt", each.cutAt());
+        ArrayNode arms = said.putArray("arms");
+        each.which().line().written().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
+        return said;
+    }
+
+    /** The readings of a case, each with the copies of the rule it was read at and what it
+     *  answered, which {@code answer} writes. */
+    private static <A> void readingsOfACase(ObjectNode said, CasesAtARule<A> each,
+                                            BiConsumer<ObjectNode, CasesAtARule.Reading<A>>
+                                                    answer) {
+        ArrayNode readings = said.putArray("readings");
+        for (CasesAtARule.Reading<A> reading : each.readings()) {
+            ObjectNode one = readings.addObject();
+            ArrayNode copies = one.putArray("readAt");
+            reading.readAt().forEach(copy -> copyId(copies.addObject(), copy));
+            answer.accept(one, reading);
+        }
+    }
+
+    /** Which of the cases a rule's line was told of an entry is, from one, and of how many. */
+    private record CaseOfALine(int ordinal, int of) {}
+
+    /**
+     * Each entry numbered among those about the same line of the same rule, in the order they
+     * stand. Two entries are two cases ({@link CasesAtARule#key}), which is all the number
+     * says: the condition a case was said as is what tells it apart, and it is too long to be
+     * read. The line is the entry's own ({@link CasesAtARule#lineOfTheRule}), the half of
+     * its key a case is not, so what the number counts and what tells entries apart are one
+     * identity.
+     */
+    private static List<CaseOfALine> casesNumbered(List<CasesAtARule<CaseExpansion.CameTo>> expanded) {
+        Map<CasesAtARule.LineOfARule, Integer> of = new HashMap<>();
+        for (CasesAtARule<CaseExpansion.CameTo> each : expanded) {
+            of.merge(each.lineOfTheRule(), 1, Integer::sum);
+        }
+        Map<CasesAtARule.LineOfARule, Integer> sofar = new HashMap<>();
+        List<CaseOfALine> out = new ArrayList<>();
+        for (CasesAtARule<CaseExpansion.CameTo> each : expanded) {
+            CasesAtARule.LineOfARule line = each.lineOfTheRule();
+            out.add(new CaseOfALine(sofar.merge(line, 1, Integer::sum), of.get(line)));
+        }
+        return out;
+    }
+
+    /** Which of the author's lines, as the arms on the way to it, in a clause: nothing for the
+     *  comparison itself. */
+    private static String armsSaid(WrittenLine written, Page page) {
+        if (written.arms().isEmpty()) {
+            return "";
+        }
+        List<String> arms = written.arms().stream()
+                .map(arm -> page.say(new ReportMessage.ArmOfTheConstructIn(arm.arm() + 1,
+                        word(arm.at().origin().kind()),
+                        WrittenOwner.theBodyThatWrote(arm.at().origin().owner()).definition())))
+                .toList();
+        String said = arms.getLast();
+        for (int i = arms.size() - 2; i >= 0; i--) {
+            said = page.say(new ReportMessage.ThenAfter(arms.get(i), said));
+        }
+        return page.say(new ReportMessage.DownTheArms(said));
+    }
+
+    /**
+     * How many ways one case of a line was and what made the parts it is taken apart on. What made
+     * them is not a factoring of the count, which is why it is a list beside it and not a product.
+     */
+    private static void caseExpansion(ObjectNode into, CaseExpansion.CameTo expansion,
+                                      WhereAPartIs parts, DocumentSources sources) {
+        ObjectNode structural = into.putObject("structuralWays");
+        switch (expansion.counted().structuralWays()) {
+            case CaseCount.Ways.Exactly(var ways) -> structural.put("exactly", ways.toString());
+            case CaseCount.Ways.MoreThan(var ways) -> structural.put("moreThan", ways.toString());
+        }
+        ObjectNode consistent = into.putObject("numericallyConsistentWays");
+        switch (expansion.counted().numericallyConsistentWays()) {
+            case NumericallyConsistentWays.Counted.AtMost(var ways) ->
+                    consistent.put("atMost", ways.toString());
+            case NumericallyConsistentWays.Counted.NotCounted(var why) ->
+                    consistent.put("notCounted", word(why));
+        }
+        expansion.counted().walkedWaysAtMost().ifPresent(ways ->
+                into.put("walkedWaysAtMost", ways.toString()));
+        switch (expansion.attributed()) {
+            case CaseExpansion.NotAttributed(var why) -> into.put("notAttributed", word(why));
+            case CaseExpansion.Attributed attributed -> {
+                into.put("partsSplitOn", attributed.partsSplitOn());
+                into.put("unattributed", attributed.unattributed());
+                ArrayNode factors = into.putArray("factors");
+                attributed.factors().forEach(each ->
+                        factor(factors.addObject(), each, parts, sources));
+                ArrayNode multiplied = into.putArray("multipliedHelpers");
+                attributed.multiplied().forEach(each ->
+                        multipliedHelper(multiplied.addObject(), each, parts, sources));
+            }
+        }
+        ArrayNode diagnosed = into.putArray("diagnosed");
+        expansion.diagnosed().forEach(each -> diagnosis(diagnosed.addObject(), each));
+    }
+
+    /** How many ways some parts of a case can come out together, where they compare one
+     *  number. */
+    private static void diagnosis(ObjectNode into, CaseExpansion.Diagnosis diagnosis) {
+        switch (diagnosis) {
+            case CaseExpansion.OrderedBoundaries ordered -> {
+                into.put("kind", "orderedBoundaries");
+                into.put("quantity", ordered.quantity());
+                into.put("comparisons", ordered.comparisons());
+                into.put("points", ordered.points());
+                into.put("waysAtMost", ordered.waysAtMost());
+            }
+            case CaseExpansion.CorrelatedRemainders remainders -> {
+                into.put("kind", "correlatedRemainders");
+                into.put("dividend", remainders.dividend());
+                into.put("divisor", remainders.divisor());
+                into.put("comparisons", remainders.comparisons());
+                into.put("ways", remainders.ways());
+            }
+        }
+    }
+
+    /** One thing in the model that made some of the parts a case is taken apart on. */
+    private static void factor(ObjectNode into, CaseExpansion.Factor factor, WhereAPartIs parts,
+                               DocumentSources sources) {
+        switch (factor) {
+            case CaseExpansion.Choice choice -> {
+                into.put("kind", "choice");
+                copyId(into.putObject("construct"), choice.construct());
+                writtenAt(into, choice.construct(), parts, sources);
+                into.put("choice", word(choice.kind()));
+                into.put("alternatives", choice.alternatives());
+                into.put("times", choice.times());
+                choice.operation().ifPresent(operation ->
+                        into.put("operation", operationNamed(operation)));
+            }
+            case CaseExpansion.Applications applications -> {
+                into.put("kind", "applications");
+                copyId(into.putObject("call"), applications.call());
+                writtenAt(into, applications.call(), parts, sources);
+                into.put("operation", operationNamed(applications.operation()));
+                into.put("applications", applications.applications());
+            }
+            case CaseExpansion.KeptWays kept -> {
+                into.put("kind", "keptWays");
+                ArrayNode by = into.putArray("keptBy");
+                for (ModelOccurrence each : kept.keptBy()) {
+                    ObjectNode one = by.addObject();
+                    copyId(one.putObject("construct"), each);
+                    writtenAt(one, each, parts, sources);
+                }
+                into.put("ways", kept.ways());
+                into.put("times", kept.times());
+            }
+        }
+    }
+
+    /** A helper whose readings the choices of a case multiply, with each comparison of it that
+     *  made their parts and the helpers its call is written inside. */
+    private static void multipliedHelper(ObjectNode into, CaseExpansion.MultipliedHelper helper,
+                                         WhereAPartIs parts, DocumentSources sources) {
+        into.put("helper", helper.helper().toString());
+        ArrayNode madeAt = into.putArray("madeAt");
+        for (ModelOccurrence each : helper.madeAt()) {
+            ObjectNode one = madeAt.addObject();
+            copyId(one.putObject("construct"), each);
+            writtenAt(one, each, parts, sources);
+            ArrayNode inside = one.putArray("calledInside");
+            CaseExpansion.MultipliedHelper.calledInside(each).forEach(
+                    caller -> inside.add(caller.toString()));
+        }
+    }
+
+    /**
+     * Where an author goes about a construct of the model a count names: the construct they wrote,
+     * which every copy of it through a helper's calls is, and nothing where a pass composed it.
+     *
+     * <p>The one place the question is asked, for the places this report looks up
+     * ({@link #partPlaces}) and for the two surfaces that write them, so that what is looked up is
+     * what is written.
+     */
+    private static Optional<RuleSite> whereItIsWritten(ModelOccurrence construct) {
+        return construct.origin().isWritten()
+                ? Optional.of(new RuleSite.AConstructTheAuthorWrote(construct.origin()))
+                : Optional.empty();
+    }
+
+    /** {@code construct}'s place, under {@code at}, where this document can point at it. */
+    private static void writtenAt(ObjectNode into, ModelOccurrence construct, WhereAPartIs parts,
+                                  DocumentSources sources) {
+        whereItIsWritten(construct).flatMap(site -> placeInTheRule(site, parts))
+                .ifPresent(at -> place(into.putObject("at"), at, sources));
+    }
+
+    /** An operation of the language as the library publishes it. */
+    private static String operationNamed(ValueName.Stdlib operation) {
+        return operation.qualified();
+    }
+
+    /**
+     * One case in a sentence: the two counts, then what made its parts as a list. Never joined by
+     * a sign of multiplication, which would say the count is their product.
+     */
+    private static String caseExpansionSaid(CaseExpansion.CameTo expansion,
+                                            Function<ModelOccurrence, Message> writtenIn,
+                                            Function<ModelOccurrence, Message> calledAt,
+                                            Page page) {
+        StringBuilder out = new StringBuilder(page.say(
+                switch (expansion.counted().structuralWays()) {
+                    case CaseCount.Ways.Exactly(var ways) ->
+                            new ReportMessage.StructuralWays(grouped(ways));
+                    case CaseCount.Ways.MoreThan _ ->
+                            new ReportMessage.MoreStructuralWaysThanCounted();
+                }));
+        switch (expansion.counted().numericallyConsistentWays()) {
+            case NumericallyConsistentWays.Counted.AtMost(var ways) -> out.append(page.say(
+                    new ReportMessage.AtMostNumericallyConsistentWays(grouped(ways))));
+            case NumericallyConsistentWays.Counted.NotCounted(var why) -> out.append(page.say(
+                    new ReportMessage.NumericallyConsistentWaysNotCounted(switch (why) {
+                        case STATES_A_COUNT_IS_TAKEN_IN ->
+                                new ReportMessage.TheStatesACountIsTakenIn();
+                        case WAYS_A_COUNT_IS_HELD_TO -> new ReportMessage.TheWaysACountIsHeldTo();
+                    })));
+        }
+        expansion.counted().walkedWaysAtMost().ifPresent(ways -> out.append(page.say(
+                new ReportMessage.AtMostWaysWalkedFromTheRemainders(grouped(ways)))));
+        switch (expansion.attributed()) {
+            case CaseExpansion.NotAttributed(var why) -> out.append(page.say(
+                    new ReportMessage.WhatMadeItsPartsWasNotRead(switch (why) {
+                        case NOTHING_DERIVED -> new ReportMessage.WhatWasHeldOfItsDerivation();
+                        case STEPS_A_READING_TAKES -> new ReportMessage.TheStepsAReadingTakes();
+                    })));
+            case CaseExpansion.Attributed attributed -> {
+                if (!attributed.factors().isEmpty()) {
+                    out.append(page.say(new ReportMessage.ItsPartsWereMadeBy(reasons(page,
+                            attributed.factors().stream()
+                                    .map(factor -> factorSaid(factor,
+                                            each -> page.say(writtenIn.apply(each)), page))
+                                    .toList()))));
+                }
+                if (attributed.unattributed() > 0) {
+                    out.append(page.say(new ReportMessage.PartsMadeByNothingNamed(
+                            grouped(attributed.unattributed()),
+                            grouped(attributed.partsSplitOn()))));
+                }
+                attributed.multiplied().forEach(helper -> out.append(
+                        multipliedHelperSaid(helper, writtenIn, calledAt, page)));
+            }
+        }
+        if (!expansion.diagnosed().isEmpty()) {
+            out.append(page.say(new ReportMessage.WhatTheNumbersLeaveOfThem(reasons(page,
+                    expansion.diagnosed().stream()
+                            .map(each -> page.say(diagnosisSaid(each))).toList()))));
+        }
+        return out.toString();
+    }
+
+    /** A count as a page writes one: in groups of three. */
+    private static String grouped(long count) {
+        return String.format(Locale.ROOT, "%,d", count);
+    }
+
+    /** The same, of a count that may not fit in a long. */
+    private static String grouped(BigInteger count) {
+        return String.format(Locale.ROOT, "%,d", count);
+    }
+
+    /** How many ways some parts can come out together, in a clause. */
+    private static Message diagnosisSaid(CaseExpansion.Diagnosis diagnosis) {
+        return switch (diagnosis) {
+            case CaseExpansion.OrderedBoundaries ordered -> ordered.points() == 1
+                    ? new ReportMessage.ComparisonsTurnAtOnePoint(grouped(ordered.comparisons()),
+                            ordered.quantity(), grouped(ordered.waysAtMost()))
+                    : new ReportMessage.ComparisonsTurnAtPoints(grouped(ordered.comparisons()),
+                            ordered.quantity(), grouped(ordered.points()),
+                            grouped(ordered.waysAtMost()));
+            case CaseExpansion.CorrelatedRemainders remainders -> remainders.ways() == 1
+                    ? new ReportMessage.RemaindersComeOutOneWay(
+                            grouped(remainders.comparisons()), remainders.dividend(),
+                            Long.toString(remainders.divisor()))
+                    : new ReportMessage.RemaindersComeOutWays(grouped(remainders.comparisons()),
+                            remainders.dividend(), Long.toString(remainders.divisor()),
+                            grouped(remainders.ways()));
+        };
+    }
+
+    /**
+     * A helper whose readings a case's choices multiply, as a suggestion an author can take: what
+     * the helper is, where its comparisons were read, and the helpers its call has to move out of.
+     * Nothing about what the case would come to, which is another compilation.
+     */
+    private static String multipliedHelperSaid(CaseExpansion.MultipliedHelper helper,
+                                               Function<ModelOccurrence, Message> writtenIn,
+                                               Function<ModelOccurrence, Message> calledAt,
+                                               Page page) {
+        // Each place once for what it says: two readings made at one place in one call are one
+        // place to send a reader to.
+        Set<Message> at = new LinkedHashSet<>();
+        Set<ValueName.Helper> inside = new LinkedHashSet<>();
+        for (ModelOccurrence each : helper.madeAt()) {
+            Message calls = calledAt.apply(each);
+            at.add(calls instanceof ReportMessage.Nothing ? writtenIn.apply(each)
+                    : new ReportMessage.PlaceInCalls(writtenIn.apply(each), calls));
+            inside.addAll(CaseExpansion.MultipliedHelper.calledInside(each));
+        }
+        return page.say(new ReportMessage.ChoicesMultiplyTheHelper(helper.helper().name(),
+                Joined.reasons(List.copyOf(at)), inside.isEmpty() ? new ReportMessage.Nothing()
+                        : new ReportMessage.TheCallIsWrittenInsideHelpers(
+                                listed(page, inside.stream().map(each -> "`" + each.name() + "`")
+                                        .toList()))));
+    }
+
+    /** A helper every choice of a case is written in, as a suggestion an author can take, with
+     *  the helpers its call has to move out of. */
+    private static String helperToDeclareSaid(CaseExpansion.HelperToDeclare declared, Page page) {
+        return page.say(new ReportMessage.EveryChoiceIsWrittenInTheHelper(
+                declared.helper().name(), declared.calledInside().isEmpty()
+                        ? new ReportMessage.Nothing()
+                        : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                declared.calledInside().stream()
+                                        .map(each -> "`" + each.name() + "`").toList()))));
+    }
+
+    /**
+     * A helper a comparison is written in that a call outside it applies to each element, as a
+     * suggestion an author can take: where the calls are, the helpers that call it, which a call
+     * of it has to move out of, and the helpers the other rules suggest at the same reading that
+     * leave the comparison read again on each application.
+     */
+    private static String helperOnEachElementSaid(OnEachElement said,
+                                                  Function<ModelOccurrence, Message> writtenIn,
+                                                  Page page) {
+        Set<Message> at = new LinkedHashSet<>();
+        said.named().calls().forEach(call -> at.add(writtenIn.apply(call)));
+        String out = page.say(new ReportMessage.TheHelperIsCalledOnEachElement(
+                said.named().helper().name(), Joined.reasons(List.copyOf(at)),
+                said.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                        : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                said.calledInside().stream()
+                                        .map(each -> "`" + each.name() + "`").toList()))));
+        return said.leftReadAgainBy().isEmpty() ? out
+                : out + page.say(new ReportMessage.DeclaringThemLeavesItReadAgain(listed(page,
+                        said.leftReadAgainBy().stream()
+                                .map(each -> "`" + each.name() + "`").toList())));
+    }
+
+    /** One thing that made some of a case's parts, as an author would find it. */
+    private static String factorSaid(CaseExpansion.Factor factor,
+                                     Function<ModelOccurrence, String> writtenIn, Page page) {
+        return page.say(switch (factor) {
+            case CaseExpansion.Choice choice -> {
+                Message what = switch (choice.kind()) {
+                    case IF -> new ReportMessage.TheIf();
+                    case MATCH -> new ReportMessage.TheMatch();
+                    case CASES -> choice.operation().<Message>map(operation ->
+                                    new ReportMessage.TheCasesOf(operationNamed(operation)))
+                            .orElse(new ReportMessage.TheCasesOfAnOperation());
+                };
+                String in = writtenIn.apply(choice.construct());
+                yield choice.times() == 1
+                        ? new ReportMessage.ChosenOnce(what, in, grouped(choice.alternatives()))
+                        : new ReportMessage.ChosenTimes(what, in, grouped(choice.alternatives()),
+                                grouped(choice.times()));
+            }
+            case CaseExpansion.Applications applications -> applications.applications() == 1
+                    ? new ReportMessage.TheCallOnOneApplication(
+                            operationNamed(applications.operation()),
+                            writtenIn.apply(applications.call()))
+                    : new ReportMessage.TheCallOnApplications(
+                            operationNamed(applications.operation()),
+                            writtenIn.apply(applications.call()),
+                            grouped(applications.applications()));
+            case CaseExpansion.KeptWays kept -> {
+                Message by = kept.keptBy().isEmpty() ? new ReportMessage.Nothing()
+                        : new ReportMessage.KeptBy(both(page, kept.keptBy().stream()
+                                .map(writtenIn).distinct().toList()));
+                yield kept.times() == 1
+                        ? new ReportMessage.TheWaysElementsAreKeptOnce(by, grouped(kept.ways()))
+                        : new ReportMessage.TheWaysElementsAreKept(by, grouped(kept.ways()),
+                                grouped(kept.times()));
+            }
+        });
+    }
+
+    /** The definition a construct of the model was written in, and where in it, where this
+     *  rendering can say. */
+    private static Message writtenInSaid(ModelOccurrence construct, WhereAPartIs parts,
+                                         Page page, SourceId declaredIn) {
+        return new ReportMessage.Then(new ReportMessage.Verbatim(
+                WrittenOwner.theBodyThatWrote(construct.origin().owner()).definition()),
+                whereItIsWritten(construct).<Message>map(site ->
+                        sentTo(site, parts, page.rendering(), declaredIn))
+                        .orElse(new ReportMessage.Nothing()));
     }
 
     static void branch(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {
@@ -7969,6 +10803,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 });
             }
         }
+        // And the ways every run of which stops at a construction, apart from the ways no input
+        // takes: inputs take them, and every run is refused where it builds a value. Each with
+        // where the runs stop, written as every entry saying where runs stopped writes it.
+        List<DecisionReading.EveryRunStops> stopping = decision.read().everyRunStops();
+        if (!stopping.isEmpty()) {
+            ArrayNode ways = out.putArray("waysEveryRunStops");
+            for (DecisionReading.EveryRunStops each : stopping) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                runsStopped(one, behavior.wayStops().get(each.way()).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
+            }
+        }
+        // And the ways no input gets past where the proof stopped at a figure before it could say
+        // whether any input takes them: either of the two above, and neither is said. Each with
+        // the figure, and where every run along it would stop were some input to take it.
+        List<DecisionReading.UndecidedAtAFigure> undecided = decision.read().undecided();
+        if (!undecided.isEmpty()) {
+            ArrayNode ways = out.putArray("waysUndecided");
+            for (DecisionReading.UndecidedAtAFigure each : undecided) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                figuresMet(one, List.of(each.figure()));
+                runsStopped(one, behavior.wayStops().get(each.way()).stream()
+                        .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
+            }
+        }
+        placed.ifPresent(rows -> statementsNoRowIsIn(out, rows));
+    }
+
+    /**
+     * The statements of the decision that lack cases, which are what
+     * `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for, in the
+     * order the page numbers them. Absent where there are none.
+     */
+    private static void statementsNoRowIsIn(ObjectNode into, DecisionEvidence.RowsPlaced rows) {
+        if (rows.lacking().isEmpty()) {
+            return;
+        }
+        ArrayNode all = into.putArray("statementsNoRowIsIn");
+        for (CasesTheRowsTook.StatementShort each : rows.lacking()) {
+            ObjectNode one = all.addObject();
+            one.put("statement", each.what());
+            one.put("kind", word(each.kind()));
+            one.put("notAskable", each.notAskable());
+            if (!each.unseen().isEmpty()) {
+                ArrayNode cases = one.putArray("cases");
+                each.unseen().forEach(unseen -> cases.add(word(unseen.side())));
+            }
+        }
     }
 
     /**
@@ -7987,7 +10871,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     static void reachProofsContradicted(ObjectNode into, String behavior,
                                         PathReachability.Answers.Contradictions shownWrong,
                                         Set<DecisionRule> waysGoneDown) {
-        if (shownWrong.isEmpty() && waysGoneDown.isEmpty()) {
+        if (shownWrong.reachIsEmpty() && waysGoneDown.isEmpty()) {
             return;
         }
         ArrayNode all = into.putArray("reachProofsContradicted");
@@ -8001,6 +10885,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = all.addObject();
             one.put("kind", word(ReachProofWord.WAY_NO_INPUT_TAKES));
             ruleId(one.putObject("way"), behavior, each);
+        }
+    }
+
+    /**
+     * The walks this compiler proved go over one element at most that a row then took a second
+     * element of, each as the fold the author wrote, named the way a rewrite of it is.
+     *
+     * <p>Beside {@code reachProofsContradicted} and not among its entries: that list is of proofs
+     * that nothing arrives somewhere, and this is a proof about how long a list is. Nothing about
+     * the model is wrong then and the proof is, and the rewrites of the walk are asked as if it had
+     * not been made. Absent where no row went against any.
+     */
+    static void walkProofsContradicted(ObjectNode into,
+                                       PathReachability.Answers.Contradictions shownWrong) {
+        if (shownWrong.walks().isEmpty()) {
+            return;
+        }
+        ArrayNode all = into.putArray("walkProofsContradicted");
+        for (SourceConstructOrigin walk : shownWrong.walks()) {
+            WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(walk.owner());
+            ObjectNode one = all.addObject();
+            one.put("module", body.module());
+            one.put("definition", body.definition());
+            one.put("construct", walk.ordinal());
+            one.put("lowered", walk.lowered());
         }
     }
 
@@ -8051,9 +10960,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * published: a finding names the combination it is about by an identity, and a consumer acting
      * on one looks it up here.
      *
-     * <p>One entry per combination the body has a path to, whatever the rows did. Whether a row
-     * made it is the entry's own answer and is absent where the coverage has no value — a
-     * combination nothing was read about is not one no row makes.
+     * <p>An entry for each combination a row was seen making, with the rows, and none where nothing
+     * was read: a combination nothing was read about is not one no row makes, and listing the body's
+     * combinations there would write one for each choice of each group, as many as the factors
+     * multiplied out. What the body has is its groups, written below whatever was read, and the
+     * combinations no row makes are the sets of choices of those groups that the reading left
+     * missing.
      *
      * <p>The groups the measure would not walk are counted beside the entries rather than left out
      * of the number. What they hold is combinations nobody counted, and an account whose total said
@@ -8067,19 +10979,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObjectNode out = into.putObject("interaction");
         measured(out.putObject("coverage"), meetings.made());
         out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
+        if (!meetings.asked().notJoined().isEmpty()) {
+            ArrayNode unjoined = out.putArray("meetingsNotJoined");
+            for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+                ObjectNode one = unjoined.addObject();
+                one.put("why", word(each.why()));
+                PublishedAt.of(each.at()).ifPresent(place -> at(one, place, sources));
+            }
+        }
         ArrayNode all = out.putArray("obligations");
         Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
-        for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
-            ObjectNode one = all.addObject();
-            combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
-            met.ifPresent(rows -> {
-                one.put("made", rows.met().contains(each));
-                RowWitnesses by = rows.made().get(each);
+        if (met.isPresent()) {
+            for (ObligationIdentity.OfACombinationOfDecisions each
+                    : meetings.asked().ways().keySet()) {
+                if (!met.get().met().contains(each)) {
+                    continue;
+                }
+                ObjectNode one = all.addObject();
+                combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
+                one.put("made", true);
+                RowWitnesses by = met.get().made().get(each);
                 if (by != null) {
                     onlyWitnessedBy(one, by, behavior.rowPlace(), sources);
                 }
-            });
+            }
         }
+        groups(out, behavior, meetings);
     }
 
     /**
@@ -8196,6 +11121,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
             causes(one, each.why(), sources, places);
+            runsStopped(one, each.why().beside().stopped(), sources);
         }
     }
 
@@ -8219,11 +11145,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void causes(ObjectNode into, Generator.UnresolvedCombination why,
                                DocumentSources sources,
                                PublishedRuleHandle.WhereARuleIs places) {
-        if (why.alsoShort().isEmpty()) {
+        if (why.beside().shortOf().isEmpty()) {
             return;
         }
         DocumentArray causes = DocumentPart.SYNTHESIS_SHORTFALL_CAUSES.putArray(into);
-        for (Map.Entry<TermPath, StringOfferShortfall> at : why.alsoShort().entrySet()) {
+        for (Map.Entry<TermPath, StringOfferShortfall> at : why.beside().shortOf().entrySet()) {
             for (StringOfferShortfall.NotOffered each : at.getValue().these()) {
                 DocumentItem row = causes.addObject();
                 ObjectNode said = row.node();
@@ -8250,6 +11176,67 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
+    }
+
+    /**
+     * Where the runs of rows stopped, one entry per place, in the document's own words: which of
+     * the language's ends it was, the rule that refused the run where one did, the place of the
+     * construction where it was one, and what the runtime said where nothing names a rule.
+     *
+     * <p>One writer for every entry that says where runs stopped — the rows a search composed and
+     * the rows a search for a witness tried — so a place reads alike wherever a consumer meets
+     * it.
+     * Nothing where no run stopped, so the absence says no run stopped at any of them.
+     */
+    private static void runsStopped(ObjectNode into, List<WhereARunStopped> stops,
+                                    DocumentSources sources) {
+        if (stops.isEmpty()) {
+            return;
+        }
+        DocumentArray out = DocumentPart.RUNS_STOPPED.putArray(into);
+        for (WhereARunStopped each : stops) {
+            DocumentItem row = out.addObject();
+            ObjectNode said = row.node();
+            said.put("at", word(each.stop().kind()));
+            Optional<PublishedRuleHandle> refusing = GeneratedRows.ruleRefusing(each.stop());
+            if (refusing.isPresent()) {
+                RuleHandleSurface.RUN_STOPPED_RULE.put(row, refusing.get(),
+                        sources.rendering(), null);
+            }
+            // Where it stopped and where the rule that refused it is declared, as modules: a
+            // handle names a type or a behavior and not the module declaring it, and a body run
+            // in one module can stop at a construction written in another. A construction or an
+            // unreachable the run said no place for is written with none.
+            switch (each.stop()) {
+                case RunStop.AtAConstruction it -> {
+                    it.site().ifPresent(site -> said.put("module", site.module()));
+                    said.put("declaredIn", it.clauseModule());
+                    it.site().ifPresent(site -> sitsAt(said, each, site, sources));
+                }
+                case RunStop.AtAnEnsures it -> {
+                    said.put("module", it.module());
+                    said.put("declaredIn", it.module());
+                }
+                // An unreachable names no rule, so it has nothing declared.
+                case RunStop.AtAnUnreachable it -> {
+                    it.site().ifPresent(site -> said.put("module", site.module()));
+                    said.put("said", it.said());
+                    it.site().ifPresent(site -> sitsAt(said, each, site, sources));
+                }
+                case RunStop.AtAnEnd it -> said.put("said", it.said());
+            }
+        }
+    }
+
+    /** Where a place a run stopped at sits in the text of its module: the source declaring that
+     *  module where this compilation holds one, and the line and column. */
+    private static void sitsAt(ObjectNode said, WhereARunStopped where, RunStop.Site site,
+                               DocumentSources sources) {
+        if (where.source().isPresent()) {
+            said.put("sourceId", sources.written(where.source().get()));
+        }
+        said.put("line", site.line());
+        said.put("column", site.column());
     }
 
     /** How this document says what a search settled about one rule. */
@@ -8410,8 +11397,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * line or a class, that coordinate is not where the reader would go.
      */
     private void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
-        findings(DocumentPart.FINDINGS.putArray(behavior), of.reported(), sources,
-                of.rulePlace());
+        findingsAndPatterns(DocumentPart.FINDINGS.putArray(behavior), of.reported(),
+                of.unobserved(), sources, of.rulePlace());
     }
 
     /**
@@ -8425,11 +11412,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * @param axes what each point's line is on in the words a declaration wrote, for the account
      *             that has such words. Null for a body's own lines, which have none: a reading
      *             names the position it met the line at and no reading can stand for the rest
+     * @param parts where this document shows the calls whose applications a reading was read on,
+     *             for the account that was assembled with them: a behavior's. Nothing for the
+     *             declarations', whose calls are named without a place
      */
     private void obligations(DocumentArray out, List<BorderObligationPointAssessment> account,
                              Map<BorderObligationPoint, String> axes,
                              DocumentSources sources,
-                             PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt) {
+                             PublishedRuleHandle.WhereARuleIs places, WhereARowIs rowsAt,
+                             Optional<WhereAPartIs> parts) {
         for (BorderObligationPointAssessment point : account) {
             DocumentItem owed = out.addObject();
             ObjectNode o = owed.node();
@@ -8460,11 +11451,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // the order is not a contract, and a consumer reads these as a bag: two entries that
             // print alike are two readings, so they may be counted and may not be merged.
             ArrayNode readings = o.putArray("readings");
-            for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
-                BorderAssessment at = point.met().get(said.where());
+            List<ApplicationsReadOn> readOn = new ArrayList<>();
+            for (BorderObligationPointAssessment.Reading read : point.readingsInSteadyOrder()) {
+                BorderAssessment at = point.met().get(read);
+                readOn.add(at.readOn());
                 ObjectNode r = readings.addObject();
-                r.put("behavior", said.where().behavior());
-                r.put("axis", said.at());
+                r.put("behavior", read.behavior());
+                r.put("axis", at.axis());
                 r.put("relation", at.border().operator(point.askedAt(at)));
                 r.put("against", at.border().against(point.askedAt(at)));
                 // And the cases the line decides in, which the values alone do not say: two
@@ -8475,8 +11468,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
                 measured(r, point.owedAt(at).coverage(), (node, coverage) ->
                         node.put("hit", ItemAssessment.Coverage.hit(coverage)));
+                // And the applications of closures it was read on, where some call a source wrote
+                // made them. Left out where none did: a reading read once was read on nothing an
+                // author is named.
+                if (!at.readOn().isEmpty()) {
+                    ArrayNode applications = r.putArray("applications");
+                    for (AnApplicationOfAClosure one : at.readOn().each()) {
+                        ArrayNode by = applications.addObject().putArray("madeBy");
+                        for (AnApplicationOfAClosure.Made made : one.by()) {
+                            ObjectNode step = by.addObject();
+                            calledAt(step, made.call(), made.construct(), parts, sources);
+                            step.put("application", made.ordinal());
+                        }
+                    }
+                }
+            }
+            // And, of each call whose applications made some of the readings, how many of its
+            // applications did and how many readings they made: two counts, and neither a bound
+            // on the other.
+            List<ApplicationsReadOn.OfACall> byCall = ApplicationsReadOn.byCall(readOn);
+            if (!byCall.isEmpty()) {
+                ArrayNode calls = o.putArray("readingsByCall");
+                for (ApplicationsReadOn.OfACall each : byCall) {
+                    ObjectNode one = calls.addObject();
+                    calledAt(one, each.call(), each.construct(), parts, sources);
+                    one.put("applications", each.applications());
+                    one.put("readings", each.readings());
+                }
             }
         }
+    }
+
+    /**
+     * A call of the model applying a closure, as the construct of the model it is
+     * ({@code construct}, which was decided where the application was told) and where its author
+     * wrote it, where this document can say: the operation by the name the library publishes it
+     * under.
+     */
+    private static void calledAt(ObjectNode into, ACallOfAnOperation call,
+                                 ModelOccurrence construct, Optional<WhereAPartIs> parts,
+                                 DocumentSources sources) {
+        into.put("operation", operationNamed(call.operation()));
+        copyId(into.putObject("call"), construct);
+        parts.ifPresent(where -> writtenAt(into, construct, where, sources));
     }
 
     /**
@@ -8537,7 +11571,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     entry.owed.stream().map(Adequacy.DeclaredDebt::debt).toList(),
                     entry.owed.stream().collect(Collectors.toMap(
                             each -> each.debt().point(), Adequacy.DeclaredDebt::axis, (a, _) -> a)),
-                    sources, places, rowsAt);
+                    sources, places, rowsAt, Optional.empty());
             findings(DocumentPart.FINDINGS.putArray(one), entry.found, sources, places);
             lines(one.putArray("lines"), entry.lines);
             excluded(one.putArray("excluded"), entry.excluded);
@@ -8615,7 +11649,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 return owed.getFirst().subject().named();
             }
             return found.isEmpty()
-                    ? AuthoredLine.naming(owners) : found.getFirst().finding().named();
+                    ? Page.inTheDocument(AuthoredLine.named(owners))
+                    : found.getFirst().finding().named();
         }
     }
 
@@ -8630,50 +11665,264 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private void findings(DocumentArray out, List<ReportedFinding> written,
                           DocumentSources sources,
                           PublishedRuleHandle.WhereARuleIs places) {
+        findingsAndPatterns(out, written, List.of(), sources, places);
+    }
+
+    /**
+     * The same entries, with the combinations no row makes written as the sets of choices they are
+     * said as: an entry for each, where the first finding of a combination stood.
+     *
+     * <p>An entry about a set names its group and what it takes at each factor, which is how the
+     * group of the account is joined to, and says how many choices it holds. A finding about one
+     * combination is a finding about an obligation and an entry about a set is not, so the one is
+     * joined to by the obligation's identity and the other is not given one.
+     */
+    private void findingsAndPatterns(DocumentArray out, List<ReportedFinding> written,
+                                     List<UnobservedGroup> groups, DocumentSources sources,
+                                     PublishedRuleHandle.WhereARuleIs places) {
+        boolean patternsWritten = false;
         for (ReportedFinding reported : written) {
-            Adequacy.Finding finding = reported.finding();
-            DocumentItem found = out.addObject();
-            ObjectNode f = found.node();
-            f.put("kind", word(finding.kind()));
-            f.put("disposition", word(finding.disposition()));
-            RuleHandleSurface.FINDING_SUBJECT.put(found, subject(finding, places),
-                    sources.rendering(), null);
-            // Which rule this is about, where the finding is about one. The words in `subject` are
-            // how a reader finds it, and two rules an author named alike have the same words — so a
-            // consumer joining findings to the questions they came from wants this.
-            //
-            // Asked of the subject rather than matched against the kinds that have one. Listed
-            // here, a kind added and not listed wrote no identity, and one rule's findings came out
-            // identical in every field with nothing to join them by.
-            if (finding.about() instanceof About.OfARule about) {
-                ruleId(f.putObject("ruleId"), about.rule());
+            if (reported.finding().about() instanceof About.ACombinationNoRowMakes) {
+                if (!patternsWritten) {
+                    patternsWritten = true;
+                    for (UnobservedGroup group : groups) {
+                        for (UnobservedChoices each : group.choices()) {
+                            finding(out, each.finding(), group, each, sources, places);
+                        }
+                    }
+                }
+                continue;
             }
-            // And which thing a row is owed for, where the finding is about one. The words in
-            // `subject` do not tell two of them apart — a rule read at one level in one role owes
-            // two points where two cases stop the run in different places, and a fork whose caller
-            // supplies the rule owes one arm per rule at one place — so a consumer joining a
-            // finding to the account's entry joins on this.
-            //
-            // Asked of the subject, for the reason the rule above is: the accounts that keep such
-            // things are not a list this holds, and one written here would leave a finding about
-            // the next of them named by words that tell two of its obligations apart nowhere.
-            if (finding.about() instanceof About.OfAnObligation owed) {
-                obligationId(f.putObject("obligationId"), owed.obligationIdentity(), sources);
+            finding(out, reported, null, null, sources, places);
+        }
+    }
+
+    /** Each of {@code asks} into {@code into}: the type made, where it is written and what it
+     *  asks. */
+    private static void constructionsWritten(ArrayNode into, List<WhatAConstructionAsks> asks,
+                                             DocumentSources sources) {
+        for (WhatAConstructionAsks each : asks) {
+            ObjectNode one = into.addObject();
+            one.put("construction", each.construction().qualified());
+            PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
+            askedWritten(one.putObject("asked"), each.asks());
+        }
+    }
+
+    /** A place a run may stop at, as a document writes it: what it is, where it is written, and
+     *  of a call, the behavior and what it is told of its body. */
+    private static void placeWritten(ObjectNode into, StopOrigin place, DocumentSources sources) {
+        switch (place) {
+            case StopOrigin.AConstruction(var _, var type) -> {
+                into.put("kind", "construction");
+                into.put("construction", type.qualified());
             }
-            // And which limit stopped it, where the finding is about one being in the way. Two
-            // conjuncts of one clause about one position can stop for two different limits, so
-            // written without this a rule's findings there are one object twice — and the entry
-            // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
-            if (finding.about() instanceof About.OfSomethingNotRead about) {
-                f.put("reason", word(about.finding().reason()));
+            case StopOrigin.ACall(var _, var behavior, var passage) -> {
+                into.put("kind", "call");
+                into.put("module", behavior.module());
+                into.put("behavior", behavior.name());
+                passageWritten(into.putObject("passage"), passage, sources);
             }
-            // Present where the kind has one. A finding a build is not told about under any code is
-            // not one with an empty code, and a consumer joining these to the diagnostics a build
-            // printed reads the difference.
-            finding.code().ifPresent(code -> f.put("code", code.name()));
-            if (hasAPlaceOfItsOwn(finding)) {
-                at(f, reported.at(), sources);
+            case StopOrigin.SomethingWorkedOut _ -> into.put("kind", "worked_out");
+        }
+        PublishedAt.of(Citation.of(place.at())).ifPresent(at -> at(into, at, sources));
+    }
+
+    /** What a behavior called is told of its body, as a document writes it: down every call to
+     *  where the proof that a run gets past gave out. */
+    private static void passageWritten(ObjectNode into, CallPassage passage,
+                                       DocumentSources sources) {
+        switch (passage) {
+            case CallPassage.Past _ -> into.put("reason", "gotten_past");
+            case CallPassage.Open(var why) -> {
+                switch (why) {
+                    case CallPassage.WhyOpen.NoBody _ -> into.put("reason", "no_body");
+                    case CallPassage.WhyOpen.OnACycle _ -> into.put("reason", "reaches_itself");
+                    case CallPassage.WhyOpen.NotRead _ -> into.put("reason", "not_read");
+                    case CallPassage.WhyOpen.MayStopAt(var place) -> {
+                        into.put("reason", "may_stop");
+                        placeWritten(into.putObject("place"), place, sources);
+                    }
+                }
             }
+        }
+    }
+
+    /** Each of {@code notShown} into {@code into}: the type made, where it is written, what it
+     *  asks where that is read, and why neither is shown. */
+    private static void constructionsNotShownWritten(ArrayNode into,
+                                                     List<AConstructionStopNotShown> notShown,
+                                                     DocumentSources sources) {
+        for (AConstructionStopNotShown each : notShown) {
+            ObjectNode one = into.addObject();
+            one.put("construction", each.construction().qualified());
+            PublishedAt.of(Citation.of(each.at())).ifPresent(place -> at(one, place, sources));
+            each.asked().ifPresent(asked -> askedWritten(one.putObject("asked"), asked));
+            one.put("reason", word(each.why()));
+        }
+    }
+
+    /** What a construction asks of a run as a document writes it: a form and how it stands to a
+     *  number, or the parts of a conjunction or of a disjunction. */
+    private static void askedWritten(ObjectNode into, WhatAConstructionAsks.Asked asked) {
+        switch (asked) {
+            case WhatAConstructionAsks.Is(var form, var rel, var against) -> {
+                into.put("form", form);
+                into.put("is", switch (rel) {
+                    case GE -> "at_least";
+                    case GT -> "above";
+                    case LE -> "at_most";
+                    case LT -> "below";
+                    case EQ -> "equal";
+                    case NE -> "not_equal";
+                });
+                into.put("than", against);
+            }
+            case WhatAConstructionAsks.AllOf(var each) -> {
+                ArrayNode parts = into.putArray("allOf");
+                each.forEach(part -> askedWritten(parts.addObject(), part));
+            }
+            case WhatAConstructionAsks.OneOf(var each) -> {
+                ArrayNode parts = into.putArray("oneOf");
+                each.forEach(part -> askedWritten(parts.addObject(), part));
+            }
+            case WhatAConstructionAsks.Never _ -> into.put("never", true);
+        }
+    }
+
+    private void finding(DocumentArray out, ReportedFinding reported, UnobservedGroup group,
+                         UnobservedChoices pattern, DocumentSources sources,
+                         PublishedRuleHandle.WhereARuleIs places) {
+        Adequacy.Finding finding = reported.finding();
+        DocumentItem found = out.addObject();
+        ObjectNode f = found.node();
+        f.put("kind", word(finding.kind()));
+        f.put("disposition", word(finding.disposition()));
+        RuleHandleSurface.FINDING_SUBJECT.put(found, subject(finding, places),
+                sources.rendering(), null);
+        // Which rule this is about, where the finding is about one. The words in `subject` are
+        // how a reader finds it, and two rules an author named alike have the same words — so a
+        // consumer joining findings to the questions they came from wants this.
+        //
+        // Asked of the subject rather than matched against the kinds that have one. Listed
+        // here, a kind added and not listed wrote no identity, and one rule's findings came out
+        // identical in every field with nothing to join them by.
+        if (finding.about() instanceof About.OfARule about) {
+            ruleId(f.putObject("ruleId"), about.rule());
+        }
+        // And which thing a row is owed for, where the finding is about one. The words in
+        // `subject` do not tell two of them apart — a rule read at one level in one role owes
+        // two points where two cases stop the run in different places, and a fork whose caller
+        // supplies the rule owes one arm per rule at one place — so a consumer joining a
+        // finding to the account's entry joins on this.
+        //
+        // Asked of the subject, for the reason the rule above is: the accounts that keep such
+        // things are not a list this holds, and one written here would leave a finding about
+        // the next of them named by words that tell two of its obligations apart nowhere.
+        if (pattern != null) {
+            ObjectNode set = f.putObject("pattern");
+            set.put("group", group.ordinal());
+            ArrayNode fixed = set.putArray("fixed");
+            pattern.fixed().forEach(outcome -> {
+                if (outcome == null) {
+                    fixed.addNull();
+                } else {
+                    fixed.add(outcome);
+                }
+            });
+            f.put("combinations", pattern.count());
+        } else if (finding.about() instanceof About.OfAnObligation owed) {
+            obligationId(f.putObject("obligationId"), owed.obligationIdentity(), sources);
+        }
+        // And which limit stopped it, where the finding is about one being in the way. Two
+        // conjuncts of one clause about one position can stop for two different limits, so
+        // written without this a rule's findings there are one object twice — and the entry
+        // beside them in `notRead` is keyed on the reason, which leaves nothing to join by.
+        if (finding.about() instanceof About.OfSomethingNotRead about) {
+            f.put("reason", word(about.finding().reason()));
+        }
+        // And where every run getting to a rule a run may stop in is shown to stop: the
+        // operation it stops in, and the rows, as forms between their ends.
+        List<EveryRunStops> proved = switch (finding.about()) {
+            case About.AStepThatMayStopARun(var it) -> it.everyRunStops();
+            case About.AStepWhoseStopIsNotShown(var it) -> it.everyRunStops();
+            default -> List.of();
+        };
+        if (!proved.isEmpty()) {
+            ArrayNode stops = f.putArray("everyRunStops");
+            for (EveryRunStops each : proved) {
+                ObjectNode one = stops.addObject();
+                one.put("operation", each.operation());
+                ArrayNode where = one.putArray("where");
+                for (EveryRunStops.Within within : each.where()) {
+                    ObjectNode bound = where.addObject();
+                    bound.put("form", within.form());
+                    if (within.least() != null) {
+                        bound.put("least", within.least());
+                    }
+                    if (within.greatest() != null) {
+                        bound.put("greatest", within.greatest());
+                    }
+                }
+            }
+        }
+        // And the invariants that keep every run getting to a rule from stopping there, where its
+        // stops are where the representation of a number stops, said of a stop shown or not.
+        WhatIsShownOfAStop ofAStop = switch (finding.about()) {
+            case About.AStepThatMayStopARun(var it) -> it;
+            case About.AStepWhoseStopIsNotShown(var it) -> it;
+            default -> null;
+        };
+        Optional<WhatKeepsEveryRunGoing> said = ofAStop == null ? Optional.empty()
+                : ofAStop.keeping().flatMap(WhatKeepsEveryRunGoing::said);
+        if (said.isPresent() && !said.get().bounds().isEmpty()) {
+            WhatKeepsEveryRunGoing region = said.get();
+            ArrayNode bounds = f.putArray("keeping");
+            for (ABoundThatKeepsEveryRunGoing each : region.bounds()) {
+                ObjectNode keeping = bounds.addObject();
+                switch (each.holder()) {
+                    case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
+                            keeping.put("data", data.data().key().qualified());
+                    case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter -> {
+                        keeping.put("parameter", parameter.parameter());
+                        keeping.put("type", parameter.type());
+                    }
+                }
+                keeping.put("invariant", invariantWritten(each));
+                keeping.put("furthestOut", region.asFarOutAsCanBe(each));
+            }
+        }
+        // And, of a rule where whether a run stops is not resolved, each operation that is not,
+        // and why, and what each construction on the way asks of a run that works it out, which
+        // the words beside the rule say from the same condition.
+        if (finding.about() instanceof About.AStepWhoseStopIsNotShown(var it)
+                && !it.notShown().isEmpty()) {
+            ArrayNode unresolved = f.putArray("unresolved");
+            for (AStopNotShown each : it.notShown()) {
+                ObjectNode one = unresolved.addObject();
+                each.operation().ifPresent(operation -> one.put("operation", operation));
+                one.put("reason", word(each.why()));
+                each.restsOn().ifPresent(place -> placeWritten(one.putObject("restsOn"), place,
+                        sources));
+            }
+        }
+        if (finding.about() instanceof About.AStepWhoseStopIsNotShown(var it)
+                && !it.asks().isEmpty()) {
+            constructionsNotShownWritten(f.putArray("asks"), it.asks(), sources);
+        }
+        // And, of a rule a run on the way to is shown to stop at a construction, what each such
+        // construction asks that the run does not meet, as the words beside the rule say it.
+        if (finding.about() instanceof About.AStepThatMayStopARun(var it)
+                && !it.constructions().isEmpty()) {
+            constructionsWritten(f.putArray("constructions"),
+                    constructionsAsked(it.constructions()), sources);
+        }
+        // Present where the kind has one. A finding a build is not told about under any code is
+        // not one with an empty code, and a consumer joining these to the diagnostics a build
+        // printed reads the difference.
+        finding.code().ifPresent(code -> f.put("code", code.name()));
+        if (hasAPlaceOfItsOwn(finding)) {
+            at(f, reported.at(), sources);
         }
     }
 
@@ -8706,6 +11955,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // behavior's rows are as many as somebody wrote, and the one this is about is the one
             // at this place.
             case About.AnUnansweredRow _ -> true;
+            // And a step a run may stop at, for the same reason: two steps of one body are told
+            // apart by where they are written.
+            case About.AStepThatMayStopARun _, About.AStepWhoseStopIsNotShown _ -> true;
             // A rule is a way through the whole body and stands at no one place in it. Where its
             // conditions are is said under the finding, one note apiece, so a coordinate here
             // would name whichever of them a walk reached first.
@@ -8717,22 +11969,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
             // A rewrite of an arm shown at its fork stands there, which is what tells two of a
-            // body's rewrites apart where their siblings are; one of the whole body, and one of a
-            // fork this compilation holds no source of, are shown at the behavior and stand nowhere
-            // in it.
+            // body's rewrites apart where their siblings are, and one of a walk shown at its fold
+            // stands there for the same reason; one of the whole body, and one of a fork or a fold
+            // this compilation holds no source of, are shown at the behavior and stand nowhere in
+            // it.
             case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
                     switch (reportAt) {
-                        case ReplacementReportAnchor.AtTheFork _ -> true;
+                        case ReplacementReportAnchor.AtTheFork _,
+                             ReplacementReportAnchor.AtTheWalk _ -> true;
                         case ReplacementReportAnchor.AtTheBehavior _ -> false;
                     };
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
                     About.ALineTheRowsDoNotTellFromAnother _,
-                    About.APositionNoLineDivides _,
+                    About.ATiltOfADerivedValueNoRowShows _, About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
-                    About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
-                    About.AQuestionNothingAnswered _,
+                    About.ARuleNothingClassified _, About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ -> false;
         };
@@ -8804,10 +12057,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Where a reader is sent to look at the rule, which is what such a finding has instead
             // of a subject: what the rule states there is what nothing worked out.
             case About.ARuleNothingClassified(var it) -> words(it.at());
-            // The rule, by the handle a reader finds it with: it stops some runs at no position,
-            // so the rule is all there is to name.
-            case About.ARuleThatMayStopARun(var it) -> new PublishedSentence.AroundAHandle("",
-                    PublishedRuleHandle.of(handle(it.cited(), places), places), "");
+            // What the step works out, as written: where it is written is said beside it.
+            case About.AStepThatMayStopARun(var it) -> words(it.shown().isEmpty()
+                    ? it.constructions().getFirst().asks().construction().qualified()
+                    : it.shown().getFirst().operation());
+            case About.AStepWhoseStopIsNotShown(var it) -> words(
+                    it.notShown().stream().flatMap(one -> one.operation().stream()).findFirst()
+                            .orElseGet(() -> it.asks().isEmpty() ? "what it works out"
+                                    : it.asks().getFirst().construction().qualified()));
             // The position and not a number measured of it: which of this position's rules went
             // unread is a fact about the location, and the measures on it are as many as the rules
             // name numbers there.
@@ -8824,10 +12081,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The handle, and what tells this rule from another beside it: two arms of one clause
             // may name the same case, so the words alone joined two questions into one row.
             case About.AQuestionNothingAnswered(var asked) -> new PublishedSentence.AroundAHandle(
-                    "", PublishedRuleHandle.of(handle(asked.cited(), places), places),
-                    " — " + asked(asked.asked()) + " " + subjectOf(asked));
+                    PublishedRuleHandle.of(handle(asked.cited(), places), places),
+                    new PublishedSentence.Around.ThenAsked(
+                            asked(asked.asked(), subjectOf(asked))));
             case About.ACaseNoRowAppliesItTo(var input, var missing, var _) ->
-                    words(missing.name() + " (in #" + (input.at() + 1) + ")");
+                    words(missing.name() + " (in " + inputSaid(input.at()) + ")");
             // The point and the line, and no quantity: a body's line is owed once wherever it is
             // read, so what joins this to a `partition.obligations` entry is the role, where on
             // the line, and the rule — the same three that entry is keyed on.
@@ -8838,6 +12096,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // line that was written joins the `boundaries` entry it came from.
             case About.ALineTheRowsDoNotTellFromAnother untold ->
                     words(untold.line().border().label() + " / " + untold.allowed().label());
+            // The total and the position whose weight in it is owed: the pair a weight is told
+            // apart by, spelled the way `obligationId` spells them.
+            case About.ATiltOfADerivedValueNoRowShows tilt ->
+                    words(tilt.into().left() + " / " + tilt.position());
             // The same sentence, on what the declaration wrote. A line owed once over every reading
             // of it is named by the terms the author used and not by the position some behavior met
             // it at, which is what the debt is (issue #1062).
@@ -8986,17 +12248,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (weakenedBy.isEmpty()) {
             return;
         }
+        ArrayNode out = of.putArray("weakening");
+        weakeningWords(weakenedBy).forEach(out::add);
+    }
+
+    /**
+     * The words of a set of weakenings, once each and in the order the words are published in.
+     *
+     * <p>The same order whichever readers found which weakenings. What a consumer compares against
+     * the last run is the array of these, so the order it comes out in may not be the order a walk
+     * arrived at them. The page says them in the same order, so the two never differ.
+     */
+    private static List<String> weakeningWords(WeakeningSet weakenedBy) {
+        return weakeningsSaid(weakenedBy).written().stream().map(AdequacyReport::word).toList();
+    }
+
+    /** The same, as the vocabulary each word is written in, for a surface that says more than the
+     *  word. */
+    private static CanonicalSelection<WeakeningVocabulary> weakeningsSaid(
+            WeakeningSet weakenedBy) {
         List<WeakeningVocabulary> said = new ArrayList<>();
         for (Weakening each : weakenedBy.causes()) {
             said.add(vocabularyOf(each));
         }
-        ArrayNode out = of.putArray("weakening");
-        // In the order the words are published in, which is the same one whichever readers found
-        // which weakenings. What a consumer compares against the last run is this array, so the
-        // order it comes out in may not be the order a walk arrived at them.
-        for (WeakeningVocabulary each : PublicationOrders.WEAKENING_WORDS.keep(said).written()) {
-            out.add(word(each));
-        }
+        return PublicationOrders.WEAKENING_WORDS.keep(said);
     }
 
     /**
@@ -9061,8 +12336,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<PublishedOpening> said = new ArrayList<>();
         // Once for the fold below, for the reason the page's own line gives.
         PublishedRuleHandle.WhereARuleIs places = rulePlaces();
-        for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
-            said.add(openingOf(each, sources, places));
+        List<AdequacyUncertainty> open = whatKeepsTheVerdictOpen();
+        // Walked only for a verdict some fork holds open, which is the exception.
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> observed =
+                open.stream().anyMatch(it -> it instanceof AdequacyUncertainty.ByWeakening(
+                        Weakening.ArmsUnsettled _)) ? forksLeftOutBy() : Map.of();
+        for (AdequacyUncertainty each : open) {
+            said.add(openingOf(each, sources, places, observed));
         }
         for (PublishedOpening each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN
                 .arrange(said).written()) {
@@ -9073,20 +12353,64 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // incompleteness is attributed to. Neither is this, and neither is shaped like it.
             about(fact.putObject("about"), each.about(), sources);
             each.reason().ifPresent(reason -> fact.put("reason", word(reason)));
+            observedIn(fact, each.observedIn());
             fact.put("runSensitivity", word(each.runSensitivity()));
+        }
+    }
+
+    /** The behaviors a fact was met under, where there are any: the field is absent otherwise. */
+    static void observedIn(ObjectNode fact, List<PublishedOpening.ObservedIn> behaviors) {
+        if (behaviors.isEmpty()) {
+            return;
+        }
+        ArrayNode seenIn = fact.putArray("observedIn");
+        for (PublishedOpening.ObservedIn behavior : behaviors) {
+            ObjectNode seen = seenIn.addObject();
+            seen.put("module", behavior.module());
+            seen.put("behavior", behavior.behavior());
         }
     }
 
     /** What the document writes for one thing keeping the verdict open. */
     private static PublishedOpening openingOf(AdequacyUncertainty each, DocumentSources sources,
-                                              PublishedRuleHandle.WhereARuleIs places) {
+                                              PublishedRuleHandle.WhereARuleIs places,
+                                              Map<SourceConstructOrigin,
+                                                      List<PublishedOpening.ObservedIn>> observed) {
         // The reason beside it, where the kind is one that has one. A measure nobody made says
         // what it was waiting for, and that word is one this document already writes wherever a
         // measure has no number — so a reader meets one vocabulary and not two.
         Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
                 ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
+        List<PublishedOpening.ObservedIn> seenIn =
+                each instanceof AdequacyUncertainty.ByWeakening(Weakening.ArmsUnsettled(var fork))
+                        ? observed.getOrDefault(fork, List.of()) : List.of();
         return new PublishedOpening(kindOf(each), why, each.runSensitivity(),
-                publishedSubject(each.subject(), sources, places));
+                publishedSubject(each.subject(), sources, places), seenIn);
+    }
+
+    /**
+     * The behaviors under which each fork was left out of the arm count, read off the arm accounts
+     * the report already holds.
+     *
+     * <p>Only the forks an account excludes: a behavior that reaches a fork and counts its arms is
+     * not one the fork's uncertainty showed up in.
+     */
+    Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> forksLeftOutBy() {
+        Map<SourceConstructOrigin, List<PublishedOpening.ObservedIn>> out = new LinkedHashMap<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.branch() == null) {
+                    continue;
+                }
+                for (ArmSummary arms : behavior.branch().measured().made().stream().toList()) {
+                    for (ArmExclusion left : arms.exclusions()) {
+                        out.computeIfAbsent(left.fork(), _ -> new ArrayList<>()).add(
+                                new PublishedOpening.ObservedIn(module.module(), behavior.name()));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -9171,6 +12495,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("behavior", it.behavior());
                 into.put("axis", it.axis());
             }
+            case PublishedSubject.OfAReplacement it -> {
+                into.put("module", it.module());
+                into.set("replacementId", it.replacementId());
+            }
         }
     }
 
@@ -9185,30 +12513,39 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>A {@code switch} with no {@code default}, so a subject added later is a compile error
      * rather than an entry printed with nothing said about it.
      */
-    private static String said(Subject subject, SourceRendering rendering,
-                               PublishedRuleHandle.WhereARuleIs places) {
+    private static String said(Subject subject, Page page,
+                               PublishedRuleHandle.WhereARuleIs places,
+                               Map<Subject.OfAReplacement, String> rewrites,
+                               Map<BorderObligationPoint, PublishedRuleHandle> writtenPoints) {
+        SourceRendering rendering = page.rendering();
         return switch (subject) {
-            case Subject.OfAModule it -> "module " + it.module();
+            case Subject.OfAModule it -> page.say(new ReportMessage.SubjectModule(it.module()));
             case Subject.OfABehavior it -> it.behavior();
-            case Subject.OfASource it -> "source " + rendering.names().nameOf(it.source());
-            case Subject.OfARow it -> switch (it.rowRef().identity()) {
-                case RowIdentity.Named named -> "row `" + named.name() + "` of " + it.rowRef().behavior();
+            case Subject.OfASource it -> page.say(new ReportMessage.SubjectSource(
+                    rendering.names().nameOf(it.source())));
+            case Subject.OfARow it -> page.say(switch (it.rowRef().identity()) {
+                case RowIdentity.Named named ->
+                        new ReportMessage.SubjectNamedRow(named.name(), it.rowRef().behavior());
                 case RowIdentity.Unnamed unnamed ->
-                        "row " + unnamed.shown() + " of " + it.rowRef().behavior();
-            };
+                        new ReportMessage.SubjectUnnamedRow(unnamed.shown(),
+                                it.rowRef().behavior());
+            });
             case Subject.AtASpelledPosition it -> it.behavior() + "/" + it.path();
             case Subject.AtAPosition it -> it.behavior() + "/" + it.at();
-            case Subject.AtAnInput it -> "input " + it.at() + " of " + it.behavior();
+            case Subject.AtAnInput it -> page.say(new ReportMessage.SubjectInput(
+                    inputSaid(it.at()), it.behavior()));
             // The position and what stopped the reading there. A line telling a reader to read
             // the rule and what stopped it, and naming neither, sends them to another array for
             // both.
             case Subject.AtARule it -> {
                 PartitionEvidence.Unanswered asked = new PartitionEvidence.Unanswered(it.question());
-                yield RuleHandleProse.said(PublishedRuleHandle.of(handle(asked.cited(), places), places), rendering,
-                                null)
-                        + " at " + asked.at() + " (" + ReportedReason.words(whyStanding(asked))
-                        .stream()
-                        .map(AdequacyReport::whyUnread).collect(Collectors.joining("; ")) + ")";
+                yield page.say(new ReportMessage.SubjectRule(
+                        RuleHandleProse.said(
+                                PublishedRuleHandle.of(handle(asked.cited(), places), places),
+                                page.rendering(), page.language(), null),
+                        asked.at(),
+                        reasons(page, ReportedReason.words(whyStanding(asked)).stream()
+                                .map(each -> page.say(whyUnread(each))).toList())));
             }
             case Subject.AtABorder it -> it.line().target().label();
             // Composed here and not by what writes a point beside a line, which takes the account
@@ -9222,15 +12559,50 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // shape this whole array was written to stop repeating.
             // A comparison a body wrote is at whatever value a call put it at, and what tells two
             // of its points apart is the line and where on it the point is.
-            case Subject.AtAPoint it -> it.point().line().saidWithoutAPlace()
-                    + it.point().line().at().map(at -> " = " + at).orElse("")
-                    + placeOn(it.point().point());
-            case Subject.AtAFork it -> "a fork of " + it.fork().module();
-            case Subject.AtAnArm it -> "an arm of " + it.arm().writtenIn().definition();
-            case Subject.OfAMeasure it ->
-                    word(it.measure()) + " of " + it.behavior();
-            case Subject.OfAnAxisMeasure it -> it.at().term() + " of " + it.behavior();
+            case Subject.AtAPoint it -> {
+                String rule = switch (it.point().line().provenance()) {
+                    case RuleRef.Named _ -> page.say(it.point().line().toldWithoutAPlace());
+                    case RuleRef.Written _ -> {
+                        PublishedRuleHandle handle = writtenPoints.get(it.point());
+                        if (handle == null) {
+                            throw new IllegalStateException("a point of a rule nobody named is"
+                                    + " sent to by where the rule is, and no assessment of this"
+                                    + " one said where: " + it.point());
+                        }
+                        yield page.say(it.point().line().toldAfter(RuleHandleProse.said(handle,
+                                page.rendering(), page.language(), null)));
+                    }
+                };
+                yield rule
+                        + it.point().line().at().map(at -> " = " + at).orElse("")
+                        + placeOn(it.point().point(), page);
+            }
+            case Subject.AtAFork it -> page.say(new ReportMessage.SubjectFork(it.fork().module()));
+            case Subject.AtAnArm it -> page.say(new ReportMessage.SubjectArm(
+                    it.arm().writtenIn().definition()));
+            case Subject.OfAMeasure it -> page.say(new ReportMessage.SubjectMeasure(
+                    measureNamed(it.measure()), it.behavior()));
+            case Subject.OfAnAxisMeasure it -> page.say(new ReportMessage.SubjectAxis(
+                    it.at().term(), it.behavior()));
+            case Subject.OfAReplacement it -> {
+                String words = rewrites.get(it);
+                if (words == null) {
+                    throw new IllegalStateException("this report was not assembled with the"
+                            + " rewrite " + it + " that keeps its verdict open");
+                }
+                yield page.say(new ReportMessage.SubjectRewrite(
+                        it.module() + "." + it.obligation().behavior(), words));
+            }
         };
+    }
+
+    /**
+     * One of a behavior's inputs as a person is shown it: {@code #1} for the first. Every line
+     * naming an input asks this, so the signature line and the line saying what keeps a verdict
+     * open name one input alike.
+     */
+    private static String inputSaid(int at) {
+        return "#" + (at + 1);
     }
 
     /**
@@ -9243,11 +12615,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Which of the four roles it is, is not this. That is the line's answer about the point and
      * needs the readings of the line to give it, which a point on its own does not carry.
      */
-    private static String placeOn(DomainPoint point) {
-        ObjectNode said = JSON.createObjectNode();
-        location(said, point);
-        return " (" + said.get("kind").asString().replace('_', ' ')
-                + (said.has("side") ? ", " + said.get("side").asString() : "") + ")";
+    private static String placeOn(DomainPoint point, Page page) {
+        Message where = switch (point) {
+            case DomainPoint.AtTheLine _ -> new ReportMessage.AtTheLine();
+            case DomainPoint.BesideTheLine _ -> new ReportMessage.BesideTheLine();
+            case DomainPoint.InTheRegion _ -> new ReportMessage.InTheRegion();
+        };
+        return page.say(point.side() == null ? new ReportMessage.PlacedOn(where)
+                : new ReportMessage.PlacedOnASide(where, sideNamed(point.side())));
     }
 
     /**
@@ -9258,39 +12633,57 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * the reading as well: raising it lifts nothing today, and it is what they meet once the rule
      * is read.
      */
-    private static String next(AdequacyUncertainty unanswered) {
+    private static String next(AdequacyUncertainty unanswered, Page page) {
         ReaderDisposition disposition = ReaderDisposition.of(unanswered);
-        String next = next(disposition);
-        return disposition instanceof ReaderDisposition.StoppedAtAFigure
-                || unanswered.figures().isEmpty() ? next
-                : next + "; it stopped at " + figuresSaid(unanswered.figures()) + " as well";
+        Message next = next(disposition, page);
+        if (!(disposition instanceof ReaderDisposition.StoppedAtAFigure)
+                && !unanswered.figures().isEmpty()) {
+            next = new ReportMessage.ItStoppedAtAsWell(next,
+                    figuresSaid(unanswered.figures(), page));
+        }
+        // And where the runs of the rows tried for it stopped, which is what stopped it where a
+        // reader is sent to read the rule and what stopped it.
+        if (!unanswered.runsStopped().isEmpty()) {
+            next = new ReportMessage.Reasons(next,
+                    GeneratedRows.stoppedAt(unanswered.runsStopped(), page));
+        }
+        return page.say(next);
     }
 
     /** What a reader does next, as the disposition says. */
-    private static String next(ReaderDisposition disposition) {
+    private static Message next(ReaderDisposition disposition, Page page) {
         return switch (disposition) {
+            // Each row as a line of this report names one, so two rows never read as one.
+            case ReaderDisposition.WriteTheCaseOutIn it -> new ReportMessage.WriteEachCaseOut(
+                    listed(page, it.unread().stream().map(row -> rowShown(row, page)).toList()));
             // The figures named here, as what stopped carried them, and nothing a run is given sets
             // them.
-            case ReaderDisposition.StoppedAtAFigure it -> (it.aRowThereSettlesIt()
-                    ? "the search stopped at " : "stopped at ") + figuresSaid(it.figures())
-                    + ", which no option sets" + (it.aRowThereSettlesIt()
-                            ? ": write a row there, or a rule that leaves no value there" : "");
-            case ReaderDisposition.LookAtTheRule _ -> "read the rule and what stopped it";
+            case ReaderDisposition.StoppedAtAFigure it -> switch (it.settledBy()) {
+                case NOTHING_NAMED -> new ReportMessage.StoppedAtWhichNoOptionSets(
+                        figuresSaid(it.figures(), page));
+                case A_ROW_OR_A_RULE_AT_THE_POINT -> new ReportMessage.TheSearchStoppedAt(
+                        figuresSaid(it.figures(), page));
+                // The search did not look past the figure, so nothing says there is no row.
+                case A_ROW_THAT_TELLS_THE_REWRITE_APART ->
+                        new ReportMessage.StoppedBeforeARowThatTellsTheRewriteApart(
+                                figuresSaid(it.figures(), page));
+            };
+            case ReaderDisposition.LookAtTheRule _ -> new ReportMessage.ReadTheRule();
             // Without the word for it. What the document calls a weakening is for a consumer keyed
             // on this report; a person reading a line is owed a sentence, and the words a build
             // matches on do not reach one (ASourceThatProducedNoObservationSaysSo).
             case ReaderDisposition.LookAtWhatTheMeasureWentWithout _ ->
-                    "read what this measure went without";
+                    new ReportMessage.ReadWhatTheMeasureWentWithout();
             case ReaderDisposition.LookAtWhyNothingWasMeasured it ->
                     ReasonProse.of(it.why()).clause();
             case ReaderDisposition.LookAtWhatShowedNoRow _ ->
-                    "read what was tried to show a row can be written there";
-            case ReaderDisposition.LookAtTheFork _ -> "read the fork nothing told apart";
+                    new ReportMessage.ReadWhatWasTried();
+            case ReaderDisposition.LookAtTheFork _ -> new ReportMessage.ReadTheFork();
             case ReaderDisposition.LookAtThisCompilersProof _ ->
-                    "read this compiler's proof, which is what does not hold";
+                    new ReportMessage.ReadThisCompilersProof();
             case ReaderDisposition.ReconsiderWhatThisBehaviorNeedsToDistinguish _ ->
-                    "weigh what this behavior needs to tell apart";
-            case ReaderDisposition.Settled _ -> "nothing";
+                    new ReportMessage.WeighWhatToTellApart();
+            case ReaderDisposition.Settled _ -> new ReportMessage.NothingToDo();
         };
     }
 
@@ -9301,10 +12694,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * figure is declared as — the one a person asking this compiler's maintainers about it can be
      * found by.
      */
-    private static String figuresSaid(List<Figure> figures) {
-        return figures.stream()
-                .map(each -> each.counts() + " (" + each.name() + ", " + each.most() + ")")
-                .collect(Collectors.joining("; "));
+    private static String figuresSaid(List<Figure> figures, Page page) {
+        return reasons(page, figures.stream().map(each -> page.say(figureSaid(each))).toList());
     }
 
     /**
@@ -9320,10 +12711,97 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * lines this ends a clause of separate what a question stands on with semicolons, and two
      * figures of one stop read there as two stops.
      */
-    private static String stoppedAt(List<Figure> figures) {
-        return figures.isEmpty() ? "" : ", stopped at " + figures.stream()
-                .map(each -> figuresSaid(List.of(each)))
-                .collect(Collectors.joining(" and at "));
+    private static String imagesNotShownSaid(
+            Optional<BlockReason.RelationShownOverARegion> leftOpen, Page page) {
+        return leftOpen.map(BlockReason.RelationShownOverARegion::imagesNotShown)
+                .filter(names -> !names.isEmpty())
+                .map(names -> page.say(new ReportMessage.TheImageIsNotShown(
+                        String.join(", ", names))))
+                .orElse("");
+    }
+
+    /**
+     * The numbers a relation settles by the terms' ends and no row is shown computed in, as the
+     * line a question's stops are written in says them: each run by its ends, joined with "or".
+     */
+    private static String numbersNotShownComputedSaid(Optional<NumberRegion> numbers, Page page) {
+        return numbers.map(region -> page.say(new ReportMessage.NoRowShownComputedIn(
+                eitherOf(page, region.runs().stream().map(run -> {
+                    List<String> ends = new ArrayList<>();
+                    if (run.from() != null) {
+                        ends.add(page.say(run.from().inclusive()
+                                ? new ReportMessage.AtLeast(run.from().at().spelled())
+                                : new ReportMessage.Above(run.from().at().spelled())));
+                    }
+                    if (run.to() != null) {
+                        ends.add(page.say(run.to().inclusive()
+                                ? new ReportMessage.AtMost(run.to().at().spelled())
+                                : new ReportMessage.Below(run.to().at().spelled())));
+                    }
+                    return ends.isEmpty() ? page.say(new ReportMessage.OfAnySize())
+                            : both(page, ends);
+                }).toList())))).orElse("");
+    }
+
+    /** Things of which any one will do: {@code a or b or c}. */
+    static String eitherOf(Page page, List<String> each) {
+        return page.say(Joined.either(Joined.asWritten(each)));
+    }
+
+    /**
+     * Where the numbers a relation settles by the terms' ends and no row is shown computed in lie,
+     * as an entry of a question's {@code stopped} writes them: the runs they make, in order. Each
+     * end is spelled exactly, and absent where the run has none.
+     */
+    public static void numbersNotShownComputed(ObjectNode into, NumberRegion numbers) {
+        ArrayNode runs = into.putArray("numbersNotShownComputed");
+        for (NumberRegion.Run each : numbers.runs()) {
+            ObjectNode run = runs.addObject();
+            if (each.from() != null) {
+                ObjectNode from = run.putObject("from");
+                from.put("at", each.from().at().spelled());
+                from.put("inclusive", each.from().inclusive());
+            }
+            if (each.to() != null) {
+                ObjectNode to = run.putObject("to");
+                to.put("at", each.to().at().spelled());
+                to.put("inclusive", each.to().inclusive());
+            }
+        }
+    }
+
+    private static Message stoppedAt(List<Figure> figures) {
+        if (figures.isEmpty()) {
+            return new ReportMessage.Nothing();
+        }
+        Message said = figureSaid(figures.getLast());
+        for (int i = figures.size() - 2; i >= 0; i--) {
+            said = new ReportMessage.AndAt(figureSaid(figures.get(i)), said);
+        }
+        return new ReportMessage.StoppedAt(said);
+    }
+
+    /** One figure as a line says it: what it counts, then its name and what it stood at. */
+    private static Message figureSaid(Figure figure) {
+        return new ReportMessage.FigureSaid(figure.countsSaid(), figure.name(), figure.most());
+    }
+
+    /** The values a row built and run got to the rule at, as the model writes them, beside a word
+     *  saying not every value is shown to: what is shown, and that nothing else is. */
+    private static Message shownReached(List<String> values) {
+        return values.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.ShownReachedAt(Joined.listed(Joined.asWritten(values)));
+    }
+
+    /**
+     * Where the runs of the rows tried for a reason stopped, as a clause after the word and the
+     * figures, and nothing where no run stopped. Each place said as the line of a search that
+     * composed no row says it ({@link GeneratedRows#stoppedAt}), so a place reads alike wherever
+     * a reader meets it.
+     */
+    private static Message runsStoppedSaid(List<WhereARunStopped> stops, Page page) {
+        return stops.isEmpty() ? new ReportMessage.Nothing()
+                : new ReportMessage.AndTheRunsStoppedAt(GeneratedRows.placesStoppedAt(stops, page));
     }
 
     /**
@@ -9415,6 +12893,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     it.behavior(), it.measure());
             case Subject.OfAnAxisMeasure it -> new PublishedSubject.OfAnAxisMeasure(it.module(),
                     it.behavior(), it.at().toString());
+            case Subject.OfAReplacement it -> {
+                ObjectNode id = JSON.createObjectNode();
+                obligationId(id, it.obligation(), sources);
+                yield new PublishedSubject.OfAReplacement(it.module(), id);
+            }
         };
     }
 
@@ -9505,11 +12988,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // One word, and the reason underneath keeps which of the two it was. A position
                 // that was read and holds nothing is news about the row; neither of these is, and a
                 // reader weighing the document acts on both the same way.
-                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _,
+                     ReadingGap.KeysNotTold _, ReadingGap.SamenessNotTold _ ->
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // The value was read and whether the run got to it through that element was not:
                 // no news about the row either, and acted on the same way.
                 case ReadingGap.ReachNotRead _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                // The value was read and the row stands at the point under what the cases were
+                // said as; which of them it is in is what nobody worked out, which is no news
+                // about the row either.
+                case ReadingGap.CasesNotWorkedOut _ ->
+                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
                 // Every value was read here, so it is not that word: what stopped is the
                 // arithmetic. Both ways of that are one word, and the run sensitivity beside it
                 // says which.
@@ -9519,11 +13008,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // and this is the readings nobody made.
             case Weakening.BorderReadingsNotExhausted _ ->
                     WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED;
-            // Two words for one fact, because what to do about them differs: one wants a strategy
-            // nobody has written and the other wants a row. Which of the two it is is the fact's
-            // own answer, asked here rather than read off whichever list it arrived in.
+            // A word for each thing that stood in the way, because what to do about them differs.
+            // Which it is is the fact's own answer, asked here rather than read off whichever list
+            // it arrived in.
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it -> switch (it.why()) {
-                case NO_STRATEGY_FOR_THE_RULE -> WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED;
                 case THE_ROWS_ARE_ALL_ON_ONE_SIDE ->
                         WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE;
                 case NOTHING_WATCHED_THE_RUNS -> WeakeningWord.A_BORDERS_RUN_NOT_WATCHED;
@@ -9536,6 +13024,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // was read against it — apart from `BorderValueUnreadable`, which is a row's value once
             // a line already known to ask for one.
             case Weakening.ItemsPlaceNotWorkedOut _ -> WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT;
+            case Weakening.AWeightNotDecided _ -> WeakeningWord.A_WEIGHT_NOT_DECIDED;
             case Weakening.AReadingNotTiedToItsLine _ ->
                     WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
@@ -9552,7 +13041,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // this word says and the one thing a build held to it acts on. Which of them
                     // it is, is what the question beside it says.
                     case StandingQuestion.BoundaryUndetermined _,
-                         StandingQuestion.NothingClassifiesIt _ ->
+                         StandingQuestion.NothingClassifiesIt _,
+                         StandingQuestion.RegionUndetermined _ ->
                             WeakeningWord.RULE_UNREAD;
                 };
                 case ClosureGap.RulesNotReached _ ->
@@ -9563,11 +13053,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case ClosureGap.LineNotDerived _ -> WeakeningWord.RULE_UNREAD;
             };
             case Weakening.BodyNotInEvaluation _ -> WeakeningWord.BODY_NOT_IN_EVALUATION;
+            case Weakening.BehaviorToBeChangedFirst _ -> WeakeningWord.BEHAVIOR_TO_BE_CHANGED_FIRST;
             case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
-            case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
             case Weakening.MeetingsNotJoined _ -> WeakeningWord.MEETINGS_NOT_JOINED;
             case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
                     WeakeningWord.PROOF_CONTRADICTED;

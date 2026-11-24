@@ -256,14 +256,14 @@ class OneBoundaryAnswerReachesTheReaderTest {
 
                 behavior run = bad >-> two
                 """;
-        assertTrue(err(source).getMessage().contains("E1313"), err(source).getMessage());
+        String refusal = err(source).getMessage();
+        assertTrue(refusal.contains("E1313"), refusal);
 
         Compilation compilation = Compilation.ofDocuments(
                 java.util.Map.of("demo.sou", source), java.util.Set.of(), ModulePath.EMPTY);
         compilation.answerEverything();
-        List<String> codes = new ArrayList<>();
-        compilation.db().allReports()
-                .forEach(found -> codes.add(found.report().diagnostic().code().toString()));
+        List<String> codes = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
         assertTrue(codes.contains("E1313"), codes.toString());
         assertTrue(codes.contains("E1702"), "the stage arity is still reported: " + codes);
     }

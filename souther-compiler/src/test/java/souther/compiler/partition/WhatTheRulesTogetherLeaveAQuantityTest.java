@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
@@ -150,7 +150,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     /** A reading of the line {@link #aLine} names, which is what puts a place on a quantity. */
     static LineOrigin aReading(int clause) {
         return new LineOrigin.InvariantOrigin(
-                new DeclaredLine.OfAStatement(new InvariantStatementId(new PartId<>(
+                new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(new PartId<>(
                         new RuleRef.Invariant(new Clause.Ref(new Clause.Id(
                                 TypeSymbols.declared(new TypeKey("example.runs", "N")), clause),
                                 Optional.empty())), 0),

@@ -143,8 +143,12 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
             data Bad = { x: NoSuchTypeAnywhere }
             """;
 
-    private static Set<String> saidAboutTheSource(ModulePath path) {
-        Compilation compilation = Compilation.ofSources(List.of(APP), path);
+    /** What {@link #APP} is refused with: the artifact it imports, and its own second mistake. */
+    private static final Set<String> THE_ARTIFACT_AND_THE_MISTAKE = Set.of("E1509", "E1023");
+
+    private static Set<String> saidAboutTheSource(Set<String> refusedWith, ModulePath path) {
+        Compilation compilation = ACompiledModel.refusedOnlyWith(refusedWith,
+                Compilation.ofSources(List.of(APP), path));
         Set<String> codes = new LinkedHashSet<>();
         for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
             codes.add(said.diagnostic().code());
@@ -154,7 +158,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
 
     /** Where the report about the artifact is said, in the file this compile does hold. */
     private static void bothAreSaidOnTheSource(ModulePath path) {
-        Set<String> codes = saidAboutTheSource(path);
+        Set<String> codes = saidAboutTheSource(THE_ARTIFACT_AND_THE_MISTAKE, path);
         assertTrue(codes.contains("E1509"), "the artifact is refused: " + codes);
         assertTrue(codes.contains("E1023"),
                 "and the mistake in the author's own file is still said: " + codes);
@@ -180,10 +184,11 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
 
                 data Page = { held: Held }
                 """;
-        Compilation compilation = Compilation.ofSources(List.of(stands), new Fabricated(Map.of(
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1509"),
+                Compilation.ofSources(List.of(stands), new Fabricated(Map.of(
                         "lib.pub.$Module", moduleClass(Backend.BOUNDARY_VERSION + 1, "lib.pub",
                                 List.of(), List.of("Held"), List.of()),
-                        "lib.pub.Held", dataClass("data Held = String"))));
+                        "lib.pub.Held", dataClass("data Held = String")))));
 
         Located said = compilation.diagnostics().get(new SourceId("0")).stream()
                 .filter(d -> d.diagnostic().code().equals("E1509")).findFirst().orElseThrow();
@@ -246,7 +251,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
      */
     @Test
     void oneWhoseUnreadableImportNoDeclarationNeedsIsReadLikeAnyOther() {
-        Set<String> codes = saidAboutTheSource(new Fabricated(Map.of(
+        Set<String> codes = saidAboutTheSource(Set.of("E1023"), new Fabricated(Map.of(
                 "lib.pub.$Module", moduleClass(Backend.BOUNDARY_VERSION, "lib.pub",
                         List.of("import List ( noSuchOperation )"), List.of("Held"), List.of()),
                 "lib.pub.Held", dataClass("data Held = String"))));
@@ -277,7 +282,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 "lib.pub.Twice", dataClass("data Held = Int")));
 
         bothAreSaidOnTheSource(path);
-        assertFalse(saidAboutTheSource(path).contains("E1011"),
+        assertFalse(saidAboutTheSource(THE_ARTIFACT_AND_THE_MISTAKE, path).contains("E1011"),
                 "and not as a rule about declarations, said to somebody who declared none of them");
     }
 
@@ -369,11 +374,12 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
      */
     @Test
     void aModuleCompiledHereIsShadowedByOneThisCompilerCannotRead() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1503"),
+                Compilation.ofSources(List.of("""
                 module app.uses
 
                 data Page = { n: Int }
-                """), binaryName -> binaryName.equals("app.uses.$Module") ? NOT_A_CLASS_FILE : null);
+                """), binaryName -> binaryName.equals("app.uses.$Module") ? NOT_A_CLASS_FILE : null));
         Set<String> codes = new LinkedHashSet<>();
         for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
             codes.add(said.diagnostic().code());
@@ -413,7 +419,8 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
     @Test
     void oneThatTookAReservedNameAndCannotBeReadEitherIsBothThings() {
         Set<String> codes = new LinkedHashSet<>();
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedOnlyWith(Set.of("E1502", "E1509"),
+                Compilation.ofSources(List.of("""
                 module app.uses
                 import souther.taken ( Held )
 
@@ -421,7 +428,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 """), new Fabricated(Map.of(
                         "souther.taken.$Module", moduleClass(Backend.BOUNDARY_VERSION + 1,
                                 "souther.taken", List.of(), List.of("Held"), List.of()),
-                        "souther.taken.Held", dataClass("data Held = String"))));
+                        "souther.taken.Held", dataClass("data Held = String")))));
         for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
             codes.add(said.diagnostic().code());
         }
@@ -460,14 +467,15 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
     @Test
     void aModuleCompiledHereIsShadowedByAnUnreadableArtifactOfTheSameName() {
         Set<String> codes = new LinkedHashSet<>();
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1503"),
+                Compilation.ofSources(List.of("""
                 module app.uses
 
                 data Page = { n: Int }
                 """), new Fabricated(Map.of(
                         "app.uses.$Module", moduleClass(Backend.BOUNDARY_VERSION + 1, "app.uses",
                                 List.of(), List.of("Page"), List.of()),
-                        "app.uses.Page", dataClass("data Page = String"))));
+                        "app.uses.Page", dataClass("data Page = String")))));
         for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
             codes.add(said.diagnostic().code());
         }
@@ -505,11 +513,12 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
             }
         };
 
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1503"),
+                Compilation.ofSources(List.of("""
                 module app.uses
 
                 data Page = { n: Int }
-                """), path);
+                """), path));
         Set<String> codes = new LinkedHashSet<>();
         for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
             codes.add(said.diagnostic().code());

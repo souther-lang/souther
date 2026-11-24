@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputReading;
@@ -41,14 +42,15 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
     @Test
     void theOneAlternativeLeftIsTheWayLookedAlong() {
         WayToTheBorder way = new WayToTheBorder(List.of(
-                new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(), List.of()),
-                new OnTheWay.OneOf(
+                new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(), List.of(),
+                        NamedElements.NONE),
+                OnTheWay.OneOf.of(
                         new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 1),
                         WHERE, List.of(
                                 List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")),
-                                        List.of(), List.of())),
+                                        List.of(), List.of(), NamedElements.NONE)),
                                 List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("B")),
-                                        List.of(), List.of()))),
+                                        List.of(), List.of(), NamedElements.NONE))),
                         Optional.empty())));
         Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
                 Reachability.of(way, reading().quantities().region()));
@@ -63,7 +65,7 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
     }
 
     private static InputReading reading() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data A
@@ -73,7 +75,7 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
 
                 behavior f : (k: Kind) -> Yes
                 let f (k) = Yes
-                """, "Main");
+                """);
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

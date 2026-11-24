@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Incompleteness;
@@ -83,10 +84,22 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
                 | "found" : (MemberId("m-1")) -> Missing { why = "no such member" }
             """;
 
+    /** The sources compiled; the only thing the language may say of them is that the JVM cannot
+     *  hold what they would emit. */
+    private static Db checkedDb(List<String> sources) {
+        return checkedDb(sources, List.of("E2101"));
+    }
+
+    /** The same, of sources the language refuses for what is written about the fakes and the
+     *  JVM's width: {@code refused} is every error said, in the order it is said. */
+    private static Db checkedDb(List<String> sources, List<String> refused) {
+        Compilation c = Compilation.ofSources(sources, ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(refused, c).db();
+    }
+
     @Test
     void aSourceThatWroteNoFakeIsStillAnsweredForWhereNothingCouldBeEmitted() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE),
-                ModulePath.EMPTY).db();
+        Db db = checkedDb(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE));
 
         Answer<Output.Examples.Of> answered = db.ask(
                 new Output.Examples("example.wide", ATTACHED, ArmObservation.RECORD));
@@ -109,9 +122,9 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
      */
     @Test
     void aSourceWritingASecondBlockForOneBehaviorBuildsItAllTheSame() {
-        Db db = Compilation.ofSources(
+        Db db = checkedDb(
                 List.of(tooWideForTheJvm(A_FAKE), A_SECOND_FAKE_FOR_THE_SAME_DEPENDENCY),
-                ModulePath.EMPTY).db();
+                List.of("E2101", "E1933", "E1933"));
 
         Answer<Output.Examples.Of> answered = db.ask(
                 new Output.Examples("example.wide", ATTACHED, ArmObservation.RECORD));
@@ -124,8 +137,7 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
      *  state they are written for. */
     @Test
     void andTheModuleItSaysThisOfChecksAndEmitsNothing() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE),
-                ModulePath.EMPTY).db();
+        Db db = checkedDb(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE));
 
         assertTrue(db.ask(new Bodies.Checked("example.wide")).present(),
                 "the language accepts it");

@@ -2,6 +2,7 @@ package souther.compiler.reach;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.OccurrenceLineage;
 
 /**
  * One fork on the way to a place, and the way it went.
@@ -12,10 +13,15 @@ import souther.compiler.semantics.WhereAnOperatorAnswers;
  * nothing could take in is not on this list, and a proof naming it would be claiming it did work
  * it did not do.
  *
- * @param at  where the condition or the arm is written
- * @param way which way the fork went on the way here
+ * <p>Which copy it was taken in is part of it. A place inside a helper's body is evaluated once
+ * for every call the helper is copied into, and a proof is a claim about evaluations: two
+ * decisions at one place in two copies are two decisions, and only the lineage tells them apart.
+ *
+ * @param at      where the condition or the arm is written
+ * @param lineage which copy of the body that wrote it the fork or the operator is in
+ * @param way     which way the fork went on the way here
  */
-public record PathDecision(SourcePos at, Way way) {
+public record PathDecision(SourcePos at, OccurrenceLineage lineage, Way way) {
 
     /** Which way a fork went. */
     public enum Way {
@@ -33,6 +39,10 @@ public record PathDecision(SourcePos at, Way way) {
     public PathDecision {
         if (at == null) {
             throw new IllegalArgumentException("a fork written nowhere decided nothing");
+        }
+        if (lineage == null) {
+            throw new IllegalArgumentException("a fork is in some copy of the body that wrote it: "
+                    + at);
         }
         if (way == null) {
             throw new IllegalArgumentException("a fork went some way");
@@ -55,12 +65,18 @@ public record PathDecision(SourcePos at, Way way) {
     }
 
     /** A condition at {@code at}, held where {@code held} says so and failed otherwise. */
-    public static PathDecision ofACondition(SourcePos at, boolean held) {
-        return new PathDecision(at, held ? Way.HELD : Way.FAILED);
+    public static PathDecision ofACondition(SourcePos at, OccurrenceLineage lineage,
+                                            boolean held) {
+        return new PathDecision(at, lineage, held ? Way.HELD : Way.FAILED);
+    }
+
+    /** An arm at {@code at}, taken. */
+    public static PathDecision ofAnArm(SourcePos at, OccurrenceLineage lineage) {
+        return new PathDecision(at, lineage, Way.TAKEN);
     }
 
     /** An operator at {@code at}, which a run got past only where it answered. */
-    public static PathDecision ofAnAnswer(SourcePos at) {
-        return new PathDecision(at, Way.ANSWERED);
+    public static PathDecision ofAnAnswer(SourcePos at, OccurrenceLineage lineage) {
+        return new PathDecision(at, lineage, Way.ANSWERED);
     }
 }

@@ -8,6 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -63,7 +64,7 @@ class EverySlotIsAChildTest {
                 List.of(new Core.FieldValue("name",
                                 new Core.FieldAccess(read("base", 0), "name", Type.STRING, POS), POS),
                         new Core.FieldValue("age", new Core.Int(1, Type.INT, POS), POS)),
-                Type.ref(PERSON), POS);
+                Type.ref(PERSON), OccurrenceLineage.ORIGINAL, POS);
     }
 
     private static List<Core> childrenOf(Core e) {

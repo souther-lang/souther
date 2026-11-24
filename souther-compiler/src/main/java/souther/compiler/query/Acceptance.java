@@ -99,7 +99,8 @@ public final class Acceptance {
         // same path its declarations were read from.
         List<Located> refused = new ArrayList<>();
         for (String module : compilation.modules()) {
-            if (!db.ask(new Output.ConstConstructions(module)).present()) {
+            if (!db.ask(new Output.ConstConstructions(module)).present()
+                    || !db.ask(new Output.BuiltValues(module)).present()) {
                 CompileException bad = compilation.failure();
                 if (bad != null) {
                     throw bad;

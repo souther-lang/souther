@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -43,8 +44,8 @@ class AValueAnotherModuleDeclaresIsBuiltOnceTest {
     }
 
     private static int nodesIn(int links) {
-        Compilation compiled = Compiler.compiledModules(
-                List.of(upstream(links), downstream(links)), ModulePath.EMPTY, new ArrayList<>());
+        Compilation compiled = ACompiledModel.compiles(Compiler.compiledModules(
+                List.of(upstream(links), downstream(links)), ModulePath.EMPTY, new ArrayList<>()));
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("down", new DefinitionName("f")))
                 .value().value().definition().writtenBody();

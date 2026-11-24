@@ -2,6 +2,9 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.RuleKey;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -10,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.RandomAccess;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A parameter-rooted location: a parameter, and the steps taken from it.
@@ -143,7 +148,92 @@ public record TermPath(String head, List<Step> steps) {
         // A path is rooted somewhere. Rooted at nothing it is a place with no parameter to be a
         // place of, and every answer that carries one says a position was reached.
         Objects.requireNonNull(head, "a path is rooted at a parameter");
-        steps = steps instanceof Steps ? steps : new Steps(List.copyOf(steps));
+        // Steps of a path being made are one step further than a path that already holds each
+        // position narrowed once (within), so only steps handed in from outside are folded here.
+        steps = steps instanceof Steps own && own.head.equals(head) && own.id == 0
+                ? steps : Steps.plain(head, eachPositionNarrowedOnce(steps));
+    }
+
+    /**
+     * What a narrowing to {@code cases} taken right after {@code last} comes to: the narrowing
+     * {@code last} becomes, where the two are narrowings of one position; or null where the new
+     * one is of another position, taken after it.
+     *
+     * <p>The one rule of what a narrowing after a narrowing is, which every way of making a path
+     * keeps, so that each refinement of a path is about a position of its own
+     * ({@link #requirements}). A narrowing to several cases leaves the value standing where it
+     * stood ({@link #position}), so a narrowing after it is of the same value, and the two are the
+     * cases both leave ({@link CasesLeft#meet}): {@code kind@{Hospital|Station}} narrowed to
+     * {@code Station|Depot} is {@code kind@Station}. A narrowing to one case is a position of its
+     * own — the case's value, or what an optional holds — so a narrowing after it is of that
+     * value: {@code x@Some@Some} is the inner optional holding something too.
+     *
+     * @throws IllegalArgumentException where the two are of one position and leave it no case in
+     *                                  common: no value stands at a place narrowed to both, so no
+     *                                  path is one
+     */
+    static CasesLeft narrowedOnce(Step last, CasesLeft cases) {
+        CasesLeft had = severalCasesOf(last);
+        if (had == null) {
+            return null;
+        }
+        CasesLeft both = had.meet(cases);
+        if (both == null) {
+            throw new IllegalArgumentException("a value left " + had.spelled() + " is never "
+                    + cases.spelled() + ", so no place is narrowed to both");
+        }
+        return both;
+    }
+
+    /** The cases {@code step} leaves a value, where it narrows the value to several and so a
+     *  narrowing after it is of the same position; null otherwise. */
+    private static CasesLeft severalCasesOf(Step step) {
+        return step instanceof Step.Refine(CasesLeft had) && had.only() == null ? had : null;
+    }
+
+    /**
+     * Whether narrowing this path to {@code cases} is a place ({@link #refine(CasesLeft)}): false
+     * only where this path narrows the position to several cases that share none with
+     * {@code cases}, which no value is both of ({@link #narrowedOnce}). For a reader asking
+     * whether a value can be those cases before it names where it would stand.
+     */
+    public boolean admits(CasesLeft cases) {
+        CasesLeft had = steps.isEmpty() ? null : severalCasesOf(steps.getLast());
+        return had == null || had.meet(cases) != null;
+    }
+
+    /** {@code steps} with each narrowing taken after a narrowing of the same position folded into
+     *  it ({@link #narrowedOnce}). */
+    static List<Step> eachPositionNarrowedOnce(List<Step> steps) {
+        List<Step> out = new ArrayList<>(steps.size());
+        for (Step step : steps) {
+            CasesLeft folded = step instanceof Step.Refine(CasesLeft cases) && !out.isEmpty()
+                    ? narrowedOnce(out.getLast(), cases) : null;
+            if (folded != null) {
+                out.set(out.size() - 1, new Step.Refine(folded));
+            } else {
+                out.add(step);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The head's hash and the steps', folded as a record folds its components, so a table keyed
+     * by paths holds them in the order it always has. Written out because a path is hashed far
+     * more often than it is made, and a record's own hash goes through a method handle that the
+     * steps' cached hash does not spare.
+     */
+    @Override
+    public int hashCode() {
+        return 31 * head.hashCode() + steps.hashCode();
+    }
+
+    /** The same head and the same steps; the steps are asked first, since they know their hash. */
+    @Override
+    public boolean equals(Object other) {
+        return other == this || (other instanceof TermPath path && steps.equals(path.steps)
+                && head.equals(path.head));
     }
 
     /**
@@ -157,11 +247,64 @@ public record TermPath(String head, List<Step> steps) {
      */
     private static final class Steps extends AbstractList<Step> implements RandomAccess {
 
+        /** The head these steps are under: the steps of a path are never shared with another head,
+         *  since what they remember about the path derived from them is about this head. */
+        private final String head;
         private final List<Step> of;
         private int hash;
 
-        private Steps(List<Step> of) {
+        /** The path these steps are one step further than; null for a root and for a path built
+         *  by the constructor. */
+        private final TermPath parent;
+
+        /** What the table of derived paths calls the path these are the steps of, or nought where
+         *  that is not the one path of its head that derivations return. A number and not a
+         *  reference, so that what the table files a path under keeps no path alive. What is
+         *  derived from a path is kept beside this type ({@link #FILED}) and not in it: a path is
+         *  carried by a great many answers, and a path that held the paths made from it would
+         *  hold itself through them. */
+        private long id;
+
+        /** How a path under one head spells these, kept for the last head asked: a path is spelled
+         *  to be put in an order or into a message far more often than it is made, and one value
+         *  holds head and text together so that a thread sees both or neither. */
+        private volatile Spelling spelling;
+
+        private record Spelling(String head, String text) {}
+
+        private Steps(String head, List<Step> of, TermPath parent) {
+            this.head = head;
             this.of = of;
+            this.parent = parent;
+        }
+
+        static Steps plain(String head, List<Step> of) {
+            return new Steps(head, of, null);
+        }
+
+        /** The path made with these steps, which is the one derivations return once it is filed;
+         *  numbered before it is handed to anybody, since the constructor does not share the steps
+         *  of a numbered path with a path of its own. */
+        static TermPath numberedPath(String head, List<Step> of, TermPath parent) {
+            Steps made = new Steps(head, of, parent);
+            TermPath path = new TermPath(head, made);
+            made.id = NUMBERS.incrementAndGet();
+            return path;
+        }
+
+        /** The path under {@code head} written out, as {@link TermPath#toString} writes it. */
+        String spelledUnder(String head) {
+            Spelling had = spelling;
+            if (had != null && had.head().equals(head)) {
+                return had.text();
+            }
+            StringBuilder out = new StringBuilder(head);
+            for (Step step : of) {
+                spell(out, step, false);
+            }
+            String text = out.toString();
+            spelling = new Spelling(head, text);
+            return text;
         }
 
         @Override
@@ -188,20 +331,189 @@ public record TermPath(String head, List<Step> steps) {
             return had;
         }
 
+        /**
+         * Two of these are compared step by step on the lists they hold. Equal hashes are what a
+         * table hands over, so this is asked once for every hit; walked through an iterator of this
+         * list, it would ask the size and each step through this wrapper at every step.
+         */
         @Override
         public boolean equals(Object other) {
             if (other == this) {
                 return true;
             }
-            if (other instanceof Steps steps && steps.hashCode() != hashCode()) {
+            if (!(other instanceof Steps steps)) {
+                return super.equals(other);
+            }
+            int size = of.size();
+            if (steps.hashCode() != hashCode() || steps.of.size() != size) {
                 return false;
             }
-            return super.equals(other);
+            for (int at = 0; at < size; at++) {
+                if (!of.get(at).equals(steps.of.get(at))) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
+    private static final Step ELEMENT = new Step.Element();
+    private static final Step KEY = new Step.Key();
+
+    /** The numbers paths are filed under; nought is no path, and stands for the place roots are
+     *  filed from. */
+    private static final AtomicLong NUMBERS = new AtomicLong();
+
+    /**
+     * Every path derivations return, by the place it is filed at: the number of the path it is one
+     * step further than and that step, or, for a root, no path and the field named by its
+     * parameter. A process shares this across every compile it makes, so it lets go of whatever
+     * nothing else holds.
+     *
+     * <p>Its keys are numbers and steps and name no path, which is what lets a path go: a key that
+     * held the parent would keep it, and everything above it, for as long as the entry stayed,
+     * and the entry stays until it is swept. A path made from another holds that one itself, so a
+     * parent is filed for as long as a path made from it is, and a number is never given twice.
+     * What is swept is the entry of a path that was collected, and it is swept at every ask, since
+     * the ask that finds nothing to sweep costs a read.
+     */
+    private static final ConcurrentHashMap<Place, Filed> FILED = new ConcurrentHashMap<>();
+    private static final ReferenceQueue<TermPath> COLLECTED = new ReferenceQueue<>();
+
+    /** Where a path is filed. Compared in the code and not through a record's own, which goes
+     *  through a method handle: this is asked at every derivation of a path. */
+    private record Place(long under, Step step) {
+
+        @Override
+        public int hashCode() {
+            return 31 * Long.hashCode(under) + step.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Place place && place.under == under && place.step.equals(step);
+        }
+    }
+
+    /** A path filed, weakly, with the place to take the entry out of by. */
+    private static final class Filed extends WeakReference<TermPath> {
+
+        private final Place place;
+
+        Filed(TermPath path, Place place) {
+            super(path, COLLECTED);
+            this.place = place;
+        }
+    }
+
+    /** How many places are filed, which is what a test asks to know that the entries of paths
+     *  nothing holds are gone as well. */
+    static int placesFiled() {
+        sweep();
+        return FILED.size();
+    }
+
+    /** Takes out the entries of the paths that were collected; an entry that has been filed again
+     *  since is not the one taken out. */
+    private static void sweep() {
+        for (Reference<? extends TermPath> gone = COLLECTED.poll(); gone != null;
+             gone = COLLECTED.poll()) {
+            FILED.remove(((Filed) gone).place, gone);
+        }
+    }
+
+    /** The path filed at {@code place}, or null where none is held. */
+    private static TermPath filedAt(Place place) {
+        sweep();
+        Filed held = FILED.get(place);
+        return held == null ? null : held.get();
+    }
+
+    /** {@code made} filed at {@code place}, or the path another thread filed there first. */
+    private static TermPath filing(Place place, TermPath made) {
+        Filed mine = new Filed(made, place);
+        while (true) {
+            Filed held = FILED.putIfAbsent(place, mine);
+            if (held == null) {
+                return made;
+            }
+            TermPath had = held.get();
+            if (had != null) {
+                return had;
+            }
+            if (FILED.replace(place, held, mine)) {
+                return made;
+            }
+        }
+    }
+
+    /** The path of the parameter itself, which is the same instance for as long as one is held. */
     public static TermPath of(String head) {
-        return new TermPath(head, List.of());
+        Objects.requireNonNull(head, "a path is rooted at a parameter");
+        Place place = new Place(0, new Step.Field(head));
+        TermPath root = filedAt(place);
+        return root != null ? root : filing(place, Steps.numberedPath(head, List.of(), null));
+    }
+
+    /**
+     * The path under {@code head} that takes {@code steps}, which is the one every derivation of
+     * the same steps from the same head returns; equal to {@code new TermPath(head, steps)}.
+     */
+    public static TermPath of(String head, List<Step> steps) {
+        return of(head).continuedBy(steps);
+    }
+
+    /** The one path equal to this, which is this one where it was derived. */
+    private TermPath canonical() {
+        return held().id != 0 ? this : of(head, steps);
+    }
+
+    private Steps held() {
+        return (Steps) steps;
+    }
+
+    /**
+     * The path one step further than this filed one, made the first time it is asked. A narrowing
+     * of the position the last step narrowed is folded into that step ({@link #narrowedOnce}),
+     * since every path is made through here.
+     */
+    private TermPath within(Step step) {
+        if (step instanceof Step.Refine(CasesLeft cases) && !steps.isEmpty()) {
+            CasesLeft folded = narrowedOnce(steps.getLast(), cases);
+            if (folded != null) {
+                return prefix(steps.size() - 1).within(new Step.Refine(folded));
+            }
+        }
+        Place place = new Place(held().id, step);
+        TermPath had = filedAt(place);
+        if (had != null) {
+            return had;
+        }
+        List<Step> longer = new ArrayList<>(steps.size() + 1);
+        longer.addAll(steps);
+        longer.add(step);
+        return filing(place, Steps.numberedPath(head, List.copyOf(longer), this));
+    }
+
+    /** This canonical path taken on by each of {@code more}. */
+    private TermPath continuedBy(List<Step> more) {
+        TermPath at = this;
+        for (int i = 0; i < more.size(); i++) {
+            at = at.within(more.get(i));
+        }
+        return at;
+    }
+
+    /** The path of the first {@code length} steps of this one. */
+    public TermPath prefix(int length) {
+        if (length < 0 || length > steps.size()) {
+            throw new IndexOutOfBoundsException(length);
+        }
+        TermPath at = canonical();
+        while (at.steps.size() > length) {
+            at = at.held().parent;
+        }
+        return at;
     }
 
     /**
@@ -258,30 +570,40 @@ public record TermPath(String head, List<Step> steps) {
         return append(new Step.Field(field));
     }
 
+    /** The same path, each of {@code fields} further in, made once rather than once per field. */
+    public TermPath then(List<String> fields) {
+        if (fields.isEmpty()) {
+            return this;
+        }
+        TermPath at = canonical();
+        for (String field : fields) {
+            at = at.within(new Step.Field(field));
+        }
+        return at;
+    }
+
     /**
      * The same way in, taken into what stands at {@code root} instead of into what {@link #head}
      * names: a way into a behavior's parameter, as the same way into what a call handed it.
      */
     public TermPath under(TermPath root) {
-        List<Step> moved = new ArrayList<>(root.steps);
-        moved.addAll(steps);
-        return new TermPath(root.head, moved);
+        return root.canonical().continuedBy(steps);
     }
 
     /** The same path, inside the container it has reached. */
     public TermPath element() {
-        return append(new Step.Element());
+        return append(ELEMENT);
     }
 
     /** The same path, inside the map it has reached, at its keys. */
     public TermPath key() {
-        return append(new Step.Key());
+        return append(KEY);
     }
 
     /** The map this position is the keys of, or null where it is not at a map's keys. */
     public TermPath mapOfTheKeys() {
         return !steps.isEmpty() && steps.getLast() instanceof Step.Key
-                ? new TermPath(head, steps.subList(0, steps.size() - 1)) : null;
+                ? prefix(steps.size() - 1) : null;
     }
 
     /** The same position, narrowed to the values {@code refinement} leaves. */
@@ -289,15 +611,21 @@ public record TermPath(String head, List<Step> steps) {
         return refine(CasesLeft.of(refinement));
     }
 
-    /** The same position, narrowed to the values {@code cases} leaves. */
+    /**
+     * The same position, narrowed to the values {@code cases} leaves.
+     *
+     * <p>A position this path already narrowed to several cases is narrowed once, to the cases
+     * both leave, and not a second time after the first ({@link #narrowedOnce}).
+     *
+     * @throws IllegalArgumentException where this path narrowed the position to cases that share
+     *                                  none with {@code cases}
+     */
     public TermPath refine(CasesLeft cases) {
         return append(new Step.Refine(cases));
     }
 
     private TermPath append(Step step) {
-        List<Step> longer = new ArrayList<>(steps);
-        longer.add(step);
-        return new TermPath(head, longer);
+        return canonical().within(step);
     }
 
     /**
@@ -308,19 +636,30 @@ public record TermPath(String head, List<Step> steps) {
      * than about this one. Read here and nowhere else: every reader that decides whether two
      * positions or two classes can be in one row asks {@link Requirements#merge}, and none of them
      * keeps an account of its own.
+     *
+     * <p>Every refinement is kept: no two steps of a path narrow one position, since a narrowing of
+     * a position the step before narrowed to several cases is folded into it where the path is
+     * made ({@link #narrowedOnce}). So what this requires is every refinement the path holds.
      */
     public Requirements requirements() {
-        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
-        TermPath at = TermPath.of(head);
-        for (Step step : steps) {
-            if (step instanceof Step.Refine refine) {
+        Map<TermPath, CasesLeft> out = null;
+        for (int at = 0; at < steps.size(); at++) {
+            if (steps.get(at) instanceof Step.Refine refine) {
+                if (out == null) {
+                    out = new LinkedHashMap<>();
+                }
                 // Keyed by where the value stands: under a narrowing to several cases, a name is
-                // the name read at the sum, and what is required of it is required there.
-                out.put(at.position(), refine.cases());
+                // the name read at the sum, and what is required of it is required there. A path
+                // is built only where it is a key, and not at every step on the way.
+                TermPath position = prefix(at).position();
+                CasesLeft had = out.put(position, refine.cases());
+                if (had != null) {
+                    throw new IllegalStateException("`" + this + "` narrows `" + position
+                            + "` twice, which every way of making a path folds into one");
+                }
             }
-            at = at.append(step);
         }
-        return new Requirements(out, List.of());
+        return out == null ? Requirements.NONE : new Requirements(out, List.of());
     }
 
     /**
@@ -345,7 +684,8 @@ public record TermPath(String head, List<Step> steps) {
      * anything asked.
      */
     public TermPath narrowedFrom() {
-        return new TermPath(head, requireNarrowing().subList(0, steps.size() - 1));
+        requireNarrowing();
+        return prefix(steps.size() - 1);
     }
 
     /** Which values the last step leaves, which is what the arm that took it came out as. */
@@ -372,7 +712,7 @@ public record TermPath(String head, List<Step> steps) {
                 kept.add(step);
             }
         }
-        return kept.size() == steps.size() ? this : new TermPath(head, kept);
+        return kept.size() == steps.size() ? this : of(head, kept);
     }
 
     private List<Step> requireNarrowing() {
@@ -425,6 +765,309 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * Whether what is asked of the value at this path can say something of the value at
+     * {@code other}: one stands at, under or around the other, or the cases each requires of some
+     * value leave it none in common.
+     *
+     * <p>A narrowing says which case the value is, and leaves it the same value: a name read at a
+     * sum is the name read at each case holding it. So the two are matched on two counts. Whether
+     * the cases each path requires hold together is asked of
+     * {@link Requirements#compatibleWith}, which every reader putting two requirements together
+     * asks: two that leave a value no case in common bear on each other by excluding each other,
+     * whatever is asked under each. Where they hold together, the steps that go somewhere are
+     * matched, and the two bear on each other where one runs out within the other. This is the one
+     * answer to whether two things asked of the input are apart; a reader that sets them apart, to
+     * ask one without the other, asks it here. Whether one value moves with another, or is read by
+     * what reads it, is {@link #standsAtUnderOrAround}.
+     *
+     * <p>False only where the two are shown apart. Cases that may leave a value none in common
+     * through a name the cases of a sum share, which a path cannot tell ({@link Cases}), bear.
+     */
+    public boolean bearsOn(TermPath other) {
+        return casesBeside(other) != Cases.HOLD_TOGETHER || placed(other) != Placed.APART;
+    }
+
+    /**
+     * Whether the cases this path requires of some value and the cases {@code other} requires of
+     * it leave it none in common: a row where the value is what one asks for is no row where it is
+     * what the other does, so no value stands at both. {@code x@Hospital.code} and
+     * {@code x@Station.code} are so, and {@code x@Station.code} and {@code x.name} are not,
+     * whether or not they are the same place — the steps going to places apart is no case
+     * excluding another ({@link #bearsOn} is false for both).
+     *
+     * <p>True only where it is shown. Cases that may leave a value none in common through a name
+     * the cases of a sum share, which a path cannot tell ({@link Cases}), are not.
+     */
+    public boolean excludesTheCasesOf(TermPath other) {
+        return casesBeside(other) == Cases.EXCLUDE;
+    }
+
+    /**
+     * Whether one of this path and {@code other} stands at, under or around the other as the value
+     * is reached: the cases each requires holding together, as {@link #bearsOn} asks, and the steps
+     * that go somewhere one within the other. Two that leave some value no case in common are two
+     * places apart.
+     *
+     * <p>For a reader asking whether the value at one place moves with the value at the other, or
+     * is read by what reads the other — not whether two things stated of them can hold together,
+     * which is {@link #bearsOn}. A narrowing stated of a value excludes another case of it, so two
+     * statements under two cases cannot both hold; but the value under one case neither moves with
+     * nor reads the value under another, and a place read under a case, as a rule of a sum reads
+     * each case, says nothing of which case the value is.
+     *
+     * <p>False only where the two are shown apart: their steps apart, or their cases shown to
+     * leave some value none in common. Cases that may do so through a name the cases of a sum
+     * share, which a path cannot tell ({@link Cases}), are taken to stand together.
+     */
+    public boolean standsAtUnderOrAround(TermPath other) {
+        return casesBeside(other) != Cases.EXCLUDE && placed(other) != Placed.APART;
+    }
+
+    /**
+     * Whether the value at this path is the value at {@code other}, or one inside it, as the value
+     * is reached: the cases each requires holding together, as {@link #bearsOn} asks, and the steps
+     * that go somewhere of {@code other} running out within this one's. Two that leave some value
+     * no case in common are neither inside the other: each says which case the value is, and so
+     * stands around whatever is asked under the other.
+     *
+     * <p>The one-way half of {@link #bearsOn}, for a reader that tells what is asked of a value
+     * itself from what is asked of a value it sits in. False only where it is shown not to be, as
+     * {@link #standsAtUnderOrAround} is.
+     */
+    public boolean standsAtOrUnder(TermPath other) {
+        Placed placed = placed(other);
+        return casesBeside(other) != Cases.EXCLUDE
+                && (placed == Placed.AT || placed == Placed.UNDER);
+    }
+
+    /**
+     * Whether on every row this path stands anywhere, it stands at {@code other} or inside it: it
+     * stands at or under it ({@link #standsAtOrUnder}), and every case {@code other} requires of a
+     * value this requires too, or fewer of them. Put together by {@link Requirements#merge}, the
+     * other's requirements then add nothing to this one's.
+     *
+     * <p>For a reader that claims of this path what is shown of {@code other} — what accounts for a
+     * place, what is inside a container, what moves with a node. {@code x@Station.code} is within
+     * {@code x@{Hospital|Station}.code} and within {@code x.code}; {@code x.code} is within neither
+     * of the narrowed ones, since on a row where {@code x} is a {@code Hospital} it stands at no
+     * {@code x@Station}.
+     *
+     * <p>True only where it is shown: cases that may leave a value none in common through a name
+     * the cases of a sum share ({@link Cases}) are not.
+     */
+    public boolean standsAtOrUnderOnEveryRow(TermPath other) {
+        if (casesBeside(other) != Cases.HOLD_TOGETHER || !standsAtOrUnder(other)) {
+            return false;
+        }
+        if (!other.narrowsAnywhere()) {
+            return true;
+        }
+        Requirements mine = requirements();
+        return mine.merge(other.requirements()) instanceof Requirements.Merge.Merged(
+                Requirements both) && both.equals(mine);
+    }
+
+    /**
+     * How the value at this path stands to the elements of the container at {@code container}, as
+     * the value is reached.
+     *
+     * <p>The one answer to it. Three of the answers are claims, each true on every row: inside the
+     * element ({@link #standsAtOrUnderOnEveryRow} of the element), holding them all (the container
+     * stands at or under this on every row), or apart from them ({@link #standsAtUnderOrAround}
+     * false). The fourth is that none of those is shown, and it is no claim: a reader that needs
+     * one of the others does not have it.
+     */
+    public ToTheElements toTheElementsOf(TermPath container) {
+        if (standsAtOrUnderOnEveryRow(container.element())) {
+            return ToTheElements.INSIDE_ONE;
+        }
+        if (container.standsAtOrUnderOnEveryRow(this)) {
+            return ToTheElements.HOLDING_THEM;
+        }
+        return standsAtUnderOrAround(container) ? ToTheElements.NOT_SHOWN
+                : ToTheElements.APART;
+    }
+
+    /**
+     * Whether this path and {@code other} name one place on every row either stands on: each
+     * stands at or inside the other there ({@link #standsAtOrUnderOnEveryRow}). Two narrowings of
+     * a value to cases that are not the same cases are two places, though one holds what the
+     * other does on some rows.
+     */
+    public boolean standsAtTheSamePlaceOnEveryRow(TermPath other) {
+        return standsAtOrUnderOnEveryRow(other) && other.standsAtOrUnderOnEveryRow(this);
+    }
+
+    /** How a value stands to the elements of a container ({@link #toTheElementsOf}). */
+    public enum ToTheElements {
+
+        /** Inside the element on every row it stands on: a value of each element alone. */
+        INSIDE_ONE,
+
+        /** Holding the container on every row the container stands on: a value of all of them. */
+        HOLDING_THEM,
+
+        /** Shown apart from the container and everything in it. */
+        APART,
+
+        /** None of the others shown. */
+        NOT_SHOWN
+    }
+
+    /**
+     * How the cases two paths require of the values they pass through stand to each other.
+     *
+     * <p>Each refinement is read as what it requires of the position it is taken at
+     * ({@link #requirements}), and the two are put together by {@link Requirements#compatibleWith},
+     * the one rule of which cases hold together: two narrowings of one position hold together where
+     * they leave it some case in common, so {@code x@{Hospital|Station}} and {@code x@Station} do
+     * and {@code x@Hospital} and {@code x@Station} do not; and narrowings at two positions, as
+     * {@code x@Some} and {@code x@Some@Some} are, ask nothing of each other.
+     *
+     * <p>A path carries no account of where a name the cases of a sum share stands under each case
+     * ({@link NameReach}), so a narrowing at such a name, {@code r.q.flag@Some}, and one under a case,
+     * {@code r.q@A.flag@None}, are of two positions here and of one value on a row where {@code r.q}
+     * is an {@code A}. Two such narrowings that leave the value no case in common are neither shown
+     * to hold together nor shown apart, and each question about two places answers them on its own
+     * side: what bears says they bear, what stands says they stand, and what is shown of every row
+     * says nothing is.
+     */
+    private enum Cases {
+        /** Every value both pass through can be what both require. */
+        HOLD_TOGETHER,
+        /** Some value is required cases by one that the other leaves it none of. */
+        EXCLUDE,
+        /** They may exclude each other through a name the cases of a sum share, which a path
+         *  cannot tell. */
+        MAY_EXCLUDE
+    }
+
+    /** How the cases this path and {@code other} require stand to each other ({@link Cases}). */
+    private Cases casesBeside(TermPath other) {
+        if (!head.equals(other.head) || !narrowsAnywhere() || !other.narrowsAnywhere()) {
+            return Cases.HOLD_TOGETHER;
+        }
+        Requirements mine = requirements();
+        Requirements theirs = other.requirements();
+        if (!mine.compatibleWith(theirs)) {
+            return Cases.EXCLUDE;
+        }
+        for (Map.Entry<TermPath, CasesLeft> here : mine.refinements().entrySet()) {
+            for (Map.Entry<TermPath, CasesLeft> there : theirs.refinements().entrySet()) {
+                if (here.getValue().meet(there.getValue()) == null
+                        && mayBeOneValueThroughASharedName(here.getKey(), there.getKey())) {
+                    return Cases.MAY_EXCLUDE;
+                }
+            }
+        }
+        return Cases.HOLD_TOGETHER;
+    }
+
+    /**
+     * Whether {@code one} and {@code other} are two positions that may be one value: written alike
+     * but that one of them, somewhere on the way, narrows a value to cases of a sum where the other
+     * does not, and goes on by a name — which, read without the narrowing, may be a name the cases
+     * share. A narrowing of an optional, or narrowings both sides take that differ, make two
+     * positions of what a path says, and so do the steps that go somewhere differing.
+     */
+    private static boolean mayBeOneValueThroughASharedName(TermPath one, TermPath other) {
+        if (one.equals(other) || !one.head.equals(other.head)) {
+            return false;
+        }
+        int here = 0;
+        int there = 0;
+        while (true) {
+            int hereNarrowed = pastNarrowings(one.steps, here);
+            int thereNarrowed = pastNarrowings(other.steps, there);
+            List<Step> mine = one.steps.subList(here, hereNarrowed);
+            List<Step> theirs = other.steps.subList(there, thereNarrowed);
+            boolean hereEnds = hereNarrowed == one.steps.size();
+            boolean thereEnds = thereNarrowed == other.steps.size();
+            if (!mine.equals(theirs) && !(!hereEnds && !thereEnds
+                    && one.steps.get(hereNarrowed) instanceof Step.Field
+                    && ((mine.isEmpty() && toCasesOfASum(theirs))
+                            || (theirs.isEmpty() && toCasesOfASum(mine))))) {
+                return false;
+            }
+            if (hereEnds || thereEnds) {
+                return hereEnds && thereEnds;
+            }
+            if (!one.steps.get(hereNarrowed).equals(other.steps.get(thereNarrowed))) {
+                return false;
+            }
+            here = hereNarrowed + 1;
+            there = thereNarrowed + 1;
+        }
+    }
+
+    /** Whether {@code narrowings} narrow a value to cases of a sum, and to nothing else. */
+    private static boolean toCasesOfASum(List<Step> narrowings) {
+        for (Step step : narrowings) {
+            if (!(step instanceof Step.Refine(CasesLeft cases)) || cases.atoms().stream()
+                    .anyMatch(atom -> !(atom instanceof Refinement.SumCase))) {
+                return false;
+            }
+        }
+        return !narrowings.isEmpty();
+    }
+
+    /** Where this path's steps that go somewhere stand to {@code other}'s, narrowings set aside. */
+    private enum Placed {
+        /** Each runs out where the other does. */
+        AT,
+        /** The other runs out within this. */
+        UNDER,
+        /** This runs out within the other. */
+        AROUND,
+        /** Neither reaches the other. */
+        APART
+    }
+
+    /** Where this path's steps that go somewhere stand to {@code other}'s, matched step for step
+     *  until one path runs out, narrowings set aside. */
+    private Placed placed(TermPath other) {
+        if (!head.equals(other.head)) {
+            return Placed.APART;
+        }
+        int here = 0;
+        int there = 0;
+        while (true) {
+            here = pastNarrowings(steps, here);
+            there = pastNarrowings(other.steps, there);
+            boolean hereEnds = here == steps.size();
+            boolean thereEnds = there == other.steps.size();
+            if (hereEnds || thereEnds) {
+                return hereEnds && thereEnds ? Placed.AT
+                        : thereEnds ? Placed.UNDER : Placed.AROUND;
+            }
+            if (!steps.get(here).equals(other.steps.get(there))) {
+                return Placed.APART;
+            }
+            here++;
+            there++;
+        }
+    }
+
+    /** Whether some step of this path narrows a position to cases. */
+    private boolean narrowsAnywhere() {
+        for (Step step : steps) {
+            if (step instanceof Step.Refine) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The first of {@code steps} from {@code from} on that is no narrowing to cases. */
+    private static int pastNarrowings(List<Step> steps, int from) {
+        int at = from;
+        while (at < steps.size() && steps.get(at) instanceof Step.Refine) {
+            at++;
+        }
+        return at;
+    }
+
+    /**
      * Whether {@code other} is this path or a path below it.
      *
      * <p>Asked of the steps and never of how they are written. A rendering runs the steps together
@@ -435,7 +1078,15 @@ public record TermPath(String head, List<Step> steps) {
         if (!head.equals(other.head) || steps.size() < other.steps.size()) {
             return false;
         }
-        return steps.subList(0, other.steps.size()).equals(other.steps);
+        // Each step against its own, by position: a prefix taken as a list and compared would make
+        // a view and two iterators for every question, and this is asked of every pair of places a
+        // search sets side by side.
+        for (int at = 0; at < other.steps.size(); at++) {
+            if (!steps.get(at).equals(other.steps.get(at))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -488,9 +1139,7 @@ public record TermPath(String head, List<Step> steps) {
         if (below == null) {
             return null;
         }
-        List<Step> moved = new ArrayList<>(to.steps);
-        moved.addAll(below);
-        return new TermPath(to.head, moved);
+        return to.canonical().continuedBy(below);
     }
 
     /** The steps of this below {@code root}, or null where this is not under it. */
@@ -508,7 +1157,7 @@ public record TermPath(String head, List<Step> steps) {
     public TermPath outermostContainer() {
         for (int i = 0; i < steps.size(); i++) {
             if (reachesInsideAContainer(steps.get(i))) {
-                return new TermPath(head, steps.subList(0, i));
+                return prefix(i);
             }
         }
         return this;
@@ -527,7 +1176,7 @@ public record TermPath(String head, List<Step> steps) {
         List<TermPath> out = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
             if (reachesInsideAContainer(steps.get(i))) {
-                out.add(new TermPath(head, steps.subList(0, i)));
+                out.add(prefix(i));
             }
         }
         return List.copyOf(out);
@@ -598,10 +1247,6 @@ public record TermPath(String head, List<Step> steps) {
 
     @Override
     public String toString() {
-        StringBuilder out = new StringBuilder(head);
-        for (Step step : steps) {
-            spell(out, step, false);
-        }
-        return out.toString();
+        return ((Steps) steps).spelledUnder(head);
     }
 }

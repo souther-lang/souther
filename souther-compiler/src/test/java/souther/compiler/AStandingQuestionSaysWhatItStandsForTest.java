@@ -8,7 +8,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
@@ -46,14 +45,12 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return AdequacyReport.of(
+                ACompiledModel.measured(unreadable(source), Adequacy.Asked.fullReport()));
     }
 
     private static String reportOf(String source) {
-        return measured(source).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return measured(source).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     /** What the document says stopped the one question of {@code source}. */
@@ -290,14 +287,52 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
-     * And an equality over a product of two values says that, at each of them.
+     * And a comparison of a value with a product of two values says that, at each of them.
      *
      * <p>{@code net} is the other side of a relation and is not asked here; {@code qty} and
      * {@code price} are each a factor of a product nothing turns into a line or a set, and the word
      * for that is the one a bound over the same product is told.
      */
     @Test
-    void anEqualityOverAProductOfTwoValuesSaysSoAtEach() {
+    void aCapOverAProductOfTwoValuesSaysSoAtEach() {
+        assertEquals(List.of(
+                        "      · not accounted for: invariant Line #1 — which values may stand at"
+                                + " l.qty: " + A_PRODUCT,
+                        "      · not accounted for: invariant Line #1 — which values may stand at"
+                                + " l.price: " + A_PRODUCT),
+                allAbout(reportOf("""
+                        module probe.product
+
+                        data Line = { qty: Int, price: Int, net: Int }
+                            invariant net <= qty * price
+
+                        behavior read : (l: Line) -> Ok
+                        """), "invariant Line #1").stream()
+                        .filter(line -> line.contains("which values may stand at")).toList());
+    }
+
+    /**
+     * An equality of a value with a product of two others defines it, and says nothing of either
+     * factor that is left unanswered.
+     */
+    @Test
+    void aValueDefinedAsAProductOfTwoOthersLeavesNothingUnanswered() {
+        assertEquals(List.of(), allAbout(reportOf("""
+                module probe.product
+
+                data Line = { qty: Decimal, price: Decimal, net: Decimal }
+                    invariant net == qty * price
+
+                behavior read : (l: Line) -> Ok
+                """), "invariant Line #1"));
+    }
+
+    /**
+     * Whole numbers stop at a width and their product may not, so the factors of a product of two
+     * of them are left with the question, as they are by a cap over the same product.
+     */
+    @Test
+    void aWholeNumberDefinedAsAProductOfTwoOthersLeavesTheFactorsUnanswered() {
         assertEquals(List.of(
                         "      · not accounted for: invariant Line #1 — which values may stand at"
                                 + " l.qty: " + A_PRODUCT,

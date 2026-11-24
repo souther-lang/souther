@@ -85,6 +85,16 @@ public final class DocumentShape {
         return new Read(walk.objects, walk.conditions, walk.wrong);
     }
 
+    /**
+     * {@code fragment} read against the part of the schema {@code reference} points at: for a shape
+     * that no document a model of this repository makes holds, and that is written here by hand.
+     */
+    public static Read of(JsonNode fragment, String reference) {
+        Walk walk = new Walk(SHIPPED);
+        walk.of(fragment, SchemaReference.resolve(SHIPPED, reference), "");
+        return new Read(walk.objects, walk.conditions, walk.wrong);
+    }
+
     /** The same, for a caller that wants the document held to the schema and nothing else. */
     public static void assertShapedLikeTheSchema(JsonNode document) {
         assertEquals(List.of(), of(document).wrong(),

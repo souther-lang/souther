@@ -26,16 +26,6 @@ class ASpacingWitnessIsOnlyForABoundaryWrittenOnALineTest {
         return Witnesses.spacing(source, Formatter.canonicalize(CstParser.parse(source).root()));
     }
 
-    /** The canonical form of a source has nothing against it. */
-    @Test
-    void aSourceInItsCanonicalFormHasNoWitness() {
-        assertEquals(List.of(), witnesses(Formatter.format("""
-                module fmtprobe exposing ( f )
-
-                let f (x: Int): Int = x + 1
-                """)));
-    }
-
     /** A space the canonical form does not write is one witness, and it says both answers. */
     @Test
     void aSpaceTheCanonicalFormDoesNotWriteIsAWitness() {

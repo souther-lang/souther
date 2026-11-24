@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -13,10 +15,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,7 +61,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> found = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
                 .filter(line -> line.border().cut().toString().contains("Apart"))
                 .map(line -> ((LineOrigin.ComparisonOrigin) line.origin()).part()
-                        .map(part -> part.decides().key()).orElse("everywhere"))
+                        .map(part -> part.decides().spelledOut()).orElse("everywhere"))
                 .toList();
         assertEquals(1, found.size(), found.toString());
         return found.getFirst();
@@ -87,7 +87,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> written = lineBetweenAAndK(MODEL.formatted(ABOVE, "a >= k"));
         assertEquals(1, written.size(), written.toString());
         assertEquals(written, lineBetweenAAndK(MODEL.formatted(ABOVE, QUOTIENT)));
-        assertFalse(human(MODEL.formatted(ABOVE, QUOTIENT)).contains("not read"));
+        assertFalse(NotRead.in(human(MODEL.formatted(ABOVE, QUOTIENT))));
     }
 
     /**
@@ -107,7 +107,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> written = lineBetweenAAndK(MODEL.formatted(ABOVE, "a >= k"));
         String model = MODEL.formatted("", QUOTIENT);
         assertEquals(written, lineBetweenAAndK(model));
-        assertFalse(human(model).contains("not read"));
+        assertFalse(NotRead.in(human(model)));
     }
 
     /**
@@ -131,7 +131,14 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         }
     }
 
-    private static final String MAY_STOP_A_RUN = "may stop a run:";
+    /**
+     * Whether {@code report} says of a rule that a run reaching it stops in what it works out:
+     * as a stop shown to exist, or as one not resolved. A division by nought on some ways is one
+     * no existence of a stopping run is shown for, and is said as not resolved.
+     */
+    private static boolean saysAStop(String report) {
+        return report.contains("may stop a run:") || report.contains("stop not resolved:");
+    }
 
     /**
      * Without the guard, the way that divides by nought is a place where a run stops, said beside
@@ -140,15 +147,30 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void withoutAGuardTheWayThatStopsIsSaidBesideTheLineTheOtherWayDraws() {
         String report = human(MODEL.formatted("", QUOTIENT));
-        assertTrue(report.contains(MAY_STOP_A_RUN), report);
-        assertFalse(report.contains("not read"), report);
+        assertTrue(saysAStop(report), report);
+        assertFalse(NotRead.in(report), report);
         assertEquals(1, lineBetweenAAndK(MODEL.formatted("", QUOTIENT)).size());
     }
 
     /** Under the guard no row takes the way that divides by nought, and nothing is said of it. */
     @Test
     void underAGuardThatRulesTheWayOutNoRunStopsAndNothingIsSaid() {
-        assertFalse(human(MODEL.formatted(ABOVE, QUOTIENT)).contains(MAY_STOP_A_RUN));
+        assertFalse(saysAStop(human(MODEL.formatted(ABOVE, QUOTIENT))));
+    }
+
+    /**
+     * A choice decided by a statement that holds on no row it is made on — {@code a} above nought
+     * leaves {@code a}, not below nought, and a run with {@code a} at or below nought stops in
+     * making it — is read and reported, and the stop is not passed over: the decision is a column
+     * of the decision table, named by it or its denial, whichever spells first, though the denial
+     * of its denial is spelled another way.
+     */
+    @Test
+    void aChoiceDecidedByAStatementThatHoldsOnNoRowIsReportedWithItsStop() {
+        String report = human(MODEL.formatted("",
+                "(if " + QUOTIENT.replace(">= k", "< 0") + " then 1 else 2) >= b"));
+        assertFalse(report.contains("measurement: complete"), report);
+        assertTrue(saysAStop(report) || report.contains("not read:"), report);
     }
 
     /**
@@ -159,7 +181,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aStopTheWaysBeforeItAreNotShownToRuleOutIsSaidAsOneThatMayHappen() {
         String guards = "guard a * b > 0 else No\n    guard b > 0 else No";
-        assertTrue(human(MODEL.formatted(guards, QUOTIENT)).contains(MAY_STOP_A_RUN));
+        assertTrue(saysAStop(human(MODEL.formatted(guards, QUOTIENT))));
     }
 
     /**
@@ -169,12 +191,15 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aStopOnSomeWaysIsSaidWhereverItStandsInTheComparison() {
         for (String guard : List.of("(if a > 0 then a / 0 else b / 1) >= k",
-                "(if a > 0 then a / 1 else b / 0) >= k",
-                "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k")) {
+                "(if a > 0 then a / 1 else b / 0) >= k")) {
             String report = human(MODEL.formatted("", guard));
-            assertTrue(report.contains(MAY_STOP_A_RUN), guard + "\n" + report);
-            assertFalse(report.contains("not read"), guard + "\n" + report);
+            assertTrue(saysAStop(report), guard + "\n" + report);
+            assertFalse(NotRead.in(report), guard + "\n" + report);
         }
+        // The quotient by nought stands inside a sum of two Rationals. The sum stops no run, and
+        // the stop is said all the same where it stands.
+        String sum = "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k";
+        assertTrue(saysAStop(human(MODEL.formatted("", sum))), sum);
     }
 
     private static final String MATCHED =
@@ -186,16 +211,17 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
      */
     @Test
     void anArmOfAMatchStopsARunOnlyWhereTheArmIsTaken() {
-        assertFalse(human(MODEL.formatted(ABOVE, MATCHED)).contains(MAY_STOP_A_RUN));
-        assertTrue(human(MODEL.formatted("", MATCHED)).contains(MAY_STOP_A_RUN));
+        assertFalse(saysAStop(human(MODEL.formatted(ABOVE, MATCHED))));
+        assertTrue(saysAStop(human(MODEL.formatted("", MATCHED))));
     }
 
     /**
-     * The finding is about a rule, and names it by the identity the document gives every rule a
-     * finding is about.
+     * The finding is about a step, and names it by where it is written, and by no rule. What a
+     * run works out there is said as a stop not resolved, and that finding is the one said of
+     * the step.
      */
     @Test
-    void aRuleSomeRunsStopInIsNamedByItsRuleIdInTheDocument() {
+    void aStepSomeRunsStopAtIsNamedByWhereItIsWrittenInTheDocument() {
         Compilation compilation = measured(MODEL.formatted("", QUOTIENT));
         JsonNode findings = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation)
@@ -203,21 +229,27 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
                 .get("modules").get(0).get("behaviors").get(0).get("findings");
         List<JsonNode> stopping = new ArrayList<>();
         for (JsonNode each : findings) {
-            if (each.get("kind").asString().equals("rule_may_stop_a_run")) {
+            String kind = each.get("kind").asString();
+            if (kind.equals("step_may_stop_a_run") || kind.equals("step_stop_not_shown")) {
                 stopping.add(each);
             }
         }
         assertEquals(1, stopping.size(), findings.toString());
-        assertTrue(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
+        assertEquals("step_stop_not_shown", stopping.getFirst().get("kind").asString());
+        assertTrue(stopping.getFirst().has("at"), stopping.getFirst().toString());
+        assertFalse(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
         assertFalse(stopping.getFirst().has("reason"), stopping.getFirst().toString());
     }
 
-    /** A comparison every run stops in is said once, as one that draws no line. */
+    /** A division by nought written is a step every run that gets to it stops at, whatever the
+     *  input holds, and is said once there. */
     @Test
-    void aComparisonEveryRunStopsInIsNotSaidTwice() {
+    void aDivisionEveryRunStopsAtIsSaidOnceWhereItIsWritten() {
         String report = human(MODEL.formatted("", "a / 0 >= k"));
-        assertFalse(report.contains(MAY_STOP_A_RUN), report);
-        assertTrue(report.contains(SUCH_A_RUN_STOPS), report);
+        assertEquals(1, report.lines().filter(line -> line.contains("· may stop a run:")).count(),
+                report);
+        assertTrue(report.contains("any run that gets here stops in division by 0, whatever the"
+                + " input holds"), report);
     }
 
     private static final String ALL = """
@@ -240,8 +272,8 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aClosureMadeOnTwoValuesOneOfWhichStopsSaysBoth() {
         String report = human(ALL.formatted("[1, 0]"));
-        assertTrue(report.contains(MAY_STOP_A_RUN), report);
-        assertFalse(human(ALL.formatted("[1, 2]")).contains(MAY_STOP_A_RUN));
+        assertTrue(saysAStop(report), report);
+        assertFalse(saysAStop(human(ALL.formatted("[1, 2]"))));
     }
 
     /**
@@ -252,8 +284,8 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     void anApplicationThatStopsIsNotLostToOneThatCutsNothing() {
         String model = ALL.replace("10 / d >= k", "10 / d >= 1");
         String report = human(model.formatted("[1, 0]"));
-        assertTrue(report.contains(MAY_STOP_A_RUN), report);
-        assertFalse(human(model.formatted("[1, 2]")).contains(MAY_STOP_A_RUN));
+        assertTrue(saysAStop(report), report);
+        assertFalse(saysAStop(human(model.formatted("[1, 2]"))));
     }
 
     /** The reason is the stop's, not the reading's: a division by nought stops the run. */
@@ -291,32 +323,28 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
 
     /**
      * A mean over a list the body wrote out is read as the sum of it is: the way where the list
-     * holds nothing divides by nought and is no row, and what is left unsaid is said for the reason
-     * the sum beside a number leaves something unsaid, which is a fact of its own and not about the
-     * quotient. The sum leaves less: its halves weigh one each and stand at the bar's own value,
-     * and a mean's weigh a half.
+     * holds nothing divides by nought and is no row, and what is left unsaid is the relation's — a
+     * value it is not shown to reach — which is a fact of its own and not about the quotient. The
+     * sum leaves nothing of the relation unsaid: its halves weigh one each and stand at the bar's
+     * own value. A mean's weigh a half, so a bar past half the greatest {@code Int} is one neither
+     * half reaches alone, and the bar is what is left unsaid.
      */
     @Test
-    void aMeanOverAFilteredListIsUnreadForNoReasonItsSumIsNot() {
+    void aMeanOverAFilteredListIsUnreadOnlyWhereItsRelationIs() {
         String mean = human(LIST.formatted("List.sum(xs) / List.length(xs)"));
         String sum = human(LIST.formatted("List.sum(xs)"));
         assertFalse(mean.contains("quotient by nought"), mean);
-        assertFalse(notRead(sum).isEmpty(), sum);
-        assertEquals(withoutWhatTheyAreAbout(notRead(sum)),
-                withoutWhatTheyAreAbout(notRead(mean)));
-        assertTrue(notRead(mean).containsAll(notRead(sum)), mean);
+        assertEquals(Set.of(), unreachedValues(sum), sum);
+        assertTrue(unreachedValues(mean).stream().anyMatch(line -> line.endsWith("about `k`")),
+                mean);
         assertTrue(mean.contains("border      borders"), mean);
     }
 
-    /** {@code lines}, each without the place it is about. */
-    private static Set<String> withoutWhatTheyAreAbout(Set<String> lines) {
-        return lines.stream().map(each -> each.substring(0, each.lastIndexOf(", about `")))
-                .collect(Collectors.toSet());
-    }
-
-    private static Set<String> notRead(String report) {
+    /** The lines of {@code report} saying a relation is not shown to reach a value. */
+    private static Set<String> unreachedValues(String report) {
         return report.lines()
-                .filter(line -> line.contains("not read:"))
+                .filter(line -> line.contains("not read:")
+                        && line.contains("not shown to reach every value here"))
                 .map(line -> line.replaceAll("@\\d+:\\d+", ""))
                 .collect(Collectors.toSet());
     }
@@ -324,25 +352,24 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once for the class: several tests read the same model, its lines and
      *  its report, and only read them. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
+        return SHARED.compiles(model, () -> {
+            Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
     }

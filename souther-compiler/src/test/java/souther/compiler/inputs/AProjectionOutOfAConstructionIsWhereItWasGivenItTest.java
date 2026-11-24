@@ -10,6 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -69,13 +70,14 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
     /** {@code Code(a)}, the one-field construction a newtype is written as. */
     private static Core.Construct code(Core given) {
         return new Core.Construct(CODE, List.of(new Core.FieldValue("value", given, POS)),
-                Type.ref(CODE), POS);
+                Type.ref(CODE), OccurrenceLineage.ORIGINAL, POS);
     }
 
     /** {@code Pair { left = a, right = b }}. */
     private static Core.Construct pair(Core left, Core right) {
         return new Core.Construct(PAIR, List.of(new Core.FieldValue("left", left, POS),
-                new Core.FieldValue("right", right, POS)), Type.ref(PAIR), POS);
+                new Core.FieldValue("right", right, POS)), Type.ref(PAIR),
+                OccurrenceLineage.ORIGINAL, POS);
     }
 
     /**
@@ -90,20 +92,20 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
         return new Core.FieldAccess(target, field, holds, POS);
     }
 
-    private static PathResolution readingOf(Core e, Map<BindingId, Core> bound) {
+    private static ValuesAt readingOf(Core e, Map<BindingId, Core> bound) {
         return InputReads.written(Map.of(LEFT, TermPath.of("a"), RIGHT, TermPath.of("b")),
                         bound, ElementBindings.NONE)
                 .pathOf(e, DeclarationNewtypes.asWritten(Symbols.none(DefaultStdlib.get())));
     }
 
-    private static PathResolution readingOf(Core e) {
+    private static ValuesAt readingOf(Core e) {
         return readingOf(e, Map.of());
     }
 
     /** The value a newtype's construction was given, read back out of it, is where that value is. */
     @Test
     void aFieldReadOutOfAConstructionWrittenWhereItStandsIsAtThePositionItWasGiven() {
-        assertEquals(new PathResolution.At(TermPath.of("a")),
+        assertEquals(new ValuesAt.At(TermPath.of("a")),
                 readingOf(field(code(a()), "value", Type.STRING)));
     }
 
@@ -117,7 +119,7 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
     void aFieldReadOutOfAConstructionANameHoldsIsAtThePositionItWasGiven() {
         Core held = new Core.Read("code", LOCAL, Type.ref(CODE), POS);
 
-        assertEquals(new PathResolution.At(TermPath.of("a")),
+        assertEquals(new ValuesAt.At(TermPath.of("a")),
                 readingOf(field(held, "value", Type.STRING), Map.of(LOCAL, code(a()))));
     }
 
@@ -130,9 +132,9 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
      */
     @Test
     void oneFieldOfTwoIsAtItsOwnPosition() {
-        assertEquals(new PathResolution.At(TermPath.of("a")),
+        assertEquals(new ValuesAt.At(TermPath.of("a")),
                 readingOf(field(pair(a(), b()), "left", Type.STRING)));
-        assertEquals(new PathResolution.At(TermPath.of("b")),
+        assertEquals(new ValuesAt.At(TermPath.of("b")),
                 readingOf(field(pair(a(), b()), "right", Type.STRING)));
     }
 
@@ -140,9 +142,10 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
     @Test
     void aProjectionOfAConstructionGivenAConstructionReachesTheValueInside() {
         Core.Construct outer = new Core.Construct(OUTER,
-                List.of(new Core.FieldValue("inner", code(a()), POS)), Type.ref(OUTER), POS);
+                List.of(new Core.FieldValue("inner", code(a()), POS)), Type.ref(OUTER),
+                OccurrenceLineage.ORIGINAL, POS);
 
-        assertEquals(new PathResolution.At(TermPath.of("a")),
+        assertEquals(new ValuesAt.At(TermPath.of("a")),
                 readingOf(field(field(outer, "inner", Type.ref(CODE)), "value", Type.STRING)));
     }
 
@@ -157,8 +160,8 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
      */
     @Test
     void aConstructionItselfIsAtNoPosition() {
-        assertEquals(new PathResolution.NotAPosition(), readingOf(code(a())));
-        assertEquals(new PathResolution.NotAPosition(), readingOf(pair(a(), b())));
+        assertEquals(new ValuesAt.NotAPosition(), readingOf(code(a())));
+        assertEquals(new ValuesAt.NotAPosition(), readingOf(pair(a(), b())));
     }
 
     /** And a name holding one is at none either, for the same reason. */
@@ -166,7 +169,7 @@ class AProjectionOutOfAConstructionIsWhereItWasGivenItTest {
     void aNameHoldingAConstructionIsAtNoPosition() {
         Core held = new Core.Read("code", LOCAL, Type.ref(CODE), POS);
 
-        assertEquals(new PathResolution.NotAPosition(),
+        assertEquals(new ValuesAt.NotAPosition(),
                 readingOf(held, Map.of(LOCAL, code(a()))));
     }
 }

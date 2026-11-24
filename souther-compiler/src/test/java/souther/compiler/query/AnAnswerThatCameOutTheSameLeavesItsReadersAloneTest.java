@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
@@ -52,18 +54,19 @@ class AnAnswerThatCameOutTheSameLeavesItsReadersAloneTest {
     private static Compilation started() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("orders.sou", MODULE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE);
         c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
         return c;
     }
 
     private static void edited(Compilation c) {
-        c.update(Map.of("orders.sou", AND_SOMETHING_NOBODY_NAMES), Set.of());
+        c.update(Map.of("orders.sou", AND_SOMETHING_NOBODY_NAMES), Set.of(), TestDay.DATE);
         c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        ACompiledModel.compiles(c);
     }
 
     /**

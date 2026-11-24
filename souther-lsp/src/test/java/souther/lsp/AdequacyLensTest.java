@@ -132,6 +132,31 @@ class AdequacyLensTest {
                 | (Total(5000), Standard, Express) -> Fee(500)
             """;
 
+    private static final String CASES = "file:///cases.sou";
+
+    /**
+     * A behavior whose only gap is a step of a search no row was seen in: both rules are taken, no
+     * class is owed, and no row sits at a line. What a search draws inside itself is all that is
+     * left to write a row for.
+     */
+    private static final String ONLY_A_STEP_OF_A_SEARCH = """
+            module cases
+
+            data Node = { v: Int, below: List<Node> }
+            data Yes
+            data No
+            let anyBig (n: Node): Bool = n.v > 5 || List.any(c -> anyBig(c), n.below)
+
+            behavior f : (t: Node) -> Yes | No
+            let f (t) = if anyBig(t) then Yes else No
+
+            example f
+                | "the top" : (Node { v = 9, below = [] }) -> Yes
+                | "below" : (Node { v = 0, below = [ Node { v = 9, below = [] } ] }) -> Yes
+                | "a child that fails" :
+                    (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
+            """;
+
     private static ModuleGraph graphOf(Map<String, String> documents) {
         return ModuleGraph.of(new LinkedHashMap<>(documents));
     }
@@ -360,7 +385,7 @@ class AdequacyLensTest {
         List<CodeAction> actions = analyzer.codeActions(MODULE, TRIP, on(9), graph);
 
         assertEquals(1, actions.size(), actions.toString());
-        assertEquals("Write the rows `submit` does not cover", actions.get(0).title());
+        assertEquals("Add the missing example rows for `submit`", actions.get(0).title());
         // Offered without the rows, which is the point of offering it: what they cost is paid by
         // somebody taking it.
         CodeAction.Deferred offered =
@@ -377,6 +402,33 @@ class AdequacyLensTest {
         assertEquals(List.of(),
                 errorsIn(TRIP.stripTrailing() + "\n" + taken.newText()),
                 "and the document goes on compiling with them in it");
+    }
+
+    /**
+     * A step of a search no row was seen in is work the offer stands for.
+     *
+     * <p>The editor decides whether to offer the rows by what is owed, and asks nothing that
+     * composes. A behavior whose only gap is a case a statement draws inside itself was written a
+     * block by the command and offered nothing by the editor, because what the editor asks did not
+     * know of cases.
+     */
+    @Test
+    void aStepOfASearchNoRowWasSeenInIsOffered() {
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph graph = graphOf(Map.of(CASES, ONLY_A_STEP_OF_A_SEARCH));
+        List<CodeAction> actions =
+                analyzer.codeActions(CASES, ONLY_A_STEP_OF_A_SEARCH, on(7), graph);
+
+        assertEquals(1, actions.size(), actions.toString());
+        CodeAction.Edit taken = analyzer.resolve(
+                assertInstanceOf(CodeAction.Deferred.class, actions.get(0)),
+                ONLY_A_STEP_OF_A_SEARCH, graph);
+        assertNotNull(taken, "and taking it writes the row");
+        assertTrue(taken.newText().contains("below = []"),
+                "the row is a node with nothing below it: " + taken.newText());
+        assertEquals(List.of(),
+                errorsIn(ONLY_A_STEP_OF_A_SEARCH.stripTrailing() + "\n" + taken.newText()),
+                "and the document goes on compiling with it in it");
     }
 
     /**
@@ -420,15 +472,10 @@ class AdequacyLensTest {
 
     /** What a compile of {@code source} refuses it for, which is nothing where it compiles. */
     private static List<String> errorsIn(String source) {
-        List<String> said = new ArrayList<>();
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        for (souther.compiler.query.Db.Found each : compilation.db().allReports()) {
-            if (each.report().isError()) {
-                said.add(each.report().diagnostic().code());
-            }
-        }
-        return said;
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList();
     }
 
     /**
@@ -754,10 +801,10 @@ class AdequacyLensTest {
         Analyzer analyzer = measuring(Adequacy.Level.ALL);
         ModuleGraph graph = graphOf(Map.of(TWO_URI, TWO));
 
-        assertEquals("Write the rows `first` does not cover",
+        assertEquals("Add the missing example rows for `first`",
                 analyzer.codeActions(TWO_URI, TWO, caret(lineOf(TWO, "behavior first"), 4), graph)
                         .get(0).title());
-        assertEquals("Write the rows `second` does not cover",
+        assertEquals("Add the missing example rows for `second`",
                 analyzer.codeActions(TWO_URI, TWO, caret(lineOf(TWO, "behavior second"), 4), graph)
                         .get(0).title());
     }
@@ -794,7 +841,7 @@ class AdequacyLensTest {
         int first = lineOf(TWO, "behavior first");
         int second = lineOf(TWO, "behavior second");
 
-        assertEquals("Write the rows `first` does not cover",
+        assertEquals("Add the missing example rows for `first`",
                 analyzer.codeActions(TWO_URI, TWO, over(first, 0, second + 1, 0), graph)
                         .get(0).title());
     }
@@ -891,7 +938,7 @@ class AdequacyLensTest {
     private static boolean offersRows(Analyzer analyzer, String uri, String text, Range asked,
                                       ModuleGraph graph) {
         return analyzer.codeActions(uri, text, asked, graph).stream()
-                .anyMatch(action -> action.title().startsWith("Write the rows"));
+                .anyMatch(action -> action.title().startsWith("Add the missing example rows"));
     }
 
     private static Range caret(int line, int column) {

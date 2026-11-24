@@ -1,5 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleRef;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
+
 import java.util.Optional;
 
 /**
@@ -98,8 +102,33 @@ public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
 
     /** What a report calls this line — the author's word for the rule where they wrote one and what
      *  the rule is where they did not, and never a place a body reached it at. */
+    public SearchMessage toldWithoutAPlace() {
+        return line.toldWithoutAPlace();
+    }
+
+    /** The same in the catalog's base language, for a text no reader's language changes: a
+     *  diagnostic's argument, and a field of a document a consumer matches on. */
     public String saidWithoutAPlace() {
-        return line.saidWithoutAPlace();
+        return Messages.render(toldWithoutAPlace(), Messages.BASE_LANGUAGE);
+    }
+
+    /**
+     * What a list running across behaviors calls this line, after the handle that sends a reader to
+     * its rule.
+     *
+     * <p>A comparison a body wrote is the reading of each behavior that reads it, and a debt of
+     * each: two behaviors calling one helper owe the helper's comparison apart. The handle says
+     * where the comparison is written and is the same for both, so what tells the two debts apart
+     * is the behavior that read it, and it is said here with the rest of what a report calls the
+     * line. A rule the author named is found by its name from anywhere and one debt however many
+     * behaviors carry it, so the handle is the whole of it.
+     */
+    public SearchMessage toldAfter(String handle) {
+        return line.told(switch (line.which().rule()) {
+            case RuleRef.Named _ -> new SearchMessage.TheRuleCited(handle);
+            case RuleRef.Written written ->
+                    new SearchMessage.TheRuleInTheBehavior(handle, written.behavior());
+        });
     }
 
     /** The declaration this line is owed to, where a declaration's clause drew it. */

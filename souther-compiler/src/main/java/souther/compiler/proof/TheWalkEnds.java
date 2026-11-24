@@ -4,6 +4,7 @@ import souther.compiler.core.TheWalk;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
@@ -57,8 +58,8 @@ public final class TheWalkEnds {
                 LawProposition<A> holds)) || aspect != AnswerAspect.PRESENCE) {
             return false;
         }
-        Map<Number, Granularity> whole = Map.of(Number.INDEX, Granularity.DISCRETE,
-                Number.LENGTH, Granularity.DISCRETE);
+        NumberSpace counted = NumberSpace.spacedOnly(Granularity.DISCRETE);
+        Map<Number, NumberSpace> whole = Map.of(Number.INDEX, counted, Number.LENGTH, counted);
         NumericDomain<Number> where = NumericDomain.top(Enum::compareTo);
         where = where.assume(LinearForm.atom(Number.LENGTH), Rel.GE, whole);
         for (LawProposition<A> part : parts(holds)) {

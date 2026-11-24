@@ -8,8 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Which case a value is, read where it stands: the value a {@code match} chooses its arm by, and
- * what the body of a behavior a call names answers, read where the call stands.
+ * Which case a value is, read where it stands: the value a {@code match} chooses its arm by.
  *
  * <p>Only which case, and nothing else it might be asked: a value matched on is asked that, and
  * what the value holds is a question of what made it.

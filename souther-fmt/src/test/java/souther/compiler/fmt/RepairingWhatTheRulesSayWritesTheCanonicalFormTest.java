@@ -53,6 +53,16 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
         return REPORTS.computeIfAbsent(path, p -> Deviations.of(FormatterCorpus.textOf(p)));
     }
 
+    /**
+     * What the formatter writes for each source, taken once: three checks here ask it of the same
+     * files, and the formatter is the larger part of what each of them costs.
+     */
+    private static final Map<Path, String> CANONICAL = new ConcurrentHashMap<>();
+
+    private static String canonicalOf(Path path) {
+        return CANONICAL.computeIfAbsent(path, p -> Formatter.format(FormatterCorpus.textOf(p)));
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("sources")
     void everySourceIsWhollyNamed(Path path) {
@@ -67,6 +77,28 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
     }
 
     /**
+     * The canonical form of a source has nothing against it, whichever rule is asked.
+     *
+     * <p>Every rule's report on text the formatter wrote is empty, so a rule that finds a decision
+     * the formatter itself took is a rule that disagrees with the formatter. This is each rule's
+     * claim that the canonical form of a source has no witness, over every source this repository
+     * has rather than over one source written for the rule.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("sources")
+    void theCanonicalFormOfEverySourceHasNothingAgainstIt(Path path) {
+        String canonical = canonicalOf(path);
+
+        // A source already in canonical form is the text the rules were asked about above.
+        Deviations.Report report = canonical.equals(FormatterCorpus.textOf(path))
+                ? reportOn(path) : Deviations.of(canonical);
+
+        assertEquals(List.of(), report.deviations(),
+                "the rules have something against the canonical form of " + path);
+        assertTrue(report.whole());
+    }
+
+    /**
      * And some of them are not in canonical form, so the sweep above is answering a question.
      *
      * <p>A corpus every file of which is already canonical would pass with no rule written at all:
@@ -78,7 +110,7 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
         int deviations = 0;
         for (Path path : FormatterCorpus.paths()) {
             String source = FormatterCorpus.textOf(path);
-            if (!Formatter.format(source).equals(source)) {
+            if (!canonicalOf(path).equals(source)) {
                 differ.add(path);
                 deviations += reportOn(path).deviations().size();
             }

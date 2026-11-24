@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -99,7 +100,8 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
             """;
 
     /** The model measured once for every question here, none of which changes what it read. */
-    private static final Compilation MEASURED = measured();
+    private static final Compilation MEASURED =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     /** A total of a list a behavior takes is a number of that location, like a count of it. */
     @Test
@@ -242,12 +244,5 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
 
     private static Map<String, PartitionEvidence> evidence() {
         return MEASURED.db().ask(new Adequacy.Coverage(MODULE)).value();
-    }
-
-    private static Compilation measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
     }
 }

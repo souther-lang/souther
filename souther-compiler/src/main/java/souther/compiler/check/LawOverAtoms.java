@@ -1,11 +1,17 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.Derivation.HoldsSomethingWhere.Holding;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.OccurrencesInAPattern;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -13,7 +19,9 @@ import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedSet;
 import java.util.function.Function;
 
 /**
@@ -22,9 +30,17 @@ import java.util.function.Function;
  *
  * <p>The law is taken apart by {@link LawAtACall}, as the reading of an input takes it apart; this
  * answers only the parts that reading leaves to a reader, in the names this side has. A part those
- * names do not reach is null, and a statement with such a part is null as a whole: a law says when
+ * names do not reach is held as one ({@link Holding.Unnamed}) and not left out: a law says when
  * something holds and, by the same statement, when it does not, so a part left out would answer the
- * second wrong.
+ * second wrong, and a part held as unnamed settles neither side of itself.
+ *
+ * <p>Some element meeting a statement is how many meet it being above nought, and how many fail it
+ * is how many there are less how many meet it; so every quantifier is a count, and a count is named
+ * by what it counts ({@link Terms#howManyMeetFor}) wherever a law or a condition asks it. A
+ * string inside another is no number. Which strings a string may be where it holds one is what the
+ * reading of a call as a set of strings answers ({@link StringPredicates}); here it is a part
+ * unnamed, together with what it makes certain of the numbers: the one inside is no longer than the
+ * one around it.
  */
 final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, LinearForm<FactSubject>> {
 
@@ -33,7 +49,17 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     private final Terms terms;
     private final ElementsWrittenOut.Reading<Denotations> elements;
 
+    /** The call {@code applied} is, as the term its answer is named by, or null where it is not
+     *  named: what a number of the call is named by is then read off its parts, and not off the
+     *  expressions they were written as, which an environment spells in its own way. */
+    private final Term call;
+
     private LawOverAtoms(AnOperationApplied applied, Denotations at, Terms terms) {
+        this(applied, at, terms, null);
+    }
+
+    private LawOverAtoms(AnOperationApplied applied, Denotations at, Terms terms, Term call) {
+        this.call = call;
         this.applied = applied;
         this.at = at;
         this.terms = terms;
@@ -42,34 +68,221 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
 
     /**
      * What {@code applied}'s answer coming out on {@code aspect}'s holding side is the same as, read
-     * in {@code at} — or null where no law settles that side, or a part of it is one this cannot
-     * name.
+     * in {@code at} — or null where no law settles that side, or every part of it is one this
+     * cannot name.
      */
     static Holding whereItHolds(AnOperationApplied applied, AnswerAspect aspect, Denotations at,
                                 Terms terms) {
+        return whereItHolds(applied, aspect, at, terms, null);
+    }
+
+    /** The same, of the call named by {@code call} where it is one ({@link #call}). */
+    static Holding whereItHolds(AnOperationApplied applied, AnswerAspect aspect, Denotations at,
+                                Terms terms, Term call) {
         if (applied == null) {
             return null;
         }
-        return DefaultBoundOperationFacts.get().settled(applied.operation(),
+        Holding read = DefaultBoundOperationFacts.get().settled(applied.operation(),
                 OperationLaw.Observed.of(aspect)) instanceof BoundOperationFacts.Settled.ByALaw(
                         OperationLaw.Observation<DeclaredArgument>(
                                 AnswerAspect stated, LawProposition<DeclaredArgument> law),
                         var _) && stated == aspect
-                ? LawAtACall.of(law, new LawOverAtoms(applied, at, terms)) : null;
+                ? LawAtACall.of(law, new LawOverAtoms(applied, at, terms, call)) : null;
+        return read == null || namesNothing(read) ? null : read;
+    }
+
+    /**
+     * What {@code condition}, a call, coming out true is the same as: its law, and where the
+     * checker settled which strings it was given to accept, what the pattern says as well. The
+     * pattern is a value and no law of the operation is stated over it, so it is read off the call.
+     */
+    static Holding whereItHolds(Core condition, Denotations at, Terms terms) {
+        AnOperationApplied applied = AnOperationApplied.of(condition);
+        if (applied != null && Core.withoutStanding(condition) instanceof Core.PreservedCall kept
+                && kept.settled() instanceof Core.KernelFact.StringMatches matches) {
+            Holding accepting = new LawOverAtoms(applied, at, terms).accepting(matches.meaning());
+            return namesNothing(accepting) ? null : accepting;
+        }
+        return whereItHolds(applied, AnswerAspect.TRUTH, at, terms);
+    }
+
+    /** Whether every part of {@code holding} is one this names by nothing, so that it settles
+     *  nothing on any path. */
+    private static boolean namesNothing(Holding holding) {
+        return switch (holding) {
+            case Holding.Unnamed(var _, var ifHolds, var ifDenied) ->
+                    ifHolds.isEmpty() && ifDenied.isEmpty();
+            case Holding.Not(Holding denied) -> namesNothing(denied);
+            case Holding.AllOf(var ways) -> !ways.isEmpty()
+                    && ways.stream().allMatch(LawOverAtoms::namesNothing);
+            case Holding.AnyOf(var ways) -> !ways.isEmpty()
+                    && ways.stream().allMatch(LawOverAtoms::namesNothing);
+            case Holding.Something _, Holding.Stands _ -> false;
+        };
     }
 
     /**
      * How many {@code applied}'s answer holds, read in {@code at}, where its law says it in one
-     * case met whatever the arguments are — or null where no law says, it says it case by case
-     * ({@link #sizeInCases}), or names a number this cannot.
+     * case met whatever the arguments are, or in two told apart by whether a container holding
+     * each value once holds one ({@link #byAValueHeldOnce}) — or null where no law says, it says
+     * it in other cases ({@link #sizeInCases}), or names a number this cannot.
      */
-    static LinearForm<FactSubject> sizeOf(AnOperationApplied applied, Denotations at,
-                                          Terms terms) {
+    static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms) {
+        return sizeOf(applied, at, terms, null);
+    }
+
+    /** The same, of the call named by {@code call} where it is one ({@link #call}). */
+    static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms, Term call) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
-        LinearForm<LawNumber<DeclaredArgument>> unconditional =
-                law == null ? null : law.unconditional();
-        return unconditional == null ? null
-                : new LawOverAtoms(applied, at, terms).form(unconditional);
+        if (law == null) {
+            return null;
+        }
+        LawOverAtoms reading = new LawOverAtoms(applied, at, terms, call);
+        LinearForm<LawNumber<DeclaredArgument>> unconditional = law.unconditional();
+        if (unconditional == null) {
+            return reading.byAValueHeldOnce(law.cases());
+        }
+        LinearForm<FactSubject> form = reading.form(unconditional);
+        return form == null ? null : new Sized(form, null);
+    }
+
+    /**
+     * How many an answer holds: the law's one form, or its two cases of a value held once
+     * ({@code byTheValue}) — one of the two, and the other null.
+     */
+    record Sized(LinearForm<FactSubject> form, ByAValueHeldOnce byTheValue) {
+
+        Sized {
+            if ((form == null) == (byTheValue == null)) {
+                throw new IllegalArgumentException("a size is said by one form or by two cases");
+            }
+        }
+
+        /**
+         * What {@code answer}, the atom of how many the answer holds, is held to whatever the
+         * path: the form, or where the law was in cases, the answer between what the two cases
+         * come to.
+         *
+         * <p>The span and not one form of the count. The span relates two atoms each way, which
+         * is what a reading closes over, and says what the cases say read forward; which case it
+         * is, is what the count settles where a reading settles it ({@link #guaranteedOf}).
+         */
+        List<NumericConstraint> carriedBy(FactSubject answer) {
+            List<NumericConstraint> out = new ArrayList<>();
+            if (byTheValue == null) {
+                stating(LinearForm.atom(answer).minus(form).orNull(), Rel.EQ, out);
+            } else {
+                boolean fewerWhereHeld = byTheValue.fewerWhereHeld();
+                stating(LinearForm.atom(answer).minus(fewerWhereHeld ? byTheValue.held()
+                        : byTheValue.notHeld()).orNull(), Rel.GE, out);
+                stating(LinearForm.atom(answer).minus(fewerWhereHeld ? byTheValue.notHeld()
+                        : byTheValue.held()).orNull(), Rel.LE, out);
+            }
+            return out;
+        }
+
+        /**
+         * What {@code answer} comes to where a reading settles the count: the one case's answer
+         * where the value is held, and the other's where it is not. Asked of the reading's bounds
+         * on the count and opening no case, so a chain of such operations is read once.
+         */
+        List<ConditionalConstraint> guaranteedOf(FactSubject answer) {
+            if (byTheValue == null) {
+                return List.of();
+            }
+            LinearForm<FactSubject> atLeastOne = byTheValue.count()
+                    .minus(LinearForm.constant(ExactRatio.ONE)).orNull();
+            LinearForm<FactSubject> asHeld = LinearForm.atom(answer).minus(byTheValue.held())
+                    .orNull();
+            LinearForm<FactSubject> asNotHeld = LinearForm.atom(answer)
+                    .minus(byTheValue.notHeld()).orNull();
+            if (atLeastOne == null || asHeld == null || asNotHeld == null) {
+                return List.of();
+            }
+            return List.of(
+                    new ConditionalConstraint(new NumericConstraint(atLeastOne, Rel.GE),
+                            new NumericConstraint(asHeld, Rel.EQ)),
+                    new ConditionalConstraint(new NumericConstraint(byTheValue.count(), Rel.LE),
+                            new NumericConstraint(asNotHeld, Rel.EQ)));
+        }
+
+        private static void stating(LinearForm<FactSubject> form, Rel rel,
+                                    List<NumericConstraint> out) {
+            if (form != null) {
+                out.add(new NumericConstraint(form, rel));
+            }
+        }
+    }
+
+    /**
+     * Two cases of how many an answer holds, told apart by how many of a container that holds
+     * each value once are one value: {@code held} where it is one, {@code notHeld} where none is.
+     */
+    record ByAValueHeldOnce(LinearForm<FactSubject> count, LinearForm<FactSubject> held,
+                            LinearForm<FactSubject> notHeld) {
+
+        /** Whether the answer is the smaller where the value is held, as an insert's is. */
+        boolean fewerWhereHeld() {
+            LinearForm<FactSubject> step = held.minus(notHeld).orNull();
+            return step != null && step.constant().signum() < 0;
+        }
+    }
+
+    /**
+     * Two cases that are a container holding one value, or not, where the container holds each
+     * value once — a set its elements, a map its keys — and the two answers differ by a number.
+     *
+     * <p>Not cases to open. The answer lies between the two whichever holds, and is the one the
+     * count picks where a reading settles the count; read as cases, every value built by a chain
+     * of such operations is a split in each reading that bounds it, for a count no reading may
+     * say anything of.
+     */
+    private Sized byAValueHeldOnce(List<OperationLaw.Size.Case<DeclaredArgument>> cases) {
+        if (cases.size() != 2) {
+            return null;
+        }
+        LinearForm<FactSubject> count = null;
+        LinearForm<FactSubject> held = null;
+        LinearForm<FactSubject> notHeld = null;
+        for (OperationLaw.Size.Case<DeclaredArgument> each : cases) {
+            if (!(each.where() instanceof LawProposition.SomeElement<DeclaredArgument> some)
+                    || !heldOnce(some)) {
+                return null;
+            }
+            LinearForm<FactSubject> answer = form(each.equalTo());
+            LinearForm<FactSubject> counted = switch (LawAtACall.of(each.where(), this)) {
+                case Holding.Something(LinearForm<FactSubject> c) -> c;
+                case Holding.Not(Holding.Something(LinearForm<FactSubject> c)) -> c;
+                case null, default -> null;
+            };
+            if (answer == null || counted == null || (count != null && !count.equals(counted))) {
+                return null;
+            }
+            count = counted;
+            if (some.holds()) {
+                held = answer;
+            } else {
+                notHeld = answer;
+            }
+        }
+        LinearForm<FactSubject> step = held == null || notHeld == null ? null
+                : held.minus(notHeld).orNull();
+        return step == null || !step.coefs().isEmpty() ? null
+                : new Sized(null, new ByAValueHeldOnce(count, held, notHeld));
+    }
+
+    /** Whether {@code some} asks of a container that holds each value once: some element of a
+     *  set being a value, or some key of a map. */
+    private boolean heldOnce(LawProposition.SomeElement<DeclaredArgument> some) {
+        Core container = applied.argument(some.container());
+        if (container == null || !(some.ofTheElement() instanceof LawProposition.Same<
+                DeclaredArgument>(var one, var other, boolean same)) || !same) {
+            return false;
+        }
+        AddsWhatItDoesNotHold.Of once = AddsWhatItDoesNotHold.Of.heldOnceIn(
+                TypeOps.base(Core.withoutStanding(container).type(), terms.newtypeInners()));
+        LawSubject<DeclaredArgument> asked = once == null ? null : heldAs(some.container(), once);
+        return asked != null && (asked.equals(one) || asked.equals(other));
     }
 
     /**
@@ -86,12 +299,15 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * may lie.
      */
     static Derivation.Chosen sizeInCases(AnOperationApplied applied, Denotations at,
-                                         Terms terms) {
+                                         Terms terms, Term call) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
         if (law == null || law.unconditional() != null) {
             return null;
         }
-        LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        LawOverAtoms reading = new LawOverAtoms(applied, at, terms, call);
+        if (reading.byAValueHeldOnce(law.cases()) != null) {
+            return null;
+        }
         List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (OperationLaw.Size.Case<DeclaredArgument> each : law.cases()) {
             LinearForm<FactSubject> answer = reading.form(each.equalTo());
@@ -147,6 +363,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             case Holding.Something(LinearForm<FactSubject> count) -> standing(count, Rel.GT);
             case Holding.Stands(LinearForm<FactSubject> form, Rel rel) -> standing(form, rel);
+            case Holding.Unnamed it -> it.outOf(LawOverAtoms::settled);
         };
     }
 
@@ -159,8 +376,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     /**
      * The relations {@code holding} coming out {@code positive} makes certain over the counts and
      * numbers, each {@code form rel 0} — or null where it cannot come out that way at all. A
-     * disjunction of more than one way that may hold makes nothing certain, and is left out: what is
-     * taken is never more than the law says.
+     * disjunction of more than one way that may hold makes certain what every one of them does, at
+     * the weakest ({@link NumericConstraint#commonTo}): what is taken is never more than the law
+     * says.
      */
     static List<NumericConstraint> certain(Holding holding, boolean positive) {
         List<NumericConstraint> out = new ArrayList<>();
@@ -185,6 +403,10 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 yield true;
             }
             case Holding.Not(Holding denied) -> certain(denied, !positive, out);
+            // It may come out either way, and says of the numbers what its law makes certain of
+            // the side it comes out on. A side that cannot come out is one it cannot be on.
+            case Holding.Unnamed(var _, var ifHolds, var ifDenied) ->
+                    every(positive ? ifHolds : ifDenied, true, out);
             // Each of them where all hold, and some one where any does not: the same two, turned.
             case Holding.AllOf(var ways) -> positive ? every(ways, true, out)
                     : oneOf(ways, false, out);
@@ -203,11 +425,13 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return true;
     }
 
-    /** The one of {@code ways} that can come out {@code positive}, where only one can; nothing
-     *  where more than one can; and false where none can. */
+    /** What the one of {@code ways} that can come out {@code positive} makes certain, where only
+     *  one can; what every one that can does, at the weakest, where more than one can; and false
+     *  where none can. */
     private static boolean oneOf(List<Holding> ways, boolean positive,
                                  List<NumericConstraint> out) {
-        List<Holding> open = new ArrayList<>();
+        // One way written twice is one way: `s ++ s` holds something where `s` does.
+        SequencedSet<Holding> open = new LinkedHashSet<>();
         for (Holding way : ways) {
             if (!Boolean.valueOf(!positive).equals(settled(way))) {
                 open.add(way);
@@ -216,7 +440,23 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         if (open.isEmpty()) {
             return false;
         }
-        return open.size() != 1 || certain(open.getFirst(), positive, out);
+        if (open.size() == 1) {
+            return certain(open.getFirst(), positive, out);
+        }
+        // More than one may be the way it is, and which is not said: what is certain is what every
+        // one of them makes certain, at the weakest. A way that cannot come out so is no way.
+        List<List<NumericConstraint>> each = new ArrayList<>();
+        for (Holding way : open) {
+            List<NumericConstraint> one = certain(way, positive);
+            if (one != null) {
+                each.add(one);
+            }
+        }
+        if (each.isEmpty()) {
+            return false;
+        }
+        out.addAll(each.size() == 1 ? each.getFirst() : NumericConstraint.commonTo(each));
+        return true;
     }
 
     @Override
@@ -237,7 +477,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
 
     @Override
     public Holding joins(LawProposition.All<DeclaredArgument> all, List<Holding> each) {
-        return each.contains(null) ? null : new Holding.AllOf(each);
+        return new Holding.AllOf(each);
     }
 
     @Override
@@ -245,11 +485,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                            Function<LawProposition<DeclaredArgument>, Holding> part) {
         List<Holding> each = new ArrayList<>(any.parts().size());
         for (LawProposition<DeclaredArgument> one : any.parts()) {
-            Holding read = part.apply(one);
-            if (read == null) {
-                return null;
-            }
-            each.add(read);
+            each.add(part.apply(one));
         }
         return new Holding.AnyOf(each);
     }
@@ -260,11 +496,11 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     public Holding observed(LawProposition.Observed<DeclaredArgument> observed) {
         if (!(observed.of() instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument which))
                 || observed.side().aspect() != AnswerAspect.EMPTINESS) {
-            return null;
+            return new Holding.Unnamed(observed);
         }
         FactSubject count = countOf(applied.argument(which));
         if (count == null) {
-            return null;
+            return new Holding.Unnamed(observed);
         }
         Holding something = new Holding.Something(LinearForm.atom(count));
         return observed.side().holds() ? something : new Holding.Not(something);
@@ -273,13 +509,39 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     @Override
     public Holding compared(LawProposition.Compared<DeclaredArgument> compared) {
         LinearForm<FactSubject> form = form(compared.form());
-        return form == null ? null : new Holding.Stands(form, compared.states());
+        return form == null ? new Holding.Unnamed(compared)
+                : new Holding.Stands(form, compared.states());
     }
 
-    /** Some element of a container no walk writes out, which no atom here names. */
+    /**
+     * Some element of a container no walk writes out meeting a statement, by how many of its
+     * elements meet it ({@link #howManyMeet}) being above nought.
+     */
     @Override
     public Holding someElement(LawProposition.SomeElement<DeclaredArgument> some) {
-        return null;
+        LinearForm<FactSubject> count = LawAtACall.number(
+                new LawNumber.HowManyMeet<>(some.container(), some.ofTheElement()), this);
+        if (count == null) {
+            return new Holding.Unnamed(some);
+        }
+        Holding something = new Holding.Something(count);
+        return some.holds() ? something : new Holding.Not(something);
+    }
+
+    /** What of {@code container} a value is held as, as {@code of} says: one of its elements, or
+     *  one of its keys. */
+    private static LawSubject<DeclaredArgument> heldAs(DeclaredArgument container,
+                                                       AddsWhatItDoesNotHold.Of of) {
+        return switch (of) {
+            case ELEMENTS -> new LawSubject.ElementOf<>(container);
+            case KEYS -> new LawSubject.KeyOf<>(container);
+        };
+    }
+
+    /** The argument {@code subject} is, or null where it is no argument. */
+    private static DeclaredArgument argumentIn(LawSubject<DeclaredArgument> subject) {
+        return subject instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at)
+                ? at : null;
     }
 
     @Override
@@ -288,14 +550,101 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         return settles(new LawProposition.Always<>(some.holds() == someMeets));
     }
 
-    /** Two values being one, which no relation between numbers says. */
+    /**
+     * Two values being one, outside an element counted: a part unnamed. Two values of any type are
+     * no relation between numbers, and no law of the library states it of two arguments — it
+     * states it of an element and what the element is asked to be, which is a count
+     * ({@link #howManyMeet}).
+     */
     @Override
     public Holding same(LawProposition.Same<DeclaredArgument> same) {
-        return null;
+        return new Holding.Unnamed(same);
     }
 
-    /** The size of an argument, by the count its type is counted by, and an argument that is a
-     *  number; nothing else. */
+    /**
+     * One string standing inside another where the law says: a part unnamed, which makes certain
+     * on each side of itself what that side alone has. Where it stands inside, the one inside
+     * holds no more code points than the one around it. Where it does not, the one inside holds
+     * some, because the empty string stands inside every string, in each place the law names.
+     * Each is named where this names a length of the strings it is over.
+     */
+    @Override
+    public Holding inside(LawProposition.Inside<DeclaredArgument> inside) {
+        LawProposition.Inside<DeclaredArgument> standing = new LawProposition.Inside<>(
+                inside.inner(), inside.outer(), inside.where(), true);
+        WhatAStringSaysOfItsLength.Sides<FactSubject> said = WhatAStringSaysOfItsLength.inside(
+                lengthOf(standing.inner()), lengthOf(standing.outer()));
+        Holding holds = new Holding.Unnamed(new Holding.Unnamed.Of.ALaw(standing),
+                standing(said.ifHolds()), standing(said.ifDenied()));
+        return inside.holds() ? holds : new Holding.Not(holds);
+    }
+
+    /** What {@code conditions} of the lengths of strings state, each as the form it stands as. */
+    private static List<Holding> standing(
+            List<WhatAStringSaysOfItsLength.Condition<FactSubject>> conditions) {
+        List<Holding> out = new ArrayList<>();
+        for (WhatAStringSaysOfItsLength.Condition<FactSubject> each : conditions) {
+            NumericConstraint stated = NumericConstraint.of(each);
+            out.add(new Holding.Stands(stated.form(), stated.rel()));
+        }
+        return out;
+    }
+
+    /**
+     * A string coming out one {@code meaning} accepts: a statement unnamed, which makes certain on
+     * each side of itself what that side alone has. Where it is accepted, it holds as many code
+     * points as the strings the pattern accepts do, none where the pattern accepts none. Where it
+     * is not, it is not the empty string if the pattern accepts that, since nothing else of its
+     * length is left out.
+     */
+    private Holding accepting(PatternMeaning meaning) {
+        Core string = applied.args().get(StringPredicates.of(Kernel.STRING_MATCHES).subject());
+        FactSubject count = countOf(string);
+        WhatAStringSaysOfItsLength.Sides<FactSubject> said = count == null
+                ? WhatAStringSaysOfItsLength.Sides.nothing()
+                : WhatAStringSaysOfItsLength.inALanguage(count, meaning);
+        List<Holding> ifHolds = new ArrayList<>(standing(said.ifHolds()));
+        ifHolds.addAll(occurrencesIn(string, meaning));
+        return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning),
+                ifHolds, standing(said.ifDenied()));
+    }
+
+    /**
+     * The most times each code point the pattern writes out stands in {@code string}, where the
+     * pattern is accepted: a ceiling on how many of its code points are that one, wherever the
+     * pattern has one ({@link OccurrencesInAPattern}).
+     */
+    private List<Holding> occurrencesIn(Core string, PatternMeaning meaning) {
+        List<Holding> out = new ArrayList<>();
+        if (string == null || NumericMeasures.takenOf(Core.withoutStanding(string).type(),
+                terms.newtypeInners()) == null) {
+            return out;
+        }
+        OccurrencesInAPattern.writtenOutWithACeiling(meaning).forEach((codePoint, most) -> {
+            FactSubject standing = terms.codePointsAtomFor(string,
+                    CodePointClass.of(CodePoints.of(codePoint)), at);
+            if (standing != null) {
+                out.add(new Holding.Stands(LinearForm.atomMinusConstant(standing,
+                        ExactRatio.of(most)), Rel.LE));
+            }
+        });
+        return out;
+    }
+
+    /** How many code points the argument {@code subject} names holds, or null where it names no
+     *  argument or this names no count of it. */
+    private FactSubject lengthOf(LawSubject<DeclaredArgument> subject) {
+        DeclaredArgument which = argumentIn(subject);
+        return which == null ? null : countOf(applied.argument(which));
+    }
+
+    /**
+     * The size of an argument, by the count its type is counted by; an argument that is a number;
+     * how many elements of an argument meet a statement ({@link #howManyMeet}); how many different
+     * values they come to; how many they hold added up; and how many code points of a string are
+     * in a class — each counted by an atom of what it counts. A size of anything but an argument
+     * is no number of the call outside the element it is of.
+     */
     @Override
     public LinearForm<FactSubject> counted(LawNumber<DeclaredArgument> number) {
         return switch (number) {
@@ -305,21 +654,276 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             case LawNumber.SizeOf<DeclaredArgument>(
                     LawSubject.Argument<DeclaredArgument>(DeclaredArgument which)) -> {
-                FactSubject count = countOf(applied.argument(which));
+                FactSubject count = countOfPart(which);
                 yield count == null ? null : LinearForm.atom(count);
             }
-            case LawNumber.SizeOf<DeclaredArgument> _,
-                 LawNumber.HowManyMeet<DeclaredArgument> _,
-                 LawNumber.HowManyDifferent<DeclaredArgument> _,
-                 LawNumber.SumOver<DeclaredArgument> _,
-                 LawNumber.CodePointsOf<DeclaredArgument> _ -> null;
+            case LawNumber.HowManyMeet<DeclaredArgument> meet -> howManyMeet(meet);
+            case LawNumber.HowManyDifferent<DeclaredArgument> different -> atom(different(different));
+            case LawNumber.SumOver<DeclaredArgument> sum -> sumOver(sum);
+            case LawNumber.CodePointsOf<DeclaredArgument>(var of, var counted) -> {
+                DeclaredArgument which = argumentIn(of);
+                Core string = which == null ? null : applied.argument(which);
+                yield atom(string == null ? null : terms.codePointsAtomFor(string, counted, at));
+            }
+            case LawNumber.SizeOf<DeclaredArgument> _ -> null;
         };
+    }
+
+    private static LinearForm<FactSubject> atom(FactSubject atom) {
+        return atom == null ? null : LinearForm.atom(atom);
+    }
+
+    /**
+     * How many elements of {@code meet}'s container meet what it states.
+     *
+     * <p>Where it states that something does not hold, how many there are less how many it does
+     * hold of. Otherwise how many are an argument, or have a key that is one
+     * ({@link Terms#howManyAreAtomFor}); how many some element of another argument is, or whose key
+     * some key of it is ({@link #heldOf}); and how many come out on a side, themselves or what a
+     * closure answers of each ({@link Terms#howManyMeetFor}). Null where it states anything
+     * else.
+     */
+    private LinearForm<FactSubject> howManyMeet(LawNumber.HowManyMeet<DeclaredArgument> meet) {
+        LawProposition<DeclaredArgument> asked = meet.ofTheElement();
+        Core container = applied.argument(meet.container());
+        if (container == null) {
+            return null;
+        }
+        if (statesAFailing(asked)) {
+            FactSubject all = countOfPart(meet.container());
+            LinearForm<FactSubject> meeting = all == null ? null
+                    : howManyMeet(new LawNumber.HowManyMeet<>(meet.container(), asked.denied()));
+            return meeting == null ? null : LinearForm.atom(all).minus(meeting).orNull();
+        }
+        return switch (asked) {
+            case LawProposition.Same<DeclaredArgument>(var one, var other, boolean _) ->
+                    atom(areAnArgument(meet.container(), container, one, other));
+            case LawProposition.SomeElement<DeclaredArgument> _ -> heldOf(meet);
+            case LawProposition.Observed<DeclaredArgument>(var of, var side) ->
+                    comingOut(meet.container(), container, of, side.aspect());
+            default -> null;
+        };
+    }
+
+    /** How many elements of {@code container}, the argument {@code named}, come out on the holding
+     *  side of {@code aspect} — each itself, or what a closure answers of each, as {@code of}
+     *  says — or null where {@code of} is anything else. */
+    private LinearForm<FactSubject> comingOut(DeclaredArgument named, Core container,
+                                              LawSubject<DeclaredArgument> of,
+                                              AnswerAspect aspect) {
+        // Named by the parts of the call's term where they can, which every route that reaches the
+        // call reads alike, and by the expressions it was handed where they cannot.
+        LinearForm<FactSubject> byTheTerms = holdingSomethingByTheTerms(named, container, of,
+                aspect);
+        if (byTheTerms != null) {
+            return byTheTerms;
+        }
+        return switch (of) {
+            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument element)
+                    when element.equals(named) ->
+                    terms.howManyMeetFor(container, null, aspect, at);
+            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) -> {
+                Core given = applied.argument(closure);
+                yield given == null ? null : terms.howManyMeetFor(container, given, aspect, at);
+            }
+            default -> null;
+        };
+    }
+
+    /** How many elements of {@code container}, the argument {@code named}, hold something — each
+     *  itself, or what the closure answers of each — named by the parts of the call's term, or null
+     *  where {@code aspect} asks anything else or a part is not named. */
+    private LinearForm<FactSubject> holdingSomethingByTheTerms(DeclaredArgument named,
+                                                              Core container,
+                                                              LawSubject<DeclaredArgument> of,
+                                                              AnswerAspect aspect) {
+        Term whole = partOfTheCall(named);
+        DeclaredArgument by = switch (of) {
+            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) ->
+                    closure;
+            default -> null;
+        };
+        Term closure = by == null ? null : partOfTheCall(by);
+        boolean eachItself = of instanceof LawSubject.ElementOf<DeclaredArgument>(
+                DeclaredArgument element) && element.equals(named);
+        // A closure the call was not handed is no reason to count each element: what counts what
+        // the closure answers is read of the closure, and of nothing else.
+        boolean closureIsHanded = by == null || applied.argument(by) != null;
+        if (aspect != AnswerAspect.EMPTINESS || whole == null || !closureIsHanded
+                || !(eachItself || closure != null)) {
+            return null;
+        }
+        return terms.howManyHoldSomething(whole, closure,
+                NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                        terms.newtypeInners()),
+                terms.elementMeasureOf(container, by == null ? null : applied.argument(by), at));
+    }
+
+    /** Whether {@code asked} states that something does not hold, so that what meets it is what
+     *  fails its denial. */
+    private static boolean statesAFailing(LawProposition<DeclaredArgument> asked) {
+        return switch (asked) {
+            case LawProposition.Same<DeclaredArgument> same -> !same.holds();
+            case LawProposition.SomeElement<DeclaredArgument> some -> !some.holds();
+            case LawProposition.Observed<DeclaredArgument> observed -> !observed.side().holds();
+            case LawProposition.Inside<DeclaredArgument> inside -> !inside.holds();
+            default -> false;
+        };
+    }
+
+    /** How many elements of {@code container}, the argument {@code named}, are an argument — or
+     *  have a key that is one — where {@code one} and {@code other} are the element or its key and
+     *  that argument, either way round. */
+    private FactSubject areAnArgument(DeclaredArgument named, Core container,
+                                      LawSubject<DeclaredArgument> one,
+                                      LawSubject<DeclaredArgument> other) {
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            LawSubject<DeclaredArgument> held = heldAs(named, of);
+            DeclaredArgument value = held.equals(one) ? argumentIn(other)
+                    : held.equals(other) ? argumentIn(one) : null;
+            Core given = value == null ? null : applied.argument(value);
+            FactSubject count = given == null ? null
+                    : terms.howManyAreAtomFor(container, given, of, at);
+            if (count != null) {
+                return count;
+            }
+        }
+        return null;
+    }
+
+    /** How many different values {@code different} counts over its container: its elements, their
+     *  keys, or what a closure answers of each — or null where it counts anything else. */
+    private FactSubject different(LawNumber.HowManyDifferent<DeclaredArgument> different) {
+        Core container = applied.argument(different.container());
+        if (container == null) {
+            return null;
+        }
+        return switch (different.ofTheElement()) {
+            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument of)
+                    when of.equals(different.container()) -> terms.howManyDifferentAtomFor(
+                    container, null, AddsWhatItDoesNotHold.Of.ELEMENTS, at);
+            case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument of)
+                    when of.equals(different.container()) -> terms.howManyDifferentAtomFor(
+                    container, null, AddsWhatItDoesNotHold.Of.KEYS, at);
+            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) -> {
+                Core given = applied.argument(closure);
+                yield given == null ? null : terms.howManyDifferentAtomFor(container, given,
+                        AddsWhatItDoesNotHold.Of.ELEMENTS, at);
+            }
+            default -> null;
+        };
+    }
+
+    /**
+     * How many the elements of {@code sum}'s container hold, added up — each element or what a
+     * closure answers of each — or null where it adds up any other number.
+     *
+     * <p>Where the container is written out, the sizes of what it was written with, each read where
+     * it stands ({@link LawAtACall#sizedOfEachWrittenOut}); otherwise the atom of the sum.
+     */
+    private LinearForm<FactSubject> sumOver(LawNumber.SumOver<DeclaredArgument> sum) {
+        Core container = applied.argument(sum.container());
+        if (container == null
+                || !(sum.ofTheElement() instanceof LawNumber.SizeOf<DeclaredArgument>(var of))) {
+            return null;
+        }
+        List<ElementsWrittenOut.Stood<Denotations>> each =
+                LawAtACall.sizedOfEachWrittenOut(sum, this);
+        if (each != null) {
+            LinearForm<FactSubject> total = LinearForm.constant(ExactRatio.ZERO);
+            for (ElementsWrittenOut.Stood<Denotations> one : each) {
+                FactSubject holds = terms.sizeOfWhatItHolds(one.value(), one.at());
+                total = holds == null ? null : total.plus(LinearForm.atom(holds)).orNull();
+                if (total == null) {
+                    return null;
+                }
+            }
+            return total;
+        }
+        return atom(switch (of) {
+            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument element)
+                    when element.equals(sum.container()) -> sumOfSizes(container, sum.container(),
+                    null);
+            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) -> {
+                Core given = applied.argument(closure);
+                yield given == null ? null
+                        : sumOfSizes(container, sum.container(), closure);
+            }
+            default -> null;
+        });
+    }
+
+    /** The atom of the sum of the sizes of what the elements of {@code container} hold, or of what
+     *  the closure {@code by} answers of each: named by the parts of the call where it is named, so
+     *  that it is the atom the call's own term makes of them. */
+    private FactSubject sumOfSizes(Core container, DeclaredArgument containerArgument,
+                                   DeclaredArgument by) {
+        Term whole = partOfTheCall(containerArgument);
+        Term closure = by == null ? null : partOfTheCall(by);
+        if (whole != null && (by == null || closure != null)) {
+            return terms.sumOfSizesAtomOf(whole, closure,
+                    NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                            terms.newtypeInners()),
+                    terms.elementMeasureOf(container, by == null ? null : applied.argument(by),
+                            at));
+        }
+        return terms.sumOfSizesAtomFor(container, by == null ? null : applied.argument(by), at);
+    }
+
+    /** How many {@code argument} holds, named by the part of the call's term it stands at where the
+     *  call is named, and by the expression it was handed otherwise. */
+    private FactSubject countOfPart(DeclaredArgument argument) {
+        Core handed = applied.argument(argument);
+        Term part = partOfTheCall(argument);
+        if (handed == null || part == null) {
+            return countOf(handed);
+        }
+        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(handed).type(),
+                terms.newtypeInners());
+        return counts == null ? null : terms.sizeAtomOf(counts, part, handed, at);
+    }
+
+    /** The part of the call's term that {@code argument} stands at, or null where the call is not
+     *  named or is another call. */
+    private Term partOfTheCall(DeclaredArgument argument) {
+        int position = CallArguments.positionOf(argument, applied.operation());
+        return call == null || !applied.operation().equals(call.calledOperation())
+                || position < 0 || position >= call.parts().size() ? null
+                : call.parts().get(position);
     }
 
     @Override
     public LinearForm<FactSubject> writtenOut(LawNumber.HowManyMeet<DeclaredArgument> number,
                                               long many) {
         return LinearForm.constant(ExactRatio.of(many));
+    }
+
+    /**
+     * How many elements of one argument another holds ({@link Terms#howManyAreInAtomFor}), where
+     * {@code meet} counts the elements some element of the other is, or those whose key some key
+     * of the other is. Null where it counts anything else.
+     */
+    private LinearForm<FactSubject> heldOf(LawNumber.HowManyMeet<DeclaredArgument> meet) {
+        if (!(meet.ofTheElement() instanceof LawProposition.SomeElement<DeclaredArgument>(
+                DeclaredArgument holder, LawProposition.Same<DeclaredArgument>(
+                        var one, var other, boolean same), boolean some))
+                || !same || !some) {
+            return null;
+        }
+        Core counted = applied.argument(meet.container());
+        Core holding = applied.argument(holder);
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            LawSubject<DeclaredArgument> ofCounted = heldAs(meet.container(), of);
+            LawSubject<DeclaredArgument> ofHolder = heldAs(holder, of);
+            boolean alike = (one.equals(ofCounted) && other.equals(ofHolder))
+                    || (one.equals(ofHolder) && other.equals(ofCounted));
+            FactSubject held = !alike || counted == null || holding == null ? null
+                    : terms.howManyAreInAtomFor(counted, holding, of, at);
+            if (held != null) {
+                return LinearForm.atom(held);
+            }
+        }
+        return null;
     }
 
     /** {@code form}, over numbers of the arguments, as a form over the atoms each is — or null

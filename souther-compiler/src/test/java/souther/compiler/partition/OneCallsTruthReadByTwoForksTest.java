@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -34,9 +35,7 @@ class OneCallsTruthReadByTwoForksTest {
 
     @Test
     void aModelIsMeasuredWhoseTwoForksReadOneCallsAnswer() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         AdequacyReport report = assertDoesNotThrow(() -> AdequacyReport.of(compilation));
         assertEquals(List.of("parse"), report.modules().getFirst().behaviors().stream()
                 .map(AdequacyReport.BehaviorReport::name).toList());

@@ -7,9 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,9 +35,7 @@ class ATotalOverTheInputsRunSaysWhatStoppedItsElementTest {
     private static String json(String total) {
         Compilation compilation = Compilation.ofSource(MODEL.formatted(total), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -52,16 +47,20 @@ class ATotalOverTheInputsRunSaysWhatStoppedItsElementTest {
         assertFalse(report.contains("outside_the_linear_fragment"), report);
     }
 
+    /** A rounding is read through the law the library states of it, and stops nothing. */
     @Test
-    void aRoundedElementIsSaidToHaveNoForm() {
+    void aRoundedElementIsRead() {
         String report = json("List.map(r -> Decimal.round(2, HALF_UP, r.a), ls)");
-        assertTrue(report.contains("no_form_of_what_it_answers"), report);
+        assertFalse(report.contains("no_form_of_what_it_answers"), report);
         assertFalse(report.contains(OF_THE_WHOLE_ANSWER), report);
+        assertFalse(report.contains("outside_the_linear_fragment"), report);
     }
 
+    /** A field times itself, which no field held still makes a form of. A product of two fields
+     *  is read ({@link ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest}). */
     @Test
-    void aProductOfTwoValuesIsSaidToBeOutsideTheLinearFragment() {
-        String report = json("List.map(r -> r.q * r.price, ls)");
+    void aSquareIsSaidToBeOutsideTheLinearFragment() {
+        String report = json("List.map(r -> r.q * r.q, ls)");
         assertTrue(report.contains("outside_the_linear_fragment"), report);
         assertFalse(report.contains(OF_THE_WHOLE_ANSWER), report);
     }

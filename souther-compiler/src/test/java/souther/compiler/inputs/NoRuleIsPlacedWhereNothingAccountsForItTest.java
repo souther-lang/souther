@@ -3,6 +3,9 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -15,7 +18,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,9 +42,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * failure here rather than a line in a report nobody looked at: the day one turns up, somebody comes
  * and decides what a reader should be told about it. So a shorter list is a failure as much as a
  * longer one.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     /**
@@ -187,21 +194,14 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             """;
 
     /**
-     * The models asked about here: what the repository carries, and one this class writes.
+     * The model this class writes, asked about beside the ones the repository carries.
      *
-     * <p>The written one crosses a name through a sum, which the corpora do not, and the questions
-     * below are about every model that reaches them either way. Answered once for the class, as the
-     * repository's are, because each question here asks about all of them.
+     * <p>It crosses a name through a sum, which the corpora do not, and the questions below are
+     * about every model that reaches them either way. Made once for the class, as the repository's
+     * are, because each question here asks about all of them.
      */
-    private static final List<Compilation> ASKED_ABOUT = askedAbout();
-
-    private static List<Compilation> askedAbout() {
-        List<Compilation> out = new ArrayList<>(RepositoryModels.all());
-        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY);
-        crossed.answerEverything();
-        out.add(crossed);
-        return List.copyOf(out);
-    }
+    private static final Compilation THROUGH_A_SUM = ACompiledModel.compiles(
+            Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY));
 
     /**
      * The reading of every behavior of every model this repository carries, as the compilation made
@@ -210,16 +210,21 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
      */
     private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
-        for (Compilation compilation : ASKED_ABOUT) {
-            for (String module : compilation.modules()) {
-                Answer<Map<String, InputDomain>> read =
-                        compilation.db().ask(new Adequacy.Inputs(module));
-                if (read.present()) {
-                    out.addAll(read.value().values());
-                }
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            readingsOf(model.answered(), out);
+        }
+        readingsOf(THROUGH_A_SUM, out);
+        return out;
+    }
+
+    private static void readingsOf(Compilation compilation, List<InputDomain> out) {
+        for (String module : compilation.modules()) {
+            Answer<Map<String, InputDomain>> read =
+                    compilation.db().ask(new Adequacy.Inputs(module));
+            if (read.present()) {
+                out.addAll(read.value().values());
             }
         }
-        return out;
     }
 
     /** The rules of every value the models open, once they have been read. */
@@ -241,9 +246,10 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             return everyValueRead;
         }
         List<PlacedRules> out = new ArrayList<>();
-        for (Compilation compilation : ASKED_ABOUT) {
-            valuesRead(compilation, out);
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            valuesRead(model.answered(), RepositoryModels.knownTo(model), out);
         }
+        valuesRead(THROUGH_A_SUM, THROUGH_A_SUM.db().readings(), out);
         everyValueRead = List.copyOf(out);
         return everyValueRead;
     }
@@ -255,7 +261,8 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         everyValueRead = null;
     }
 
-    private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
+    private static void valuesRead(Compilation compilation, DeclarationReadings known,
+                                   List<PlacedRules> out) {
         for (String module : compilation.modules()) {
             Map<String, DeclaredSig> sigs =
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -264,7 +271,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
                 for (DeclaredSig.Input input : declared.inputs()) {
                     out.add(PlacedRules.of(TermPath.of("p"), input.type(),
                             RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                                    RepositoryModels.knownTo(compilation))));
+                                    known, TestDay.TODAY)));
                 }
             }
         }

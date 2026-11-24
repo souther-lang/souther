@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -125,10 +127,8 @@ class EveryWayASearchFallsShortIsBuiltHereTest {
                 behavior f : (r: R) -> Int
                 let f (r) = r.a
                 """;
-        Compilation one = Compilation.ofSource(source, "Main");
-        one.answerEverything();
-        Compilation other = Compilation.ofSource(source, "Main");
-        other.answerEverything();
+        Compilation one = ACompiledModel.answered(source);
+        Compilation other = ACompiledModel.answered(source);
         // One of them is asked something more than the other, which is the whole of the shape: two
         // stores over one input that were not put the same questions have nothing to be compared
         // over wherever only one of them was asked.

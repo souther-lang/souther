@@ -20,6 +20,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.jvm.ClassFileImage;
@@ -219,7 +220,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
 
     /** The row, evaluated the way the query asks it, against an answerer the test chooses. */
     private static Observations evaluated(Crossed answerer) {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
+        Compilation c = ACompiledModel.answered(MODEL);
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         souther.compiler.generated.EvaluationArtifact artifact = c.db()

@@ -42,7 +42,8 @@ import java.util.function.Function;
 public record ElementProjection(List<TermPath.Step> steps) {
 
     public ElementProjection {
-        steps = List.copyOf(steps);
+        // Each position narrowed once, as a path holds it, so two ways to one place are one way.
+        steps = TermPath.eachPositionNarrowedOnce(steps);
         for (TermPath.Step step : steps) {
             if (!staysInside(step)) {
                 throw new IllegalArgumentException("a way inside one element goes into no"

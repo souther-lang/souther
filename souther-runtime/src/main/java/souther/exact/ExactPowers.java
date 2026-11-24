@@ -78,6 +78,14 @@ final class ExactPowers {
         return bits.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }
 
+    /** {@link #writable(BigInteger, BigInteger, BigInteger)} of a whole number of {@code bits} bits and
+     *  two exponents at or above nought, counted in longs: each term is at most what an {@code int}
+     *  holds before the three are added, so their sum is held. */
+    static boolean writable(long bits, long twos, long fives) {
+        return twos <= Integer.MAX_VALUE && fives <= Integer.MAX_VALUE
+                && bits + twos + 2 * fives <= Integer.MAX_VALUE;
+    }
+
     /**
      * A count of bits as the host takes one, and the shortage of room where it is past what the host
      * counts.

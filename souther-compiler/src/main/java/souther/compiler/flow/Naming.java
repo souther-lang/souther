@@ -5,6 +5,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * How a reading writes down what got a run to a value.
@@ -77,6 +78,19 @@ public interface Naming<P> {
      * compiles.
      */
     P forkArm(Core fork, int part);
+
+    /**
+     * That a run got past {@code construction}, which the model wrote: what that states of the
+     * input where this naming says it, joined onto the way as any part of it is.
+     *
+     * <p>No arm. A construction is no fork — a run either gets past it or stops there, and a run
+     * that stops arrives nowhere — so this splits no way and is no condition a way is told apart by.
+     * A naming with nothing to say about what a construction asks of a run answers nothing, and
+     * the ways to the value are left as they are, with no join made onto any of them.
+     */
+    default Optional<P> passing(Core.Construct construction) {
+        return Optional.empty();
+    }
 
     /**
      * {@code onlyWay} as a run that went down arm {@code part} of {@code fork} is seen taking it,

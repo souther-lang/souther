@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -25,6 +26,7 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -168,7 +170,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         FillResult watched = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere),
-                        new AnswerObservation.Answered(new ObservedValue.Integer(0))),
+                        new AnswerObservation.Answered(new ObservedValue.Integer(0)),
+                        Optional.empty()),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertEquals(1, watched.rows().size(),
@@ -242,7 +245,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                          SiteNumbering numbering) {
 
         static Model of(String source, String behavior) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
+            Compilation compilation = ACompiledModel.answered(source);
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             RuleReadingSource rules = RuleReadings.of(compilation, module);

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -16,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Which sign a run is on is the path's and the declarations', so where a guard or a type keeps the
  * divisor above nought, the comparison draws the line the comparison written out with the product
  * draws. The rows built at it are held against the run time's exact quotient.
+ *
+ * <p>Past the product the two are not one comparison: a row that stops in {@code k * d} is no row
+ * at the comparison written out, so the pay is parted once more at the greatest product a divisor
+ * gets past, and the quotient stops nowhere there.
  */
 class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
@@ -71,7 +76,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         String report = human(MODEL.formatted("guard b.days > 0 else No",
                 "a.pay / b.days >= 100"));
         assertFalse(report.contains("a quotient by a value that is not a constant"), report);
-        assertEquals(Set.copyOf(borders("guard b.days > 0 else No", "a.pay >= 100 * b.days")),
+        assertEquals(withoutWhereTheProductStops(
+                        borders("guard b.days > 0 else No", "a.pay >= 100 * b.days")),
                 Set.copyOf(borders("guard b.days > 0 else No", "a.pay / b.days >= 100")));
     }
 
@@ -92,7 +98,7 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         }
         Map<String, List<BorderAssessment>> each = linesOfEach(modelOf(bodies));
         for (int i = 0; i < bodies.size(); i += 2) {
-            assertEquals(Set.copyOf(described(each.get("f" + i))),
+            assertEquals(withoutWhereTheProductStops(described(each.get("f" + i))),
                     Set.copyOf(described(each.get("f" + (i + 1)))),
                     bodies.get(i + 1)[0] + " / " + bodies.get(i + 1)[1]);
         }
@@ -126,6 +132,10 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      * A quotient moved and weighed by numbers is the quotient against another number, the
      * relation turned where it is weighed by a number below nought: {@code 30 - 2 * (q + 1) > 0}
      * is {@code q < 14}, on each sign of the divisor.
+     *
+     * <p>A quotient is a Rational, and a sum or a weight of one is a Rational wherever its operands
+     * are, so it stops no run: every line is the quotient's, the one on the dividend alone among
+     * them.
      */
     @Test
     void aQuotientMovedAndWeighedByNumbersIsTheQuotientAgainstANumber() {
@@ -163,7 +173,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                     Ok
                 }
                 """;
-        assertEquals(Set.copyOf(bordersOfModel(declared.formatted("a.pay >= 100 * b.days"))),
+        assertEquals(withoutWhereTheProductStops(
+                        bordersOfModel(declared.formatted("a.pay >= 100 * b.days"))),
                 Set.copyOf(bordersOfModel(declared.formatted("a.pay / b.days >= 100"))));
     }
 
@@ -523,8 +534,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      */
     @Test
     void whatTheLibrarySaysIsTheSameInAnyOrderLeavesTheOrderToTheRows() {
-        for (String first : List.of("List.length(xs) >= 2", "!List.isEmpty(xs)",
-                "List.all(x -> x != 7, xs)", "List.contains(n, xs)")) {
+        for (String first : List.of("List.length(xs) >= 2", "Bool.not(List.isEmpty(xs))",
+                "List.all(x -> Bool.not(x == 7), xs)", "List.contains(n, xs)")) {
             String guards = "guard " + first + " else No\n"
                     + "    guard List.any(x -> 100 / x >= 1, xs) else No";
             String report = human(OVER_A_LIST.formatted(guards));
@@ -655,6 +666,56 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         return out;
     }
 
+    /**
+     * The least size of a value a comparison written out with the product draws a line at only
+     * because the product stops there: {@code 100 * days} is an {@code Int} for a {@code days}
+     * up to the greatest {@code Int} over a hundred, and that quotient times a hundred is as
+     * far from nought as a pay the divisor can get past.
+     */
+    private static final BigInteger WHERE_THE_PRODUCT_STOPS = BigInteger.valueOf(Long.MAX_VALUE)
+            .divide(BigInteger.valueOf(100)).multiply(BigInteger.valueOf(100));
+
+    private static final Pattern AT = Pattern.compile("at=(-?\\d+)\\]");
+
+    /**
+     * Whether {@code line} is a line of {@code a.pay} that the comparison written out draws
+     * because it works the product out: at a value its product with the divisor has no
+     * {@code Int} for.
+     *
+     * <p>The product is an operation the comparison works out, so a pay far out is shown to have
+     * a divisor on either side of the line. A quotient works out no product, and the dividend and
+     * the divisor it works out are the positions themselves: every pay and divisor the types hold
+     * is a row of it, so it draws no line where the product stops.
+     */
+    private static boolean drawnWhereTheProductStops(String line) {
+        Matcher at = AT.matcher(line);
+        if (!line.contains("term=a.pay") || !at.find()) {
+            return false;
+        }
+        return new BigInteger(at.group(1)).abs().compareTo(WHERE_THE_PRODUCT_STOPS) >= 0;
+    }
+
+    /** {@code lines} but for those the comparison written out draws only because it works the
+     *  product out ({@link #drawnWhereTheProductStops}). */
+    private static Set<String> withoutWhereTheProductStops(List<String> lines) {
+        return lines.stream().filter(line -> !drawnWhereTheProductStops(line))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Where the product stops, the comparison written out draws lines and the quotient does not:
+     * a pay there is no row of the first, and the quotient is worked out for it all the same.
+     */
+    @Test
+    void onlyTheComparisonWrittenOutDrawsLinesWhereTheProductStops() {
+        List<String> written = borders(ABOVE, "a.pay >= 100 * b.days");
+        List<String> quotient = borders(ABOVE, "a.pay / b.days >= 100");
+        assertTrue(written.stream().anyMatch(line -> drawnWhereTheProductStops(line)),
+                written.toString());
+        assertTrue(quotient.stream().noneMatch(line -> drawnWhereTheProductStops(line)),
+                quotient.toString());
+    }
+
     private static List<String> borders(String guard, String condition) {
         return bordersOfModel(MODEL.formatted(guard, condition));
     }
@@ -730,26 +791,25 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
     private static String human(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once for the class: tests ask one model its lines and its report, and
      *  only read them. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
+        return SHARED.compiles(model, () -> {
+            Compilation made = Compilation.ofSource(model, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return made;
         });
     }
 }

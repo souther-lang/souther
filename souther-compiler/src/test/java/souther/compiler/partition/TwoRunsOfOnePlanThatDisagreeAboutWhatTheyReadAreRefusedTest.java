@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
@@ -225,7 +226,7 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());
         RuleReadingContext reading =
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         MeasuredInput subject = MeasuredInput.of("fee",
                 InputDomain.of(List.of(new InputDomain.Parameter("days", null, Type.INT)),
                         reading, TypeCardinality.Counts.workedOutIn(reading),

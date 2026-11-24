@@ -3,12 +3,14 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
@@ -41,7 +43,8 @@ import java.util.function.UnaryOperator;
  * @param states   what every condition of this body states about its input
  * @param subjects what the body's expressions name that a row can control
  */
-record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
+record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
+                        CaseCandidates candidates) {
 
     /**
      * One condition of a path: the column it is, and what it states about the input.
@@ -50,11 +53,20 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      * @param said     which copies of the model's code each thing it asks was read off, told
      *                 where it was read
      */
-    record Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said) {
+    record Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said,
+                List<CaseWay> cases) {
 
-        /** {@code answer}, asking what {@code stated} put on the way. */
+        Read {
+            cases = List.copyOf(cases);
+        }
+
+        /**
+         * {@code answer}, asking what {@code stated} put on the way, for an arm entered. The
+         * statement an arm states is what a run entered it by and not a search a case is drawn
+         * inside of, so it draws none.
+         */
         Read(DecidedCondition answer, ReachingCuts.Stating stated) {
-            this(answer, stated.entries(), stated.by());
+            this(answer, stated.entries(), stated.by(), List.of());
         }
     }
 
@@ -97,10 +109,102 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         if (asked.isEmpty()) {
             return List.of();
         }
-        return List.of(new Read(oneRelation(asked) && (!(condition instanceof Condition.Truth)
+        DecidedCondition answer = oneRelation(asked)
+                && (!(condition instanceof Condition.Truth)
                 || oneRelation(asked(states.stating(condition, !held).entries())))
                 ? answerOf(condition, asked.getFirst(), held)
-                : asOneColumn(condition, held), stated, said.by()));
+                : asOneColumn(condition, held);
+        return List.of(new Read(answer, stated, said.by(), casesOf(condition, answer)));
+    }
+
+    /**
+     * What a row has to be to be evidence of each case the statement {@code answer} is about draws
+     * inside itself, for the cases a search draws that the reading can say what a row has to be
+     * for ({@link CaseOfAStatement.Search#askedAtLevel}).
+     *
+     * <p>Only the cases the decision owes where the statement came out as it did
+     * ({@link CasesTheRowsTook#owedBy}): a search that came out finding one owes the node meeting
+     * it and one found below it, and one that came out empty owes the two ways of coming back
+     * empty.
+     */
+    private List<CaseWay> casesOf(Condition condition, DecidedCondition answer) {
+        if (answer.condition() instanceof DecisionCondition.AStatement(Proposition stated)
+                && !(stated instanceof Proposition.SomeReachable)) {
+            return waysRoundTheOrdersOf(condition, stated, answer);
+        }
+        if (!(answer.condition() instanceof DecisionCondition.AStatement(
+                Proposition.SomeReachable search))
+                || !(answer instanceof DecidedCondition.Held(var _, boolean held))) {
+            return List.of();
+        }
+        List<CaseWay> out = new ArrayList<>();
+        for (CaseOfAStatement.Step step : CasesTheRowsTook.owedBy(search, held == search.holds())) {
+            CaseOfAStatement.Search which = new CaseOfAStatement.Search(search, step);
+            // One way for each level the step is asked at, the nearest first: a search for a row
+            // takes the first that composes one. Only the levels whose places this reading read;
+            // a reading made to stop where the type returns to itself reads fewer, and the levels
+            // past them are the ways of a reading made to read more ({@link CaseCandidates}).
+            for (int level = 1; level <= candidates.levelsAsked(which); level++) {
+                if (!readEvery(which.placesAtLevel(level))) {
+                    break;
+                }
+                wayTo(condition, which, which.askedAtLevel(level, states::denied))
+                        .ifPresent(out::add);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What a row has to be, beside the way to the rule, to be one the order of a repeated key can
+     * be asked of: the entry the statement looks up is there. A row that takes the rule with the
+     * container or the quantified list empty takes it without the statement looking anything up,
+     * and no order of its elements decides what it says.
+     *
+     * <p>One way for each order the statement rests on, the way it came out here: holding where
+     * the statement held, failing where it failed.
+     */
+    private List<CaseWay> waysRoundTheOrdersOf(Condition condition, Proposition stated,
+                                               DecidedCondition answer) {
+        if (!(answer instanceof DecidedCondition.Held(var _, boolean held))) {
+            return List.of();
+        }
+        List<CaseWay> out = new ArrayList<>();
+        for (Proposition.LastToHold last : stated.lastsToHold()) {
+            StandingAtAPoint.OrderOfAKey order = StandingAtAPoint.OrderOfAKey.of(last);
+            Optional<Proposition> entry = Proposition.theEntryLookedUp(stated, last);
+            if (order == null || entry.isEmpty()) {
+                continue;
+            }
+            CaseOfAStatement.KeyOrder which = new CaseOfAStatement.KeyOrder(stated, order,
+                    held ? CaseOfAStatement.Way.HOLDS_BY_THE_LAST
+                            : CaseOfAStatement.Way.FAILS_BY_THE_LAST);
+            wayTo(condition, which, Optional.of(List.of(entry.get()))).ifPresent(out::add);
+        }
+        return List.copyOf(out);
+    }
+
+    /** Whether the reading read a position at every one of {@code places}, which is what it needs
+     *  to say what a row has to be there. */
+    private boolean readEvery(List<TermPath> places) {
+        return places.stream().allMatch(each -> CaseCandidates.reads(states.read().domain(), each));
+    }
+
+    /** What {@code asked} comes to on the way at {@code condition}, as the way to {@code which}:
+     *  nothing where the step is not asked or the reading has no words for what it is. */
+    private Optional<CaseWay> wayTo(Condition condition, CaseOfAStatement which,
+                                    Optional<List<Proposition>> asked) {
+        if (asked.isEmpty()) {
+            return Optional.empty();
+        }
+        List<OnTheWay> puts = new ArrayList<>();
+        SaidOnTheWay said = SaidOnTheWay.NONE;
+        for (Proposition each : asked.get()) {
+            ReachingCuts.Stating put = ReachingCuts.whereItDecides(condition, each, states.read());
+            puts.addAll(put.entries());
+            said = said.and(put.by());
+        }
+        return puts.isEmpty() ? Optional.empty() : Optional.of(new CaseWay(which, puts, said));
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is
@@ -120,14 +224,15 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     private static boolean oneRelation(List<OnTheWay> stated) {
         return stated.size() == 1 && switch (stated.getFirst()) {
-            case OnTheWay.TakenIn(var _, RowDemand.Relational _),
-                 OnTheWay.TakenIn(var _, RowDemand.ATruth _) -> true;
-            case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _),
-                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> false;
+            case OnTheWay.TakenIn(var _, RowDemand.Relational _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ATruth _, var _, var _) -> true;
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _, var _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
-                 OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
+                 OnTheWay.TakenIn(var _, RowDemand.SoMany _, var _, var _) -> true;
             // One of several ways is no relation, and the column is what the condition states.
             case OnTheWay.OneOf _, OnTheWay.Counted _ -> false;
             // Taken off before a column is read ({@link #asked}): it asks nothing to read one off.
@@ -170,19 +275,26 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             case Proposition.Truth(DecisionSubject of, boolean holds, var _) ->
                     new DecidedCondition.Stood(new DecisionCondition.ATruth(of), holds == held);
             case Proposition.Compared(Relation.Ordered(DecisionAtom term, var at, Rel proposition),
-                                      boolean holds, var _) -> new DecidedCondition.Compared(
+                                      boolean holds, var _, var _) -> new DecidedCondition.Compared(
                     new DecisionCondition.AnOrderedComparison(term, at, proposition),
                     holds == held);
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel proposition),
-                                      boolean holds, var _) when overDecisionAtoms(form) ->
+                                      boolean holds, var _, var _) when overDecisionAtoms(form) ->
                     new DecidedCondition.Compared(new DecisionCondition.AComparison(
                             decisionForm(form), proposition), holds == held);
             case Proposition.Compared _, Proposition.Always _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
-                 Proposition.SoManyHold _, Proposition.WhereItAnswers _ ->
-                    DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
+                 Proposition.SoManyHold _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ -> {
+                    Optional<DecidedCondition.Held> named =
+                            DecisionCondition.AStatement.of(denying.apply(stated), held);
+                    yield named.isPresent() ? named.get()
+                            : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                                    met, new WhyNotTaken.MeaningUnread(
+                                            WhyUnread.pastTheReadings())), held);
+                }
         };
     }
 
@@ -211,6 +323,16 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      * compiler read nothing of, which the rule carries as that rather than leaving off.
      */
     private DecidedCondition answerOf(Condition condition, OnTheWay one, boolean held) {
+        // What was read through two names for one element, or a name whose element is not known,
+        // is of no one value at the position, so no column over the position is: the column is
+        // what the condition states, which tells the two apart, and where no condition stands one
+        // this reading has no column for.
+        if (ElementsOnTheWay.namedIn(one).readsNoOneValue()) {
+            return condition != null ? asOneColumn(condition, held)
+                    : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                            ElementsOnTheWay.conditionOf(one), ElementsOnTheWay.ANOTHER_ELEMENT),
+                            held);
+        }
         return switch (one) {
             // That some element meets something is no column over the input's numbers: which
             // element did is nothing a value at one position says. So the condition is the column
@@ -218,34 +340,41 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             // reading has no column for. Only a condition the body asks is read this way, so there
             // is one to ask.
             // And two values being one, whose column is the comparison the condition states:
-            // written either way round, it is read as one statement there.
-            case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _),
-                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) ->
+            // written either way round, it is read as one statement there. And a remainder of a
+            // form, whose values are a class and no column over the input's numbers.
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OneValueAtBoth _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.OnARemainder _, var _, var _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _, var _) ->
                     asOneColumn(condition, held);
             // Which of two values stands at a position: the truth of that position, whichever
             // spelling asked it, read off the demand and not off the condition again. And what
             // came out is the position's value and not the condition's — `f == false` holding is
             // `f` not holding.
-            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> new DecidedCondition.Stood(
-                    new DecisionCondition.ATruth(new DecisionSubject.AnInput(truth.at())),
-                    truth.held());
-            case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
+            // The value at the position is the one the names the demand was read through stood
+            // for, as the condition's own statement of it is.
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth, NamedElements named, var _) ->
+                    new DecidedCondition.Stood(new DecisionCondition.ATruth(
+                            ReadThroughNames.theInputAt(truth.at(), named.elements())),
+                            truth.held());
+            case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken), NamedElements named,
+                                  var _) -> {
                 Rel proposition = taken.rel().orItsDenial();
+                ElementsNamed names = named.elements();
                 DecisionCondition.Comparison column = switch (taken) {
                     case TakenConstraint.Affine affine -> new DecisionCondition.AComparison(
-                            DecisionAtom.ofTheInput(affine.form()), proposition);
+                            ReadThroughNames.theNumbersOf(affine.form(), names), proposition);
                     case TakenConstraint.Ordered ordered ->
                             new DecisionCondition.AnOrderedComparison(
-                                    new DecisionAtom.OfTheInput(ordered.term()), ordered.at(),
-                                    proposition);
+                                    ReadThroughNames.theNumberAt(ordered.term(), names),
+                                    ordered.at(), proposition);
                     // A hole is the same column as the equality it denies, which is what makes the
                     // table exclusive: `voucher == "spring"` and `voucher /= "spring"` are one
                     // distinction a body draws, met the two ways a path can meet it.
                     case TakenConstraint.AwayFrom away ->
                             new DecisionCondition.AnOrderedComparison(
-                                    new DecisionAtom.OfTheInput(away.term()), away.at(),
+                                    ReadThroughNames.theNumberAt(away.term(), names), away.at(),
                                     proposition);
                 };
                 yield new DecidedCondition.Compared(column, taken.rel() == proposition);
@@ -273,10 +402,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             // How many elements meet a statement, which a row is composed for and no column over
             // the input's numbers is: which elements meet it is nothing a value at one position
             // says, so the column is the statement.
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany _) when condition != null ->
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany _, var _, var _) when condition != null ->
                     asOneColumn(condition, held);
             // A count is a comparison a condition states, and a fork states none.
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> throw new IllegalArgumentException(
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many, var _, var _) ->
+                    throw new IllegalArgumentException(
                     "a count is stated by a condition, and a fork brings none: " + many);
             // A condition the source settles is no distinction, and is taken off before a column
             // is asked for, the condition's ({@link #deciding}) and the arm's ({@link #entering})
@@ -319,12 +449,14 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         // fork on a value the body computed is what the arm comes to for the input, which is no
         // answer to the question about the computed value.
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
+                && !narrowed.named().elements().readsNoOneValue()
                 && states.narrowsItsOwnPosition(match, part, reads)) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
             return new Read(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
-                    new DecisionSubject.AnInput(at.narrowedFrom().position()),
+                    ReadThroughNames.theInputAt(at.narrowedFrom().position(),
+                            narrowed.named().elements()),
                     states.answersOf(match, reads)), at.narrowing()), entered);
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row
@@ -384,6 +516,17 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         ReachingCuts.Stating entered = states.attempting(attempt, part, at, reads, numbering);
         return new Read(columnOf(states.entered(attempt, part, reads), true,
                 metAt(entered.entries()), states::denied), entered);
+    }
+
+    /**
+     * What getting past {@code construction} asks of a row, a clause at a time: each clause of the
+     * invariant of the type it builds, read over what it is handed — what the arm of an attempt of
+     * it that built the value states. No column: a construction is no distinction the body draws.
+     * Nothing where the type it builds holds its values to no clause.
+     */
+    List<PassedConstruction> constructing(Core.Construct construction, InputReads reads,
+                                ConditionNumbering numbering) {
+        return states.constructing(construction, reads, numbering);
     }
 
     /**

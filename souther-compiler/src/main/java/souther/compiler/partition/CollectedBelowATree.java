@@ -9,12 +9,11 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -68,12 +67,12 @@ final class CollectedBelowATree {
                         DeclarationNewtypes newtypes) {
         RecursionOverATree search = recursion.search().orElse(null);
         if (search == null || !(reads.pathOf(args.get(search.node()), newtypes)
-                instanceof PathResolution.At(TermPath root)) || !RunSource.oneTreeStandsAt(root)) {
+                instanceof ValuesAt.At(TermPath root)) || !RunSource.oneTreeStandsAt(root)) {
             return null;
         }
         for (int at = 0; at < args.size(); at++) {
             if (at != search.node() && !(reads.pathOf(args.get(at), newtypes)
-                    instanceof PathResolution.At(TermPath stays)
+                    instanceof ValuesAt.At(TermPath stays)
                     && WrittenOfANode.apart(stays, root))) {
                 return null;
             }
@@ -169,23 +168,26 @@ final class CollectedBelowATree {
             if (walk != null) {
                 return evalWalk(walk, here, env);
             }
-            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(ValueName operation,
-                                                                          List<Core> args))) {
+            if (!(AnOperationApplied.of(e) instanceof AnOperationApplied applied)) {
                 return null;
             }
-            if (operation.equals(ValueName.Stdlib.operation("List", "append"))) {
+            List<Core> args = applied.args();
+            if (applied.putsListsEndToEnd()) {
                 return eval(args.get(0), here, env) instanceof Abs.Elems left
                         && eval(args.get(1), here, env) instanceof Abs.Elems right
                         ? left.with(right) : null;
             }
-            if (operation.equals(ValueName.Stdlib.operation("Map", "get"))) {
-                return lookup(args.get(0), args.get(1), here) ? new Abs.MaybeEntry() : null;
+            AnOperationApplied.Lookup looked = applied.lookup();
+            if (looked != null) {
+                return lookup(looked.key(), looked.container(), here)
+                        ? new Abs.MaybeEntry() : null;
             }
-            if (operation.equals(ValueName.Stdlib.operation("Option", "map"))) {
-                Core.Block closure = blocksAt(here).apply(args.get(0));
+            AnOperationApplied.Mapped mapped = applied.mapsAnOption();
+            if (mapped != null) {
+                Core.Block closure = blocksAt(here).apply(mapped.closure());
                 if (closure == null || closure.params().size() != 1
                         || closure.params().getFirst().binding() == null
-                        || !(eval(args.get(1), here, env) instanceof Abs.MaybeEntry)) {
+                        || !(eval(mapped.option(), here, env) instanceof Abs.MaybeEntry)) {
                     return null;
                 }
                 Map<BindingId, Abs> inside = new HashMap<>(env);
@@ -200,8 +202,8 @@ final class CollectedBelowATree {
          *  the key a field chain of the node, the map a position apart from the tree, and both the
          *  same at every node. */
         private boolean lookup(Core key, Core from, InputReads here) {
-            if (!(here.pathOf(key, newtypes) instanceof PathResolution.At(TermPath keyed))
-                    || !(here.pathOf(from, newtypes) instanceof PathResolution.At(TermPath in))
+            if (!(here.pathOf(key, newtypes) instanceof ValuesAt.At(TermPath keyed))
+                    || !(here.pathOf(from, newtypes) instanceof ValuesAt.At(TermPath in))
                     || !keyed.isAtOrUnder(root) || keyed.equals(root)) {
                 return false;
             }
@@ -265,7 +267,7 @@ final class CollectedBelowATree {
         /** A walk from a seed over a field of the node whose step puts the search from each
          *  element of that field to the end of what it carried. */
         private Abs evalWalk(SeededWalk walk, InputReads here, Map<BindingId, Abs> env) {
-            if (!(here.pathOf(walk.container(), newtypes) instanceof PathResolution.At(
+            if (!(here.pathOf(walk.container(), newtypes) instanceof ValuesAt.At(
                     TermPath over)) || over.steps().size() != root.steps().size() + 1
                     || !over.isAtOrUnder(root)
                     || !(over.steps().getLast() instanceof TermPath.Step.Field(String field))
@@ -280,14 +282,13 @@ final class CollectedBelowATree {
         private boolean stepsDownOnEachElement(SeededWalk walk, InputReads here) {
             Denotation step = here.standing(walk.step().body(), symbols, newtypes);
             if (!(AnOperationApplied.of(Core.withoutStanding(step.value()))
-                    instanceof AnOperationApplied(ValueName operation, List<Core> args))
-                    || !operation.equals(ValueName.Stdlib.operation("List", "append"))) {
+                    instanceof AnOperationApplied applied) || !applied.putsListsEndToEnd()) {
                 return false;
             }
             Set<Core> operands = new LinkedHashSet<>();
             boolean carried = false;
             boolean descends = false;
-            for (Core written : args) {
+            for (Core written : applied.args()) {
                 Core each = Core.withoutStanding(written);
                 if (!operands.add(each)) {
                     continue;

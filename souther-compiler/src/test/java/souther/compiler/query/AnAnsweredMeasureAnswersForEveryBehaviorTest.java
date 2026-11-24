@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
@@ -62,8 +63,8 @@ class AnAnsweredMeasureAnswersForEveryBehaviorTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(EVERY_SHAPE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        // The import of a module nothing provides is what the model is refused for.
+        return ACompiledModel.refusedWith(List.of("E1504"), compilation);
     }
 
     private static List<String> declared(Compilation compilation) {

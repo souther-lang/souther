@@ -4,6 +4,7 @@ import souther.compiler.observe.Target;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Weakening;
 
 /**
@@ -60,12 +61,17 @@ final class Subjects {
             // carried in the words a report writes about the border's own items, not in a second
             // place to send a reader.
             case Weakening.ItemsPlaceNotWorkedOut it -> atThe(it.border());
+            // The behavior, which is whose weights these are. Which position is the computation's
+            // own and is said where the weights are, in the document's `partition.weights`.
+            case Weakening.AWeightNotDecided it -> new Subject.OfABehavior(it.behavior());
             // The border the reading is: which point it could not be tied to is the point's, and
             // the reading is what a reader is sent to.
             case Weakening.AReadingNotTiedToItsLine it -> atThe(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             // Named by the behavior, which is what this answer is of.
             case Weakening.BodyNotInEvaluation it ->
+                    new Subject.OfABehavior(it.behavior());
+            case Weakening.BehaviorToBeChangedFirst it ->
                     new Subject.OfABehavior(it.behavior());
             case Weakening.BoundaryNotDerived it -> new Subject.OfABehavior(it.behavior());
             case Weakening.InputNotRead it -> new Subject.OfABehavior(it.behavior());
@@ -77,7 +83,6 @@ final class Subjects {
             // its groups went unwalked is what the walk met, and a behavior has one reading of its
             // meetings.
             case Weakening.MeetingsNotWalked it -> new Subject.OfABehavior(it.behavior());
-            case Weakening.MeetingsNotPlaced it -> new Subject.OfABehavior(it.behavior());
             case Weakening.MeetingsNotJoined it -> new Subject.OfABehavior(it.behavior());
             // The arm as the source wrote it, which is what the fact now carries: the number a run
             // through it was recorded at is resolved where the sites are, and nothing this far
@@ -107,9 +112,10 @@ final class Subjects {
             // on that search is not said: no node further down was measured.
             case Weakening.ReachableNodeCasesUnmeasured it ->
                     new Subject.OfABehavior(it.behavior());
-            // The behavior whose body the rewrite is of. Which rewrite, and why it was left open,
-            // is the rewrite's own entry under the replacement measure.
-            case Weakening.RewriteUndecided it -> new Subject.OfABehavior(it.behavior());
+            // The rewrite, as the obligation the replacement measure owes it. Two rewrites of one
+            // body left open are two entries; why each was left open travels as the reason.
+            case Weakening.RewriteUndecided it -> new Subject.OfAReplacement(it.module(),
+                    new ObligationIdentity.OfAReplacement(it.behavior(), it.replacement()));
         };
     }
 

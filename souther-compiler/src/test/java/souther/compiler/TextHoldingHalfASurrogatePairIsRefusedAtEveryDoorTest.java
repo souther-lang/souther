@@ -97,16 +97,16 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
             """;
 
     /**
-     * The reading {@code souther run} does refuses it the same way: a data's generated JSON decoder,
-     * a {@code String} read on its own, and a map's key, which the generated decoder does not read.
+     * The reading {@code souther run} does refuses it the same way: a data's generated JSON decoder
+     * and a {@code String} read on its own. A map's key never reaches the decoder, because the JSON
+     * parser refuses a name holding half a pair first; {@code RunnerTest} holds that.
      */
     @Test
     void theRunnersReadingRefusesItTheSameWay() throws Exception {
         String escapedHigh = "\\ud800";
         for (String[] each : new String[][] {
                 {"field", "{\"s\": \"" + escapedHigh + "\"}", "/s"},
-                {"bare", "\"" + escapedHigh + "\"", ""},
-                {"keyed", "{\"" + escapedHigh + "\": 1}", "/" + HIGH}}) {
+                {"bare", "\"" + escapedHigh + "\"", ""}}) {
             JsonBoundary.Read.Refused refused = Crossing.refusalOf(TAKING, "demo", each[0], each[1]);
             Issue issue = refused.issues().asList().get(0);
             assertEquals(TextRule.REFUSED, issue.code(), each[0]);

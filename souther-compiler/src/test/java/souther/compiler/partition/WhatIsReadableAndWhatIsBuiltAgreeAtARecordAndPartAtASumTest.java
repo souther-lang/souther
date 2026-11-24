@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ConstructionDescent;
 import souther.compiler.check.DeclarationKinds;
@@ -314,7 +315,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        return Compilation.ofSource(SPREAD, "Main");
+        return ACompiledModel.answered(SPREAD);
     }
 
     private static String module() {

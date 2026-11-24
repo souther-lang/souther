@@ -12,11 +12,13 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Function;
 
 /**
  * How one {@link BorderQuantity}'s own values are ordered, and which of them the quantity can take.
@@ -99,8 +101,23 @@ public interface LevelSpace {
      * plainest one it can reach from there. Left out, a run bounded at both ends answered with the
      * end furthest from the line the point is named for, and a point that exists to be inside a
      * partition and beside its boundary was offered a row at the other side of it.
+     *
+     * <p>The end is a line's, so the value is wanted beside it however near anything else is
+     * ({@link #standingFor} is the other question).
      */
     Witness witness(LevelInterval run, Towards from);
+
+    /**
+     * One value standing for {@code run}, wanted near no end of it: where the quantity is usually
+     * near, where the run is left open on a side ({@link Carrier#aPlaceInside}), and otherwise from
+     * the low end.
+     *
+     * <p>For a value standing for a class rather than for a point beside its line. The levels of a
+     * form have no place they are usually near, so a space of them answers as from the low end.
+     */
+    default Witness standingFor(LevelInterval run, UsualPlace usual) {
+        return witness(run, Towards.ABOVE);
+    }
 
     /**
      * Whether the quantity can take this level at all — or which way the exact arithmetic could
@@ -139,6 +156,19 @@ public interface LevelSpace {
     }
 
     /**
+     * Whether every level of this order is a number the quantity counts to
+     * ({@link Level.OfTheQuantity}), so that a place another order parts the quantity at must be
+     * said as a count before it is put among this order's.
+     *
+     * <p>One quantity can be parted at a decimal, which is a place of its carrier, and at a number
+     * no decimal writes, which is no place of anything. The second is on an order that counts, and
+     * the first is brought onto it ({@link Seam#counted}) and not compared across.
+     */
+    default boolean countsLevels() {
+        return false;
+    }
+
+    /**
      * The nearest level the quantity can take at or past {@code from}, the way {@code towards} says,
      * or empty where the order names none there — or which way the exact arithmetic could not tell.
      *
@@ -156,8 +186,8 @@ public interface LevelSpace {
      *
      * <p>Adjacency, and nothing else. Empty says the run past this level has no end, which is not a
      * statement that it is empty: a decimal difference has no successor and has every larger
-     * difference. That other question is {@link #anythingBeyond}, and both are read off the one
-     * {@link Occupancy} so they cannot disagree.
+     * difference. That other question is whether {@link #inspect} finds the run inhabited, and
+     * both are read off the one {@link Occupancy} so they cannot disagree.
      */
     default ExactAnswer<Optional<Level>> neighbour(Level from, Towards towards) {
         return endAnswer(runFrom(from, towards, false), towards);
@@ -170,22 +200,7 @@ public interface LevelSpace {
         };
     }
 
-    /**
-     * Whether this quantity takes any value at all strictly past {@code from}, the way
-     * {@code towards} says — or which way the exact arithmetic could not tell.
-     *
-     * <p>What decides whether a border has a side there. False only where the order itself stops —
-     * an enumeration at its last case, a string a rule holds another string apart from — and never
-     * because the step between two values has no name.
-     */
-    default ExactAnswer<Boolean> anythingBeyond(Level from, Towards towards) {
-        return switch (inspect(runFrom(from, towards, false))) {
-            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
-            case Occupancy other -> ExactAnswer.held(other.any());
-        };
-    }
-
-    /** Everything one way of a level, which is what the three questions above are asked about. */
+    /** Everything one way of a level, which is what the questions above are asked about. */
     private static LevelInterval runFrom(Level from, Towards towards, boolean itself) {
         Bound at = Bound.at(from, itself);
         return towards == Towards.ABOVE
@@ -207,7 +222,12 @@ public interface LevelSpace {
     static LevelSpace onACarrier(Carrier carrier) {
         BoundaryDomain steps = BoundaryDomain.on(carrier);
         OrderedInterval extent = carrier == null ? OrderedInterval.OPEN : carrier.extent();
-        return new LevelSpace() {
+        return new Defined() {
+
+            @Override
+            Definition definition() {
+                return new Definition.OnACarrier(carrier);
+            }
 
             @Override
             public int compare(Level l, Level r) {
@@ -310,6 +330,20 @@ public interface LevelSpace {
              */
             @Override
             public Witness witness(LevelInterval run, Towards from) {
+                // From the end of a line, which a rule drew: no usual place is nearer than it.
+                return foundIn(run, look -> carrier.somethingInside(look.min(), look.max(), from,
+                        UsualPlace.NONE));
+            }
+
+            @Override
+            public Witness standingFor(LevelInterval run, UsualPlace usual) {
+                return foundIn(run, look -> carrier.aPlaceInside(look.min(), look.max(), usual));
+            }
+
+            /** The first place {@code taken} gives up of the run at a scale it is looked in at,
+             *  that the run holds. */
+            private Witness foundIn(LevelInterval run,
+                                    Function<NumericDomain.Bounds, Place> taken) {
                 if (carrier == null) {
                     return Witness.NONE;
                 }
@@ -332,7 +366,7 @@ public interface LevelSpace {
                     // a range gives up is the range's own answer and the carrier holds it inside
                     // what it reaches itself; narrowed here first, a run nothing bounds below was
                     // bounded by the order and gave up the least count there is.
-                    Place at = carrier.somethingInside(look.min(), look.max(), from);
+                    Place at = taken.apply(look);
                     if (at == null) {
                         continue;
                     }
@@ -370,6 +404,11 @@ public interface LevelSpace {
      */
     static LevelSpace steppingBy(ExactRatio step) {
         return new Lattice(step, new AdditiveImage.OverWholeNumbers(step)) {
+
+            @Override
+            Definition definition() {
+                return new Definition.SteppingBy(step);
+            }
 
             /** Every multiple of the step, so a run has a first value and a last wherever it is
              *  bounded. */
@@ -427,6 +466,11 @@ public interface LevelSpace {
      */
     static LevelSpace overFiniteDecimals(ExactRatio generator) {
         return new Lattice(generator, new AdditiveImage.OverFiniteDecimals(generator)) {
+
+            @Override
+            Definition definition() {
+                return new Definition.OverFiniteDecimals(generator);
+            }
 
             /**
              * The level itself where this takes it, and no first value past it where it does not.
@@ -610,7 +654,12 @@ public interface LevelSpace {
      *
      */
     static LevelSpace onlyWhereTheyMeet() {
-        return new LevelSpace() {
+        return new Defined() {
+
+            @Override
+            Definition definition() {
+                return new Definition.OnlyWhereTheyMeet();
+            }
 
             @Override
             public int compare(Level l, Level r) {
@@ -867,14 +916,67 @@ public interface LevelSpace {
         }
     }
 
+    /**
+     * A space known by what it is made from: the kind of space and what that kind was given.
+     *
+     * <p>Two spaces made the same way are the same space, whichever call made them. Left to
+     * identity, a value that holds a space — a {@link Standing} does — would differ from one built
+     * again from the same quantity, which is a difference nothing in either of them says.
+     *
+     * <p>The kind is part of what a space is made from. The whole numbers cut at a step and the
+     * decimals cut at the same step have the same generator and are not the same space, so equal
+     * arguments to two kinds do not make two spaces equal.
+     */
+    abstract class Defined implements LevelSpace {
+
+        /** What this space is made from. */
+        abstract Definition definition();
+
+        @Override
+        public final boolean equals(Object other) {
+            return other instanceof Defined that && definition().equals(that.definition());
+        }
+
+        @Override
+        public final int hashCode() {
+            return definition().hashCode();
+        }
+
+        @Override
+        public final String toString() {
+            return definition().toString();
+        }
+    }
+
+    /** The kinds of space there are, each with what it takes. */
+    sealed interface Definition {
+
+        /** The values of a carrier, written as places of it; null where the quantity has none. */
+        record OnACarrier(Carrier carrier) implements Definition {}
+
+        /** The whole-number multiples of a step. */
+        record SteppingBy(ExactRatio step) implements Definition {}
+
+        /** The finite decimals that a generator reaches. */
+        record OverFiniteDecimals(ExactRatio generator) implements Definition {}
+
+        /** The one level two values with no distance between them take. */
+        record OnlyWhereTheyMeet() implements Definition {}
+    }
+
     /** The shared half of every space whose levels are numbers: how two of them compare. What stops
      *  a border having a side on one of these is what the rules leave, which is asked of them and
      *  not of the order. */
-    abstract class Counting implements LevelSpace {
+    abstract class Counting extends Defined {
 
         @Override
         public int compare(Level l, Level r) {
             return numberOf(l).compareTo(numberOf(r));
+        }
+
+        @Override
+        public boolean countsLevels() {
+            return true;
         }
 
         static ExactRatio numberOf(Level level) {

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.RuleReadings;
@@ -133,7 +134,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
                 behavior read : (x: Int) -> Ok
                 behavior charge : (a: Amount) -> Ok
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "g");
         assertNotNull(building, "the module has classes to build against");
 
@@ -172,7 +173,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
         remembered.buildAlone(Type.INT, FixtureTemplate.integer(8));
         remembered.buildAlone(Type.STRING, seven());
 
-        assertEquals(BoundaryValues.OnItsOwn.REFUSED, first);
+        assertEquals(new BoundaryValues.OnItsOwn.Refused(), first);
         assertEquals(3, source.asked.size(), "one answer per type and value");
     }
 
@@ -194,7 +195,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
 
                 behavior read : (c: Code) -> Ok
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "g");
         assertNotNull(building, "the module has classes to build against");
         Type.Ref code = assertInstanceOf(Type.Ref.class,
@@ -202,11 +203,14 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
         TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
                 RuleReadings.of(compilation, "g").symbols().scope().reach(code.name()));
 
-        assertEquals(BoundaryValues.OnItsOwn.BUILT, building.buildAlone(code,
-                FixtureTemplate.newtype(written, FixtureTemplate.string("ABC"))));
-        assertEquals(BoundaryValues.OnItsOwn.REFUSED, building.buildAlone(code,
+        BoundaryValues.OnItsOwn.Built admitted = assertInstanceOf(BoundaryValues.OnItsOwn.Built.class,
+                building.buildAlone(code,
+                        FixtureTemplate.newtype(written, FixtureTemplate.string("ABC"))));
+        assertEquals(new ObservedValue.Text("ABC"), assertInstanceOf(ObservedValue.Constructed.class,
+                admitted.observed()).field("value"), "the value it built is the one a row would carry");
+        assertEquals(new BoundaryValues.OnItsOwn.Refused(), building.buildAlone(code,
                 FixtureTemplate.newtype(written, FixtureTemplate.string("x"))));
-        assertEquals(BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN,
+        assertEquals(new BoundaryValues.OnItsOwn.NoDecoderOfItsOwn(),
                 building.buildAlone(Type.option(code),
                         FixtureTemplate.newtype(written, FixtureTemplate.string("x"))));
         assertThrows(IllegalStateException.class,
@@ -244,8 +248,8 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
             asked.add(Type.show(type) + " " + fixture);
             return switch (answer) {
                 case null -> throw new LinkageError("no runtime");
-                case Built.Value _ -> OnItsOwn.BUILT;
-                case Built.Refused _ -> OnItsOwn.REFUSED;
+                case Built.Value(var observed) -> new OnItsOwn.Built(observed);
+                case Built.Refused _ -> new OnItsOwn.Refused();
             };
         }
     }

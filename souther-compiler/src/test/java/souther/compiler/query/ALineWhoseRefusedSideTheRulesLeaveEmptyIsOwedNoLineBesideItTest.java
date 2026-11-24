@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.JsonNode;
@@ -125,18 +126,17 @@ class ALineWhoseRefusedSideTheRulesLeaveEmptyIsOwedNoLineBesideItTest {
     private static String report(String model) {
         Compilation compilation = measured(model);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** Each model measured once, whichever of its document and its report is read. */
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model, source -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
-        });
+        }));
     }
 }

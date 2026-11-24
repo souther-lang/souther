@@ -5,10 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A place worked out from a decimal of a scale near the end of the range is a place the coverage
@@ -62,8 +59,7 @@ class APlaceWorkedOutOfAFineDecimalIsNotAnInternalErrorTest {
     private static void assertAnswered(String behavior) {
         Compilation compilation = Compilation.ofSource(FINE + behavior, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model is one the language admits");
+        ACompiledModel.compiles(compilation);
         assertDoesNotThrow(() -> AdequacyReport.of(compilation));
     }
 

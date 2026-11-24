@@ -81,7 +81,7 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
         assertTrue(offered.contains("| ("),
                 () -> "and rows are offered: " + offered);
 
-        String row = RowsOfABlock.forThe(offered, "ns=2 <= x").written();
+        String row = RowsOfABlock.forThe(offered, "List.length(ns): 2 <= x at List.length(ns)").written();
         List<Integer> held = elementsOf(row);
 
         assertTrue(held.size() >= 2,
@@ -101,11 +101,7 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String block(Compilation compilation) {
@@ -113,6 +109,6 @@ class AContainerIsWrittenForItsLengthAndItsTotalTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.ledger")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 }

@@ -98,7 +98,8 @@ final class WhatABodyTellsApart {
         this.armsNamed = armsNamed;
         this.dependencies = dependencies;
         this.arrives = arrives;
-        this.coexistence = ClassCoexistence.among(axes);
+        this.coexistence = ClassCoexistence.among(axes,
+                measured.subject().quantities().region());
         this.unread = new boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
@@ -459,7 +460,9 @@ final class WhatABodyTellsApart {
      */
     private boolean neverHolds(souther.compiler.reading.Condition each, TermPath at) {
         if (!(each instanceof souther.compiler.reading.Condition.Side side)
-                || side.line().isEmpty()
+                || !(side.states().map(souther.compiler.reading.Condition.Side.Stated::other)
+                        .orElse(null) instanceof souther.compiler.reading.Condition.Side.OtherSide
+                        .OnTheOrder(Place line))
                 || !(side.at() instanceof NumericTerm.FromOnePosition named)) {
             return false;
         }
@@ -469,9 +472,8 @@ final class WhatABodyTellsApart {
         if (standing == null) {
             return false;
         }
-        souther.compiler.reading.Condition.Side.Line line = side.line().get();
-        SearchRegion closed = holding(quantities.region(), standing, line.at(),
-                line.holding(side.held()));
+        SearchRegion closed = holding(quantities.region(), standing, line,
+                side.states().orElseThrow().rel());
         return closed != null && closed.emptiness().isPresent();
     }
 
@@ -617,6 +619,7 @@ final class WhatABodyTellsApart {
             case BlockReason.ComparisonRelatingTwoValues _,
                  BlockReason.ComparisonOverARun _,
                  BlockReason.ComparisonOnARemainder _,
+                 BlockReason.ComparisonMeasuredOnItsRuns _,
                  BlockReason.RuleRestrictingToAdmittedValues _,
                  BlockReason.ClassesNotComposed _ -> false;
         };

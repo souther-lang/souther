@@ -43,6 +43,10 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_ASK = List.of(
+            new Licence("souther.compiler.semantics.ConditionJoin.operator", 1,
+                    "the table read the other way, by the table's own owner: which operator"
+                            + " composes a way is asked of the one table, and no reader names a"
+                            + " connective to build the term a condition joined is"),
             new Licence("souther.compiler.partition.Condition.of", 1,
                     "the one place a condition of a body becomes a shape, which carries the"
                             + " composition to every reader of that shape"),
@@ -56,18 +60,22 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
                     "the one reading of what a condition states, which joins the propositions the"
                             + " two halves state the way the connective composes them"),
 
+            new Licence("souther.compiler.check.Term.runsOfAStatement", 1,
+                    "which whole numbers a statement held as a term holds of: the one place a"
+                            + " term of a closure's answer becomes a set, joining the sets of its"
+                            + " two halves the way the connective composes them"),
+
+            new Licence("souther.compiler.check.WhatAClauseNeeds.workJoined", 1,
+                    "whether a clause is false where one part of it is: the one place that walk"
+                            + " meets a connective, and what it composes is how the false part"
+                            + " carries on to the whole"),
+
             new Licence("souther.compiler.check.ClauseHelpers.shaped", 1,
                     "the shape an author wrote a clause in, which is walking into what composes"
                             + " both halves. The one place an authored part is recognised: which"
                             + " parts there are, where each stands among them, the clause with each"
                             + " expanded where it stands, and which subtree of a reading each of"
-                            + " them became are all answers over that one shape"),
-            new Licence("souther.compiler.partition.ClauseStatements.walk", 1,
-                    "what a behavior's clause states outright: one recognition, and both of what a"
-                            + " connective can compose read off it. The comparisons a clause draws"
-                            + " lines with and the predicates it tells sets of strings apart with"
-                            + " are read off the statements this leaves, so neither reader is a"
-                            + " second place the same `&&` is recognised in"));
+                            + " them became are all answers over that one shape"));
 
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItComposes() {

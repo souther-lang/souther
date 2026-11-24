@@ -12,12 +12,15 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.StringContainment;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -92,6 +95,13 @@ final class Reading {
     /** The values made by an operation that were read as what its law says rather than named: what
      *  is stated of the operation beside others is as true of each of them as of one named. */
     private final Set<Value.Made> readByALaw = new LinkedHashSet<>();
+    /** What {@link #met} answers. Keyed by the term itself, since two places writing the same
+     *  thing are two places a run works it out. */
+    private final Map<LibraryTerm, List<Case>> met = new IdentityHashMap<>();
+    /** What holds on the way to the part of a body being read: a fork's condition inside its arm,
+     *  what an option is inside the arm that reads it, what the left of an operator that stops
+     *  early came to inside its right. */
+    private final List<LawProposition<Value>> way = new ArrayList<>();
 
     Reading(Library library, Set<ValueName.Stdlib.Operation> readThrough) {
         this.library = library;
@@ -125,8 +135,49 @@ final class Reading {
 
     // --- what a body comes to ------------------------------------------------------------------
 
+    /**
+     * The operators and calls this reading has worked out, each by where it is written, with every
+     * case it came to there under the way the body went to reach it.
+     *
+     * <p>Kept beside the cases a body comes to, since those are what the body answers and a value
+     * worked out on the way and then not answered is in none of them, though working it out may
+     * still end a run. A closure is read where it is applied, so what one never applied here holds
+     * is met nowhere.
+     */
+    Map<LibraryTerm, List<Case>> met() {
+        return Collections.unmodifiableMap(met);
+    }
+
+    /** That nothing met so far is kept: what is met from here on is read apart from it. */
+    void forgetWhatWasMet() {
+        met.clear();
+    }
+
     /** The cases {@code term} comes out by, read in {@code frame}. */
     List<Case> cases(LibraryTerm term, Frame frame) {
+        List<Case> out = casesOf(term, frame);
+        if (term instanceof LibraryTerm.Operator || term instanceof LibraryTerm.Call
+                || term instanceof LibraryTerm.Negated) {
+            LawProposition<Value> reached = Props.all(way);
+            List<Case> at = met.computeIfAbsent(term, _ -> new ArrayList<>());
+            out.forEach(each -> at.add(new Case(Props.both(reached, each.when()), each.is())));
+        }
+        return out;
+    }
+
+    /** The cases {@code part} comes out by, read where {@code reached} holds on the way to it.
+     *  What is met inside is told {@code reached}; the cases are not, and a caller whose answer is
+     *  the part's alone, an arm, puts it on them itself. */
+    private List<Case> reachedWhere(LawProposition<Value> reached, LibraryTerm part, Frame frame) {
+        way.add(reached);
+        try {
+            return cases(part, frame);
+        } finally {
+            way.removeLast();
+        }
+    }
+
+    private List<Case> casesOf(LibraryTerm term, Frame frame) {
         return switch (term) {
             case LibraryTerm.Parameter(int position) ->
                     one(frame.params().get(position));
@@ -141,6 +192,7 @@ final class Reading {
             case LibraryTerm.WholeNumber(long value) -> one(new Value.Whole(value));
             case LibraryTerm.DecimalNumber(var value) -> one(new Value.Decimal(value));
             case LibraryTerm.Truth(boolean value) -> one(new Value.Truth(value));
+            case LibraryTerm.UnitValue(var type) -> one(new Value.Unit(type));
             case LibraryTerm.ListOf(List<LibraryTerm> elements) ->
                     each(elements, frame, Value.Listed::new);
             case LibraryTerm.TupleOf(List<LibraryTerm> elements) ->
@@ -154,7 +206,8 @@ final class Reading {
             case LibraryTerm.Let(BindingId binding, LibraryTerm value, LibraryTerm body) -> {
                 List<Case> out = new ArrayList<>();
                 for (Case bound : cases(value, frame)) {
-                    for (Case inside : cases(body, frame.with(binding, bound.is()))) {
+                    for (Case inside : reachedWhere(bound.when(), body,
+                            frame.with(binding, bound.is()))) {
                         out.add(new Case(Props.both(bound.when(), inside.when()), inside.is()));
                     }
                 }
@@ -174,9 +227,10 @@ final class Reading {
                 List<Case> out = new ArrayList<>();
                 for (Case decided : cases(condition, frame)) {
                     LawProposition<Value> holds = side(decided.is(), AnswerAspect.TRUTH);
-                    out.addAll(under(Props.both(decided.when(), holds), cases(then, frame)));
-                    out.addAll(under(Props.both(decided.when(), holds.denied()),
-                            cases(otherwise, frame)));
+                    LawProposition<Value> taken = Props.both(decided.when(), holds);
+                    LawProposition<Value> notTaken = Props.both(decided.when(), holds.denied());
+                    out.addAll(under(taken, reachedWhere(taken, then, frame)));
+                    out.addAll(under(notTaken, reachedWhere(notTaken, otherwise, frame)));
                 }
                 yield out;
             }
@@ -185,10 +239,11 @@ final class Reading {
                 List<Case> out = new ArrayList<>();
                 for (Case read : cases(option, frame)) {
                     LawProposition<Value> holds = side(read.is(), AnswerAspect.PRESENCE);
-                    out.addAll(under(Props.both(read.when(), holds), cases(present,
+                    LawProposition<Value> there = Props.both(read.when(), holds);
+                    LawProposition<Value> notThere = Props.both(read.when(), holds.denied());
+                    out.addAll(under(there, reachedWhere(there, present,
                             frame.with(value, new Value.PayloadOf(read.is())))));
-                    out.addAll(under(Props.both(read.when(), holds.denied()),
-                            cases(absent, frame)));
+                    out.addAll(under(notThere, reachedWhere(notThere, absent, frame)));
                 }
                 yield out;
             }
@@ -204,12 +259,29 @@ final class Reading {
         return new Value.Arithmetic(BinOp.SUB, new Value.Whole(0), value);
     }
 
-    /** Every combination of the cases of the two operands, each put to {@code op}. */
+    /**
+     * Every combination of the cases of the two operands, each put to {@code op}.
+     *
+     * <p>The right is read where the operator runs it ({@link BinOp#rightRunsWhenLeftIs}): on
+     * every run, or only where the left came out the way that lets it run, which is what holds on
+     * the way to what the right works out ({@link #met}). It is not put on the cases the two come
+     * to. On a run the left settles, the operator answers the left, and that is a case here as
+     * much as the other: what {@link #operated(BinOp, Value, Value)} makes of the two then comes
+     * to the left whatever the right is, so every case of the left is kept beside every case of
+     * the right, each under what those two cases hold.
+     */
     private List<Case> operated(BinOp op, LibraryTerm left, LibraryTerm right, Frame frame) {
         List<Case> out = new ArrayList<>();
-        List<Case> rights = cases(right, frame);
+        Boolean runsWhenLeftIs = op.rightRunsWhenLeftIs();
+        List<Case> rights = runsWhenLeftIs == null ? cases(right, frame) : null;
         for (Case one : cases(left, frame)) {
-            for (Case other : rights) {
+            List<Case> others = rights;
+            if (runsWhenLeftIs != null) {
+                LawProposition<Value> holds = side(one.is(), AnswerAspect.TRUTH);
+                others = reachedWhere(Props.both(one.when(),
+                        runsWhenLeftIs ? holds : holds.denied()), right, frame);
+            }
+            for (Case other : others) {
                 out.add(new Case(Props.both(one.when(), other.when()),
                         operated(op, one.is(), other.is())));
             }
@@ -306,23 +378,13 @@ final class Reading {
             case ADD, SUB, MUL, DIV -> new Value.Arithmetic(op, left, right);
             case CONCAT -> new Value.Joined(left, right);
             case LT, LE, GT, GE -> new Value.Statement(Props.compared(number(left),
-                    relationOf(op), number(right)));
+                    op.relation(), number(right)));
             case EQ, NE -> {
                 LawProposition<Value> alike = isNumber(left) || isNumber(right)
                         ? Props.compared(number(left), Rel.EQ, number(right))
                         : same(left, right);
                 yield new Value.Statement(op == BinOp.EQ ? alike : alike.denied());
             }
-        };
-    }
-
-    private static Rel relationOf(BinOp op) {
-        return switch (op) {
-            case LT -> Rel.LT;
-            case LE -> Rel.LE;
-            case GT -> Rel.GT;
-            case GE -> Rel.GE;
-            default -> throw new IllegalArgumentException(op + " orders nothing");
         };
     }
 
@@ -575,6 +637,14 @@ final class Reading {
                 LawProposition<Value> alike = same(subject(one, operation, argument, elements),
                         subject(other, operation, argument, elements));
                 yield holds ? alike : alike.denied();
+            }
+            case LawProposition.Inside<A>(LawSubject<A> inner, LawSubject<A> outer,
+                                          StringContainment where, boolean holds) -> {
+                LawProposition<Value> inside = new LawProposition.Inside<>(
+                        new LawSubject.Argument<>(subject(inner, operation, argument, elements)),
+                        new LawSubject.Argument<>(subject(outer, operation, argument, elements)),
+                        where, true);
+                yield holds ? inside : inside.denied();
             }
         };
     }

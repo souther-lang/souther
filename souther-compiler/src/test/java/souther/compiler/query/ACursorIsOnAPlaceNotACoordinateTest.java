@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Placement;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
@@ -67,7 +68,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(MODEL_ID.value(), MODEL);
         byId.put(ATTACHED_ID.value(), ATTACHED);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     /**

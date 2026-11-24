@@ -95,16 +95,16 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
                     + " -> " + OWNER + "#" + THE_LENDER,
             AMethod.of(CHECK + "FieldDomains", "leftBy",
                     "(L" + CHECK + "InvariantChecker$Seeded;Lsouther/compiler/types/TypeSymbol$AtModule;"
-                            + A_WORLD + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;)L"
-                            + CHECK + "FieldDomains;")
+                            + A_WORLD + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;L"
+                            + CHECK + "InvariantChecker$Inherited;)L" + CHECK + "FieldDomains;")
                     + " -> " + OWNER + "#" + THE_LENDER,
             AMethod.of(CHECK + "InvariantChecker", "<init>",
                     "(" + A_WORLD + "Ljava/util/Map;L" + CHECK + "ValueTemplates;)V")
                     + " -> " + OWNER + "#" + THE_LENDER,
             AMethod.of(CHECK + "InvariantChecker", "readFields",
                     "(Lsouther/compiler/types/TypeSymbol$AtModule;" + A_WORLD
-                            + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;)L" + CHECK
-                            + "DeclarationReading;")
+                            + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;L" + CHECK
+                            + "InvariantChecker$Inherited;)L" + CHECK + "DeclarationReading;")
                     + " -> " + OWNER + "#" + THE_LENDER,
             AMethod.of(INPUTS + "InputDomain", "of",
                     "(Ljava/util/List;" + A_WORLD + "L" + CHECK + "TypeCardinality$Counts;L"
@@ -113,7 +113,7 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
                     + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK,
             AMethod.of(INPUTS + "PlacedRules", "of",
                     "(L" + INPUTS + "TermPath;Lsouther/compiler/types/Type;" + A_WORLD + "L" + INPUTS
-                            + "PlacedRules$Reaching;)L" + INPUTS + "PlacedRules;")
+                            + "PlacedRules$Reaching;Ljava/util/List;)L" + INPUTS + "PlacedRules;")
                     + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK);
 
     @Test

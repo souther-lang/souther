@@ -1,5 +1,5 @@
 {
-  "schemaVersion" : 24,
+  "schemaVersion" : 28,
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "not_satisfied",
@@ -1696,7 +1696,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "worked/1 <= x < 5", "worked/5 <= x <= 7" ],
+          "classes" : [ "worked: 1 <= x < 5", "worked: 5 <= x <= 7" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -1708,7 +1708,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "rate/0 <= x < 0.8", "rate/0.8 <= x <= 1" ],
+          "classes" : [ "rate: 0 <= x < 0.8", "rate: 0.8 <= x <= 1" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -2754,7 +2754,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -2925,7 +2926,7 @@
           "read" : {
             "extent" : "complete"
           },
-          "classes" : [ "hours/0 <= x <= 45", "hours/45 < x <= 100", "hours/100 < x <= 200" ],
+          "classes" : [ "hours: 0 <= x <= 45", "hours: 45 < x <= 100", "hours: 100 < x <= 200" ],
           "use" : "read",
           "excluded" : [ ],
           "unprovenClaims" : [ ],
@@ -3830,7 +3831,8 @@
           "reason" : "no_rows"
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -4243,7 +4245,8 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ ],
+        "caseExpansions" : [ ]
       },
       "branch" : {
         "status" : "unavailable",
@@ -4257,9 +4260,13 @@
           "obligationId" : {
             "behavior" : "settleOvertime",
             "conditions" : [ {
-              "kind" : "statement",
-              "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard]]",
-              "outcome" : "denied"
+              "kind" : "not_read",
+              "condition" : "condition 0 of `settleOvertime`",
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "called_body_not_read"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4268,9 +4275,13 @@
           "obligationId" : {
             "behavior" : "settleOvertime",
             "conditions" : [ {
-              "kind" : "statement",
-              "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard], any[all[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], agreement is Extended], all[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], agreement is Standard]]]",
-              "outcome" : "held"
+              "kind" : "not_read",
+              "condition" : "condition 1 of `settleOvertime`",
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "called_body_not_read"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4288,9 +4299,13 @@
         "obligationId" : {
           "behavior" : "settleOvertime",
           "conditions" : [ {
-            "kind" : "statement",
-            "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard]]",
-            "outcome" : "denied"
+            "kind" : "not_read",
+            "condition" : "condition 0 of `settleOvertime`",
+            "outcome" : "held",
+            "notRead" : [ {
+              "kind" : "meaning_unread",
+              "reason" : "called_body_not_read"
+            } ]
           } ]
         },
         "code" : "E1935"
@@ -4301,9 +4316,13 @@
         "obligationId" : {
           "behavior" : "settleOvertime",
           "conditions" : [ {
-            "kind" : "statement",
-            "condition" : "all[any[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], !agreement is Extended], any[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], !agreement is Standard], any[all[!Affine[form=LinearForm[constant=-100, coefs={hours=1}], proposition=GT], agreement is Extended], all[!Affine[form=LinearForm[constant=-45, coefs={hours=1}], proposition=GT], agreement is Standard]]]",
-            "outcome" : "held"
+            "kind" : "not_read",
+            "condition" : "condition 1 of `settleOvertime`",
+            "outcome" : "held",
+            "notRead" : [ {
+              "kind" : "meaning_unread",
+              "reason" : "called_body_not_read"
+            } ]
           } ]
         },
         "code" : "E1935"

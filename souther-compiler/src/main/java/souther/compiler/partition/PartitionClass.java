@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.msg.SearchMessage;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
@@ -60,6 +62,15 @@ public record PartitionClass(String id, String label, Recognition recognises,
         }
     }
 
+    /**
+     * The id of a class of {@code term}'s numbers, which is the term and the condition the class
+     * is told by. Separated by a colon, which is not a relation, so a condition that begins with
+     * one is not run into the separator.
+     */
+    public static String idOf(NumericTerm.FromOnePosition term, String label) {
+        return term + ": " + label;
+    }
+
     public static PartitionClass of(String id, String label, Recognition recognises,
                                     RepresentativeSource representatives) {
         return new PartitionClass(id, label, recognises, representatives, null, null, null);
@@ -67,7 +78,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
 
     /** A class nothing can produce a value for, and why. */
     public static PartitionClass ungeneratable(String id, String label,
-                                               Recognition recognises, String why) {
+                                               Recognition recognises, SearchMessage why) {
         return new PartitionClass(id, label, recognises,
                 new RepresentativeSource.NothingProducible(why), null, null, null);
     }

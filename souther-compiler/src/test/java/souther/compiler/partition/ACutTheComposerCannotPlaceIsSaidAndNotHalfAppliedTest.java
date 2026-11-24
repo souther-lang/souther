@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
@@ -27,6 +28,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -156,7 +158,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     void aCutNamingTwoTotalsOfOneContainerIsSaidAsThatAndTheRowIsComposedWithoutIt() {
         OnTheWay.TakenIn both = new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
                 new TakenConstraint.Affine(LinearForm.<NumericTerm>sumOfAtoms(aTotalOver("a"),
-                        aTotalOverBothFields()), Rel.GE)));
+                        aTotalOverBothFields()), Rel.GE)), NamedElements.NONE);
 
         Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100), both);
 
@@ -241,7 +243,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
     private static OnTheWay.TakenIn cut(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,
-                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)));
+                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)),
+                NamedElements.NONE);
     }
 
     /** A row composed with {@code axis} at {@code at}, and {@code taken} on the way to it. */
@@ -253,7 +256,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                         domain().quantities(rules()).ordersOf(axis.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, TruthsAsked.NONE, List.of(taken),
-                        Reachability.Ways.ONE, List.of()),
+                        Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 
@@ -269,7 +272,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
     // The compilation, read once and answered from. Every helper below asks it for one thing, and a
     // compile apiece would be the same model built as many times as this file has questions.
-    private static final Compilation COMPILATION = compiled();
+    private static final Compilation COMPILATION = ACompiledModel.compiles(compiled());
 
     private static Compilation compiled() {
         return Compilation.ofSource(BOUNDED, "Main");

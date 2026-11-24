@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.query.Compilation;
 
@@ -31,9 +32,9 @@ class WhatDenialsComeToDoesNotTurnOnHowTheyWereWrittenTest {
 
             """;
 
-    private static List<String> saidOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    private static List<String> saidOf(List<String> refusedWith, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSource(source, "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
@@ -42,14 +43,14 @@ class WhatDenialsComeToDoesNotTurnOnHowTheyWereWrittenTest {
     }
 
     private static void refuses(String rule) {
-        assertEquals(List.of("NoValuesTheseCanAllDifferIn"), saidOf(STAGE + """
+        assertEquals(List.of("NoValuesTheseCanAllDifferIn"), saidOf(List.of("E1013"), STAGE + """
                 data Pair = { p: Stage, r: Stage }
                     invariant no = RULE
                 """.replace("RULE", rule)), rule);
     }
 
     private static void admits(String source) {
-        assertEquals(List.of(), saidOf(source), "a value of this can be written");
+        assertEquals(List.of(), saidOf(List.of(), source),"a value of this can be written");
     }
 
     /** A pair is unordered, so a denial written either way round is one rule. */
@@ -102,7 +103,7 @@ class WhatDenialsComeToDoesNotTurnOnHowTheyWereWrittenTest {
      */
     @Test
     void aDenialIsCarriedOntoTheBlocksAConjunctionLeaves() {
-        assertEquals(List.of("NoValuesTheseCanAllDifferIn"), saidOf(STAGE + """
+        assertEquals(List.of("NoValuesTheseCanAllDifferIn"), saidOf(List.of("E1013"), STAGE + """
                 data Trio = { p: Stage, q: Stage, r: Stage }
                     invariant no = p == q && q /= r && p == Ready && r == Ready
                 """), "the denial is between the block p and q are and r");
@@ -128,7 +129,7 @@ class WhatDenialsComeToDoesNotTurnOnHowTheyWereWrittenTest {
      */
     @Test
     void aRingOfOddLengthOverTwoCasesHasNoValue() {
-        assertEquals(List.of("NoValuesTheseCanAllDifferIn"), saidOf(STAGE + """
+        assertEquals(List.of("NoValuesTheseCanAllDifferIn"), saidOf(List.of("E1013"), STAGE + """
                 data Five = { a: Stage, b: Stage, c: Stage, d: Stage, e: Stage }
                     invariant no = a /= b && b /= c && c /= d && d /= e && e /= a
                 """), "a ring of five over two cases");

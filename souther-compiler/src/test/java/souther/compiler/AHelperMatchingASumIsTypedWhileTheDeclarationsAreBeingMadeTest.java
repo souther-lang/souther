@@ -144,7 +144,7 @@ class AHelperMatchingASumIsTypedWhileTheDeclarationsAreBeingMadeTest {
      */
     @Test
     void theCompilationAnswersWhatASumTheLanguageDeclaresCanBe() {
-        Db db = Compilation.ofSources(List.of(SUM), ModulePath.EMPTY).db();
+        Db db = ACompiledModel.compiles(Compilation.ofSources(List.of(SUM), ModulePath.EMPTY)).db();
         TypeSymbol.AtModule roundingMode =
                 TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"));
 

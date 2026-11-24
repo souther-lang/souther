@@ -79,7 +79,7 @@ class WhatABodyNeverTellsApartIsInNoCombinationTest {
         assertTrue(findings.stream().noneMatch(each -> each.kind() == Adequacy.Kind.PAIR_UNCOVERED),
                 () -> "a combination of a position the body never looks at: " + findings);
         assertFalse(souther.compiler.report.AdequacyReport.of(compilation)
-                        .human(souther.compiler.diag.SourceRendering
+                        .humanInEnglish(souther.compiler.diag.SourceRendering
                                 .namedByIdentity(compilation.texts()))
                         .contains("    combination "),
                 "and no count of one is printed");
@@ -92,9 +92,6 @@ class WhatABodyNeverTellsApartIsInNoCombinationTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 }

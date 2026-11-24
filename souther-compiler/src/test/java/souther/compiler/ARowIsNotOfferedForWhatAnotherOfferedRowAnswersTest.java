@@ -203,7 +203,7 @@ class ARowIsNotOfferedForWhatAnotherOfferedRowAnswersTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 

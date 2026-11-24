@@ -2,22 +2,14 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.BehaviorContract;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.types.WrittenOwner;
-import souther.compiler.check.Carrier;
-import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.RulesLeftUnread;
-import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
@@ -29,12 +21,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Replacement;
-import souther.compiler.partition.BorderQuantity;
-import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.ClosureGap;
-import souther.compiler.partition.Level;
-import souther.compiler.partition.LineFacts;
-import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -89,6 +76,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ProofContradicted", "answers/UNAFFECTED");
         table.put("ProofOfAWayContradicted", "answers/UNAFFECTED");
         table.put("ArmsUnsettled", "answers/UNAFFECTED");
+        // Left unread for a figure measuring it runs into, and a run that allows more measures it.
+        table.put("BehaviorToBeChangedFirst", "answers/MAY_CHANGE");
         // The one arm that is a figure the query graph hands the analysis.
         table.put("PairSpaceTruncated", "answers/MAY_CHANGE");
         // And the figure the readings of one row are tried against: a build allowed more tries the
@@ -100,6 +89,11 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // Which of the author's points a reading stands at is a question about how the reading
         // was derived, and a wider run derives it the same way.
         table.put("AReadingNotTiedToItsLine", "answers/UNAFFECTED");
+        // Only what is first a fact of the weights: the exact arithmetic giving out, nothing read,
+        // a border short with no word of its own, and a run nothing watched. What a border's own
+        // reading stopped at stays that border's weakening, carried as it was said, so a row here
+        // is the sample made with the arithmetic and the other ways are held in the figure test.
+        table.put("AWeightNotDecided", "answers/UNAFFECTED");
         // A border nothing held against the lines beside it, which does not answer one way: a
         // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
         // watched is. The row is written with the one that is, so what it shows is the answer
@@ -107,8 +101,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ABorderNotHeldAgainstTheLinesBesideIt", "asks what stood in the way/MAY_CHANGE");
         // And the same figure on the other criterion: a build allowed more walks the group.
         table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
-        // A meeting the classes do not place is placed the same way however much a run allows.
-        table.put("MeetingsNotPlaced", "answers/UNAFFECTED");
         // And a sum whose decisions are not joined to evaluations is joined the same way.
         table.put("MeetingsNotJoined", "answers/UNAFFECTED");
         // A run this reading cannot place among the rules is not placed by allowing more.
@@ -240,15 +232,16 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
             case Weakening.RewriteUndecided _ -> "asks why it was left open";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
+                 Weakening.BodyNotInEvaluation _, Weakening.BehaviorToBeChangedFirst _,
+                 Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
                  Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
+                 Weakening.AWeightNotDecided _,
                  Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
                  Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
-                 Weakening.MeetingsNotWalked _, Weakening.MeetingsNotPlaced _,
-                 Weakening.MeetingsNotJoined _,
+                 Weakening.MeetingsNotWalked _, Weakening.MeetingsNotJoined _,
                  Weakening.DecisionReadingIncomplete _,
                  Weakening.DecisionRuleReadShort _,
                  Weakening.KeyedOverwriteCasesUnmeasured _,
@@ -271,9 +264,12 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.BorderValueUnreadable(border(), ReadingGap.of(aLimit)));
         out.add(new Weakening.ModelReadingIncomplete(new ClosureGap.RulesNotReached(
                 "b", new PositionId(TermPath.of("x")))));
-        out.add(new Weakening.OutputCasesUnreadable("b"));
-        out.add(new Weakening.InputCasesUnreadable("b", 0));
+        RowRef unread = new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1));
+        out.add(new Weakening.OutputCasesUnreadable("b", Set.of(unread)));
+        out.add(new Weakening.InputCasesUnreadable("b", 0, Set.of(unread)));
         out.add(new Weakening.BodyNotInEvaluation("b"));
+        out.add(new Weakening.BehaviorToBeChangedFirst("b",
+                WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(4)));
         out.add(new Weakening.BoundaryNotDerived("b"));
         out.add(new Weakening.InputNotRead("b"));
         out.add(new Weakening.ProofContradicted(new CoverageSites.Obligation("b",
@@ -291,11 +287,13 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
                 souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.add(new Weakening.AReadingNotTiedToItsLine(border()));
+        out.add(new Weakening.AWeightNotDecided("b", OneBorder.derivedValue(),
+                new NumericTerm.ValueOf(TermPath.of("x")),
+                Weakening.AWeightNotDecided.Why.THE_ARITHMETIC_GAVE_OUT));
         out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
         out.add(new Weakening.MeetingsNotWalked("b", 1,
                 List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
-        out.add(new Weakening.MeetingsNotPlaced("b", 1));
         out.add(new Weakening.MeetingsNotJoined("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));
@@ -307,7 +305,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.DecisionRuleReadShort("b"));
         out.add(new Weakening.KeyedOverwriteCasesUnmeasured("b"));
         out.add(new Weakening.ReachableNodeCasesUnmeasured("b"));
-        out.add(new Weakening.RewriteUndecided("b",
+        out.add(new Weakening.RewriteUndecided("m", "b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
                 new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way.atFigures(
@@ -318,19 +316,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
 
     /** One border, since which border it is is no part of what this is about. */
     private static Border border() {
-        Carrier carrier = new Carrier.Whole();
-        NumericTerm.ValueOf value = new NumericTerm.ValueOf(TermPath.of("x"));
-        BoundaryTarget target = BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate("cap", value,
-                        TermOrdersFixtures.itself(value, carrier)),
-                new Level.OnACarrier(carrier, Count.of(100)));
-        LineOrigin origin = new LineOrigin.EnsuresOrigin(
-                new souther.compiler.partition.WhichLine.OfAComparisonOfAPart(
-                        new souther.compiler.partition.ClauseStatementId(
-                                new souther.compiler.check.PartId<>(new RuleRef.Ensures(
-                                        new BehaviorContract.RuleId(null, 0, 0, null), "cap"), 0),
-                                0)),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
-        return Border.at(target, origin, new NumericDomain.Bounds(null, null));
+        return OneBorder.border();
     }
 }

@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.observe.FailurePhase;
-import souther.compiler.query.Compilation;
+import souther.compiler.ACompiledModel;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
@@ -316,7 +316,7 @@ class AnImplementationIsHeldToTheDeclarationAndNotToTheRecordTest {
     }
 
     private static Map<String, ClassFileImage> compiled(String model) {
-        return Compilation.ofSource(model, "Main").db().ask(new Output.All()).value();
+        return ACompiledModel.answered(model).db().ask(new Output.All()).value();
     }
 
     private static Object builtElsewhere(Map<String, ClassFileImage> generated, String source)

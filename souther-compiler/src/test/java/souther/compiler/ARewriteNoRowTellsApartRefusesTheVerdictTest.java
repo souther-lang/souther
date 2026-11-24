@@ -2,9 +2,15 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheArmFromItsSibling;
+import souther.compiler.diag.msg.ExampleMessage.NoRowTellsTheBodyFromOneAnswer;
+import souther.compiler.diag.msg.ExampleMessage.WriteARowAtThatInput;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.partition.Replacement;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
@@ -12,7 +18,6 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -106,22 +111,22 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
     void aBuildIsWarnedAtTheArmAndToldWhichRowToWriteDown() {
         Compilation compilation = Compilation.ofSource(NOTHING_HELD, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        List<String> said = compilation.warnings().stream()
+        ACompiledModel.compiles(compilation);
+        List<Diagnostic> said = compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code()))
-                .map(d -> Messages.render(d.said(), Locale.ENGLISH) + " | "
-                        + d.notes().stream()
-                                .map(n -> Messages.render(n.said(), Locale.ENGLISH)).toList())
                 .toList();
 
         // Every row holds nothing, so none of them answers differently under the rewrite and the
         // row the hint names is one the search composed.
-        assertTrue(said.stream().anyMatch(each -> each.startsWith(
-                        "No row of `refund` would come out differently if the `case OutOfPocket`"
-                                + " arm of this fork answered as the `case Advance` arm.")
-                        && each.contains("Amount(")),
-                () -> "what a build is told: " + said);
+        assertTrue(said.stream().anyMatch(d -> d.said() instanceof NoRowTellsTheArmFromItsSibling it
+                        && it.behavior().equals("refund")
+                        && List.of(it.arm().args()).equals(List.of("OutOfPocket"))
+                        && List.of(it.sibling().args()).equals(List.of("Advance"))
+                        && d.notes().stream().anyMatch(n -> n.said() instanceof WriteARowAtThatInput row
+                                && row.input().contains("Amount("))),
+                () -> "what a build is told: " + said.stream().map(d -> d.said() + " " + d.notes())
+                        .toList());
     }
 
     /** And the page says it beside the arms, with the gap under the count. */
@@ -129,7 +134,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
     void thePageSaysHowManyRewritesTheRowsTellApart() {
         Compilation compilation = compiled(NOTHING_HELD);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         // Three: the arm answering what the item holds written as the arms answering nothing, which
         // are one rewrite since the two do the same, and each of those written as the first. Not
@@ -197,7 +202,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                 """;
         Compilation compilation = compiled(doubled);
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(List.of(
                         "! no row would come out differently if the body always answered what"
                                 + " `doubled zero` answers",
@@ -210,23 +215,21 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
 
         Compilation warned = Compilation.ofSource(doubled, "Main");
         warned.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        warned.answerEverything();
-        List<String> said = warned.warnings().stream()
+        ACompiledModel.compiles(warned);
+        List<Message> said = warned.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code().toString()))
-                .map(d -> Messages.render(d.said(), Locale.ENGLISH))
+                .map(Diagnostic::said)
                 .toList();
         assertEquals(List.of(
-                        "No row of `doubled` would come out differently if its body answered what"
-                                + " row `zero` answers whatever it was given.",
-                        "No row of `doubled` would come out differently if its body answered what"
-                                + " row `one` answers whatever it was given."),
+                        new NoRowTellsTheBodyFromOneAnswer("zero", "doubled"),
+                        new NoRowTellsTheBodyFromOneAnswer("one", "doubled")),
                 said);
 
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.doubled")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
         List<RowsOfABlock.Row> rows = RowsOfABlock.of(block);
         assertTrue(rows.stream().anyMatch(
                         row -> row.isFor("the body answering what doubled zero answers"))
@@ -235,13 +238,21 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                 () -> "a row composed for each says which: " + block);
     }
 
+    /**
+     * Of the body answering one value only: the fold under the sum is walked over one element at
+     * most on these rows, which is a question of its own
+     * ({@link AFoldOwesARowWhoseStepReadsWhatItCarriedTest}).
+     */
     @Test
     void aSumWhoseRowsAnswerTwoValuesTellsOneAnswerApart() {
         Compilation compilation = compiled(SUM + """
                     | "one of five" : ([Item { amount = Amount(5), kind = Travel }]) -> Sum(5)
                 """);
 
-        assertEquals(0, rewritesUnnoticed(compilation),
+        assertEquals(0, Adequacy.accountOf(compilation.db(), "example.total").stream()
+                        .filter(each -> each.about() instanceof About.ARewriteNoRowTellsApart
+                                rewrite && rewrite.replacement() instanceof Replacement.ByOneAnswer)
+                        .count(),
                 Adequacy.accountOf(compilation.db(), "example.total").toString());
     }
 
@@ -252,12 +263,6 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 }

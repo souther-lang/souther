@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.4.1</version>
+        <version>0.4.2-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-compiler</artifactId>
@@ -130,6 +130,29 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- The test classes other modules' tests go through: the one that asks that a model
+                 compiles before they read what is said of it, and the one that reads a report's
+                 unread lines beside a stop nothing tells. Only those ship, so a module reaches
+                 them without taking the compiler's tests with it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>test-jar</id>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>souther/compiler/ACompiledModel*.class</include>
+                                <include>souther/compiler/UnreadBesideItsStops*.class</include>
+                                <include>souther/compiler/NotRead*.class</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- What the library's written operations state is proved against their bodies once,
                  here, with the classes and the library this build ships, and what each proof came
                  to rides inside the jar. A compilation reads it rather than proving them again at
@@ -137,7 +160,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
-                <version>3.6.4</version>
+                <version>3.7.0</version>
                 <executions>
                     <execution>
                         <id>prove-the-library</id>

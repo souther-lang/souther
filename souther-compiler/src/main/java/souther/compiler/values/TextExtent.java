@@ -92,6 +92,16 @@ public sealed interface TextExtent {
     record NoNamedRun() implements TextExtent {}
 
     /**
+     * The language is one run of the strings, and an end of it is a string no {@code String} is.
+     *
+     * <p>A {@code String} holds only text in Normalization Form C, so a line drawn at a string the
+     * form changes would be drawn at a place no value stands. The values inside the run may still
+     * be a run with other ends, which this reading does not work out; nothing is said of them, and
+     * no line is placed.
+     */
+    record NotEstablished() implements TextExtent {}
+
+    /**
      * The machines this needed were more than the allowance let it make.
      *
      * <p>A fact about this compiler. Which limit refused it is kept, since a language larger than

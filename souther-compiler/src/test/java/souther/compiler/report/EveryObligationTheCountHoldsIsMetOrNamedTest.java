@@ -2,9 +2,10 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
-import souther.test.ReadsTheRepositorysModels;
+import souther.test.Nightly;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DoesNotComeBack;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.About;
@@ -13,10 +14,13 @@ import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,9 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Every arm is populated before anything is asserted about it. A law over three states two of
  * which no source reaches is a law that passes by not applying, and the counts below are what says
  * it does apply.
+ *
+ * <p>Asked once a night. It is a property of every model the repository carries as the corpus runs
+ * it, and no smaller set stands for that; what it finds is as well found by the morning as by the
+ * change that caused it.
  */
 @ClosedWorldContract
-@ReadsTheRepositorysModels
+@Nightly
 class EveryObligationTheCountHoldsIsMetOrNamedTest {
 
     /**
@@ -169,10 +177,13 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         int armsUnmet = 0;
         int armsUndecided = 0;
         for (Reported reported : reports()) {
-            String page = reported.report().human(reported.names());
+            String page = reported.report().humanInEnglish(reported.names());
             // Which block each obligation nobody could decide belongs to, so that what is checked is
-            // the block naming its own and not the page holding the right number somewhere.
-            java.util.SequencedMap<String, Integer> openIn = new java.util.LinkedHashMap<>();
+            // the block naming its own and not the page holding the right number somewhere — and
+            // by which question it is open on, each worded apart, so that a block saying one of
+            // them where another is owed is not counted as naming it.
+            Map<String, java.util.SequencedMap<String, Integer>> openIn = new LinkedHashMap<>();
+            OPEN.forEach(opening -> openIn.put(opening, new java.util.LinkedHashMap<>()));
             // And which block each point the rules leave no value at belongs to, which is the
             // other half of the difference between the two numbers and is named the same way.
             java.util.SequencedMap<String, Integer> refusedIn = new java.util.LinkedHashMap<>();
@@ -193,7 +204,10 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                                 + gap.debt().point() + " carries " + found + " findings");
                     }
                 }
-                openIn.put(module.module() + "/declarations", declared.undecided().size());
+                String declarationsBlock = module.module() + "/declarations";
+                owesNothingYet(openIn, declarationsBlock);
+                declared.undecided().forEach(open -> questionsOpen(wrong, reported.name(),
+                        open.debt().owed().disposition(), openIn, declarationsBlock));
                 refusedIn.put(module.module() + "/declarations", declared.refuted().size());
                 for (Adequacy.DeclaredDebt answered : declared.refuted()) {
                     carriesNoFinding(wrong, reported.name(), answered.debt(),
@@ -275,16 +289,19 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                             }
                         }
                     }
-                    openIn.put(module.module() + "/" + behavior.name(),
-                            account.undecided().size() + openArms);
+                    String block = module.module() + "/" + behavior.name();
+                    owesNothingYet(openIn, block);
+                    account.undecided().forEach(open -> questionsOpen(wrong, reported.name(),
+                            open.owed().disposition(), openIn, block));
+                    openIn.get(WHETHER_A_ROW_IS_THERE).merge(block, openArms, Integer::sum);
                     refusedIn.put(module.module() + "/" + behavior.name(),
                             account.refuted().size());
                 }
             }
-            saidUnderEachBlock(wrong, reported.name(), page, openIn,
-                    "? undecided whether a row");
+            openIn.forEach((opening, owed) ->
+                    saidUnderEachBlock(wrong, reported.name(), page, owed, List.of(opening)));
             saidUnderEachBlock(wrong, reported.name(), page, refusedIn,
-                    "· no row can stand at");
+                    List.of("· no row can stand at"));
         }
 
         String reached = "met " + met + ", unmet " + unmet + ", refuted " + refuted
@@ -302,6 +319,64 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
                 "every state an arm reaches here is reached: " + reached);
     }
 
+    /** Whether a row that is written stands at the point; an arm nobody could decide opens so. */
+    private static final String WHETHER_A_ROW_IS_THERE = "? undecided whether a row";
+
+    /** Whether a row can be written at the point at all. */
+    private static final String WHETHER_ONE_CAN_BE_WRITTEN =
+            "? nothing could show a row can be written at the ";
+
+    /** Whether a row gets to the point, where a run may stop on the way. */
+    private static final String WHETHER_ONE_GETS_THERE = "? nothing could show a row gets to the ";
+
+    /** Whether a row can be written there where every row there reaches `unreachable`. */
+    private static final String WHETHER_ANY_REACHES_IT = "? no row can be written at the ";
+
+    /**
+     * The openings of what a point nobody could decide is said to be open on, one line per
+     * question — which an author acts on differently, so they are worded apart and a point open
+     * on two is named by both.
+     */
+    private static final List<String> OPEN = List.of(WHETHER_A_ROW_IS_THERE,
+            WHETHER_ONE_CAN_BE_WRITTEN, WHETHER_ONE_GETS_THERE, WHETHER_ANY_REACHES_IT);
+
+    /** The opening {@code question} is said with. Over every question there is, so a question
+     *  added is a decision here about how it is worded. */
+    private static String openingOf(ObligationDisposition.Uncertainty question) {
+        return switch (question) {
+            case ObligationDisposition.Uncertainty.WhetherARowIsThere _ -> WHETHER_A_ROW_IS_THERE;
+            case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped _,
+                 ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
+                    WHETHER_ONE_CAN_BE_WRITTEN;
+            case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.TheWayThereMayStop _ ->
+                    WHETHER_ONE_GETS_THERE;
+            case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
+                    .EveryRowReachesAnUnreachable _ -> WHETHER_ANY_REACHES_IT;
+        };
+    }
+
+    /** {@code block} owing none of any question yet, so that a line of a question it owes none
+     *  of is a line too many. */
+    private static void owesNothingYet(Map<String, java.util.SequencedMap<String, Integer>> openIn,
+                                       String block) {
+        openIn.values().forEach(owed -> owed.putIfAbsent(block, 0));
+    }
+
+    /** Each question {@code disposition} is open on, owed under {@code block} as a line of its
+     *  own opening; a point open on none is one nothing names. */
+    private static void questionsOpen(List<String> wrong, String source,
+                                      ObligationDisposition disposition,
+                                      Map<String, java.util.SequencedMap<String, Integer>> openIn,
+                                      String block) {
+        List<ObligationDisposition.Uncertainty> open =
+                disposition instanceof ObligationDisposition.Undecided it
+                        ? it.because().written() : List.of();
+        if (open.isEmpty()) {
+            wrong.add(source + ": an undecided point open on no question");
+        }
+        open.forEach(question -> openIn.get(openingOf(question)).merge(block, 1, Integer::sum));
+    }
+
     /** A point nobody could decide carries no finding. */
     private static void carriesNoFinding(List<String> wrong, String source,
                                          BorderObligationPointAssessment open, long findings) {
@@ -312,8 +387,8 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
     }
 
     /**
-     * As many lines of one opening under each block as that block counted obligations of the state
-     * that opening is written for.
+     * As many lines of the openings under each block as that block counted of what those openings
+     * are written for.
      *
      * <p>Per block and counted, rather than looked for on the page. A block owing ten of them and
      * printing one says the sentence a reader searches for and answers for one of the ten; a page
@@ -326,7 +401,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
      */
     private static void saidUnderEachBlock(List<String> wrong, String source, String page,
                                            java.util.SequencedMap<String, Integer> owed,
-                                           String opening) {
+                                           List<String> openings) {
         java.util.Map<String, Integer> said = new java.util.LinkedHashMap<>();
         owed.keySet().forEach(block -> said.put(block, 0));
         String module = null;
@@ -338,15 +413,14 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
             } else if (line.startsWith("  ") && !line.startsWith("   ") && module != null) {
                 String named = module + "/" + line.strip().split("\\s+")[0];
                 block = owed.containsKey(named) ? named : block;
-            } else if (block != null && line.strip().startsWith(opening)) {
+            } else if (block != null && openings.stream().anyMatch(line.strip()::startsWith)) {
                 said.merge(block, 1, Integer::sum);
             }
         }
         owed.forEach((where, counted) -> {
             if (!counted.equals(said.get(where))) {
-                wrong.add(source + " " + where + ": " + counted + " obligations the count holds as"
-                        + " `" + opening + "` and " + said.get(where) + " lines saying so under"
-                        + " that block");
+                wrong.add(source + " " + where + ": " + counted + " counted as " + openings
+                        + " and " + said.get(where) + " lines saying so under that block");
             }
         });
     }
@@ -375,29 +449,27 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         List<Reported> out = new ArrayList<>();
         // The corpora as every reader of the repository's models takes them, compiled once for all
         // of those.
-        RepositoryModels.conformance().forEach((corpus, compilation) -> out.add(new Reported(
-                corpus.name(), AdequacyReport.of(compilation),
-                new SourceRendering(corpus.names(), compilation.texts()))));
-        Compilation unread = Compilation.ofSource(TOO_LARGE_TO_OBSERVE, "Main");
-        unread.measure(Adequacy.Asked.fullReport());
-        unread.answerEverything();
+        RepositoryModels.conformance().forEach((corpus, shared) -> {
+            Compilation asked = shared.answered();
+            out.add(new Reported(corpus.name(), AdequacyReport.of(asked),
+                    new SourceRendering(corpus.names(), asked.texts())));
+        });
+        Compilation unread =
+                ACompiledModel.measured(TOO_LARGE_TO_OBSERVE, Adequacy.Asked.fullReport());
         out.add(new Reported("example.unread", AdequacyReport.of(unread),
                 SourceRendering.namedByIdentity(unread.texts())));
         Compilation stopped = Compilation.ofSource(A_ROW_THAT_DOES_NOT_COME_BACK, "Main");
         stopped.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         stopped.measure(Adequacy.Asked.fullReport());
-        stopped.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1923"), stopped);
         out.add(new Reported("example.loop", AdequacyReport.of(stopped),
                 SourceRendering.namedByIdentity(stopped.texts())));
-        Compilation gate = Compilation.ofSource(ONE_ARM_OF_TWO, "Main");
-        gate.measure(Adequacy.Asked.fullReport());
-        gate.answerEverything();
+        Compilation gate = ACompiledModel.measured(ONE_ARM_OF_TWO, Adequacy.Asked.fullReport());
         out.add(new Reported("example.gate", AdequacyReport.of(gate),
                 SourceRendering.namedByIdentity(gate.texts())));
-        Compilation closed = Compilation.ofSource(GUARDS_THAT_CLOSE, "Main");
-        closed.measure(Adequacy.Asked.fullReport());
-        closed.answerEverything();
+        Compilation closed =
+                ACompiledModel.measured(GUARDS_THAT_CLOSE, Adequacy.Asked.fullReport());
         out.add(new Reported("example.closed", AdequacyReport.of(closed),
                 SourceRendering.namedByIdentity(closed.texts())));
         return out;

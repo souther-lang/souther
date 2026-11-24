@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,7 +40,7 @@ import java.util.List;
  * would be. Left as a leaf, it was a form every reading below had no word for, and an author who
  * named a rule lost the reading an author who repeated it kept.
  */
-sealed interface ClauseExpr {
+public sealed interface ClauseExpr {
 
     /**
      * The tree nodes this stands for, outermost first.
@@ -93,6 +92,13 @@ sealed interface ClauseExpr {
     }
 
     /**
+     * What holds exactly where this does not: the same parts, each denied, and a connective
+     * composing the other way round. The occurrences are this one's, so a reader asking about the
+     * denial of a part is asking about the same place in the clause.
+     */
+    ClauseExpr denied();
+
+    /**
      * What a reading is handed: a part of no connective, or a connective it takes whole.
      *
      * <p>A binding standing in the clause is not one of these. Where the environment changes is the
@@ -108,19 +114,39 @@ sealed interface ClauseExpr {
         /** The part itself, with the denials above it taken off, which is the innermost of what it
          *  is spelled as. */
         Core of();
+
+        @Override
+        Part denied();
     }
 
-    /** One part of no connective, stated where {@code positive} and denied where it is not. */
-    record Leaf(List<Core> spelled, boolean positive, ClauseOccurrence at) implements Part {
+    /**
+     * One part of no connective, stated where {@code positive} and denied where it is not.
+     *
+     * @param meant what a reading of what the part states takes it as, where that is not what it is
+     *              spelled as ({@link #withTheSizeMeant}); null where it is
+     */
+    record Leaf(List<Core> spelled, boolean positive, ClauseOccurrence at, Core meant)
+            implements Part {
 
         public Leaf {
             spelled = named(spelled);
         }
 
-        /** The part itself, which is the innermost of what it is spelled as. */
+        /** A part that means what it is spelled as. */
+        public Leaf(List<Core> spelled, boolean positive, ClauseOccurrence at) {
+            this(spelled, positive, at, null);
+        }
+
+        /** The part itself: what it is taken as, which is the innermost of what it is spelled as
+         *  where nothing else is said. */
         @Override
         public Core of() {
-            return spelled.get(spelled.size() - 1);
+            return meant != null ? meant : spelled.get(spelled.size() - 1);
+        }
+
+        @Override
+        public Leaf denied() {
+            return new Leaf(spelled, !positive, at, meant);
         }
     }
 
@@ -167,6 +193,12 @@ sealed interface ClauseExpr {
         List<Core> writtenHalves() {
             return List.of(left.written(), right.written());
         }
+
+        @Override
+        public Joined denied() {
+            return new Joined(spelled, !positive, at, how.denied(), left.denied(),
+                    right.denied());
+        }
     }
 
     /**
@@ -185,6 +217,33 @@ sealed interface ClauseExpr {
         public Scoped {
             spelled = named(spelled);
         }
+
+        @Override
+        public Scoped denied() {
+            return new Scoped(spelled, !positive, at, binding, body.denied());
+        }
+    }
+
+    /**
+     * {@code part} with an emptiness check read as the size it means held against nought
+     * ({@link Conditions#asSizeComparison}), spelled as both — or {@code part} itself where it is
+     * no emptiness check.
+     *
+     * <p>For a reading of what a part states. {@code List.isEmpty(xs)} states what
+     * {@code List.length(xs) == 0} states, and a reading that has words for the second and not the
+     * first would read one rule two ways by its spelling. Not a restatement of the shape: the call
+     * is not written in terms of the comparison, so a reader asking what stands under a denial
+     * ({@link BooleanMeaning#underADenial}) is not told of one. What it is spelled as is what its
+     * author wrote, the call included, and the comparison is what it is taken as
+     * ({@link Leaf#meant}).
+     */
+    static Part withTheSizeMeant(Part part) {
+        if (!(part instanceof Leaf leaf)) {
+            return part;
+        }
+        Core meant = Conditions.asSizeComparison(leaf.of());
+        return meant == leaf.of() ? part
+                : new Leaf(leaf.spelled(), leaf.positive(), leaf.at(), meant);
     }
 
     private static List<Core> named(List<Core> spelled) {
@@ -267,9 +326,9 @@ sealed interface ClauseExpr {
      * the fragment an imported clause falls outside of is the whole of them (spec
      * §invariant-discharge-representation).
      *
-     * <p>So: the call, the {@code if} an author wrote themselves, and a comparison against a
-     * written {@code true} or {@code false} — {@code p == false} and {@code p /= true} deny what
-     * {@code p} states, and the other two state it.
+     * <p>So: the call and a comparison against a written {@code true} or {@code false}, which are
+     * what {@link TruthRestatement} reads and the reading of the ways a value arrives reads too, and
+     * the {@code if} an author wrote themselves.
      *
      * <p>The equivalence class and not the spellings. What a reading is given is a part and a
      * polarity, so {@code not (p == false)} and {@code p} arrive as the same pair — and a reader
@@ -277,39 +336,40 @@ sealed interface ClauseExpr {
      */
     private static ClauseExpr restating(Core clause, boolean positive, List<Core> spelled,
                                         ClauseOccurrence at, int[] counted) {
-        Core bare = Core.withoutStanding(clause);
-        if (bare instanceof Core.PreservedCall call && DischargeRules.denies(call.operation())
-                && call.args().size() == 1) {
-            return of(call.args().get(0), !positive, spelled, at, counted);
+        TruthRestatement restated = TruthRestatement.of(clause);
+        if (restated != null) {
+            return of(restated.operand(), restated.denies() != positive, spelled, at, counted);
         }
-        if (bare instanceof Core.If iff
-                && Core.withoutStanding(iff.then()) instanceof Core.Bool t && !t.value()
-                && Core.withoutStanding(iff.els()) instanceof Core.Bool f && f.value()) {
-            return of(iff.cond(), !positive, spelled, at, counted);
-        }
-        return againstATruthValue(clause, positive, spelled, at, counted);
-    }
-
-    /**
-     * The same of a comparison one side of which is a written {@code true} or {@code false}.
-     *
-     * <p>Whether it denies is whether the two disagree: an equality against {@code true} and a
-     * disequality against {@code false} state what the other side states, and the other pair deny
-     * it. Read off the operator and the literal rather than written out as four cases, so a fifth
-     * way to write the same thing arrives here as one of the two answers and not as a case nobody
-     * added.
-     */
-    private static ClauseExpr againstATruthValue(Core clause, boolean positive,
-                                                 List<Core> spelled, ClauseOccurrence at, int[] counted) {
-        if (!(Core.withoutStanding(clause) instanceof Core.Binary bin)
-                || (bin.op() != BinOp.EQ && bin.op() != BinOp.NE)) {
+        if (!(Core.withoutStanding(clause) instanceof Core.If iff)) {
             return null;
         }
-        boolean holds = bin.op() == BinOp.EQ;
-        if (Core.withoutStanding(bin.right()) instanceof Core.Bool truth) {
-            return of(bin.left(), (truth.value() != holds) != positive, spelled, at, counted);
+        Boolean then = written(iff.then());
+        Boolean otherwise = written(iff.els());
+        // Both branches written: the condition, or its denial.
+        if (then != null && otherwise != null && !then.equals(otherwise)) {
+            return of(iff.cond(), then == positive, spelled, at, counted);
         }
-        return Core.withoutStanding(bin.left()) instanceof Core.Bool truth
-                ? of(bin.right(), (truth.value() != holds) != positive, spelled, at, counted) : null;
+        // One branch written says what a connective says: the written branch is what the clause
+        // comes to where the condition went that way, and the other branch is read only where it
+        // went the other. An if with a true then-branch is a choice between its condition and its
+        // else-branch, one with a false else-branch is a conjunction of its condition and its
+        // then-branch, and the two with the condition denied are the other two.
+        if (then != null || otherwise != null) {
+            boolean thenWritten = then != null;
+            boolean truth = thenWritten ? then : otherwise;
+            // The condition is stated where the written branch is the one it selects and that
+            // branch is true — a choice — or the one it does not and that branch is false.
+            boolean conditionStated = thenWritten == truth;
+            ConditionJoin how = truth ? ConditionJoin.EITHER : ConditionJoin.BOTH;
+            return new Joined(spelled, positive, at, how.under(positive),
+                    under(iff.cond(), conditionStated == positive, counted),
+                    under(thenWritten ? iff.els() : iff.then(), positive, counted));
+        }
+        return null;
+    }
+
+    /** The truth a clause writes outright, or null where it writes none. */
+    private static Boolean written(Core clause) {
+        return Core.withoutStanding(clause) instanceof Core.Bool bool ? bool.value() : null;
     }
 }

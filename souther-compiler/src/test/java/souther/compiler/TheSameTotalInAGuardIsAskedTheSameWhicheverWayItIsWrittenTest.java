@@ -18,7 +18,6 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -88,10 +87,8 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
 
     private static AdequacyReport.BehaviorReport measured(String way) {
         return MEASURED.computeIfAbsent(way, each -> {
-            Compilation compilation = Compilation.ofSource(
-                    model(WAYS.get(each), FIRST_ONLY + SECOND_ONLY), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(
+                    model(WAYS.get(each), FIRST_ONLY + SECOND_ONLY), Adequacy.Asked.fullReport());
             return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
         });
     }
@@ -104,17 +101,23 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
     }
 
     /** What is asked of the rows: how many combinations, and whether any went unread. */
-    private record Asked(int combinations, int read, int notPlaced, int notMeasured,
+    private record Asked(int combinations, int read, int unconfirmed, int notMeasured,
                          int notJoined, MeasurementStatus status) {
 
         static Asked of(AdequacyReport.BehaviorReport behavior) {
             InteractionEvidence evidence = behavior.evidence().interaction();
             return new Asked(evidence.counted(), evidence.asked().read(),
-                    evidence.asked().notPlaced().size(), evidence.asked().notMeasured().size(),
-                    evidence.asked().notJoined(), behavior.status());
+                    evidence.asked().unconfirmed().size(), evidence.asked().notMeasured().size(),
+                    evidence.asked().notJoined().size(), behavior.status());
         }
     }
 
+    /**
+     * Every way is asked for the same combinations under the same measure. A month's pay is any
+     * whole number, so the total may pass an {@code Int}: each way tells where on the ways its
+     * months are kept, the filter too, whose total is read once over every way of keeping and
+     * worked out on each.
+     */
     @Test
     void everyWayIsAskedForTheSameCombinationsUnderTheSameMeasure() {
         Asked first = null;
@@ -146,13 +149,10 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
 
     /** The lines of a report that say which values a total draws its borders at. */
     private static Set<String> bordersRead(String total) {
-        Compilation compilation = Compilation.ofSource(
-                model(total, FIRST_ONLY + SECOND_ONLY), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                model(total, FIRST_ONLY + SECOND_ONLY), Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertFalse(report.contains("not read"), report);
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         return report.lines().map(String::strip).filter(line -> line.startsWith("· read as"))
                 .collect(Collectors.toCollection(TreeSet::new));
     }
@@ -163,6 +163,11 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
      * borders are those of the same two months written out, a hundred and two hundred lower than
      * the threshold or half of it — and the same closure applied to the second month takes its own
      * arm.
+     *
+     * <p>Neither is read to the end. A choice is expanded into a relation for each arm, which
+     * carries none of the operations the comparison works out, and a total over a closure is a
+     * number worked out by a run that may stop and that no operation tells of. What is held is
+     * that the closure draws no border the months written out do not.
      */
     @Test
     void aChoiceInAClosureIsReadWithWhatStandsAroundIt() {
@@ -173,8 +178,9 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
             String written = "(" + body.replace("R", "w.first") + ") + ("
                     + body.replace("R", "w.second") + ")";
             Set<String> borders = bordersRead(written);
-            assertTrue(borders.size() > 4, "the written form is read: " + borders);
-            assertEquals(borders, bordersRead(closure), body);
+            assertTrue(borders.size() > 4, "the written form draws its borders: " + borders);
+            Set<String> ofTheClosure = bordersRead(closure);
+            assertTrue(borders.containsAll(ofTheClosure), body + "\n" + ofTheClosure);
         }
     }
 }

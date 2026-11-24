@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.DocumentShape;
 import souther.compiler.publish.MeasureWord;
+import souther.compiler.publish.PublishedOpening;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSubject;
 import souther.compiler.publish.SubjectWord;
@@ -64,6 +65,13 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         armId.put("lowered", 0);
         armId.put("part", 0);
         armId.put("decidedBy", "the_body");
+        ObjectNode rewriteId = JSON.createObjectNode();
+        rewriteId.put("behavior", "b");
+        rewriteId.put("rewrite", "fold_after_one_step");
+        rewriteId.put("module", "m");
+        rewriteId.put("definition", "b");
+        rewriteId.put("construct", 0);
+        rewriteId.put("lowered", 0);
         ObjectNode line = JSON.createObjectNode();
         // A comparison written in a body, which is a rule apiece: the rule is the whole of what
         // names a line of it, and there is nothing under it to be one of.
@@ -125,7 +133,8 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
                 new PublishedSubject.AtAFork("m", writtenBy, 0, 0, "if"),
                 new PublishedSubject.AtAnArm(armId),
                 new PublishedSubject.OfAMeasure("m", "b", MeasureWord.BRANCH),
-                new PublishedSubject.OfAnAxisMeasure("m", "b", "r.cost"));
+                new PublishedSubject.OfAnAxisMeasure("m", "b", "r.cost"),
+                new PublishedSubject.OfAReplacement("m", rewriteId));
     }
 
     /**
@@ -278,6 +287,28 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         }
         JsonNode kind = branch.get("properties").get("kind");
         return kind.get("const").asString().equals(written.get("kind").asString());
+    }
+
+    /** And the behaviors an unsettled fork was met under, which the schema holds to a shape too. */
+    @Test
+    void theSchemaAcceptsTheBehaviorsAFactWasMetUnder() {
+        ObjectNode document = document();
+        ObjectNode entry = ((tools.jackson.databind.node.ArrayNode)
+                document.get("keptOpenBy")).addObject();
+        entry.put("kind", "arms_unsettled");
+        entry.put("runSensitivity", "unaffected");
+        ObjectNode writtenBy = JSON.createObjectNode();
+        writtenBy.put("kind", "body");
+        writtenBy.put("definition", "filter");
+        AdequacyReport.about(entry.putObject("about"),
+                new PublishedSubject.AtAFork("m", writtenBy, 0, 0, "if"),
+                new DocumentSources(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        AdequacyReport.observedIn(entry, List.of(
+                new PublishedOpening.ObservedIn("crm", "convertLead"),
+                new PublishedOpening.ObservedIn("crm", "screenForDuplicates")));
+
+        assertEquals(List.of(), DocumentShape.of(document).wrong());
+        assertEquals(2, entry.get("observedIn").size());
     }
 
     /** The schema this compiler ships beside the documents it writes. */

@@ -65,18 +65,26 @@ public sealed interface DecisionSubject {
      * <p>The position before any arm narrows it: what the arms of one fork answer is one question
      * about one position, and a subject carrying the narrowing would be a subject apiece for each
      * answer.
+     *
+     * @param identity which value at the position it is ({@link ValueIdentity}): two names for two
+     *                 elements of one container stand at one position, and are two subjects
      */
-    record AnInput(TermPath at) implements DecisionSubject {
+    record AnInput(TermPath at, ValueIdentity identity) implements DecisionSubject {
+
+        /** The value at {@code at}, read through no name for an element. */
+        public AnInput(TermPath at) {
+            this(at, ValueIdentity.AT_THE_POSITION);
+        }
 
         public AnInput {
-            if (at == null) {
+            if (at == null || identity == null) {
                 throw new IllegalArgumentException("an input subject is some position");
             }
         }
 
         @Override
         public String spelled() {
-            return at.toString();
+            return at + identity.spelled();
         }
 
         @Override

@@ -2,18 +2,26 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.OfferedAtTheLines;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,8 +53,8 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         Compilation compilation = compiled("", PRICE_AND_QUANTITY, "price * quantity >= 1000");
         assertEquals(List.of("1000"), bordersOf(linesOf(compilation)));
         Map<String, List<String>> classes = classesOf(measured(compilation));
-        assertEquals(List.of("price/= 0", "price//= 0"), classes.get("price"), classes.toString());
-        assertEquals(List.of("quantity/= 0", "quantity//= 0"), classes.get("quantity"),
+        assertEquals(List.of("price: = 0", "price: /= 0"), classes.get("price"), classes.toString());
+        assertEquals(List.of("quantity: = 0", "quantity: /= 0"), classes.get("quantity"),
                 classes.toString());
     }
 
@@ -106,6 +115,10 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         spellings.put(List.of("guard 1000 <= price * quantity else No", "Ok"), "faced the other way");
         spellings.put(List.of("let amount = price * quantity", "guard amount >= 1000 else No", "Ok"),
                 "named");
+        spellings.put(List.of("guard Int.multiply(price, quantity) >= 1000 else No", "Ok"),
+                "written as the library's operation");
+        spellings.put(List.of("let amount = Int.multiply(quantity, price)",
+                "guard amount >= 1000 else No", "Ok"), "named, as the library's operation");
         List<String> borders = null;
         Map<String, List<String>> classes = null;
         for (Map.Entry<List<String>, String> each : spellings.entrySet()) {
@@ -118,6 +131,40 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
             }
             assertEquals(borders, theseBorders, each.getValue());
             assertEquals(classes, theseClasses, each.getValue());
+        }
+    }
+
+    /**
+     * The same lines and classes whether an operator is written as the operator or as the
+     * library's call that stands for it, a product among them: a multiplication that is the whole
+     * of a side is a line on the product however it is written.
+     */
+    @Test
+    void anOperatorWrittenAsTheLibrarysCallDrawsTheSameLines() {
+        String[][] pairs = {
+            {"a + b >= 10", "Int.add(a, b) >= 10"},
+            {"a - b >= 10", "Int.subtract(a, b) >= 10"},
+            {"a * b >= 10", "Int.multiply(a, b) >= 10"},
+            {"a * 2 + b >= 10", "Int.add(Int.multiply(a, 2), b) >= 10"},
+            {"(a + 1) * b >= 10", "Int.multiply(Int.add(a, 1), b) >= 10"},
+            {"a * b + c >= 10", "Int.add(Int.multiply(a, b), c) >= 10"},
+            {"a * b - c * 2 >= 10",
+                "Int.subtract(Int.multiply(a, b), Int.multiply(c, 2)) >= 10"},
+            {"a * b == c", "Int.multiply(a, b) == c"},
+            {"a * a >= 10", "Int.multiply(a, a) >= 10"},
+            {"a * b >= c * 2", "Int.multiply(a, b) >= Int.multiply(c, 2)"},
+            {"a * b + 1 >= c", "Int.add(Int.multiply(a, b), 1) >= c"},
+        };
+        for (String[] pair : pairs) {
+            List<String> seen = new ArrayList<>();
+            for (String spelling : pair) {
+                Compilation compilation = compiled("", "a: Int, b: Int, c: Int",
+                        List.of("guard " + spelling + " else No", "Ok"), "");
+                List<String> lines = linesOf(compilation).stream()
+                        .map(each -> each.axis() + "@" + each.value()).sorted().toList();
+                seen.add(lines + " " + classesOf(measured(compilation)));
+            }
+            assertEquals(seen.get(0), seen.get(1), pair[0] + " | " + pair[1]);
         }
     }
 
@@ -137,31 +184,764 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """;
         Map<String, List<String>> classes = classesOf(measured(compiled(prelude,
                 "price: Price, quantity: Quantity", "price.value * quantity.value >= 1000")));
-        assertEquals(List.of("price/1 <= x < 1000", "price/1000 <= x <= 100000"),
+        assertEquals(List.of("price: 1 <= x < 1000", "price: 1000 <= x <= 100000"),
                 classes.get("price"), classes.toString());
-        assertEquals(List.of("quantity/1 <= x < 1000", "quantity/1000 <= x <= 100000"),
+        assertEquals(List.of("quantity: 1 <= x < 1000", "quantity: 1000 <= x <= 100000"),
                 classes.get("quantity"), classes.toString());
     }
 
     /**
      * A product of one number with itself or of three numbers is not read as one, and neither is
-     * a product with arithmetic before or after it, which the run does in the type: at
-     * {@code price} of two to the sixty-second, {@code price * quantity * 2} stops the run for
-     * every {@code quantity} above nought, where a product held against five hundred would come
-     * out true. A factor weighed, negated or moved, and a product weighed, moved or negated, are
-     * each named as the arithmetic was before.
+     * a product of three with arithmetic before or after it, which the run does in the type: at
+     * {@code price} of two to the sixty-second, {@code price * quantity * price * 2} stops the run
+     * for every {@code quantity} above nought, where a product held against five hundred would
+     * come out true. Each is named as a product.
      */
     @Test
     void aProductThisDoesNotReadIsNamedAsAProduct() {
         for (String condition : List.of("price * price >= 1000",
-                "price * quantity * price >= 1000", "2 * price * quantity >= 1000",
-                "(0 - price) * quantity >= 1000", "(price + 1) * quantity >= 1000",
-                "price * quantity * 2 >= 1000", "price * quantity - 5 >= 995",
-                "0 - price * quantity <= 0 - 1000")) {
+                "price * quantity * price >= 1000", "price * quantity * price * 2 >= 1000",
+                "price * quantity * price - 5 >= 995",
+                "0 - price * quantity * price <= 0 - 1000")) {
             Compilation compilation = compiled("", PRICE_AND_QUANTITY, condition);
             assertEquals(List.of(), bordersOf(linesOf(compilation)), condition);
             assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
                     reasonsOf(measured(compilation)), condition);
+        }
+    }
+
+    /**
+     * A product beside other numbers relates the numbers of both, and is read where a number
+     * stands in the product and beside it: {@code a - a * b} is {@code a} at one value and
+     * {@code 1 - b} at another, and a row for each side of the line is the pair of inputs that
+     * makes it.
+     */
+    @Test
+    void aProductBesideOtherNumbersIsReadAndLeavesNoPlaceUnread() {
+        for (String condition : List.of("a * b + c >= 1000", "a * b <= c", "a - a * b <= c",
+                "a * b + a <= c", "Int.max(0, a - a * b) <= c", "c - b * a >= 5")) {
+            Compilation compilation = compiled("", "a: Int, b: Int, c: Int", condition);
+            PartitionEvidence measured = measured(compilation);
+            List<BorderAssessment> lines = linesOf(compilation);
+            assertTrue(!lines.isEmpty(), condition);
+            for (BorderAssessment line : lines) {
+                if (!line.axis().contains("*")) {
+                    continue;
+                }
+                assertTrue(!certifiedRows(List.of(line)).isEmpty(),
+                        condition + " has no row for " + line.axis() + " @ " + line.value());
+            }
+            assertTrue(!reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                    condition + ": " + reasonsOf(measured));
+        }
+    }
+
+    private static final String MONEY_AND_RATE = """
+            data Money = Decimal
+                invariant value >= 0.0m
+
+            data Rate = Decimal
+                invariant value >= 0.0m
+            """;
+
+    /**
+     * The product of two decimals is a number of its own beside the other numbers of a comparison,
+     * as one of whole numbers is: a rule over {@code g * (1 - r)} is read, every position is shown
+     * to reach it, and a row is built at a point of the line by the numbers that make the product.
+     */
+    @Test
+    void aProductOfDecimalsBesideOtherNumbersIsReadAndALineIsReachedByARow() {
+        for (String condition : List.of(
+                "Decimal.compare(Decimal.multiply(g.value, r.value), c.value) <= 0",
+                "Decimal.compare(Decimal.multiply(g.value, r.value), 5.0m) <= 0",
+                "Decimal.compare(Decimal.max(0.0m, Decimal.multiply(g.value, r.value)),"
+                        + " c.value) <= 0",
+                "Decimal.compare(Decimal.subtract(g.value,"
+                        + " Decimal.multiply(g.value, r.value)), c.value) <= 0",
+                "Decimal.compare(Decimal.max(0.0m, Decimal.subtract(g.value,"
+                        + " Decimal.multiply(g.value, r.value))), c.value) <= 0")) {
+            Compilation compilation = compiled(MONEY_AND_RATE, "g: Money, r: Rate, c: Money",
+                    condition);
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), condition);
+            List<Row> rows = certifiedRows(linesOf(compilation));
+            assertTrue(!rows.isEmpty(), condition);
+        }
+    }
+
+    /**
+     * Where the declarations leave the factor beside the number alone no place it comes to one, the
+     * number alone stands at the value over what the factor comes to inside the run: a rate
+     * strictly between nought and one is at a half, and a price of two pennies leaves a penny.
+     */
+    @Test
+    void aFactorThatCannotBeOneIsHeldInsideTheRunItIsLeft() {
+        String prelude = """
+                data Price = Decimal
+                    invariant value >= 0.00m
+
+                data Rate = Decimal
+                    invariant value > 0.00m && value < 1.00m
+                """;
+        Compilation compilation = compiled(prelude, "price: Price, rate: Rate",
+                "Decimal.compare(Decimal.subtract(price.value,"
+                        + " Decimal.multiply(price.value, rate.value)), 0.01m) >= 0");
+        List<BorderAssessment> lines = linesOf(compilation);
+        assertTrue(lines.stream().anyMatch(line -> line.axis().contains("*")), describe(lines));
+        for (BorderAssessment line : lines) {
+            if (line.axis().contains("*")) {
+                assertEquals(List.of(), pointsWithNoRow(line));
+            }
+        }
+        assertTrue(certifiedRows(lines).stream().anyMatch(row ->
+                row.inputs().equals(List.of("Price(0.02m)", "Rate(0.5m)"))),
+                certifiedRows(lines).toString());
+    }
+
+    /**
+     * A whole number made a decimal is a number a row holds as it is, so a decimal operation over
+     * it is one a row is asked to get past: every position of the rule is shown to reach it.
+     */
+    @Test
+    void aWholeNumberMadeADecimalIsMultipliedAsAnyDecimalIs() {
+        PartitionEvidence measured = measured(compiled(MONEY_AND_RATE, "a: Int, r: Rate, c: Money",
+                "Decimal.compare(Decimal.subtract(Decimal.fromInt(a),"
+                        + " Decimal.multiply(Decimal.fromInt(a), r.value)), c.value) <= 0"));
+        assertEquals(List.of(), unreadReasonsOf(measured));
+    }
+
+    /**
+     * A whole number made a decimal is multiplied as a decimal is, and a total of the products of
+     * two maps' values made one is the number that carries the product: the line is read and
+     * reached by a row whose maps hold the entries the total is made of.
+     */
+    @Test
+    void aTotalMadeADecimalAndMultipliedIsReadAndReached() {
+        for (String net : List.of("Decimal.max(0.0m, Decimal.subtract(gross, fee))",
+                "Decimal.subtract(gross, fee)")) {
+            String model = """
+                    module demo
+
+                    data Ok
+                    data No
+                    data Money = Decimal
+                        invariant value >= 0.0m
+
+                    let lineValue (sku: String, quantity: Int, prices: Map<String, Int>): Int = {
+                        let price = Map.get(sku, prices) |> Option.withDefault(0)
+                        price * quantity
+                    }
+
+                    behavior f : (agreed: Map<String, Int>, prices: Map<String, Int>, c: Money,
+                                  rate: Decimal) -> Ok | No
+                    let f (agreed, prices, c, rate) = {
+                        let gross = Decimal.fromInt(Map.fold((acc, sku, quantity) ->
+                            acc + lineValue(sku, quantity, prices), 0, agreed))
+                        let fee = Decimal.multiply(gross, rate)
+                        let net = %s
+                        guard Decimal.compare(net, c.value) <= 0 else No
+                        Ok
+                    }
+                    """.formatted(net);
+            Compilation compilation = Compilation.ofSource(model, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            ACompiledModel.compiles(compilation);
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), net);
+            List<BorderAssessment> lines = linesOf(compilation);
+            assertTrue(lines.stream().anyMatch(line -> line.axis().contains("*")),
+                    net + ": " + describe(lines));
+            for (BorderAssessment line : lines) {
+                if (line.axis().contains("*")) {
+                    assertEquals(List.of(), pointsWithNoRow(line), net);
+                }
+            }
+        }
+    }
+
+    /**
+     * What a way states of a total alone is what it states of the one element the total is of:
+     * under {@code 0 <= List.sum(xs)} the total takes every value from nought, as the element
+     * does, so a rule on the total beside another number is shown to reach every value.
+     */
+    @Test
+    void aBoundTheWayStatesOfATotalAloneLeavesTheTotalEveryValueWithinIt() {
+        assertEquals(List.of(), unreadReasonsOf(measured(compiled("", "xs: List<Int>, c: Int",
+                "Int.max(0, List.sum(xs)) <= c"))));
+        Compilation fold = Compilation.ofSource("""
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (ys: Map<String, Int>, c: Int) -> Ok | No
+                let f (ys, c) = {
+                    guard Int.max(0, Map.fold((acc, key, value) -> acc + value, 0, ys)) <= c else No
+                    Ok
+                }
+                """, "Main");
+        fold.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(fold);
+        assertEquals(List.of(), unreadReasonsOf(measured(fold)));
+    }
+
+    /**
+     * A product is held at a value inside the run only where one over what the factor comes to
+     * there is a decimal. Between two tenths and four tenths the middle is three tenths and
+     * leaves seven tenths, over which a hundredth is no decimal: the number alone would not stand
+     * at every value it is claimed to. Between a quarter and three quarters the middle is a half,
+     * and twice any decimal is one.
+     */
+    @Test
+    void aFactorIsHeldInsideTheRunOnlyWhereOneOverWhatItComesToIsADecimal() {
+        NumericTerm price = new NumericTerm.ValueOf(TermPath.of("price"));
+        NumericTerm rate = new NumericTerm.ValueOf(TermPath.of("rate"));
+        NumericTerm.ProductOf product = NumericTerm.ProductOf.of(LinearForm.atom(price),
+                new LinearForm<>(ExactRatio.ONE, Map.of(rate, ExactRatio.of(-1))));
+        assertEquals(ExactRatio.ZERO, product.atAValue().at());
+
+        NumericTerm.ProductOf aHalf = product.standingWhereTheDeclarationsAdmit(
+                between("0.25", "0.75"));
+        assertEquals(ExactRatio.of(new BigDecimal("0.5")), aHalf.atAValue().at());
+        assertEquals(ExactRatio.of(new BigDecimal("0.5")), aHalf.atAValue().scale());
+
+        assertEquals(product, product.standingWhereTheDeclarationsAdmit(between("0.2", "0.4")));
+        // Four fifths over one is a number a row of few places has five more places in: a
+        // decimal, but one the row was not built with.
+        assertEquals(product, product.standingWhereTheDeclarationsAdmit(between("0.1", "0.3")));
+        // Three quarters leaves a quarter, and four times a value has the places the value has.
+        assertEquals(ExactRatio.of(new BigDecimal("0.75")),
+                product.standingWhereTheDeclarationsAdmit(between("0.7", "0.8")).atAValue().at());
+    }
+
+    /**
+     * A run times a scale has the ends it is written with, and none where an end would need more
+     * places than a decimal holds: half of the least scale there is, is no decimal.
+     */
+    @Test
+    void aRunTimesAScaleHasNoEndPastWhatADecimalHolds() {
+        NumericDomain.Bounds fromTheLeast = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal("1E-2147483647"))), null);
+        ExactRatio aHalf = ExactRatio.of(new BigDecimal("0.5"));
+        assertEquals(null, fromTheLeast.timesEach(aHalf));
+        assertTrue(fromTheLeast.timesEach(ExactRatio.of(2)) != null);
+    }
+
+    /**
+     * The number beside the one alone stands inside its run on its own order: a rate of whole
+     * numbers strictly between nought and three has a middle of one and a half, which no whole
+     * number is, and strictly between nought and four a middle of two.
+     */
+    @Test
+    void aNumberOfWholeNumbersIsHeldInsideTheRunOnlyAtAWholeNumber() {
+        NumericTerm price = new NumericTerm.ValueOf(TermPath.of("price"));
+        NumericTerm rate = new NumericTerm.ValueOf(TermPath.of("rate"));
+        NumericTerm.ProductOf product = NumericTerm.ProductOf.of(LinearForm.atom(price),
+                new LinearForm<>(ExactRatio.ONE, Map.of(rate, ExactRatio.of(-1))));
+        assertEquals(product, product.standingWhereTheDeclarationsAdmit(
+                wholeBetween("0", "3")));
+        assertEquals(ExactRatio.of(2), product.standingWhereTheDeclarationsAdmit(
+                wholeBetween("0", "4")).atAValue().at());
+    }
+
+    /** The same, with {@code rate} counted in whole numbers and {@code price} in decimals. */
+    private static NumericTerm.ProductOf.Declared wholeBetween(String low, String high) {
+        NumericTerm.ProductOf.Declared dense = between(low, high);
+        return new NumericTerm.ProductOf.Declared() {
+            @Override
+            public NumericDomain.Bounds runOf(NumericTerm number) {
+                return dense.runOf(number);
+            }
+
+            @Override
+            public boolean isDense(NumericTerm number) {
+                return !number.toString().equals("rate");
+            }
+        };
+    }
+
+    /** The declarations leave {@code rate} the values strictly between {@code low} and
+     *  {@code high}, and every number is counted on decimals. */
+    private static NumericTerm.ProductOf.Declared between(String low, String high) {
+        return new NumericTerm.ProductOf.Declared() {
+            @Override
+            public NumericDomain.Bounds runOf(NumericTerm number) {
+                return number.toString().equals("rate")
+                        ? new NumericDomain.Bounds(
+                                Endpoint.exclusive(Count.of(new BigDecimal(low))),
+                                Endpoint.exclusive(Count.of(new BigDecimal(high))))
+                        : null;
+            }
+
+            @Override
+            public boolean isDense(NumericTerm number) {
+                return true;
+            }
+        };
+    }
+    /**
+     * What is claimed of a construction that stops a run is what a run does: the row that gives
+     * a negative rate is refused when it is applied, and the one that gives a rate of a half is
+     * not.
+     */
+    @Test
+    void theConstructionThatStopsForSomeRateStopsARowThatGivesOne() {
+        String model = """
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Plan = { fee: Refund, within: Bool }
+
+                behavior f : (gross: Money, rate: Decimal, c: Money) -> Plan
+                    constructs Plan, Refund
+                let f (gross, rate, c) = {
+                    let fee = Decimal.multiply(gross.value, rate)
+                    Plan {
+                        fee = Refund(Decimal.min(fee, gross.value)),
+                        within = Decimal.compare(Decimal.subtract(gross.value, fee), c.value) <= 0
+                    }
+                }
+
+                example f
+                    | "a half" : (Money(10.0m), 0.5m, Money(100.0m))
+                        -> Plan { fee = Refund(5.0m), within = true }
+                    | "a negative rate" : (Money(10.0m), -0.5m, Money(100.0m))
+                        -> Plan { fee = Refund(0.0m), within = true }
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
+        String human = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).toString();
+        assertTrue(human.contains("1 row does not hold"), human);
+        assertTrue(human.contains("a negative rate"), human);
+        assertTrue(!human.contains("a half is") && !human.contains("a half ("), human);
+    }
+
+    /**
+     * A construction worked out before the comparison that stops a run for some rate narrows the
+     * run by what it asks: {@code Refund(Decimal.min(fee, gross))} is refused for a negative rate
+     * where the gross is above nought, so the run keeps to a product at nought or above and the
+     * positions are read. A rate that is negative is still reached, with a gross at nought.
+     */
+    @Test
+    void aConstructionBeforeTheComparisonThatStopsForSomeRateNarrowsTheRunByIt() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Plan = { fee: Refund, within: Bool }
+
+                behavior f : (gross: Money, rate: Decimal, c: Money) -> Plan
+                    constructs Plan, Refund
+                let f (gross, rate, c) = {
+                    let fee = Decimal.multiply(gross.value, rate)
+                    Plan {
+                        fee = Refund(Decimal.min(fee, gross.value)),
+                        within = Decimal.compare(Decimal.subtract(gross.value, fee), c.value) <= 0
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
+    }
+
+    /**
+     * A construction of a number held to at least nought by the operation that made it stops no
+     * run: {@code Refund(Decimal.max(0.0m, x))} is told so whatever {@code x} is, and the
+     * comparison after it is not kept from being shown reached.
+     */
+    @Test
+    void aConstructionOfAMaximumWithNoughtStopsNoRun() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Money = Decimal
+                    invariant value >= 0.0m
+                data Plan = { fee: Refund, within: Bool }
+
+                behavior f : (gross: Money, rate: Decimal, c: Money) -> Plan
+                    constructs Plan, Refund
+                let f (gross, rate, c) = {
+                    let fee = Decimal.multiply(gross.value, rate)
+                    let net = Decimal.max(0.0m, Decimal.subtract(gross.value, fee))
+                    Plan {
+                        fee = Refund(net),
+                        within = Decimal.compare(net, c.value) <= 0
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), compilation.diagnostics().values().stream()
+                .flatMap(List::stream).map(each -> each.diagnostic().code()).toList());
+        assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
+    }
+
+    /**
+     * What the library says of the larger of two is held to the clauses of the type it is made
+     * into: at nought or above is not above nought, so {@code Positive(Decimal.max(0.0m, x))} may
+     * still stop a run, for an {@code x} at nought or below. That is told as the values it stops
+     * on, and no row the compiler certifies is one with such an {@code x}.
+     */
+    @Test
+    void aMaximumWithNoughtIsNoProofOfAnythingAboveNought() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Positive = Decimal
+                    invariant value > 0.0m
+                data Plan = { p: Positive, within: Bool }
+
+                behavior f : (x: Decimal, c: Decimal) -> Plan
+                    constructs Plan, Positive
+                let f (x, c) = {
+                    let net = Decimal.max(0.0m, x)
+                    Plan {
+                        p = Positive(net),
+                        within = Decimal.compare(net, c) <= 0
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), unreadReasonsOf(measured(compilation)));
+        List<BigDecimal> rows = certifiedFirstInputsOf(compilation);
+        assertTrue(!rows.isEmpty());
+        for (BigDecimal x : rows) {
+            assertTrue(x.signum() > 0, "a row at x = " + x + " is refused by Positive");
+        }
+    }
+
+    /** A newtype over {@code kind} holding {@code clause}, made of {@code number} in a plan that
+     *  then compares the value the number is made of, so that only the making can keep the
+     *  comparison from being shown reached. */
+    private static Compilation aNumberMadeInto(String kind, String clause, String number) {
+        String compared = kind.equals("Int") ? "x <= c" : "Decimal.compare(x, c) <= 0";
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Held = KIND
+                    invariant CLAUSE
+                data Plan = { p: Held, within: Bool }
+
+                behavior f : (x: KIND, c: KIND) -> Plan
+                    constructs Plan, Held
+                let f (x, c) = {
+                    let net = NUMBER
+                    Plan {
+                        p = Held(net),
+                        within = COMPARED
+                    }
+                }
+                """.replace("KIND", kind).replace("CLAUSE", clause).replace("NUMBER", number)
+                .replace("COMPARED", compared), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return compilation;
+    }
+
+    /**
+     * The end a choice keeps puts the same end on its answer whichever argument is the constant,
+     * whichever end it is, and however the constant is written: the lesser is at most each of the
+     * two and the greater at least each.
+     */
+    @Test
+    void aChoiceBetweenAValueAndAConstantIsHeldToTheEndItKeeps() {
+        String[][] held = {
+                {"Decimal", "value <= 0.0m", "Decimal.min(0.0m, x)"},
+                {"Decimal", "value <= 0.0m", "Decimal.min(x, 0.0m)"},
+                {"Decimal", "value >= 0.0m", "Decimal.max(x, 0.0m)"},
+                {"Decimal", "value >= -1.0m", "Decimal.max(-1.0m, x)"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m + 0.5m, x)"},
+                {"Int", "value <= 0", "Int.min(0, x)"},
+                {"Int", "value <= 0", "Int.min(x, 0)"},
+                {"Int", "value >= 0", "Int.max(x, 0)"}};
+        for (String[] each : held) {
+            assertEquals(List.of(),
+                    unreadReasonsOf(measured(aNumberMadeInto(each[0], each[1], each[2]))),
+                    each[2] + " held to " + each[1]);
+        }
+    }
+
+    /**
+     * The end a choice keeps is the only one it puts: the lesser of a value and nought is not at
+     * nought or above, nor the greater at nought or below. A run the making stops is told as the
+     * values it stops on, so the value is read and no row the compiler certifies is one the
+     * making refuses.
+     */
+    @Test
+    void aChoiceBetweenAValueAndAConstantIsNotHeldToTheEndItDoesNotKeep() {
+        Object[][] notHeld = {
+                {"Decimal", "value >= 0.0m", "Decimal.min(0.0m, x)", "0"},
+                {"Decimal", "value <= 0.0m", "Decimal.max(0.0m, x)", "0"},
+                {"Decimal", "value >= 1.0m", "Decimal.max(0.5m, x)", "1"},
+                {"Int", "value >= 0", "Int.min(0, x)", "0"},
+                {"Int", "value <= 0", "Int.max(0, x)", "0"}};
+        for (Object[] each : notHeld) {
+            Compilation compilation = aNumberMadeInto((String) each[0], (String) each[1],
+                    (String) each[2]);
+            String label = each[2] + " held to " + each[1];
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), label);
+            List<BigDecimal> rows = certifiedFirstInputsOf(compilation);
+            assertTrue(!rows.isEmpty(), label);
+            BigDecimal end = new BigDecimal((String) each[3]);
+            boolean above = ((String) each[1]).contains(">=");
+            for (BigDecimal x : rows) {
+                assertTrue(above ? x.compareTo(end) >= 0 : x.compareTo(end) <= 0,
+                        label + " at x = " + x);
+            }
+        }
+    }
+
+    /** The first input of every row the compiler certifies for {@code f}. */
+    private static List<BigDecimal> certifiedFirstInputsOf(Compilation compilation) {
+        List<BigDecimal> out = new ArrayList<>();
+        for (BorderAssessment border : Adequacy.readingsOf(compilation.db(), "demo").get("f")) {
+            for (ItemAssessment item : border.items().values()) {
+                if (!(item instanceof ItemAssessment.Owed owed)) {
+                    continue;
+                }
+                for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                        String text = certified.row().inputs().getFirst().text();
+                        out.add(new BigDecimal(text.endsWith("m")
+                                ? text.substring(0, text.length() - 1) : text));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the argument of the maximum is worked out with still stops a run when it can: the
+     * construction of a number at nought or above says nothing of the sum under it.
+     */
+    @Test
+    void aMaximumWithNoughtLeavesTheOperationsUnderItAsTheyWere() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Count = Int
+                    invariant value >= 0
+                data Plan = { n: Count, within: Bool }
+
+                behavior f : (a: Int, b: Int, c: Int) -> Plan
+                    constructs Plan, Count
+                let f (a, b, c) = {
+                    let net = Int.max(0, a + b)
+                    Plan {
+                        n = Count(net),
+                        within = net <= c
+                    }
+                }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
+                unreadReasonsOf(measured(compilation)));
+    }
+
+    /**
+     * The shape of a refund plan, measured: the total of the agreed lines at their unit prices, a
+     * fee taken off it, the rest held at nought or above and compared with what was invoiced.
+     * {@code restockingFee} is the number the plan's second refund is made of; {@code examples} is
+     * the rows written under it, if any.
+     */
+    private static Compilation aRefundPlanWith(String restockingFee, String examples) {
+        return aRefundPlanOf("agreedValue(reconciliation, unitPrices)", restockingFee, examples);
+    }
+
+    /** The same, with {@code total} the whole number the gross is made of. */
+    private static Compilation aRefundPlanOf(String total, String restockingFee,
+                                             String examples) {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Sku = String
+                    invariant String.length(value) >= 1
+                data Rma = String
+                    invariant String.matches("RMA-[0-9]{8}", value)
+                data InvoiceNo = String
+                    invariant String.matches("INV-[0-9]{4}-[0-9]{6}", value)
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Accepted = { rma: Rma, skus: Set<Sku>, daysSinceDispatch: Int }
+                data Reconciliation =
+                    { agreed: Map<Sku, Int>
+                    , declaredOnly: Map<Sku, Int>
+                    , receivedOnly: Map<Sku, Int>
+                    , inDispute: Int
+                    }
+                data RefundPlan =
+                    { rma: Rma
+                    , invoiceNo: InvoiceNo
+                    , refund: Refund
+                    , restockingFee: Refund
+                    , withinInvoiced: Bool
+                    , repeatReturn: Bool
+                    , recentRmas: List<Rma>
+                    }
+
+                let lineValue (sku: Sku, quantity: Int, unitPrices: Map<Sku, Int>): Int = {
+                    let price = Map.get(sku, unitPrices) |> Option.withDefault(0)
+                    price * quantity
+                }
+
+                let agreedValue (reconciliation: Reconciliation, unitPrices: Map<Sku, Int>): Int =
+                    Map.fold((acc, sku, quantity) -> acc + lineValue(sku, quantity, unitPrices), 0,
+                             reconciliation.agreed)
+
+                behavior f : (accepted: Accepted, reconciliation: Reconciliation,
+                               unitPrices: Map<Sku, Int>, invoiceNo: InvoiceNo,
+                               invoicedGross: Amount, restockingRate: Decimal,
+                               history: List<Rma>, previousSkus: List<Sku>) -> RefundPlan
+                    constructs RefundPlan, Refund
+                let f (accepted, reconciliation, unitPrices, invoiceNo, invoicedGross,
+                       restockingRate, history, previousSkus) = {
+                    let gross = Decimal.fromInt(TOTAL)
+                    let fee = Decimal.multiply(gross, restockingRate)
+                    let net = Decimal.max(0.0m, Decimal.subtract(gross, fee))
+                    RefundPlan {
+                        rma = accepted.rma,
+                        invoiceNo = invoiceNo,
+                        refund = Refund(net),
+                        restockingFee = Refund(RESTOCKING_FEE),
+                        withinInvoiced = Decimal.compare(net, invoicedGross.value) <= 0,
+                        repeatReturn = Set.fold((acc, sku) -> acc || List.contains(sku, previousSkus),
+                                                false, accepted.skus),
+                        recentRmas = List.take(3, List.reverse(history))
+                    }
+                }
+                """.replace("TOTAL", total).replace("RESTOCKING_FEE", restockingFee) + examples,
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return compilation;
+    }
+
+    /** Whether a run may stop on the way to the plan's comparison, for values this compiler does
+     *  not say. */
+    private static boolean aPlanStopsABorderRunsThrough(Compilation compilation) {
+        return unreadReasonsOf(measured(compilation))
+                .contains(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE);
+    }
+
+    /** The refund held at nought or above by the maximum stops no run, so with a total that stops
+     *  none either nothing in the plan keeps the comparison from being shown reached. */
+    @Test
+    void aRefundPlanWhoseOnlyRefundIsHeldAtNoughtKeepsNoRunFromTheComparison() {
+        assertTrue(!aPlanStopsABorderRunsThrough(
+                aRefundPlanOf("Map.size(unitPrices)", "0.0m", "")));
+    }
+
+    /**
+     * The total of the agreed lines may stop a run: its sums can pass the greatest {@code Int}.
+     * What it stops on is the agreed lines and the unit prices, through the names its step binds
+     * as much as through the ones it is handed, and the membership after it reads neither. A row
+     * where the total comes out is a witness for every value the membership reads, so the
+     * comparison is shown reached.
+     */
+    @Test
+    void aTotalWhoseStopsReadNothingTheMembershipAfterItReadsKeepsItNoRunFromBeingShownReached() {
+        assertFalse(aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
+    }
+
+    /**
+     * The second refund, the lesser of the fee and the gross, is refused for a negative rate, and
+     * that alone is what keeps the comparison from being shown reached. The gross here is a count,
+     * whose ties part what the position holds and are no line on the number, so the product of it
+     * and the rate is a tie and not a narrowing.
+     */
+    @Test
+    void aRefundPlanIsStoppedByTheLesserOfTheFeeAndTheGrossForANegativeRate() {
+        assertTrue(aPlanStopsABorderRunsThrough(
+                aRefundPlanOf("Map.size(unitPrices)", "Decimal.min(fee, gross)", "")));
+    }
+
+    /**
+     * A row past the invoiced amount is offered, and the offered row, written out as an example
+     * with what it must come to, is run: the comparison comes out false and no row does not hold.
+     */
+    @Test
+    void theRowOfferedPastTheInvoicedAmountRunsAndComesOutPastIt() {
+        Compilation offering = aRefundPlanWith("Decimal.min(fee, gross)", "");
+        Generator.GenerationResult offered = OfferedAtTheLines.of(
+                offering, offering.modules().get(0), "f");
+        List<List<String>> beyond = offered.rows().stream()
+                .filter(row -> row.purposes().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForAPoint point
+                                && point.label().startsWith("0 < List.sum(")))
+                .map(row -> row.inputs().stream().map(each -> each.text()).toList())
+                .toList();
+        assertEquals(1, beyond.size(), beyond.toString());
+        String row = String.join(", ", beyond.getFirst());
+        Compilation run = aRefundPlanWith("Decimal.min(fee, gross)", """
+
+                example f
+                    | "past the invoiced amount" : (%s)
+                        -> RefundPlan { rma = Rma("RMA-00000000"),
+                                        invoiceNo = InvoiceNo("INV-0000-000000"),
+                                        refund = Refund(1.0m), restockingFee = Refund(0.0m),
+                                        withinInvoiced = false, repeatReturn = false,
+                                        recentRmas = [] }
+                """.formatted(row));
+        String human = AdequacyReport.of(run)
+                .humanInEnglish(SourceRendering.namedByIdentity(run.texts())).toString();
+        assertTrue(human.contains("rows 1"), human);
+        assertTrue(!human.contains("does not hold"), human);
+    }
+
+    /** A decimal times itself is no product of two numbers apart, and is named as a product. */
+    @Test
+    void aDecimalTimesItselfIsStillNamedAsAProduct() {
+        PartitionEvidence measured = measured(compiled(MONEY_AND_RATE, "g: Money, c: Money",
+                "Decimal.compare(Decimal.multiply(g.value, g.value), c.value) <= 0"));
+        assertTrue(reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                reasonsOf(measured).toString());
+    }
+
+    /** A number times itself is no product of two numbers apart, and is named as a product. */
+    @Test
+    void aNumberTimesItselfBesideOtherNumbersIsStillNamedAsAProduct() {
+        for (String condition : List.of("a * a + c >= 1000", "a - a * a <= c")) {
+            PartitionEvidence measured = measured(
+                    compiled("", "a: Int, c: Int", condition));
+            assertTrue(reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                    condition + ": " + reasonsOf(measured));
+        }
+    }
+
+    /**
+     * A product with arithmetic written around it is read, the multiplication still told as the
+     * operation it is: a factor weighed, negated or moved, and a product weighed, moved or
+     * negated, each draw a line on the product at the level the arithmetic moves it to.
+     */
+    @Test
+    void aProductWithArithmeticAroundItIsReadAtTheLevelTheArithmeticMovesItTo() {
+        Map<String, String> level = new LinkedHashMap<>();
+        level.put("2 * price * quantity >= 1000", "1000");
+        level.put("(0 - price) * quantity >= 1000", "-1000");
+        level.put("(price + 1) * quantity >= 1000", "1000");
+        level.put("price * quantity * 2 >= 1000", "1000");
+        level.put("price * quantity - 5 >= 995", "1000");
+        level.put("0 - price * quantity <= 0 - 1000", "1000");
+        for (Map.Entry<String, String> each : level.entrySet()) {
+            Compilation compilation = compiled("", PRICE_AND_QUANTITY, each.getKey());
+            assertEquals(List.of(), unreadReasonsOf(measured(compilation)), each.getKey());
+            assertTrue(linesOf(compilation).stream().anyMatch(line -> line.axis().contains("*")
+                            && line.value().equals(each.getValue())),
+                    each.getKey() + ": " + describe(linesOf(compilation)));
         }
     }
 
@@ -213,7 +993,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         Compilation guard = compiled(plain, "p: Policy", "p.rate * p.cap >= 10");
         assertEquals(List.of("10"), bordersOf(linesOf(guard)));
         Map<String, List<String>> guarded = classesOf(measured(guard));
-        assertEquals(List.of("p.rate/= 0", "p.rate//= 0"), guarded.get("p.rate"),
+        assertEquals(List.of("p.rate: = 0", "p.rate: /= 0"), guarded.get("p.rate"),
                 guarded.toString());
     }
 
@@ -325,6 +1105,18 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         return rows;
     }
 
+    /** The points of {@code line} a row is owed at and none was built for, by name. */
+    private static List<String> pointsWithNoRow(BorderAssessment line) {
+        List<String> out = new ArrayList<>();
+        line.items().forEach((point, item) -> {
+            if (item instanceof ItemAssessment.Owed owed && owed.searches().each().stream()
+                    .noneMatch(ItemAssessment.Attempt.Certified.class::isInstance)) {
+                out.add(point + " of " + line.axis() + " @ " + line.value());
+            }
+        });
+        return out;
+    }
+
     private static List<BorderAssessment> linesOf(Compilation compilation) {
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");
@@ -353,6 +1145,16 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         Map<String, List<String>> out = new LinkedHashMap<>();
         evidence.axes().forEach(axis -> out.put(axis.path(), axis.classes()));
         return out;
+    }
+
+    /** The reasons that say a rule was not read: those beside the ones that say it was read and
+     *  divides no position. */
+    private static List<UndividedPosition.Reason> unreadReasonsOf(PartitionEvidence evidence) {
+        return reasonsOf(evidence).stream()
+                .filter(reason -> reason != UndividedPosition.Reason.RULE_RELATING_TWO_VALUES
+                        && reason != UndividedPosition.Reason.RULE_ABOUT_A_RUN
+                        && reason != UndividedPosition.Reason.RULE_NEVER_TURNS_ON_THIS_LINE)
+                .toList();
     }
 
     private static List<UndividedPosition.Reason> reasonsOf(PartitionEvidence evidence) {
@@ -386,7 +1188,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 examples);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 }

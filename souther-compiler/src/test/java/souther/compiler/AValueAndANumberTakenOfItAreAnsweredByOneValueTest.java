@@ -9,7 +9,6 @@ import souther.compiler.report.GeneratedRows;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,9 +80,9 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
         assertTrue(offered.contains("| (Box { s = \"xxxx\" })"),
                 () -> "the value the rules single out is written: " + offered);
         RowsOfABlock.Row row = RowsOfABlock.at(offered, "(Box { s = \"xxxx\" })");
-        assertTrue(row.isFor("box.s== xxxx"),
+        assertTrue(row.isFor("box.s: = xxxx at box.s"),
                 () -> "and the row stands at the class of the place's own value: " + offered);
-        assertTrue(row.isFor("box.s=3 < x"),
+        assertTrue(row.isFor("String.length(box.s): 3 < x at String.length(box.s)"),
                 () -> "and at the class of the number taken of it: " + offered);
         assertFalse(offered.contains(THE_POPULATION),
                 () -> "so nothing says this is a group nothing writes a value for: " + offered);
@@ -102,7 +101,7 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
 
         assertTrue(offered.contains("| (Box { s = \"x\" })"),
                 () -> "the value the rules single out is written: " + offered);
-        assertTrue(RowsOfABlock.at(offered, "(Box { s = \"x\" })").isFor("box.s=0 <= x <= 3"),
+        assertTrue(RowsOfABlock.at(offered, "(Box { s = \"x\" })").isFor("String.length(box.s): 0 <= x <= 3 at String.length(box.s)"),
                 () -> "and the row stands at the class its own length is in: " + offered);
         // What the model settles, and not a search that fell short. The rule above the line leaves
         // the place one value, so every value that reaches this point is that one — and its length
@@ -142,11 +141,7 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String block(Compilation compilation) {
@@ -154,11 +149,11 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.string")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

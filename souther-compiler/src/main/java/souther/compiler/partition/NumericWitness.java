@@ -5,11 +5,15 @@ import souther.compiler.check.ClassMembers;
 import souther.compiler.check.HeldClass;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
+import souther.compiler.numeric.UsualPlace;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigInteger;
@@ -18,10 +22,12 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * One assignment of some numbers that a region admits, or nothing.
@@ -112,14 +118,165 @@ final class NumericWitness {
         if (leavesTheQuestionNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
+        return walked(within, terms, on, looking, composing, null, new Tries());
+    }
+
+    /**
+     * Where each of {@code terms} may stand together inside {@code within} with one of
+     * {@code congruents} holding of them besides, tried in order, or what this found out about
+     * there being none: none stands only where none stands under any of them.
+     *
+     * <p>The last of {@code terms} is the one the class is read for: once the others stand, the
+     * values of it the congruence leaves are a class ({@link Congruent#leavesTheLast}), and those
+     * are what it is walked over. A region holds runs and no class, so this is how a statement no
+     * region carries is met without the form being put at a value before its numbers are.
+     *
+     * <p>The congruences are the remainders of one form, which differ in what the last is held to
+     * and in nothing the region says. What the region leaves the terms, and where each usually
+     * stands, is asked once for them all.
+     */
+    static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
+                       Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                       List<Congruent> congruents) {
+        return of(within, terms, on, looking, Composing.ANY_ASSIGNMENT, congruents);
+    }
+
+    /**
+     * The same, with {@code composing} asked of every assignment the walk reaches.
+     *
+     * <p>The numbers that have a place they usually stand near are walked first and from there, and
+     * the last is one that has none, where there is one: the last is put wherever the class leaves
+     * it, which is no place it usually stands — a string's length put by the class at fourteen beside
+     * a format of thirteen digits is a row the format refuses.
+     */
+    static Standing of(SearchRegion within, List<? extends NumericTerm> terms,
+                       Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                       Composing composing, List<Congruent> congruents) {
+        if (congruents.isEmpty() || leavesTheQuestionNothing(within, terms)) {
+            return new Standing.ProvedImpossible();
+        }
+        List<NumericTerm> nearFirst = new ArrayList<>();
+        List<NumericTerm> rest = new ArrayList<>();
+        for (NumericTerm term : terms) {
+            Carrier carrier = on.apply(term);
+            (carrier != null && looking.startingAt(term, carrier) instanceof UsualPlace.Near
+                    ? nearFirst : rest).add(term);
+        }
+        nearFirst.addAll(rest);
+        boolean proved = true;
+        CompositionShortfall met = CompositionShortfall.NONE;
+        Tries tries = new Tries();
+        for (Congruent congruent : congruents) {
+            // Every value the question may be tried at has been tried, so the congruences after
+            // this one are left at the figure and not walked: a walk now would work out what the
+            // region leaves each position only to be refused its first value.
+            if (tries.spent()) {
+                proved = false;
+                met = met.and(CompositionShortfall.of(
+                        Set.of(CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT)));
+                break;
+            }
+            switch (walked(within, nearFirst, on, looking, composing, congruent, tries)) {
+                case Standing.Found found -> {
+                    return found;
+                }
+                case Standing.ProvedImpossible _ -> { }
+                case Standing.NotFound(CompositionShortfall shortOf) -> {
+                    proved = false;
+                    met = met.and(shortOf);
+                }
+            }
+        }
+        return proved ? new Standing.ProvedImpossible() : new Standing.NotFound(met);
+    }
+
+    private static Standing walked(SearchRegion within, List<? extends NumericTerm> terms,
+                                   Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                                   Composing composing, Congruent congruent, Tries tries) {
         SequencedMap<NumericTerm, Place> standing = new LinkedHashMap<>();
-        Met met = new Met();
-        if (walk(within, terms, 0, on, looking, composing, standing, met)) {
+        Met met = new Met(tries);
+        if (walk(within, terms, 0, on, looking, composing, congruent, standing, met)) {
             return Standing.Found.walked(standing);
         }
         return met.settlesTheQuestion()
                 ? new Standing.ProvedImpossible()
                 : new Standing.NotFound(met.shortfall());
+    }
+
+    /**
+     * That a form of whole numbers leaves {@code residue} divided by {@code divisor}.
+     *
+     * @param form    the form, its constant included, every coefficient a whole number
+     * @param divisor what it is divided by, above nought
+     * @param residue what it leaves
+     */
+    record Congruent(LinearForm<NumericTerm> form, BigInteger divisor, BigInteger residue) {
+
+        Congruent {
+            if (form == null || divisor == null || divisor.signum() <= 0 || residue == null
+                    || !form.constant().isWhole()
+                    || !form.coefs().values().stream().allMatch(ExactRatio::isWhole)) {
+                throw new IllegalArgumentException("a form of whole numbers leaving a remainder by"
+                        + " a divisor above nought: " + form + " by " + divisor);
+            }
+        }
+
+        /**
+         * The values of {@code last} that bring the form to the residue with every other number of
+         * it at the place {@code standing} gives it: {@code a·t ≡ residue − c − Σ others (mod d)},
+         * which is a class where the greatest number dividing {@code a} and {@code d} divides the
+         * right side, and no value where it does not. Where the form does not weigh {@code last}
+         * that is every value or none, as the others bring the form to the residue or not.
+         */
+        HeldClass leavesTheLast(NumericTerm last, Map<NumericTerm, Place> standing) {
+            ExactRatio weight = form.coefs().getOrDefault(last, ExactRatio.ZERO);
+            BigInteger right = residue.subtract(whole(form.constant()));
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                if (each.getKey().equals(last)) {
+                    continue;
+                }
+                Place at = standing.get(each.getKey());
+                if (!(at instanceof Count count)
+                        || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
+                                BigInteger value))
+                        || !count.whole()) {
+                    return HeldClass.NO_VALUE;
+                }
+                right = right.subtract(whole(each.getValue()).multiply(value));
+            }
+            BigInteger a = whole(weight).mod(divisor);
+            BigInteger shared = a.gcd(divisor);
+            if (right.mod(shared).signum() != 0) {
+                return HeldClass.NO_VALUE;
+            }
+            BigInteger modulus = divisor.divide(shared);
+            if (modulus.equals(BigInteger.ONE)) {
+                return HeldClass.NONE;
+            }
+            BigInteger value = right.divide(shared).mod(modulus)
+                    .multiply(a.divide(shared).modInverse(modulus)).mod(modulus);
+            return new HeldClass.OfResidues(new Congruences(value, modulus));
+        }
+
+        /** Whether every number of the form stands at {@code standing} at a whole number that
+         *  brings the form to the residue. */
+        boolean metBy(Map<NumericTerm, Place> standing) {
+            BigInteger sum = whole(form.constant());
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                Place at = standing.get(each.getKey());
+                if (at == null || !(Count.number(at).exactly().floor()
+                        instanceof ExactAnswer.Held<BigInteger>(BigInteger value))
+                        || !Count.number(at).exactly().isWhole()) {
+                    return false;
+                }
+                sum = sum.add(whole(each.getValue()).multiply(value));
+            }
+            return sum.mod(divisor).equals(residue);
+        }
+
+        private static BigInteger whole(ExactRatio ratio) {
+            return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
+        }
     }
 
     /**
@@ -177,6 +334,7 @@ final class NumericWitness {
      */
     private static final class Met {
 
+        private final Tries tries;
         private final Set<CompositionBudget> figures = EnumSet.noneOf(CompositionBudget.class);
         private final Set<CompositionCapacity> unheld = new HashSet<>();
         private CompositionShortfall composing = CompositionShortfall.NONE;
@@ -186,6 +344,10 @@ final class NumericWitness {
         private boolean refuted;
         private boolean notBuilt;
         private boolean leftUnwalked;
+
+        Met(Tries tries) {
+            this.tries = tries;
+        }
 
         CompositionShortfall shortfall() {
             return CompositionShortfall.of(figures, Set.of(), unheld).and(composing);
@@ -197,6 +359,30 @@ final class NumericWitness {
          */
         boolean settlesTheQuestion() {
             return refuted && !notBuilt && !leftUnwalked && shortfall().nothing();
+        }
+    }
+
+    /**
+     * How many more values the positions of one question may be tried at, counted over every
+     * position and every congruence it is asked under
+     * ({@link CompositionBudget#VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT}).
+     */
+    private static final class Tries {
+
+        private int left = CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT.maximum();
+
+        /** Whether another value may be tried, counting it where it may. */
+        boolean another() {
+            if (left == 0) {
+                return false;
+            }
+            left--;
+            return true;
+        }
+
+        /** Whether no more values may be tried. */
+        boolean spent() {
+            return left == 0;
         }
     }
 
@@ -225,6 +411,63 @@ final class NumericWitness {
                                          List<? extends NumericTerm> terms) {
         return terms.stream().anyMatch(term ->
                 within.projectionOf(term) instanceof NumericDomain.FormProjection.NothingIsLeft);
+    }
+
+    /** A position held away from a place another stands at, as a way to try a question. */
+    record HeldApart(NumericTerm.FromOnePosition term, Place from) {
+
+        HeldApart {
+            Objects.requireNonNull(term, "a position is held apart");
+            Objects.requireNonNull(from, "from a place");
+        }
+    }
+
+    /**
+     * The same, tried first with each of {@code apart} held away from the place it names, and
+     * where nothing stands that way, asked of {@code within} as the rules leave it.
+     *
+     * <p>Holding a position apart is a way to try and not a rule: the rules may say the two are
+     * one value, and a row at which they are is as much a row. The narrower region is made here,
+     * out of {@code within}, so an assignment found in it is one {@code within} admits.
+     */
+    static Standing triedApartFirst(SearchRegion within, List<HeldApart> apart,
+                                    List<? extends NumericTerm> terms,
+                                    Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                                    Composing composing) {
+        SearchRegion narrower = within;
+        for (HeldApart each : apart) {
+            narrower = narrower.apartFrom(each.term(), each.from());
+        }
+        if (narrower == within) {
+            return of(within, terms, on, looking, composing);
+        }
+        return askedOfTheWholeAfter(of(narrower, terms, on, looking, composing),
+                () -> of(within, terms, on, looking, composing));
+    }
+
+    /**
+     * What a question comes to that was asked first of a narrower region and, where that found
+     * nothing, of the whole region it is about.
+     *
+     * <p>A proof is the whole region's alone. That the narrower one leaves nothing is no answer
+     * about the rest of the question, and what the whole proves holds of the narrower part too.
+     * Where neither found an assignment, each walk fell short in its own way and both are said:
+     * raising what stopped the first may find one where the second stopped short.
+     *
+     * <p>Only for a narrower region made out of the whole ({@link #triedApartFirst}): an
+     * assignment found in a region the whole does not hold would be one its rules refuse.
+     */
+    private static Standing askedOfTheWholeAfter(Standing narrower, Supplier<Standing> theWhole) {
+        if (narrower instanceof Standing.Found) {
+            return narrower;
+        }
+        Standing whole = theWhole.get();
+        return switch (whole) {
+            case Standing.Found _, Standing.ProvedImpossible _ -> whole;
+            case Standing.NotFound(CompositionShortfall met) -> new Standing.NotFound(
+                    (narrower instanceof Standing.NotFound(CompositionShortfall first)
+                            ? first : CompositionShortfall.NONE).and(met));
+        };
     }
 
     /**
@@ -362,9 +605,17 @@ final class NumericWitness {
                                 Function<NumericTerm, Carrier> on,
                                 WitnessSearch looking,
                                 Composing composing,
+                                Congruent congruent,
                                 SequencedMap<NumericTerm, Place> standing,
                                 Met met) {
         if (at == terms.size()) {
+            // An assignment outside the congruence is no witness of it, however it was reached:
+            // offered to be composed it would be a row standing elsewhere. Not reached by any walk
+            // above, so said as a walk that left something unwalked rather than as a proof.
+            if (congruent != null && !congruent.metBy(standing)) {
+                met.leftUnwalked = true;
+                return false;
+            }
             return switch (composing.composes(standing)) {
                 case Composed.Built _ -> true;
                 case Composed.Refuted _ -> {
@@ -413,7 +664,8 @@ final class NumericWitness {
         // at every place it reaches, and not only at the one it starts from.
         ValueSet admits = admittedAt(term, looking, within);
         PlacesApart apart = apartAt(term, within);
-        Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
+        Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter(),
+                looking.startingAt(term, carrier));
         if (first == null) {
             met.leftUnwalked = true;
             return false;
@@ -423,6 +675,48 @@ final class NumericWitness {
         // luck, and every value between two members is one the rules refuse.
         HeldClass held = term instanceof NumericTerm.ValueOf value
                 ? within.classAt(value) : HeldClass.NONE;
+        // The last number of a congruence, which the others standing leave a class of. The class is
+        // of the whole number the term counts to, whatever order it stands on, so it is walked as
+        // that: held together with what the region holds the term to only where both are classes
+        // of the numbers the order counts, and otherwise walked by itself, each member kept where
+        // the region's class holds it. Joined with a class of days, a class of residues says
+        // nothing of the days its members are — not that there are none.
+        if (congruent != null && at == terms.size() - 1) {
+            HeldClass left = congruent.leavesTheLast(term, standing);
+            if (left instanceof HeldClass.NoValue) {
+                return false;
+            }
+            boolean joined = left instanceof HeldClass.None || (left.countsOn(carrier)
+                    && (held instanceof HeldClass.None || held instanceof HeldClass.OfResidues));
+            if (joined) {
+                held = held.and(left);
+                if (held instanceof HeldClass.NoValue) {
+                    return false;
+                }
+            } else {
+                if (!(Count.number(first).exactly().floor()
+                        instanceof ExactAnswer.Held<BigInteger> from)) {
+                    met.leftUnwalked = true;
+                    return false;
+                }
+                ClassMembers inside = left.nearest(from.value(), runs,
+                        VALUES_A_POSITION_IS_TRIED_AT);
+                for (Place tried : inside.notApart(apart)) {
+                    if (Count.number(tried).exactly().floor()
+                            instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                            && held.holds(whole) && carrier.admitted(admits, tried)
+                            && tryingAt(within, term, tried, terms, at, on, looking, composing,
+                                    congruent, standing, met)) {
+                        return true;
+                    }
+                }
+                if (inside.stoppedShort()) {
+                    met.leftUnwalked = true;
+                    met.figures.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+                }
+                return false;
+            }
+        }
         if (!(held instanceof HeldClass.None) && held.countsOn(carrier)
                 && Count.number(first).exactly().floor()
                         instanceof ExactAnswer.Held<BigInteger> from) {
@@ -430,7 +724,7 @@ final class NumericWitness {
             for (Place tried : inside.notApart(apart)) {
                 if (carrier.admitted(admits, tried)
                         && tryingAt(within, term, tried, terms, at, on, looking, composing,
-                                standing, met)) {
+                                congruent, standing, met)) {
                     return true;
                 }
             }
@@ -443,7 +737,8 @@ final class NumericWitness {
         Outwards.Walked walked = Outwards.from(first, Count.of(1), carrier, runs,
                 VALUES_A_POSITION_IS_TRIED_AT, PLACES_A_POSITION_IS_LOOKED_AT, admits, apart);
         for (Place tried : walked) {
-            if (tryingAt(within, term, tried, terms, at, on, looking, composing, standing, met)) {
+            if (tryingAt(within, term, tried, terms, at, on, looking, composing, congruent,
+                    standing, met)) {
                 return true;
             }
         }
@@ -487,14 +782,19 @@ final class NumericWitness {
     private static boolean tryingAt(SearchRegion within, NumericTerm term, Place tried,
                                     List<? extends NumericTerm> terms, int at,
                                     Function<NumericTerm, Carrier> on, WitnessSearch looking,
-                                    Composing composing,
+                                    Composing composing, Congruent congruent,
                                     SequencedMap<NumericTerm, Place> standing, Met met) {
+        if (!met.tries.another()) {
+            met.leftUnwalked = true;
+            met.figures.add(CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT);
+            return false;
+        }
         SearchRegion next = within.given(term, tried);
         if (next.emptiness().isPresent()) {
             return false;
         }
         standing.put(term, tried);
-        if (walk(next, terms, at + 1, on, looking, composing, standing, met)) {
+        if (walk(next, terms, at + 1, on, looking, composing, congruent, standing, met)) {
             return true;
         }
         standing.remove(term);
@@ -524,8 +824,8 @@ final class NumericWitness {
             case NumericTerm.GatheredUnderAKey asked ->
                     admittedAt(asked.gathered(), looking, within);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
-                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _ ->
-                    ValueSet.ANY;
+                 NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.ProductOf _ -> ValueSet.ANY;
         };
     }
 
@@ -537,7 +837,7 @@ final class NumericWitness {
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
                  NumericTerm.OccurrencesOfItsValue _, NumericTerm.OccurrencesOfAKey _,
                  NumericTerm.ExtremeOfItsKey _, NumericTerm.GatheredUnderItsKey _,
-                 NumericTerm.GatheredUnderAKey _ -> PlacesApart.NONE;
+                 NumericTerm.GatheredUnderAKey _, NumericTerm.ProductOf _ -> PlacesApart.NONE;
         };
     }
 

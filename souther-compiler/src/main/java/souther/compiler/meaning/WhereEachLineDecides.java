@@ -1,23 +1,31 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.AdditiveImage;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
  * Where each relation a statement of several holds together decides what the statement comes to.
@@ -73,8 +81,9 @@ public final class WhereEachLineDecides {
      * @param cases where it decides, as cases any one of which is enough: each a part, a conjunction
      *              of parts, or nothing asked at all. Empty where it decides nowhere. None of them
      *              names {@code line}
-     * @param scales the line held at every scale the statement wrote it at, {@code line} first:
-     *               what made each of them made the line, which the statement holds at the first
+     * @param scales the line held at every way the statement wrote it, {@code line} first: every
+     *               scale, and over whole numbers every relation cutting where it does. What made
+     *               each of them made the line, which the statement holds as the first
      */
     public record Decides(Proposition.Compared line, List<DecidingCase> cases,
                           List<Proposition.Compared> scales) {
@@ -118,11 +127,33 @@ public final class WhereEachLineDecides {
      * ({@link Lifting}), so that each part is one part of what it stands in. Where that is more
      * than is read, nothing is taken apart, and every line is where its statement turns, said for
      * cases nobody took apart.
+     *
+     * <p>A line written several ways is one line ({@link OneSpellingPerLine}): at several scales,
+     * and over whole numbers as either side of one cut. Which numbers are whole is each number's to
+     * say ({@link Quantity#wholeOnEveryRow}), and of a number of the input, {@code measuredWhole}'s:
+     * whether the input measures it in whole numbers, which is the reading of the input's and no
+     * statement's.
+     *
+     * <p>Reading a count around a line leaves the count of the other statements in the case the
+     * line decides in. That count is one part with no position of its own, the way a quantifier
+     * is: its statements choose elements of their own, so none of them is taken to be about the
+     * line's.
      */
-    public static List<Decides> in(Proposition writtenAs) {
-        Map<String, Proposition.Compared> lines = new TreeMap<>();
-        Map<String, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
-        OneSpellingPerLine spellings = new OneSpellingPerLine();
+    public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole) {
+        return in(writtenAs, measuredWhole, measuredWhole);
+    }
+
+    /**
+     * The same, where {@code wholeInItsUnit} says which numbers are whole numbers of their own
+     * unit — more than {@code measuredWhole}, which a date is not: it is a count of days, and the
+     * days are whole. That is what a proof that a line decides nowhere reads a number as
+     * ({@link NoCaseCrosses}).
+     */
+    public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole,
+                                   Predicate<NumericTerm> wholeInItsUnit) {
+        Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
+        Map<Spelling, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
+        OneSpellingPerLine spellings = new OneSpellingPerLine(measuredWhole);
         Proposition stated = spellings.of(writtenAs);
         Proposition lifted = new Lifting().of(stated);
         if (lifted != null) {
@@ -132,8 +163,32 @@ public final class WhereEachLineDecides {
         }
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
-                whereItStands(line, casesOf(standings.get(key))), spellings.scalesOf(line))));
+                withoutWhatNoRowCrosses(line, whereItStands(line, casesOf(standings.get(key))),
+                        wholeInItsUnit),
+                spellings.scalesOf(line))));
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code stated} with every quantifier in it said the way the lines are read ({@link Lifting}),
+     * or {@code stated} itself where the steps ran out and nothing is taken apart: the form the
+     * parts a quantifier makes are told apart in.
+     */
+    static Proposition lifted(Proposition stated) {
+        Proposition lifted = new Lifting().of(stated);
+        return lifted == null ? stated : lifted;
+    }
+
+    /**
+     * {@code cases} less each that is proved to hold no row on each side of {@code line}
+     * ({@link NoCaseCrosses}): a line decides in none of those, and asking them is what a line
+     * decides nowhere in costs.
+     */
+    private static List<DecidingCase> withoutWhatNoRowCrosses(
+            Proposition.Compared line, List<DecidingCase> cases,
+            Predicate<NumericTerm> wholeInItsUnit) {
+        return cases.stream().filter(each -> !NoCaseCrosses.proves(line, each, wholeInItsUnit))
+                .toList();
     }
 
     /**
@@ -153,13 +208,18 @@ public final class WhereEachLineDecides {
      */
     private static List<DecidingCase> whereItStands(Proposition.Compared line,
                                                     List<DecidingCase> cases) {
-        Map<TermPath, CasesLeft> at = casesItIsOver(line);
+        Map<Place, CasesLeft> at = casesItIsOver(line);
+        if (at == null) {
+            // Its positions leave one value no case in common, so no row holds the line, and it
+            // decides nowhere.
+            return List.of();
+        }
         if (at.isEmpty()) {
             return cases;
         }
         List<Proposition> stands = new ArrayList<>();
-        at.forEach((position, narrowed) -> {
-            Proposition standing = standing(position, narrowed);
+        at.forEach((place, narrowed) -> {
+            Proposition standing = standing(place, narrowed);
             if (standing != null) {
                 stands.add(standing);
             }
@@ -173,9 +233,9 @@ public final class WhereEachLineDecides {
             }
             Proposition said = Proposition.all(List.of(there, standsThere));
             out.add(each.saidAlone() ? DecidingCase.alone(said) : new DecidingCase(said,
-                    new DecidingCase.Cases.Together(List.of(each.standsFor().eachSaid(one -> {
+                    DecidingCase.Cases.together(List.of(each.standsFor().eachSaid(one -> {
                         Proposition itsOwn = there(one, at);
-                        return itsOwn == null ? new DecidingCase.Cases.EachOf(List.of())
+                        return itsOwn == null ? DecidingCase.Cases.NONE
                                 : new DecidingCase.Cases.One(itsOwn);
                     }), new DecidingCase.Cases.One(standsThere)))));
         }
@@ -188,7 +248,7 @@ public final class WhereEachLineDecides {
      * {@code each}, without the parts of it that ask the value the line is at what only another
      * case of it has — or null where a part of it asks the value to be a case it is not.
      */
-    private static Proposition there(Proposition each, Map<TermPath, CasesLeft> at) {
+    private static Proposition there(Proposition each, Map<Place, CasesLeft> at) {
         List<Proposition> parts = new ArrayList<>();
         for (Proposition part : each instanceof Proposition.All all ? all.parts()
                 : List.of(each)) {
@@ -204,12 +264,36 @@ public final class WhereEachLineDecides {
     }
 
     /**
-     * That the value at {@code position} is {@code narrowed}, in the words a row is asked it in:
+     * A value a line or a part of a case is about: a position, and which value there
+     * ({@link ValueIdentity}). Two names for elements of one container are one position and two
+     * values, and the case one of them is narrowed to says nothing of the other's.
+     */
+    private record Place(TermPath position, ValueIdentity identity) {
+
+        /** The value at {@code prefix}, a position {@code this} is under: the same element's
+         *  where {@code prefix} still reaches into it, the row's value where it stops above. */
+        Place at(TermPath prefix) {
+            List<TermPath.Step> steps = position.steps();
+            int element = -1;
+            for (int step = 0; step < steps.size(); step++) {
+                if (steps.get(step) instanceof TermPath.Step.Element
+                        || steps.get(step) instanceof TermPath.Step.Key) {
+                    element = step;
+                }
+            }
+            return new Place(prefix, prefix.steps().size() > element ? identity
+                    : ValueIdentity.AT_THE_POSITION);
+        }
+    }
+
+    /**
+     * That the value at {@code place} is {@code narrowed}, in the words a row is asked it in:
      * one of some cases of a sum, or holding a value or none — or null where it is neither, which
      * leaves the case unsaid and the line no narrower.
      */
-    private static Proposition standing(TermPath position, CasesLeft narrowed) {
-        DecisionSubject.AnInput value = new DecisionSubject.AnInput(position);
+    private static Proposition standing(Place place, CasesLeft narrowed) {
+        DecisionSubject.AnInput value = new DecisionSubject.AnInput(place.position(),
+                place.identity());
         List<Refinement> atoms = narrowed.atoms();
         if (atoms.stream().allMatch(Refinement.SumCase.class::isInstance)) {
             return new Proposition.InCases(value, narrowed, true);
@@ -232,10 +316,11 @@ public final class WhereEachLineDecides {
 
     /** What {@code part} comes to of a value that is the cases {@code at} says, position by
      *  position. */
-    private static AskedOfTheValue asked(Proposition part, Map<TermPath, CasesLeft> at) {
-        if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath of),
-                CasesLeft cases, boolean holds, var _) && at.containsKey(of)) {
-            CasesLeft stands = at.get(of);
+    private static AskedOfTheValue asked(Proposition part, Map<Place, CasesLeft> at) {
+        if (part instanceof Proposition.InCases(DecisionSubject.AnInput(TermPath of,
+                ValueIdentity identity), CasesLeft cases, boolean holds, var _)
+                && at.containsKey(new Place(of, identity))) {
+            CasesLeft stands = at.get(new Place(of, identity));
             boolean meets = stands.meet(cases) != null;
             if ((holds && !meets) || (!holds && stands.within(cases))) {
                 return AskedOfTheValue.NOT_THERE;
@@ -244,16 +329,18 @@ public final class WhereEachLineDecides {
         }
         // Whether an optional holds a value, asked of one the line stands under holding one or
         // none.
-        if (part instanceof Proposition.Present(DecisionSubject.AnInput(TermPath of),
-                boolean holds, var _) && at.containsKey(of)
-                && at.get(of).atoms().size() == 1
-                && at.get(of).atoms().getFirst() instanceof Refinement.Presence presence) {
+        if (part instanceof Proposition.Present(DecisionSubject.AnInput(TermPath of,
+                ValueIdentity identity), boolean holds, var _)
+                && at.get(new Place(of, identity)) instanceof CasesLeft stands
+                && stands.atoms().size() == 1
+                && stands.atoms().getFirst() instanceof Refinement.Presence presence) {
             return presence.present() == holds ? AskedOfTheValue.THERE : AskedOfTheValue.NOT_THERE;
         }
-        for (TermPath position : positionsOf(part)) {
+        for (Place place : positionsOf(part)) {
+            TermPath position = place.position();
             List<TermPath.Step> steps = position.steps();
             for (int step = 0; step < steps.size(); step++) {
-                CasesLeft stands = at.get(new TermPath(position.head(), steps.subList(0, step)));
+                CasesLeft stands = at.get(place.at(position.prefix(step)));
                 if (stands != null && steps.get(step) instanceof TermPath.Step.Refine(
                         CasesLeft cases) && stands.meet(cases) == null) {
                     return AskedOfTheValue.OF_ANOTHER_CASE;
@@ -263,51 +350,64 @@ public final class WhereEachLineDecides {
         return AskedOfTheValue.THERE;
     }
 
-    /** The positions of the input a part of a case is about, where it is one thing of one value;
-     *  none for a part that is more than that. */
-    private static List<TermPath> positionsOf(Proposition part) {
-        List<TermPath> out = new ArrayList<>();
+    /** The values of the input a part of a case is about, where it is one thing of one value;
+     *  none for a part that is more than that. A number of the input is about every place it is
+     *  read off ({@link NumericTerm#placesReadOff}): a product is filed under one of its factors,
+     *  and the case the other is narrowed to is as much the line's. */
+    private static List<Place> positionsOf(Proposition part) {
+        List<Place> out = new ArrayList<>();
         switch (part) {
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> affine.form().coefs().keySet()
-                            .forEach(quantity -> {
-                                if (quantity instanceof DecisionAtom.OfTheInput(var term)) {
-                                    out.add(term.subjectPath());
-                                }
-                            });
-                    case Relation.Ordered ordered -> {
-                        if (ordered.term() instanceof DecisionAtom.OfTheInput(var term)) {
-                            out.add(term.subjectPath());
-                        }
-                    }
+                            .forEach(quantity -> placesOf(quantity, out));
+                    case Relation.Ordered ordered -> placesOf(ordered.term(), out);
                 }
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), var _, var _) ->
-                    out.add(of);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), var _, var _, var _) ->
-                    out.add(of);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath of), var _, var _) ->
-                    out.add(of);
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath of, var identity), var _,
+                    var _) -> out.add(new Place(of, identity));
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of, var identity), var _,
+                    var _, var _) -> out.add(new Place(of, identity));
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of, var identity), var _,
+                    var _) -> out.add(new Place(of, identity));
             case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.Always _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.InTheStrings _, Proposition.Always _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> { }
-            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                 Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _ -> { }
+            case Proposition.OfTheWays ways -> out.addAll(positionsOf(ways.written()));
         }
         return out;
     }
 
-    /** Each position a position {@code line} is over narrows, with the cases it narrows it to. */
-    private static Map<TermPath, CasesLeft> casesItIsOver(Proposition.Compared line) {
-        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
-        for (TermPath position : positionsOf(line)) {
-            List<TermPath.Step> steps = position.steps();
+    /** Adds to {@code out} each place {@code quantity} is read off, where it is a number of the
+     *  input, as the value it names there; nothing for any other. */
+    private static void placesOf(Quantity quantity, List<Place> out) {
+        if (quantity instanceof DecisionAtom.OfTheInput(var term, var identity)) {
+            term.placesReadOff().forEach(at -> out.add(new Place(at, identity)));
+        }
+    }
+
+    /**
+     * Each value a position {@code line} is over narrows, with the cases its positions narrow it
+     * to together ({@link CasesLeft#meet}) — or null where two of them narrow one value to cases
+     * that share none, which no row holds both of.
+     */
+    private static Map<Place, CasesLeft> casesItIsOver(Proposition.Compared line) {
+        Map<Place, CasesLeft> out = new LinkedHashMap<>();
+        for (Place place : positionsOf(line)) {
+            List<TermPath.Step> steps = place.position().steps();
             for (int at = 0; at < steps.size(); at++) {
                 if (steps.get(at) instanceof TermPath.Step.Refine(CasesLeft cases)) {
-                    out.merge(new TermPath(position.head(), steps.subList(0, at)), cases,
-                            (one, other) -> one.meet(other) == null ? one : one.meet(other));
+                    Place value = place.at(place.position().prefix(at));
+                    CasesLeft had = out.get(value);
+                    CasesLeft both = had == null ? cases : had.meet(cases);
+                    if (both == null) {
+                        return null;
+                    }
+                    out.put(value, both);
                 }
             }
         }
@@ -336,13 +436,13 @@ public final class WhereEachLineDecides {
      */
     private static void read(Proposition stated, Proposition whole, DecisionSubject element,
                              List<List<DecidingCase>> around, boolean lifted,
-                             Map<String, Proposition.Compared> lines,
-                             Map<String, List<List<List<DecidingCase>>>> standings) {
+                             Map<Spelling, Proposition.Compared> lines,
+                             Map<Spelling, List<List<List<DecidingCase>>>> standings) {
         Reading reading = lifted ? Reading.of(stated) : Reading.unread(stated);
-        Set<String> whereItAnswers = onlyWhereItAnswers(stated);
+        Set<Spelling> whereItAnswers = onlyWhereItAnswers(stated);
         for (Proposition part : reading.named()) {
             if (part instanceof Proposition.Compared line
-                    && !whereItAnswers.contains(line.key())) {
+                    && !whereItAnswers.contains(line.spelling())) {
                 List<List<DecidingCase>> factors = new ArrayList<>(around);
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
@@ -352,8 +452,8 @@ public final class WhereEachLineDecides {
                 } else {
                     factors = List.of(Reading.unread(whole).turnsOn(line));
                 }
-                lines.putIfAbsent(line.key(), line);
-                standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
+                lines.putIfAbsent(line.spelling(), line);
+                standings.computeIfAbsent(line.spelling(), k -> new ArrayList<>()).add(factors);
             } else if (part instanceof Proposition.Some some
                     && statesARelation(some.ofTheElement())) {
                 List<List<DecidingCase>> inside = new ArrayList<>(around);
@@ -365,22 +465,41 @@ public final class WhereEachLineDecides {
     }
 
     /**
-     * A statement with every relation it holds at more than one scale written at the first: {@code
-     * 2c >= 0} and {@code c >= 0} are one line. Read as two, crossing nought turns both at once, and
-     * neither of them turns the statement alone.
+     * A statement with every relation it holds written more than one way written the first way:
+     * {@code 2c >= 0} and {@code c >= 0} are one line, and so, over whole numbers, are
+     * {@code c > 5} and {@code c >= 6}, which no whole number stands between. Read as two, crossing
+     * the line turns both at once, and neither of them turns the statement alone.
      *
-     * <p>Here and not in how a relation is written down, because which scale a relation was written
-     * at is what a reader of a document is shown and what a row is found against; only that two of
-     * them are one line is this reading's. A statement holding each line at one scale is itself.
+     * <p>Here and not in how a relation is written down, because which way a relation was written
+     * is what a reader of a document is shown and what a row is found against; only that two of
+     * them are one line is this reading's. A statement holding each line one way is itself.
      */
     private static final class OneSpellingPerLine {
 
         /** A relation and the atoms it is over, which every scale of one line shares. */
         private record Alike(Rel proposition, Set<Quantity> atoms) {}
 
+        /**
+         * Where a form of whole numbers is cut: the form divided by the largest its weights are
+         * all whole multiples of, at least {@code atLeast}. Every relation above or at a line of such a form
+         * says that of it, whatever scale and whichever of the two it was written as.
+         */
+        private record ACut(Map<Quantity, ExactRatio> weighing, BigInteger atLeast) {
+
+            ACut {
+                weighing = Map.copyOf(weighing);
+            }
+        }
+
+        private final Predicate<NumericTerm> measuredWhole;
         private final Map<Alike, List<Relation.Affine>> written = new HashMap<>();
-        /** Each relation written first, and every scale it was written at, itself first. */
+        private final Map<ACut, Relation.Affine> cuts = new HashMap<>();
+        /** Each relation written first, and every way it was written, itself first. */
         private final Map<Relation.Affine, List<Relation.Affine>> scales = new HashMap<>();
+
+        OneSpellingPerLine(Predicate<NumericTerm> measuredWhole) {
+            this.measuredWhole = measuredWhole;
+        }
 
         /** {@code line} held at every scale the statement wrote it at, itself first. */
         List<Proposition.Compared> scalesOf(Proposition.Compared line) {
@@ -413,14 +532,16 @@ public final class WhereEachLineDecides {
                     yield answers == where.answers() && states == where.states() ? stated
                             : Proposition.whereItAnswers(answers, states);
                 }
-                case Proposition.Compared(Relation.Affine affine, boolean holds, String _) -> {
+                case Proposition.Compared(Relation.Affine affine, boolean holds, Spelling _,
+                                          var _) -> {
                     Relation.Affine first = firstWritten(affine);
                     yield first == affine ? stated : new Proposition.Compared(first, holds);
                 }
                 case Proposition.SoManyHold counted -> counted.mapped(this::of);
+                case Proposition.OfTheWays ways -> of(ways.written());
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
                      Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
             };
         }
@@ -436,9 +557,23 @@ public final class WhereEachLineDecides {
             return changed ? out : parts;
         }
 
-        /** The relation {@code affine} is at the scale it was first written, which is itself where
-         *  it is the first. Both face one way, so one is the other at a positive scale. */
+        /** The relation {@code affine} is as it was first written, which is itself where it is the
+         *  first. Both face one way, so one is the other at a positive scale, or over whole
+         *  numbers the same cut. */
         private Relation.Affine firstWritten(Relation.Affine affine) {
+            ACut cut = cutOf(affine);
+            if (cut != null) {
+                Relation.Affine first = cuts.putIfAbsent(cut, affine);
+                if (first == null) {
+                    scales.put(affine, new ArrayList<>(List.of(affine)));
+                    return affine;
+                }
+                List<Relation.Affine> atEach = scales.get(first);
+                if (!atEach.contains(affine)) {
+                    atEach.add(affine);
+                }
+                return first;
+            }
             List<Relation.Affine> alike = written.computeIfAbsent(
                     new Alike(affine.proposition(), affine.form().coefs().keySet()),
                     _ -> new ArrayList<>());
@@ -455,6 +590,40 @@ public final class WhereEachLineDecides {
             alike.add(affine);
             scales.put(affine, new ArrayList<>(List.of(affine)));
             return affine;
+        }
+
+        /**
+         * Where {@code affine} cuts its form, where every number the form weighs is whole — or
+         * null where one is not shown to be, or it is an equality, which is no cut. Weighed by
+         * whatever ratios: divided by the largest they are all whole multiples of, the weights are
+         * whole, so the form so divided is a whole number on every row. That at or above the
+         * constant taken off and so divided is the form at or above nought, and above it, the
+         * form above nought: each at least the least whole number it is.
+         */
+        private ACut cutOf(Relation.Affine affine) {
+            LinearForm<Quantity> form = affine.form();
+            if (affine.proposition() == Rel.EQ || form.coefs().isEmpty()
+                    || !form.coefs().keySet().stream()
+                            .allMatch(atom -> atom.wholeOnEveryRow(measuredWhole))) {
+                return null;
+            }
+            ExactRatio common = AdditiveImage.divisorOf(form.coefs().values());
+            Map<Quantity, ExactRatio> weighing = new HashMap<>();
+            for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+                if (!(each.getValue().dividedBy(common)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio least))) {
+                    return null;
+                }
+                weighing.put(each.getKey(), least);
+            }
+            if (!(form.constant().negated().dividedBy(common)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
+                return null;
+            }
+            ExactAnswer<BigInteger> atLeast = affine.proposition() == Rel.GE
+                    ? threshold.ceiling() : threshold.floor().map(below -> below.add(BigInteger.ONE));
+            return atLeast instanceof ExactAnswer.Held<BigInteger>(BigInteger at)
+                    ? new ACut(weighing, at) : null;
         }
     }
 
@@ -489,9 +658,23 @@ public final class WhereEachLineDecides {
 
         private int left = CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum();
 
+        /** What each statement met was said as, by the statement itself: one that stands in
+         *  several places is said once, so the work is as many as there are statements and not
+         *  as many as the ways down to them. */
+        private final Map<Proposition, Optional<Proposition>> said = new IdentityHashMap<>();
+
         /** {@code stated}, every quantifier in it said this way — itself where none has a part to
          *  say outside, and null where the steps ran out. */
         Proposition of(Proposition stated) {
+            Optional<Proposition> known = said.get(stated);
+            if (known == null) {
+                known = Optional.ofNullable(ofAnew(stated));
+                said.put(stated, known);
+            }
+            return known.orElse(null);
+        }
+
+        private Proposition ofAnew(Proposition stated) {
             return switch (stated) {
                 case Proposition.All all -> {
                     List<Proposition> parts = each(all.parts());
@@ -522,6 +705,7 @@ public final class WhereEachLineDecides {
                             : answers == where.answers() && states == where.states() ? stated
                             : Proposition.whereItAnswers(answers, states);
                 }
+                case Proposition.OfTheWays ways -> of(ways.written());
                 case Proposition.SoManyHold counted -> {
                     List<Proposition> parts = each(counted.statements());
                     yield parts == null ? null : parts == counted.statements() ? stated
@@ -529,8 +713,8 @@ public final class WhereEachLineDecides {
                                     counted.admitted());
                 }
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
                      Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
             };
         }
@@ -590,11 +774,12 @@ public final class WhereEachLineDecides {
                     yield Proposition.all(ofTheRow);
                 }
                 case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.OfTheWays ways -> some(container, ways.written());
                 // One part, about the element or not; what holds everywhere is about none, and
                 // some element meeting it is the container holding one.
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ ->
                         element.mayTurnOnAnElementOf(container)
@@ -632,16 +817,18 @@ public final class WhereEachLineDecides {
         /** How many places a part stands at in {@code stated}, inside the quantifiers it holds as
          *  well: what saying a quantifier over it again writes out. */
         private static long placesIn(Proposition stated) {
+            return StatementReading.<Long>over(Lifting::placesAt).read(stated);
+        }
+
+        private static long placesAt(Proposition stated, StatementReading<Long> again) {
             return switch (stated) {
-                case Proposition.All all -> all.parts().stream().mapToLong(Lifting::placesIn).sum();
-                case Proposition.Any any -> any.parts().stream().mapToLong(Lifting::placesIn).sum();
-                case Proposition.Some some -> 1 + placesIn(some.ofTheElement());
-                case Proposition.WhereItAnswers where ->
-                        placesIn(where.answers()) + placesIn(where.states());
+                case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                     Proposition.OfTheWays _ -> stated.sumOverParts(again);
+                case Proposition.Some some -> 1 + again.read(some.ofTheElement());
                 case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                     Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
                      Proposition.Unread _, Proposition.OnAnApplication _ -> 1;
             };
         }
@@ -650,7 +837,7 @@ public final class WhereEachLineDecides {
          *  null where every part may be. */
         private static Proposition aboutNoElement(Proposition element,
                                                   DecisionSubject container) {
-            Map<String, Proposition> parts = new TreeMap<>();
+            Map<Spelling, Proposition> parts = new TreeMap<>();
             gather(element, parts, new TreeMap<>());
             return parts.values().stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container))
@@ -668,8 +855,8 @@ public final class WhereEachLineDecides {
 
         private final Proposition stated;
         private final List<Proposition> named;
-        private final Map<String, Integer> index;
-        private final Map<String, Literal> leaves;
+        private final Map<Spelling, Integer> index;
+        private final Map<Spelling, Literal> leaves;
         /** Whether the statement was lifted, so that each part is one part of it. */
         private final boolean lifted;
         private final WhatAStatementComesTo ways;
@@ -696,15 +883,15 @@ public final class WhereEachLineDecides {
             // joins next to each other: asked in that order, a statement of several such joined
             // together is left as few statements as it has joins, where asked with the parts of
             // each apart it is left as a different one for every way the earlier ones come out.
-            Map<String, Proposition> parts = new LinkedHashMap<>();
+            Map<Spelling, Proposition> parts = new LinkedHashMap<>();
             this.leaves = new TreeMap<>();
             gather(stated, parts, leaves);
             this.named = List.copyOf(parts.values());
             this.index = new TreeMap<>();
             for (int i = 0; i < named.size(); i++) {
-                index.put(named.get(i).key(), i);
+                index.put(named.get(i).spelling(), i);
             }
-            this.twice = askedTwice(named);
+            this.twice = askedTwice(named, ReadThroughNames.holdsOneValueAtEachElement(stated));
             this.ways = new WhatAStatementComesTo();
             this.canBe = lifted ? canBe(named, twice) : List.of();
             if (!lifted) {
@@ -761,14 +948,16 @@ public final class WhereEachLineDecides {
                 case Proposition.Always(boolean holds) ->
                         holds ? WhatAStatementComesTo.ALWAYS : WhatAStatementComesTo.NEVER;
                 case Proposition.SoManyHold counted -> comesToCounted(counted, asking);
+                case Proposition.OfTheWays ways -> comesTo(ways.written(), asking);
                 // A part, as it stands in the statement or as what every row meets of the parts
                 // says it: held or denied, it is the part held, asked one way round.
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
-                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _ -> {
+                     Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> {
                     Proposition held = held(stated);
-                    yield asking.part(index.get(held.key()), held == stated);
+                    yield asking.part(index.get(held.spelling()), held == stated);
                 }
             };
         }
@@ -956,18 +1145,23 @@ public final class WhereEachLineDecides {
             if (ofAValue != null) {
                 return List.of(new DecidingCase(said, DecidingCase.eachOf(ofAValue)));
             }
+            if (taken instanceof TakenApart.Shared(var choices)) {
+                return List.of(new DecidingCase(said, choices));
+            }
             return List.of(new DecidingCase(said, new DecidingCase.Cases.NotTakenApart(
                     switch (taken) {
                         case TakenApart.MoreThan _ ->
-                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
-                        case TakenApart.RanOut _ -> CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN;
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached();
+                        case TakenApart.RanOut _ ->
+                                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached();
                         // No one part tells the cases apart only where some ways are left out of
                         // what is possible, and only a value in twice leaves them out so: the
                         // statement is read under each case of the first of those. What else
                         // canBe leaves out joins any two possible ways by ways each one part apart
                         // from the last, every one of them possible, so where the line decides at
                         // one end and not at the other some part tells the two apart.
-                        case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
+                        case TakenApart.ByNoOnePart _, TakenApart.Taken _,
+                             TakenApart.Shared _ ->
                                 throw new IllegalStateException("where " + part + " decides in "
                                         + stated + " was told apart by no one part, and the"
                                         + " statement asks no value's case twice");
@@ -1008,17 +1202,17 @@ public final class WhereEachLineDecides {
                 if (!(statement instanceof Proposition.All || statement instanceof Proposition.Any
                         || statement instanceof Proposition.WhereItAnswers
                         || statement instanceof Proposition.SoManyHold)
-                        && held(statement).key().equals(part.key())) {
-                    if (statement.key().equals(part.key())) {
+                        && held(statement).spelling().equals(part.spelling())) {
+                    if (statement.spelling().equals(part.spelling())) {
                         held += weight;
                     } else {
                         denied += weight;
                     }
                     continue;
                 }
-                Map<String, Proposition> asked = new TreeMap<>();
+                Map<Spelling, Proposition> asked = new TreeMap<>();
                 gather(statement, asked, new TreeMap<>());
-                if (asked.containsKey(part.key())) {
+                if (asked.containsKey(part.spelling())) {
                     return null;
                 }
                 others.add(statement);
@@ -1052,7 +1246,7 @@ public final class WhereEachLineDecides {
             for (Proposition each : canBe) {
                 Proposition held = with(each, part, true);
                 Proposition failing = with(each, part, false);
-                if (!held.key().equals(each.key()) || !failing.key().equals(each.key())) {
+                if (!held.spelling().equals(each.spelling()) || !failing.spelling().equals(each.spelling())) {
                     parts.add(held);
                     parts.add(failing);
                 }
@@ -1074,16 +1268,21 @@ public final class WhereEachLineDecides {
             }
             WhatAStatementComesTo.Asking asking =
                     ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
-            int at = index.get(part.key());
+            int at = index.get(part.spelling());
             int held = asking.with(possible, at, true);
             int failing = asking.with(possible, at, false);
             int decides = asking.both(asking.oneNotTheOther(asking.with(whole, at, true),
                     asking.with(whole, at, false)), asking.both(held, failing));
             List<List<Proposition>> cases = new ArrayList<>();
-            return switch (split(asking, decides, asking.either(held, failing), new ArrayList<>(),
-                    most, cases)) {
+            int possibleHere = asking.either(held, failing);
+            return switch (split(asking, decides, possibleHere, new ArrayList<>(), most, cases)) {
                 case NOT -> new TakenApart.Taken(cases);
-                case PAST_THE_FIGURE -> new TakenApart.MoreThan();
+                case PAST_THE_FIGURE -> {
+                    DecidingCase.Cases shared = shared(asking, decides, possibleHere,
+                            new HashMap<>());
+                    yield shared == null ? new TakenApart.MoreThan()
+                            : new TakenApart.Shared(shared);
+                }
                 case BY_NO_ONE_PART -> new TakenApart.ByNoOnePart();
                 case OUT_OF_STEPS -> new TakenApart.RanOut();
             };
@@ -1148,6 +1347,67 @@ public final class WhereEachLineDecides {
             return Stopped.BY_NO_ONE_PART;
         }
 
+        /**
+         * The cases {@link #split} would write out, kept as the choices they are made of: a part
+         * asked, held and failing, and under each what is left to choose. The same state of the
+         * choosing — what the line decides in, and what is possible, once the parts asked are
+         * fixed — comes to the same choices however the parts were reached, so it is one value
+         * every way to it shares; the cases it stands for are as many as the ways to its ends,
+         * and the states are as many as the graph holds. Null where the taking apart stopped
+         * short for steps or for no one part telling the ways apart, as {@code split} stops.
+         */
+        private DecidingCase.Cases shared(WhatAStatementComesTo.Asking asking, int decides,
+                                          int possible, Map<Long, DecidingCase.Cases> states) {
+            long state = ((long) decides << 32) | (possible & 0xffffffffL);
+            DecidingCase.Cases known = states.get(state);
+            if (known != null) {
+                return known;
+            }
+            int some = asking.both(decides, possible);
+            int notEvery = asking.both(asking.not(decides), possible);
+            if (some < 0 || notEvery < 0) {
+                return null;
+            }
+            DecidingCase.Cases choices = null;
+            if (some == WhatAStatementComesTo.NEVER) {
+                choices = DecidingCase.Cases.NONE;
+            } else if (notEvery == WhatAStatementComesTo.NEVER) {
+                choices = new DecidingCase.Cases.Together(List.of());
+            } else {
+                BitSet parts = possible == WhatAStatementComesTo.ALWAYS
+                        ? ways.firstPartAsked(decides) : ways.partsAsked(decides);
+                for (int part = parts.nextSetBit(0); part >= 0;
+                        part = parts.nextSetBit(part + 1)) {
+                    int turns = splitsOn(asking, decides, possible, part);
+                    if (turns < 0) {
+                        return null;
+                    }
+                    if (turns == WhatAStatementComesTo.NEVER) {
+                        continue;
+                    }
+                    DecidingCase.Cases holding = shared(asking, asking.with(decides, part, true),
+                            asking.with(possible, part, true), states);
+                    DecidingCase.Cases failing = shared(asking, asking.with(decides, part, false),
+                            asking.with(possible, part, false), states);
+                    if (holding == null || failing == null) {
+                        return null;
+                    }
+                    choices = new DecidingCase.Cases.EachOf(List.of(
+                            DecidingCase.Cases.together(List.of(
+                                    new DecidingCase.Cases.One(named.get(part)), holding)),
+                            DecidingCase.Cases.together(List.of(
+                                    new DecidingCase.Cases.One(named.get(part).denied()),
+                                    failing))));
+                    break;
+                }
+                if (choices == null) {
+                    return null;
+                }
+            }
+            states.put(state, choices);
+            return choices;
+        }
+
         /** Where, between two ways both possible that differ in {@code part} alone, whether the
          *  line decides differs: {@link WhatAStatementComesTo#NEVER} where nowhere. */
         private static int splitsOn(WhatAStatementComesTo.Asking asking, int decides,
@@ -1189,7 +1449,7 @@ public final class WhereEachLineDecides {
                                 .toList()))
                         .toList()),
                 new DecidingCase.Cases.EachOf(standings.stream()
-                        .<DecidingCase.Cases>map(factors -> new DecidingCase.Cases.Together(
+                        .<DecidingCase.Cases>map(factors -> DecidingCase.Cases.together(
                                 factors.stream()
                                         .<DecidingCase.Cases>map(factor ->
                                                 new DecidingCase.Cases.EachOf(factor.stream()
@@ -1224,29 +1484,32 @@ public final class WhereEachLineDecides {
     private static DecidingCase together(List<DecidingCase> chosen) {
         Proposition said = Proposition.all(chosen.stream().map(DecidingCase::condition).toList());
         return chosen.stream().allMatch(DecidingCase::saidAlone) ? DecidingCase.alone(said)
-                : new DecidingCase(said, new DecidingCase.Cases.Together(
+                : new DecidingCase(said, DecidingCase.Cases.together(
                         chosen.stream().map(DecidingCase::standsFor).toList()));
     }
 
     /** Whether {@code leaf} is {@code part}, held or denied. */
-    private static boolean standsAs(Proposition leaf, Proposition part) {
-        return leaf.getClass() == part.getClass() && held(leaf).key().equals(part.key());
+    static boolean standsAs(Proposition leaf, Proposition part) {
+        return leaf.getClass() == part.getClass() && held(leaf).spelling().equals(part.spelling());
     }
 
     private static boolean statesARelation(Proposition stated) {
+        return StatementReading.<Boolean>over(WhereEachLineDecides::statesARelationAt)
+                .read(stated);
+    }
+
+    private static boolean statesARelationAt(Proposition stated,
+                                             StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Compared _ -> true;
-            case Proposition.All all -> all.parts().stream()
-                    .anyMatch(WhereEachLineDecides::statesARelation);
-            case Proposition.Any any -> any.parts().stream()
-                    .anyMatch(WhereEachLineDecides::statesARelation);
-            case Proposition.WhereItAnswers where -> statesARelation(where.states());
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .anyMatch(WhereEachLineDecides::statesARelation);
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.OfTheWays _ -> stated.anyPart(again);
+            case Proposition.WhereItAnswers where -> again.read(where.states());
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                 Proposition.Unread _, Proposition.OnAnApplication _ -> false;
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
+                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> false;
         };
     }
 
@@ -1254,30 +1517,49 @@ public final class WhereEachLineDecides {
      * A part as it stands in the statement: which part it is, by the spelling of it held, and
      * whether it stands held or denied.
      */
-    private record Literal(String part, boolean held) {}
+    private record Literal(Spelling part, boolean held) {}
+
+    /**
+     * Every part {@code stated} joins, each by the spelling of it held: what the cases where a
+     * line decides are taken apart on, told apart as they are told apart here.
+     */
+    static Set<Spelling> partsJoinedBy(Proposition stated) {
+        return partsHeldBy(stated).keySet();
+    }
+
+    /** The same parts, each as it stands held, by the spelling of it held, in the order
+     *  {@code stated} names them: a reader that writes them out writes them in the model's
+     *  order. */
+    static Map<Spelling, Proposition> partsHeldBy(Proposition stated) {
+        Map<Spelling, Proposition> parts = new LinkedHashMap<>();
+        gather(stated, parts, new HashMap<>());
+        return parts;
+    }
 
     /** Every part {@code stated} joins, held, and each place one stands, by its own spelling. */
-    private static void gather(Proposition stated, Map<String, Proposition> parts,
-                               Map<String, Literal> leaves) {
+    private static void gather(Proposition stated, Map<Spelling, Proposition> parts,
+                               Map<Spelling, Literal> leaves) {
+        StatementReading.<Boolean>over((each, again) -> gatherAt(each, parts, leaves, again))
+                .read(stated);
+    }
+
+    private static boolean gatherAt(Proposition stated, Map<Spelling, Proposition> parts,
+                                    Map<Spelling, Literal> leaves,
+                                    StatementReading<Boolean> again) {
         switch (stated) {
-            case Proposition.All all -> all.parts().forEach(part -> gather(part, parts, leaves));
-            case Proposition.Any any -> any.parts().forEach(part -> gather(part, parts, leaves));
-            case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), parts, leaves);
-                gather(where.states(), parts, leaves);
-            }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(part -> gather(part, parts, leaves));
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.eachPart(again);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> {
                 Proposition held = held(stated);
-                parts.putIfAbsent(held.key(), held);
-                leaves.putIfAbsent(stated.key(), new Literal(held.key(), held == stated));
+                parts.putIfAbsent(held.spelling(), held);
+                leaves.putIfAbsent(stated.spelling(), new Literal(held.spelling(), held == stated));
             }
         }
+        return true;
     }
 
     /**
@@ -1286,37 +1568,57 @@ public final class WhereEachLineDecides {
      * a row the statement says nothing of, so it stands on no side of anything, and what such a
      * part does is narrow the cases the lines of the rest decide in.
      */
-    private static Set<String> onlyWhereItAnswers(Proposition stated) {
-        Map<String, Proposition> answering = new TreeMap<>();
-        Map<String, Proposition> stating = new TreeMap<>();
-        partsBy(stated, false, answering, stating);
-        Set<String> out = new HashSet<>(answering.keySet());
+    private static Set<Spelling> onlyWhereItAnswers(Proposition stated) {
+        Map<Spelling, Proposition> answering = new TreeMap<>();
+        Map<Spelling, Proposition> stating = new TreeMap<>();
+        new FiledByWhereItStands(answering, stating).from(stated);
+        Set<Spelling> out = new HashSet<>(answering.keySet());
         out.removeAll(stating.keySet());
         return out;
     }
 
-    /** Every part {@code stated} joins, held, filed by whether it stands in where it answers. */
-    private static void partsBy(Proposition stated, boolean answering,
-                                Map<String, Proposition> where, Map<String, Proposition> what) {
-        switch (stated) {
-            case Proposition.All all ->
-                    all.parts().forEach(part -> partsBy(part, answering, where, what));
-            case Proposition.Any any ->
-                    any.parts().forEach(part -> partsBy(part, answering, where, what));
-            case Proposition.WhereItAnswers inside -> {
-                partsBy(inside.answers(), true, where, what);
-                partsBy(inside.states(), answering, where, what);
+    /**
+     * Every part a statement joins, held, filed by whether it stands in where it answers.
+     *
+     * <p>What a part comes to depends on which side of an answering it stands, so a statement met
+     * on both sides is filed on both.
+     */
+    private static final class FiledByWhereItStands {
+
+        private final Map<Spelling, Proposition> where;
+        private final Map<Spelling, Proposition> what;
+        private final StatementReading.InContext<Boolean, Boolean> reading =
+                StatementReading.InContext.over(this::filed);
+
+        FiledByWhereItStands(Map<Spelling, Proposition> where, Map<Spelling, Proposition> what) {
+            this.where = where;
+            this.what = what;
+        }
+
+        void from(Proposition stated) {
+            reading.read(stated, false);
+        }
+
+        private boolean filed(Proposition stated, boolean answering,
+                              StatementReading.InContext<Boolean, Boolean> again) {
+            switch (stated) {
+                case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                     Proposition.OfTheWays _ -> stated.eachPart(again.in(answering));
+                case Proposition.WhereItAnswers inside -> {
+                    again.read(inside.answers(), true);
+                    again.read(inside.states(), answering);
+                }
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> {
+                    Proposition held = held(stated);
+                    (answering ? where : what).putIfAbsent(held.spelling(), held);
+                }
             }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(part -> partsBy(part, answering, where, what));
-            case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
-                 Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _ -> {
-                Proposition held = held(stated);
-                (answering ? where : what).putIfAbsent(held.key(), held);
-            }
+            return true;
         }
     }
 
@@ -1330,7 +1632,9 @@ public final class WhereEachLineDecides {
             case Proposition.Truth truth -> truth.holds();
             case Proposition.InCases cases -> cases.holds();
             case Proposition.Present present -> present.holds();
+            case Proposition.InTheStrings strings -> strings.holds();
             case Proposition.SameValue same -> same.holds();
+            case Proposition.StringInside inside -> inside.holds();
             case Proposition.Unread unread -> unread.holds();
             case Proposition.Some some -> some.holds();
             case Proposition.SomeReachable reached -> reached.holds();
@@ -1338,7 +1642,8 @@ public final class WhereEachLineDecides {
             case Proposition.LastToHold last -> last.holds();
             case Proposition.OnAnApplication _, Proposition.Always _ -> true;
             case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
-            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _ ->
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.OfTheWays _ ->
                     throw new IllegalArgumentException(
                             "a part is what a conjunction or a disjunction joins: " + part);
         };
@@ -1366,6 +1671,12 @@ public final class WhereEachLineDecides {
 
         /** More cases than were taken apart. */
         record MoreThan() implements TakenApart {}
+
+        /**
+         * More cases than were taken apart, kept as the choices they are made of, each state
+         * the choosing comes to shared by every way to it ({@link Reading#shared}).
+         */
+        record Shared(DecidingCase.Cases cases) implements TakenApart {}
 
         /** No one part tells where the line decides from the rest ({@link Reading#split}). */
         record ByNoOnePart() implements TakenApart {}
@@ -1417,7 +1728,7 @@ public final class WhereEachLineDecides {
                                                          Proposition part) {
         List<DecidingCase> out = new ArrayList<>();
         for (UnderACase each : underEachCase) {
-            if (each.reading().index.containsKey(part.key())) {
+            if (each.reading().index.containsKey(part.spelling())) {
                 each.reading().turnsOn(part).forEach(one -> out.add(one.meeting(each.is())));
             }
         }
@@ -1440,12 +1751,21 @@ public final class WhereEachLineDecides {
      */
     private record AskedTwice(DecisionSubject value, List<Integer> parts, List<Refinement> atoms) {}
 
-    /** Every value of the row {@code named} asks the case of more than once, in the order they are
-     *  first asked. */
-    private static List<AskedTwice> askedTwice(List<Proposition> named) {
+    /**
+     * Every value of the row {@code named} asks the case of more than once, in the order they are
+     * first asked.
+     *
+     * <p>A value at an element of a container is one of them where the statement holds one value
+     * at each element's position ({@code oneValueEach}): two parts asking the cases of one value
+     * there ask it of the one element the statement is about, and a statement about two elements
+     * holds two values at that position and says so.
+     */
+    private static List<AskedTwice> askedTwice(List<Proposition> named, boolean oneValueEach) {
         Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
         for (int i = 0; i < named.size(); i++) {
-            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+            if (named.get(i) instanceof Proposition.InCases cases && cases.holds()
+                    && (aValueOfTheRow(cases.of())
+                    || (oneValueEach && aValueAtAnElement(cases.of())))) {
                 byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
             }
         }
@@ -1571,7 +1891,7 @@ public final class WhereEachLineDecides {
      * for: what was said for several is kept as several, whatever it was joined with.
      */
     static List<DecidingCase> joinedOverAValue(List<DecidingCase> cases) {
-        Map<String, Joined> joined = new LinkedHashMap<>();
+        Map<Spelling, Joined> joined = new LinkedHashMap<>();
         for (DecidingCase written : cases) {
             // Said as the cases left of each value first, so that what two cases ask of a value is
             // one set each and the two are told apart by that alone. A case leaving no value is
@@ -1586,14 +1906,14 @@ public final class WhereEachLineDecides {
                     .filter(part -> part instanceof Proposition.InCases in && oneValueOfTheRow(in))
                     .map(Proposition.InCases.class::cast).findFirst().orElse(null);
             if (asked == null) {
-                joined.computeIfAbsent("whole " + each.key(),
+                joined.computeIfAbsent(Spelling.of("whole ", each.spelling()),
                         _ -> new Joined(null, each, List.of(), new ArrayList<>()))
                         .written().add(written);
                 continue;
             }
             Proposition rest = Proposition.all(parts.stream().filter(part -> part != asked)
                     .toList());
-            Joined there = joined.computeIfAbsent(asked.of() + " " + rest.key(),
+            Joined there = joined.computeIfAbsent(Spelling.of(asked.of() + " ", rest.spelling()),
                     _ -> new Joined(asked.of(), rest, new ArrayList<>(), new ArrayList<>()));
             asked.cases().atoms().stream().filter(atom -> !there.atoms().contains(atom))
                     .forEach(there.atoms()::add);
@@ -1634,7 +1954,7 @@ public final class WhereEachLineDecides {
         private DecidingCase.Cases anyOfTheJoined(Proposition one) {
             Proposition left = leftOfEachValue(one);
             if (left instanceof Proposition.Always(boolean holds) && !holds) {
-                return new DecidingCase.Cases.EachOf(List.of());
+                return DecidingCase.Cases.NONE;
             }
             List<Proposition> parts = new ArrayList<>();
             for (Proposition part : left instanceof Proposition.All all ? all.parts()
@@ -1649,45 +1969,132 @@ public final class WhereEachLineDecides {
 
     /**
      * Whether {@code cases}, held, asks which case one value of the row is. A value inside the
-     * elements or the keys of a container is one of them, and two parts asking it may ask it of two
-     * elements.
+     * elements or the keys of a container is one of them where nothing says which element, and
+     * two parts asking it may ask it of two elements.
      */
     private static boolean oneValueOfTheRow(Proposition.InCases cases) {
         return cases.holds() && aValueOfTheRow(cases.of());
     }
 
-    /** Whether {@code value} is one value of the row, and not one inside the elements or the keys
-     *  of a container. */
+    /**
+     * Whether {@code value} is one value of the row: one at no element or key of a container, or
+     * one an element read through a name stands for, which is one value wherever the name is read
+     * ({@link ValueIdentity.OfAnElement}).
+     */
     private static boolean aValueOfTheRow(DecisionSubject value) {
-        return value instanceof DecisionSubject.AnInput(TermPath at)
-                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
-                        || step instanceof TermPath.Step.Key);
+        return value instanceof DecisionSubject.AnInput(TermPath at, var identity)
+                && (identity instanceof ValueIdentity.OfAnElement
+                || at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
+                        || step instanceof TermPath.Step.Key));
+    }
+
+    /** Whether {@code value} is at an element of a container and at no key of one. */
+    private static boolean aValueAtAnElement(DecisionSubject value) {
+        return value instanceof DecisionSubject.AnInput(TermPath at, var _)
+                && at.steps().stream().anyMatch(step -> step instanceof TermPath.Step.Element)
+                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Key);
     }
 
     /**
      * {@code stated} with {@code value} one of {@code atoms} — every part asking which case it is
      * come out the way that answers — or none of the cases asked where {@code atoms} is empty.
      */
-    private static Proposition assuming(Proposition stated, DecisionSubject value,
-                                        List<Refinement> atoms) {
+    static Proposition assuming(Proposition stated, DecisionSubject value,
+                                List<Refinement> atoms) {
+        return StatementReading.<Proposition>over((each, again) ->
+                assumingAt(each, value, atoms, again)).read(stated);
+    }
+
+    private static Proposition assumingAt(Proposition stated, DecisionSubject value,
+                                          List<Refinement> atoms,
+                                          StatementReading<Proposition> again) {
         return switch (stated) {
-            case Proposition.All all -> Proposition.all(all.parts().stream()
-                    .map(each -> assuming(each, value, atoms)).toList());
-            case Proposition.Any any -> Proposition.any(any.parts().stream()
-                    .map(each -> assuming(each, value, atoms)).toList());
+            case Proposition.All _ -> Proposition.all(stated.allOverParts(again));
+            case Proposition.Any _ -> Proposition.any(stated.allOverParts(again));
             case Proposition.WhereItAnswers where -> Proposition.whereItAnswers(
-                    assuming(where.answers(), value, atoms),
-                    assuming(where.states(), value, atoms));
+                    again.read(where.answers()), again.read(where.states()));
             case Proposition.InCases cases when cases.of().equals(value) -> new Proposition.Always(
                     atoms.stream().anyMatch(cases.cases().atoms()::contains) == cases.holds());
             case Proposition.Some some -> new Proposition.Some(some.container(),
-                    assuming(some.ofTheElement(), value, atoms), some.holds());
-            case Proposition.SoManyHold counted ->
-                    counted.mapped(each -> assuming(each, value, atoms));
+                    again.read(some.ofTheElement()), some.holds());
+            case Proposition.SoManyHold counted -> counted.mapped(again::read);
+            case Proposition.OfTheWays ways -> again.read(ways.written());
             case Proposition.InCases _, Proposition.Always _, Proposition.Compared _,
-                 Proposition.Truth _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
-                 Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
+                 Proposition.Truth _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> stated;
+        };
+    }
+
+    /**
+     * {@code stated} where {@code chosen} holds: every place it stands come out as it does
+     * ({@link #with}), and {@code stated} as it is where {@code chosen} is no one part
+     * ({@link #isOnePart}). The two hold together exactly where {@code stated} and {@code chosen}
+     * do, so a conjunction that holds {@code chosen} may hold this in place of {@code stated}.
+     */
+    static Proposition given(Proposition stated, Proposition chosen) {
+        if (!isOnePart(chosen)) {
+            return stated;
+        }
+        Proposition part = held(chosen);
+        return with(stated, part, part.spelling().equals(chosen.spelling()));
+    }
+
+    /**
+     * A part as {@link #standsAs} finds it in a statement: its kind and the spelling of it held.
+     * {@link #given} changes a statement only where one of the statement's parts is the part
+     * chosen in these terms.
+     */
+    record PartHeld(Class<? extends Proposition> kind, Spelling spelling) {
+
+        PartHeld {
+            Objects.requireNonNull(kind, "a part is of some kind");
+            Objects.requireNonNull(spelling, "a part is spelled some way");
+        }
+    }
+
+    /** {@code chosen} as {@link #given} finds it, where it is one part ({@link #isOnePart}). */
+    static Optional<PartHeld> asOnePart(Proposition chosen) {
+        if (!isOnePart(chosen)) {
+            return Optional.empty();
+        }
+        Proposition part = held(chosen);
+        return Optional.of(new PartHeld(part.getClass(), part.spelling()));
+    }
+
+    /**
+     * Every part {@code stated} holds, anywhere in it, as {@link #standsAs} finds one: so
+     * {@link #given} hands {@code stated} back as it is for a part chosen that is none of these.
+     * Read down every part a statement holds, which is every place {@link #with} goes and more.
+     */
+    static Set<PartHeld> partsIn(Proposition stated) {
+        Set<PartHeld> out = new HashSet<>();
+        StatementReading.<Boolean>over((each, again) -> {
+            if (isOnePart(each)) {
+                out.add(new PartHeld(each.getClass(), held(each).spelling()));
+            }
+            each.eachPart(again);
+            return Boolean.TRUE;
+        }).read(stated);
+        return out;
+    }
+
+    /**
+     * Whether {@code stated} is one part, which {@link #with} finds where it stands, and not a
+     * statement made of several, which it goes into — nor one no reader here is handed
+     * ({@link Proposition.Carried}), which says no way round it stands.
+     */
+    static boolean isOnePart(Proposition stated) {
+        return switch (stated) {
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Always _,
+                 Proposition.Carried _ -> false;
+            case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> true;
         };
     }
 
@@ -1697,28 +2104,80 @@ public final class WhereEachLineDecides {
      * <p>Inside a quantifier too, where the part is not about the element it chose: there it is
      * the same thing of the same row. Where it may be about that element it is said of another
      * element, which the part does not move.
+     *
+     * <p>A part of the statement the part does not stand in is handed back as it is, which is
+     * what making it again of the same parts would give: a conjunction, a disjunction and a
+     * statement read where an operation answers are each made only by joining what they hold
+     * ({@link Proposition#all}, {@link Proposition#any}, {@link Proposition#whereItAnswers}).
      */
-    private static Proposition with(Proposition stated, Proposition part, boolean holds) {
-        return switch (stated) {
-            case Proposition.All all -> Proposition.all(all.parts().stream()
-                    .map(each -> with(each, part, holds)).toList());
-            case Proposition.Any any -> Proposition.any(any.parts().stream()
-                    .map(each -> with(each, part, holds)).toList());
-            case Proposition.WhereItAnswers where -> Proposition.whereItAnswers(
-                    with(where.answers(), part, holds), with(where.states(), part, holds));
-            case Proposition.SoManyHold counted ->
-                    counted.mapped(each -> with(each, part, holds));
-            case Proposition leaf when standsAs(leaf, part) ->
-                    new Proposition.Always(leaf.key().equals(part.key()) == holds);
-            case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
-                    new Proposition.Some(some.container(), with(some.ofTheElement(), part, holds),
-                            some.holds());
-            case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
-                 Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
-                 Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _ -> stated;
-        };
+    static Proposition with(Proposition stated, Proposition part, boolean holds) {
+        return new ComingOut(part, holds, new IdentityHashMap<>()).with(stated);
+    }
+
+    /**
+     * One part come out one way, put through a statement.
+     *
+     * @param came what each part met so far came to: a part a statement holds in several places
+     *             is put through once, and one the part does not stand in is itself, so that
+     *             what holds it is not built again
+     */
+    private record ComingOut(Proposition part, boolean holds, Map<Proposition, Proposition> came) {
+
+        Proposition with(Proposition stated) {
+            Proposition had = came.get(stated);
+            if (had == null) {
+                had = withOnce(stated);
+                came.put(stated, had);
+            }
+            return had;
+        }
+
+        private Proposition withOnce(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> {
+                    List<Proposition> each = with(all.parts());
+                    yield each == all.parts() ? stated : Proposition.all(each);
+                }
+                case Proposition.Any any -> {
+                    List<Proposition> each = with(any.parts());
+                    yield each == any.parts() ? stated : Proposition.any(each);
+                }
+                case Proposition.WhereItAnswers where -> {
+                    Proposition answers = with(where.answers());
+                    Proposition states = with(where.states());
+                    yield answers == where.answers() && states == where.states() ? stated
+                            : Proposition.whereItAnswers(answers, states);
+                }
+                case Proposition.SoManyHold counted -> counted.mapped(this::with);
+                case Proposition.OfTheWays ways -> with(ways.written());
+                case Proposition leaf when standsAs(leaf, part) ->
+                        new Proposition.Always(leaf.spelling().equals(part.spelling()) == holds);
+                case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) -> {
+                    Proposition met = with(some.ofTheElement());
+                    yield met == some.ofTheElement() ? stated
+                            : new Proposition.Some(some.container(), met, some.holds());
+                }
+                case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
+                     Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                     Proposition.InTheStrings _, Proposition.SameValue _,
+                     Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> stated;
+            };
+        }
+
+        /** Each of {@code parts} put through, the same parts where none changed. */
+        private List<Proposition> with(List<Proposition> parts) {
+            List<Proposition> out = new ArrayList<>(parts.size());
+            boolean changed = false;
+            for (Proposition each : parts) {
+                Proposition one = with(each);
+                changed |= one != each;
+                out.add(one);
+            }
+            return changed ? out : parts;
+        }
     }
 
     /**

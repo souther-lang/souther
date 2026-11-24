@@ -188,21 +188,40 @@ final class DischargeRules {
     /**
      * The declared forms, by name, for the test that holds each to a construction it discharges.
      *
-     * <p>Every one of them, and not a subset this check can carry. What this check can do with a
-     * form is settled by whether it can name the counts the form is written over, and that is the
-     * requirement every declared form was held to where it was bound
-     * ({@link TypeRequirement#COUNTED}, on the result and on every argument named) — so a form that
-     * is bound is a form this carries, and a second reading of the carriers here would be the
-     * binder's question asked again below the binding.
+     * <p>Every one of them whose answer is counted. What this check can do with a form is settled
+     * by whether it can name the counts the form is written over, which a form answering a number
+     * on a carrier can. A form answering a {@code Rational} is stated of the arithmetic and read
+     * where a call is taken as that arithmetic; it has no count for this check to carry, so no
+     * construction fires it here.
      *
      * <p>Over the declared forms and not over everything that answers the question. A sum and a
      * difference answer it by being the arithmetic they are, and what reads them is the grammar; a
      * program firing one would be firing the operator.
      */
-    static Set<String> formNames() {
+    static Set<String> formNames(Stdlib stdlib) {
         Set<String> names = new LinkedHashSet<>();
-        facts().answersAFormOfItsArguments().forEach(operation -> names.add(operation.toString()));
+        for (ValueName operation : facts().answersAFormOfItsArguments()) {
+            if (isCarried(stdlib, operation, facts().answersAFormOfItsArguments(operation))) {
+                names.add(operation.toString());
+            }
+        }
         return names;
+    }
+
+    /**
+     * Whether {@code form}, which {@code operation} answers, is over counts: what it answers and
+     * every argument it is written over count on a carrier. A form with a part that counts on none
+     * has no coordinate for this check to name, whichever part that is.
+     */
+    private static boolean isCarried(Stdlib stdlib, ValueName operation,
+                                     LinearForm<DeclaredArgument> form) {
+        if (!(operation instanceof ValueName.Stdlib.Operation library)) {
+            return false;
+        }
+        Stdlib.Entry entry = stdlib.entry(library);
+        return entry != null && Carrier.countsToANumber(entry.signature().result())
+                && form.coefs().keySet().stream()
+                        .allMatch(each -> Carrier.countsToANumber(each.stands()));
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction
@@ -298,16 +317,32 @@ final class DischargeRules {
     }
 
     /**
-     * The bounds {@code call}'s result has here: the operation's rows, less those whose condition on
-     * the arguments this call does not meet.
+     * The operation's rows for {@code call}, in the two halves the call's arguments make of them.
+     *
+     * @param holding  the rows whose condition on the arguments this call meets as constants, which
+     *                 are the bounds its result has here
+     * @param heldBack the rest. A reading that settles the condition some other way — by what a
+     *                 guard established of the argument — is the one to take them in.
+     */
+    record BoundRows(List<ResultBound<DeclaredArgument>> holding,
+                     List<ResultBound<DeclaredArgument>> heldBack) {}
+
+    /**
+     * {@code call}'s rows, each asked once.
      *
      * @param constant what an argument reads as, or null where it reads as no constant. Asked of the
      *                 caller because what a value is read as is the reading's answer and not a
      *                 property of the syntax at the call.
      */
-    static List<ResultBound<DeclaredArgument>> boundsOn(Core.PreservedCall call,
-                                                        Function<Core, BigDecimal> constant) {
-        return boundsOn(call.operation(), CallArguments.readAs(call, constant));
+    static BoundRows boundRowsOn(Core.PreservedCall call, Function<Core, BigDecimal> constant) {
+        ConstantArguments<DeclaredArgument> constants = CallArguments.readAs(call, constant);
+        List<ResultBound<DeclaredArgument>> rows = facts().boundsOnTheResult(call.operation());
+        List<ResultBound<DeclaredArgument>> holding = new ArrayList<>(rows.size());
+        List<ResultBound<DeclaredArgument>> heldBack = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> row : rows) {
+            (constants.satisfy(row.provided()) ? holding : heldBack).add(row);
+        }
+        return new BoundRows(holding, heldBack);
     }
 
     /**
@@ -377,6 +412,14 @@ final class DischargeRules {
                 : new Source(CallArguments.of(built.from(), call), built.shape(), built.size());
     }
 
+    /** The container {@code applied} built its result from, or null where the check has no rule
+     *  about what the operation keeps. */
+    static Source builtFrom(AnOperationApplied applied) {
+        BuiltFrom<DeclaredArgument> built = facts().buildsItsResultFrom(applied.operation());
+        Core container = built == null ? null : applied.argument(built.from());
+        return container == null ? null : new Source(container, built.shape(), built.size());
+    }
+
     /**
      * The containers {@code e}'s result is no smaller than, in the order the rule names them.
      *
@@ -385,7 +428,11 @@ final class DischargeRules {
      * true of the operator.
      */
     static List<Core> noSmallerThan(Core standing) {
-        AnOperationApplied applied = AnOperationApplied.of(standing);
+        return noSmallerThan(AnOperationApplied.of(standing));
+    }
+
+    /** The same, of an application however it was found. */
+    static List<Core> noSmallerThan(AnOperationApplied applied) {
         if (applied == null) {
             return List.of();
         }
@@ -405,6 +452,76 @@ final class DischargeRules {
     static Carrying carried(Core.PreservedCall call) {
         BoundOperationFact.ReadsItsContainer carried = facts().readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
+    }
+
+    /**
+     * The predicate the value {@code call} answers meets where it answers one, or null where the
+     * operation says nothing of the value it finds — or where what stands in the closure argument is
+     * not a one-parameter block this can read.
+     */
+    static Core.Block foundWhereItHolds(Core.PreservedCall call, Denotations at) {
+        BoundOperationFacts.Found found = facts().answersAnElementWhereTheClosureHolds(
+                call.operation());
+        if (found == null) {
+            return null;
+        }
+        Core.Block predicate = Terms.blockOf(CallArguments.of(found.closure(), call), at);
+        return predicate == null || predicate.params().size() != 1 ? null : predicate;
+    }
+
+    /** The container whose element {@code call} answers where it answers a value, or null where
+     * the operation does not say which value it answers. */
+    static Core elementAnsweredFrom(Core.PreservedCall call) {
+        DeclaredArgument source = facts().answersAnElementOf(call.operation());
+        return source == null ? null : CallArguments.of(source, call);
+    }
+
+    /** Where every element {@code call} answers stands, as the operation keeps them. */
+    static List<ResultBound<DeclaredArgument>> boundsOnEachElement(Core.PreservedCall call) {
+        return facts().boundsOnEachElementOfTheResult(call.operation());
+    }
+
+    /**
+     * The predicate every element {@code call} answers meets, or null where the operation does not
+     * answer the elements of a container where a closure holds of them — or where what stands in
+     * the closure argument is not a one-parameter block this can read.
+     *
+     * <p>Read off the piece the operation assembles, which the library proves of its body, so an
+     * operation that keeps elements by a predicate states it here by being declared to and by no
+     * name this spells.
+     */
+    static Core.Block keptWhereItHolds(Core.PreservedCall call, Denotations at) {
+        KeptWhereItHolds kept = keptElements(call);
+        Core.Block predicate = kept == null ? null : Terms.blockOf(kept.closure(), at);
+        return predicate == null || predicate.params().size() != 1 ? null : predicate;
+    }
+
+    /** The elements {@code call} answers: those of {@code source} that {@code closure} holds of. */
+    record KeptWhereItHolds(Core source, Core closure) {}
+
+    /**
+     * What {@code call} keeps and by what, or null where the operation does not answer the
+     * elements of a container where a closure holds of them: the container and the closure as
+     * the call was handed them.
+     */
+    static KeptWhereItHolds keptElements(Core.PreservedCall call) {
+        BoundOperationFacts.Kept kept = facts().keepsWhereItHolds(call.operation());
+        return kept == null ? null : new KeptWhereItHolds(CallArguments.of(kept.source(), call),
+                CallArguments.of(kept.closure(), call));
+    }
+
+    /**
+     * What {@code call} keeps and by what, or null where the operation does not answer the entries
+     * of a map where a closure holds of the key and the value: the map and the closure as the call
+     * was handed them.
+     *
+     * <p>Read of the entries and never of the values, which a closure of the key and the value is
+     * not a statement of: the one asked of what such a call keeps is {@link #keptElements}.
+     */
+    static KeptWhereItHolds keptEntries(Core.PreservedCall call) {
+        BoundOperationFacts.Kept kept = facts().keepsEntriesWhereItHolds(call.operation());
+        return kept == null ? null : new KeptWhereItHolds(CallArguments.of(kept.source(), call),
+                CallArguments.of(kept.closure(), call));
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the

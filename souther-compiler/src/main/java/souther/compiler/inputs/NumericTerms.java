@@ -1,10 +1,15 @@
 package souther.compiler.inputs;
 
+import souther.compiler.meaning.Spelling;
+
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.function.Function;
 
 /**
@@ -42,12 +47,70 @@ public final class NumericTerms {
         return walked(new ArrayList<>(terms), NumericTerms::nameOf);
     }
 
+    /** These terms, in the one order, as what says so ({@link InOrder}). */
+    public static InOrder ordered(Collection<NumericTerm> terms) {
+        return new InOrder(inOrder(terms));
+    }
+
+    /**
+     * Terms in the one order, which only this hands out.
+     *
+     * <p>For a reader that records terms in the order it is handed them, and is handed them by
+     * another that put them in order already: taking this rather than a list, it cannot be
+     * handed the order some form happened to hold them in.
+     */
+    public static final class InOrder {
+
+        private final List<NumericTerm> terms;
+
+        private InOrder(List<NumericTerm> terms) {
+            this.terms = terms;
+        }
+
+        /** The terms, in the one order. */
+        public List<NumericTerm> terms() {
+            return terms;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof InOrder that && terms.equals(that.terms);
+        }
+
+        @Override
+        public int hashCode() {
+            return terms.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return terms.toString();
+        }
+    }
+
+    /** These terms as a set that is walked in the one order, for a reader whose answer holds the
+     *  order it was handed them in. */
+    public static SequencedSet<NumericTerm> setInOrder(Collection<NumericTerm> terms) {
+        return Collections.unmodifiableSequencedSet(new LinkedHashSet<>(inOrder(terms)));
+    }
+
+    /** No term, as a set whose order is stated. */
+    public static SequencedSet<NumericTerm> none() {
+        return setInOrder(List.of());
+    }
+
     /** What a form holds, walked by its terms. */
     public static <V> List<Map.Entry<NumericTerm, V>> entriesInOrder(Map<NumericTerm, V> form) {
         return walked(new ArrayList<>(form.entrySet()), each -> nameOf(each.getKey()));
     }
 
-    private static <T> List<T> walked(List<T> these, Function<T, String> naming) {
+    private static <T> List<T> walked(List<T> these, Function<T, Spelling> naming) {
+        // One term is in the one order however it is named, and two are not walked as one where
+        // there is no second, so a form of one term is walked without naming it: naming it would
+        // be all of what walking it costs.
+        if (these.size() < 2) {
+            return List.copyOf(these);
+        }
         // Each named once. A name is spelled out of the term's whole path, and the sort asks for
         // the names of two terms at every comparison; spelled there, one walk of a form of a few
         // terms spelled each of them several times over.
@@ -70,7 +133,7 @@ public final class NumericTerms {
     }
 
     /** One of the things walked, with the name it is walked under. */
-    private record Named<T>(String name, T value) {}
+    private record Named<T>(Spelling name, T value) {}
 
     /**
      * The name a term is walked under: what it is written as, and then which kind of term it is.
@@ -83,9 +146,12 @@ public final class NumericTerms {
      * place and a number taken of what is at that place can be spelled alike and are two terms.
      * Carried second, it separates those two without moving anything their names already told
      * apart.
+     *
+     * <p>Held as the term's spelling ({@link NumericTerm#spelling}), so a term that keeps elements
+     * by a statement is named without the statement written out.
      */
-    private static String nameOf(NumericTerm term) {
-        return term + " " + switch (term) {
+    private static Spelling nameOf(NumericTerm term) {
+        return Spelling.of(term.spelling(), " " + switch (term) {
             case NumericTerm.ValueOf _ -> "1";
             case NumericTerm.TakenOf _ -> "2";
             case NumericTerm.TakenOver _ -> "3";
@@ -97,6 +163,9 @@ public final class NumericTerms {
             case NumericTerm.OccurrencesOfAKey _ -> "9";
             case NumericTerm.GatheredUnderItsKey _ -> "10";
             case NumericTerm.GatheredUnderAKey _ -> "11";
-        };
+            case NumericTerm.CodePointAt _ -> "12";
+            case NumericTerm.WholeUnitsOf _ -> "13";
+            case NumericTerm.ProductOf _ -> "14";
+        });
     }
 }

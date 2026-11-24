@@ -123,9 +123,9 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
         RuleShortfall nobodyWroteIt = new RuleShortfall(ConstructOccurrence.unwritten(),
                 RuleSite.at(FIRST), RuleShortfall.Kind.LEAF,
                 StoppedReading.of(UnreadReason.FORM_NOT_READ), POSITION);
-        InvariantStatementId one = new InvariantStatementId(FIRST, 0);
-        InvariantStatementId another = new InvariantStatementId(FIRST, 1);
-        InvariantStatementId elsewhere = new InvariantStatementId(SECOND, 0);
+        InvariantStatementId one = AStatementOfAConjunct.numbered(FIRST, 0);
+        InvariantStatementId another = AStatementOfAConjunct.numbered(FIRST, 1);
+        InvariantStatementId elsewhere = AStatementOfAConjunct.numbered(SECOND, 0);
 
         assertEquals(Set.of(nobodyWroteIt), toldByTheForm(nobodyWroteIt, List.of(one), one),
                 "in the statement the arithmetic stopped on, its word is the one said");
@@ -148,7 +148,8 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
         ReadingEvidence took = new ReadingEvidence();
         decidedIn.forEach(each -> took.stoppedBy(rule, fact, each));
         took.stoppedOnTheForm(rule, new FormShortfall(RuleSite.at(stoppedOn.part()),
-                new BlockReason.RuleAboutADerivedValue(), POSITION), stoppedOn);
+                RuleSite.theRuleItself(), new BlockReason.RuleAboutADerivedValue(), POSITION),
+                stoppedOn);
         return took.decidedWhereTheArithmeticStopped(rule, Set.of(fact));
     }
 

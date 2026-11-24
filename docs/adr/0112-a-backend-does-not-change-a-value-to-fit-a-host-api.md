@@ -1,6 +1,9 @@
 # ADR-0112: A backend does not change a value to fit a host API
 
-Status: Accepted.
+Status: Accepted. Amended by ADR-0128: the range of scales and digits a `BigDecimal` holds is no
+longer part of what a Decimal operation means, and an answer past it is reported as `OutOfRoom`
+rather than as `ConstraintViolation`. That a backend never changes a value to fit a host API, and
+that every Decimal operation is mediated by `DecimalMath`, stands.
 
 ## Context
 

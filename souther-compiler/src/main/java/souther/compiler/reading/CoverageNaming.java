@@ -21,8 +21,9 @@ import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.WhatAConditionRuns;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -134,7 +135,7 @@ final class CoverageNaming implements Naming<Outcome> {
         }
         Condition condition = compared != null ? casesLeft(compared, held)
                 : new Condition.Side(drawn.term(), outcome.occurrence(), OptionalInt.empty(), held,
-                        lineOf(drawn));
+                        statedOf(drawn, held));
         if (condition == null) {
             return null;
         }
@@ -175,7 +176,7 @@ final class CoverageNaming implements Naming<Outcome> {
             return new OnVisit.Unnamed(WhyNotJoined.NO_RUN_IS_RECORDED_AT_IT);
         }
         Condition condition = new Condition.Side(drawn.term(), outcome.occurrence(), visit, held,
-                lineOf(drawn));
+                statedOf(drawn, held));
         ControlClaim claim = visit.isPresent()
                 ? ControlClaim.onVisit(outcome, visit.getAsInt())
                 : new ControlClaim(outcome, ControlClaim.Visit.ANY);
@@ -211,9 +212,18 @@ final class CoverageNaming implements Naming<Outcome> {
 
     /** What {@code drawn} places on its number, where its other side is a value the number's order
      *  writes and its operator states something. */
-    private static Optional<Condition.Side.Line> lineOf(ComparedNumber drawn) {
-        return drawn.at() != null && drawn.placed() instanceof ComparisonClaim claim
-                ? Optional.of(new Condition.Side.Line(drawn.at(), claim)) : Optional.empty();
+    private static Optional<Condition.Side.Stated> statedOf(ComparedNumber drawn, boolean held) {
+        if (!(drawn.placed() instanceof ComparisonClaim claim)) {
+            return Optional.empty();
+        }
+        Rel rel = held ? claim.statedRelation() : claim.denied().statedRelation();
+        if (drawn.at() != null) {
+            return Optional.of(new Condition.Side.Stated(
+                    new Condition.Side.OtherSide.OnTheOrder(drawn.at()), rel));
+        }
+        return drawn.against() == null ? Optional.empty()
+                : Optional.of(new Condition.Side.Stated(
+                        new Condition.Side.OtherSide.AnotherNumber(drawn.against()), rel));
     }
 
     /** Which case of the union this arm is, said of the position matched on where there is one, or
@@ -243,11 +253,11 @@ final class CoverageNaming implements Naming<Outcome> {
         // What a fork is named by is the position it is on, and a scrutinee at none names nothing —
         // which is also what a scrutinee this reading did not follow leaves to name it with.
         TermPath at = switch (reads.pathOf(match.scrutinee(), newtypes)) {
-            case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesAt.At(var stands) -> stands;
+            case ValuesAt.NotAPosition _ -> null;
             // A name that only may stand at a position names no one position for a fork to be on,
             // and a name built out of the ones it may be would be a place no reader could look up.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
         if (at == null) {
             return null;

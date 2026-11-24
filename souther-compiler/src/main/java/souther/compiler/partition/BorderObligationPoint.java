@@ -62,11 +62,17 @@ public sealed interface BorderObligationPoint {
      * <p>Whether a row standing at length 1 is believed is a question about the type and not about
      * any body carrying it, so one row anywhere settles it.
      */
-    record AtLine(BorderObligationId line, DomainPoint point) implements BorderObligationPoint {
+    record AtLine(BorderObligationId line, DomainPoint point,
+                  Optional<ThresholdOfADerivedValue> threshold) implements BorderObligationPoint {
+
+        public AtLine(BorderObligationId line, DomainPoint point) {
+            this(line, point, Optional.empty());
+        }
 
         public AtLine {
-            if (line == null) {
-                throw new IllegalArgumentException("a point is some authored line's");
+            if (line == null || threshold == null) {
+                throw new IllegalArgumentException("a point is some authored line's, at one of"
+                        + " its thresholds or at its only one: " + line + " " + threshold);
             }
             if (point == null || !point.againstTheLine()) {
                 throw new IllegalArgumentException(

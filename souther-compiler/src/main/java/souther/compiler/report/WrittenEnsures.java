@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.cst.SourceSpace;
 import souther.compiler.diag.PhysicalRegion;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.query.Answer;
@@ -152,7 +153,7 @@ final class WrittenEnsures {
 
     private static int indentOf(String line) {
         int i = 0;
-        while (i < line.length() && Character.isWhitespace(line.charAt(i))) {
+        while (i < line.length() && SourceSpace.is(line.charAt(i))) {
             i++;
         }
         return i;

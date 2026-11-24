@@ -1,8 +1,9 @@
 package souther.compiler.inputs;
 
+import souther.compiler.collect.InTheOrderGiven;
+
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -69,8 +70,9 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
 
     public Requirements {
         // The order they were reached in, outermost first, which is the order a reason about them
-        // reads in.
-        refinements = Collections.unmodifiableMap(new LinkedHashMap<>(refinements));
+        // reads in. Held as a copy that says its hash without walking it, since a requirement is
+        // part of every context a table of readings is keyed by.
+        refinements = InTheOrderGiven.map(refinements);
         crossings = stillToCross(refinements, crossings);
         for (NameReach.Crossing each : crossings) {
             for (TermPath name : refinements.keySet()) {

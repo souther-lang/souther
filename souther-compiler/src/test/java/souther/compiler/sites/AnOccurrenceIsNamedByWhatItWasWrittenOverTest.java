@@ -1,5 +1,6 @@
 package souther.compiler.sites;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Placement;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
@@ -191,6 +192,6 @@ class AnOccurrenceIsNamedByWhatItWasWrittenOverTest {
     private static Compilation compile(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 }

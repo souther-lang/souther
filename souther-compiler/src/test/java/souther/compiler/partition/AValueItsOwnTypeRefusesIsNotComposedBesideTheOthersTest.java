@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -73,7 +74,7 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
         @Override
         public Built build(int parameter, FixtureTemplate candidate) {
             composed.add(candidate.text());
-            return new Built.Refused("not any of them");
+            return Built.Refused.inItsOwnWords("not any of them");
         }
     }
 
@@ -164,7 +165,7 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
             public Built build(int parameter, FixtureTemplate candidate) {
                 composed.add(candidate.text());
                 return candidate.text().contains("= 0") || candidate.text().contains("= 1")
-                        ? new Built.Refused("not this one") : new Built.NothingBuiltIt();
+                        ? Built.Refused.inItsOwnWords("not this one") : new Built.NothingBuiltIt();
             }
 
             @Override
@@ -218,7 +219,7 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
     }
 
     private static Read read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain =

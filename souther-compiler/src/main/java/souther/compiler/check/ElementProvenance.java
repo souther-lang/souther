@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.inputs.ElementQuestion;
 import souther.compiler.inputs.ElementStep;
 import souther.compiler.inputs.HeldIn;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -24,9 +25,11 @@ import java.util.Objects;
  * narrower one — it says the answers and the elements correspond, which is what a number over the
  * whole run needs and what a walk keeping some of what it was given does not have.
  * {@link #projectedFrom} is that, and the operation it was proved of is gone by the time anything
- * reads the tree, so it too is proved where the operation stands and carried by binding. And which
+ * reads the tree, so it too is proved where the operation stands and carried by binding. Which
  * keys a map an expansion wrote is keyed by is a third, kept beside the edges for the reason
- * {@link #keys} gives.
+ * {@link #keys} gives. And what an operation's answer is, a piece of each element of a container
+ * put end to end, is a fourth ({@link #assemblies}): the elements of a list a walk built are read
+ * from it once the walk is all the tree holds.
  *
  * <p><b>An edge is never handed out.</b> What one licenses is not a property of the edge but of the
  * question being asked, and a reader holding one could answer that for itself — beside the one place
@@ -61,8 +64,8 @@ public final class ElementProvenance {
      * {@code m} induces {@code m(a) R m(b)}.
      *
      * <p>Named for what the facts have in common rather than for how they are held. Two of them are
-     * one binding's edge to another and are kept as one edge; the third is kept beside it. What puts
-     * all three here is that a copy carries them alike, and a fact from one binding to several, or
+     * one binding's edge to another and are kept as one edge; the others are kept beside it. What
+     * puts them all here is that a copy carries them alike, and a fact from one binding to several, or
      * one a copy moves only one end of, obeys nothing said here and does not belong among these
      * however much it reads like one — put here, it would be carried by a law it does not keep.
      */
@@ -75,15 +78,65 @@ public final class ElementProvenance {
          *  second. */
         PROJECTS_EACH_ELEMENT_OF,
         /** The first binding is a map keyed by the keys the second was keyed by. */
-        KEEPS_THE_KEYS_OF
+        KEEPS_THE_KEYS_OF,
+        /** The first binding is the closure parameter of an operation whose answer is a piece of
+         *  each element of the second, put end to end. */
+        ASSEMBLES_THE_PIECES_OF,
+        /** The first binding is the parameter an operation hands the elements of the second on,
+         *  each application the one element it is handed. */
+        HANDED_EACH_ELEMENT_OF
     }
 
     /** Nothing was expanded, which is what a body calling no such operation comes to. */
     public static final ElementProvenance NONE =
-            new ElementProvenance(Map.of(), Map.of(), Map.of());
+            new ElementProvenance(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
 
     private final Map<BindingId, ElementEdge> edges;
     private final Map<BindingId, BindingId> projections;
+
+    /**
+     * The parameter each operation an expansion wrote hands the elements of a container on, against
+     * that container: on each application the operation makes of its closure, this parameter is
+     * the one element of the container that application is handed. Written of an operation that
+     * applies its closure to every element ({@link Combinators}) and to nothing else.
+     *
+     * <p>Not that each element is handed once, nor in which order. Applying a closure to every
+     * element says that each is handed and not how often: an operation may hand one element twice,
+     * or walk its container twice. What this licenses is that an application handed an element
+     * is handed that element, so what the closure states there is what it states on the element —
+     * and nothing read off this counts applications.
+     *
+     * <p>Beside the projections and not among them. A projection says the walk answers one value
+     * per element, which a filter or an {@code all} does not; this says which element the closure
+     * is handed on an application, which a projection does not. It is what lets a reader standing
+     * on one application of the walk the copy left say which element of the operation's container
+     * that application is of.
+     */
+    private final Map<BindingId, BindingId> handed;
+
+    /**
+     * The closure parameter of each operation an expansion wrote whose answer is put together of a
+     * piece of each element of a container, against that container and what the piece is
+     * ({@link BoundOperationFacts#assembles}).
+     *
+     * <p>Beside the projections and not among them. A projection says the walk answers one value
+     * per element, which a filter does not; this says what the operation's answer is, element by
+     * element and in order, which a projection does not. A map has both, proved of two
+     * declarations.
+     */
+    private final Map<BindingId, AssembledFrom> assemblies;
+
+    /**
+     * The container an operation's answer is a piece of each element of, and what the piece is in
+     * terms of what the closure answers on the element.
+     */
+    public record AssembledFrom(BindingId source, PieceOfAnElement piece) {
+
+        public AssembledFrom {
+            Objects.requireNonNull(source, "pieces are made of the elements of some container");
+            Objects.requireNonNull(piece, "and are some piece of each");
+        }
+    }
 
     /**
      * Each map an expansion wrote, against the map whose keys it is keyed by.
@@ -98,10 +151,14 @@ public final class ElementProvenance {
 
     private ElementProvenance(Map<BindingId, ElementEdge> edges,
                               Map<BindingId, BindingId> projections,
-                              Map<BindingId, BindingId> keys) {
+                              Map<BindingId, BindingId> keys,
+                              Map<BindingId, AssembledFrom> assemblies,
+                              Map<BindingId, BindingId> handed) {
         this.edges = Map.copyOf(edges);
         this.projections = Map.copyOf(projections);
         this.keys = Map.copyOf(keys);
+        this.assemblies = Map.copyOf(assemblies);
+        this.handed = Map.copyOf(handed);
     }
 
     /**
@@ -139,7 +196,22 @@ public final class ElementProvenance {
                         "two bodies both say what the keys of " + binding + " are");
             }
         });
-        return new ElementProvenance(joinedEdges, joinedProjections, joinedKeys);
+        Map<BindingId, AssembledFrom> joinedAssemblies = new LinkedHashMap<>(assemblies);
+        other.assemblies.forEach((binding, from) -> {
+            if (joinedAssemblies.put(binding, from) != null) {
+                throw new IllegalStateException(
+                        "two bodies both say what " + binding + " makes pieces of");
+            }
+        });
+        Map<BindingId, BindingId> joinedHanded = new LinkedHashMap<>(handed);
+        other.handed.forEach((binding, of) -> {
+            if (joinedHanded.put(binding, of) != null) {
+                throw new IllegalStateException(
+                        "two bodies both say what " + binding + " is handed the elements of");
+            }
+        });
+        return new ElementProvenance(joinedEdges, joinedProjections, joinedKeys,
+                joinedAssemblies, joinedHanded);
     }
 
     /**
@@ -196,7 +268,8 @@ public final class ElementProvenance {
             // kept some of the elements may hold none of them. Nor does it say they stand in the
             // same order, so the walk after the order stops too.
             case ElementEdge.TheSameAs(var container) -> switch (question) {
-                case NAMED_POSITION, VALUE_ORIGIN -> new ElementStep.Through(container);
+                case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF ->
+                        new ElementStep.Through(container);
                 case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, ONE_PER_ELEMENT, SAME_EMPTINESS ->
                         new ElementStep.Refused();
             };
@@ -207,7 +280,7 @@ public final class ElementProvenance {
             case ElementEdge.MadeFrom(var container) -> switch (question) {
                 case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, ONE_PER_ELEMENT,
                      SAME_EMPTINESS -> new ElementStep.Refused();
-                case VALUE_ORIGIN -> new ElementStep.Through(container);
+                case VALUE_ORIGIN, WHAT_IT_IS_MADE_OF -> new ElementStep.Through(container);
             };
         };
     }
@@ -231,26 +304,41 @@ public final class ElementProvenance {
         return parameter == null ? null : projections.get(parameter);
     }
 
+    /** Every closure parameter of an operation whose answer is a piece of each element of a
+     *  container, against that container and the piece. */
+    Map<BindingId, AssembledFrom> assembledFrom() {
+        return assemblies;
+    }
+
+    /** Every parameter an operation hands each element of a container to, against that
+     *  container. */
+    Map<BindingId, BindingId> handedEachElementOf() {
+        return handed;
+    }
+
     public boolean isEmpty() {
-        return edges.isEmpty() && projections.isEmpty() && keys.isEmpty();
+        return edges.isEmpty() && projections.isEmpty() && keys.isEmpty() && assemblies.isEmpty()
+                && handed.isEmpty();
     }
 
     @Override
     public boolean equals(Object other) {
         return this == other
                 || (other instanceof ElementProvenance that && edges.equals(that.edges)
-                        && projections.equals(that.projections) && keys.equals(that.keys));
+                        && projections.equals(that.projections) && keys.equals(that.keys)
+                        && assemblies.equals(that.assemblies) && handed.equals(that.handed));
     }
 
     @Override
     public int hashCode() {
-        return (edges.hashCode() * 31 + projections.hashCode()) * 31 + keys.hashCode();
+        return (((edges.hashCode() * 31 + projections.hashCode()) * 31 + keys.hashCode()) * 31
+                + assemblies.hashCode()) * 31 + handed.hashCode();
     }
 
     @Override
     public String toString() {
         return "ElementProvenance[edges=" + edges + ", projections=" + projections + ", keys="
-                + keys + "]";
+                + keys + ", assemblies=" + assemblies + ", handed=" + handed + "]";
     }
 
     /** What an expansion writes down as it goes. */
@@ -259,6 +347,8 @@ public final class ElementProvenance {
         private final Map<BindingId, ElementEdge> edges = new LinkedHashMap<>();
         private final Map<BindingId, BindingId> projections = new LinkedHashMap<>();
         private final Map<BindingId, BindingId> keys = new LinkedHashMap<>();
+        private final Map<BindingId, AssembledFrom> assemblies = new LinkedHashMap<>();
+        private final Map<BindingId, BindingId> handed = new LinkedHashMap<>();
 
         void holdsTheSameAs(BindingId binding, BindingId container) {
             putEdge(binding, new ElementEdge.TheSameAs(container));
@@ -286,6 +376,37 @@ public final class ElementProvenance {
          *  {@code container}. */
         void projectsEachElementOf(BindingId parameter, BindingId container) {
             projections.putIfAbsent(parameter, container);
+        }
+
+        /**
+         * {@code parameter} is the closure parameter of an operation whose answer is {@code piece}
+         * of each element of {@code source}, put end to end in the order of the elements.
+         *
+         * <p>Written once, as an edge is: a parameter said to make pieces of two containers, or
+         * two kinds of piece, is one whose answer nothing can say.
+         */
+        void assemblesThePiecesOf(BindingId parameter, BindingId source, PieceOfAnElement piece) {
+            AssembledFrom from = new AssembledFrom(source, piece);
+            AssembledFrom already = assemblies.putIfAbsent(parameter, from);
+            if (already != null && !already.equals(from)) {
+                throw new IllegalStateException("the closure parameter " + parameter
+                        + " makes " + already + " and " + from);
+            }
+        }
+
+        /**
+         * {@code parameter} is the parameter an operation hands the elements of {@code container}
+         * on, each application the one element it is handed.
+         *
+         * <p>Written once, as an edge is: a parameter said to be handed the elements of two
+         * containers is one whose application nothing can say is of which.
+         */
+        void handedEachElementOf(BindingId parameter, BindingId container) {
+            BindingId already = handed.putIfAbsent(parameter, container);
+            if (already != null && !already.equals(container)) {
+                throw new IllegalStateException("the parameter " + parameter
+                        + " is handed the elements of " + already + " and of " + container);
+            }
         }
 
         /**
@@ -347,6 +468,8 @@ public final class ElementProvenance {
             Map<BindingId, ElementEdge> inducedEdges = new LinkedHashMap<>();
             Map<BindingId, BindingId> inducedProjections = new LinkedHashMap<>();
             Map<BindingId, BindingId> inducedKeys = new LinkedHashMap<>();
+            Map<BindingId, AssembledFrom> inducedAssemblies = new LinkedHashMap<>();
+            Map<BindingId, BindingId> inducedHanded = new LinkedHashMap<>();
             renaming.forEach((of, here) -> {
                 ElementEdge edge = edges.get(of);
                 BindingId movedEnd = edge == null ? null : renaming.get(edge.container());
@@ -374,10 +497,27 @@ public final class ElementProvenance {
                             ? inducedKeys.get(here) : keys.get(here), movedKeyedBy);
                     inducedKeys.put(here, movedKeyedBy);
                 }
+                // The piece is what the operation makes of an element and moves with neither end.
+                AssembledFrom assembled = assemblies.get(of);
+                BindingId movedSource = assembled == null ? null : renaming.get(assembled.source());
+                if (movedSource != null) {
+                    refuseSecond(here, inducedAssemblies.containsKey(here)
+                            ? inducedAssemblies.get(here) : assemblies.get(here), movedSource);
+                    inducedAssemblies.put(here, new AssembledFrom(movedSource, assembled.piece()));
+                }
+                BindingId handedFrom = handed.get(of);
+                BindingId movedHanded = handedFrom == null ? null : renaming.get(handedFrom);
+                if (movedHanded != null) {
+                    refuseSecond(here, inducedHanded.containsKey(here)
+                            ? inducedHanded.get(here) : handed.get(here), movedHanded);
+                    inducedHanded.put(here, movedHanded);
+                }
             });
             inducedEdges.forEach(this::putEdge);
             projections.putAll(inducedProjections);
             keys.putAll(inducedKeys);
+            assemblies.putAll(inducedAssemblies);
+            handed.putAll(inducedHanded);
         }
 
         private static void refuseSecond(BindingId here, Object already, Object saying) {
@@ -388,7 +528,8 @@ public final class ElementProvenance {
         }
 
         ElementProvenance built() {
-            ElementProvenance built = new ElementProvenance(edges, projections, keys);
+            ElementProvenance built =
+                    new ElementProvenance(edges, projections, keys, assemblies, handed);
             return built.isEmpty() ? NONE : built;
         }
     }

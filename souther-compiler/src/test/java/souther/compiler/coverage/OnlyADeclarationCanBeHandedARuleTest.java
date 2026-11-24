@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -29,9 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class OnlyADeclarationCanBeHandedARuleTest {
 
-    private static List<String> refused(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+    private static List<String> refused(List<String> codes, String model) {
+        Compilation compilation = ACompiledModel.refusedWith(codes,
+                Compilation.ofSource(model, "Main"));
         return compilation.diagnostics().values().stream().flatMap(List::stream)
                 .map(each -> String.valueOf(each.diagnostic().code())).toList();
     }
@@ -39,7 +40,7 @@ class OnlyADeclarationCanBeHandedARuleTest {
     /** A rule handed to a name the body bound a block to. */
     @Test
     void aBlockBoundByALetTakesNoRule() {
-        assertEquals(List.of("E1809"), refused("""
+        assertEquals(List.of("E1809"), refused(List.of("E1809"), """
                 module example.local
 
                 data Count = Int
@@ -56,7 +57,7 @@ class OnlyADeclarationCanBeHandedARuleTest {
     /** And one handed to a name the body bound a declaration to. */
     @Test
     void aDeclarationBoundByALetTakesNoRuleEither() {
-        assertEquals(List.of("E1809"), refused("""
+        assertEquals(List.of("E1809"), refused(List.of("E1809"), """
                 module example.local
 
                 data Yes
@@ -80,7 +81,7 @@ class OnlyADeclarationCanBeHandedARuleTest {
     /** What a name bound to a block does take is a value, and a fork inside it is its own. */
     @Test
     void aBlockBoundByALetTakesValues() {
-        assertEquals(List.of(), refused("""
+        assertEquals(List.of(), refused(List.of(), """
                 module example.local
 
                 data Count = Int

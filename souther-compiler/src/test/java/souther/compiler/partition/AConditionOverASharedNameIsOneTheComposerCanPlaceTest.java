@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
@@ -19,6 +20,7 @@ import souther.compiler.query.Shapes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -157,8 +159,9 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, TruthsAsked.NONE,
-                        List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken))),
-                        Reachability.Ways.ONE, List.of()),
+                        List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken),
+                                NamedElements.NONE)),
+                        Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 
@@ -174,8 +177,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         // Measured, because the lines under test are drawn by the body: what the declarations alone
         // divide is the sum's cases, and a guard is read where a behavior is measured.
         made.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
+        return ACompiledModel.compiles(made);
     }
 
     private static String module() {

@@ -74,7 +74,7 @@ class EveryFigureAPartStopsAtIsSaidByEveryWordForItTest {
             AnAnswerComposed.Ways ways = AnAnswerComposed.written(List.of(
                     new DemandReading.Read.Unread(new WhyNotTaken.MeaningUnread(why))));
             Figure figure = why.figure().orElseThrow();
-            assertEquals(figure instanceof Figure.Budget(CompositionBudget budget)
+            assertEquals(figure instanceof Figure.Budget(CompositionBudget budget, var _)
                             ? new AnAnswerComposed.Ways.Stopped(Set.of(budget))
                             : new AnAnswerComposed.Ways.Unwritable(),
                     ways, why::toString);

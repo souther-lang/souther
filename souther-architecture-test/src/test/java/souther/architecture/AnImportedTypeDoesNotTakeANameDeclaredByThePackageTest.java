@@ -637,26 +637,31 @@ class AnImportedTypeDoesNotTakeANameDeclaredByThePackageTest {
 
     /** The parse itself, which is what is worth doing once. */
     private static List<Unit> parsedRepositorySources() {
-        List<Unit> out = new ArrayList<>();
         JavaCompiler compiler = compiler();
-        try (StandardJavaFileManager files =
-                     compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8)) {
-            for (Root root : roots()) {
-                Map<URI, Named> named = new LinkedHashMap<>();
-                for (Path at : root.sources()) {
-                    JavaFileObject source =
-                            files.getJavaFileObjectsFromPaths(List.of(at)).iterator().next();
-                    named.put(source.toUri(), new Named(source, named(at)));
-                }
-                out.addAll(parse(compiler, named, root));
-            }
-        } catch (IOException unreadable) {
-            throw new UncheckedIOException(unreadable);
-        }
+        // A root at a time, as the rule reads them, and the roots apart: each is its own parse with
+        // its own file manager, and the order of the population is the order of the roots.
+        List<Unit> out = roots().parallelStream()
+                .flatMap(root -> parsedRoot(compiler, root).stream())
+                .toList();
         // Closed where the population is made, and nowhere else. Copied again where it is kept,
         // dropping this one would leave the reading immutable all the same and nothing would say
         // which of the two was holding it.
         return List.copyOf(out);
+    }
+
+    private static List<Unit> parsedRoot(JavaCompiler compiler, Root root) {
+        try (StandardJavaFileManager files =
+                     compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8)) {
+            Map<URI, Named> named = new LinkedHashMap<>();
+            for (Path at : root.sources()) {
+                JavaFileObject source =
+                        files.getJavaFileObjectsFromPaths(List.of(at)).iterator().next();
+                named.put(source.toUri(), new Named(source, named(at)));
+            }
+            return parse(compiler, named, root);
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
     }
 
     /** Sources written here, all under one main root. */

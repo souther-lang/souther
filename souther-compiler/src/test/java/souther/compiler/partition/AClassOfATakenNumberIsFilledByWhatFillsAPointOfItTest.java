@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -120,8 +121,8 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
      */
     @Test
     void aClassOfAPartOfATimeIsOfferedATimeStandingInIt() {
-        assertEquals(Map.of("t=0 <= x < 9", "Time(\"00:00:00\")",
-                        "t=9 <= x <= 23", "Time(\"09:00:00\")"),
+        assertEquals(Map.of("Time.hour(t): 0 <= x < 9 at Time.hour(t)", "Time(\"00:00:00\")",
+                        "Time.hour(t): 9 <= x <= 23 at Time.hour(t)", "Time(\"09:00:00\")"),
                 offeredForEachClass(AN_HOUR, "f"));
 
         String report = report(AN_HOUR + AN_HOUR_ANSWERED);
@@ -138,7 +139,8 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
      */
     @Test
     void aClassOfATotalIsOfferedAListWhoseElementsComeToIt() {
-        assertEquals(Map.of("ns=x < 9", "[8]", "ns=9 <= x", "[9]"),
+        assertEquals(Map.of("List.sum(ns): x < 9 at List.sum(ns)", "[8]",
+                "List.sum(ns): 9 <= x at List.sum(ns)", "[9]"),
                 offeredForEachClass(A_TOTAL, "g"));
 
         String report = report(A_TOTAL + A_TOTAL_ANSWERED);
@@ -162,7 +164,7 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
                 """);
 
         assertTrue(report.contains("equivalence partitions 1/2"), report);
-        assertTrue(report.contains("no row is in `List.sum(ns)/9 <= x`"), report);
+        assertTrue(report.contains("no row is in `List.sum(ns): 9 <= x`"), report);
     }
 
     /**
@@ -179,15 +181,16 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
      */
     @Test
     void aClassOfAPartOfATimeSingledOutIsOfferedATime() {
-        assertEquals(Map.of("t== 9", "Time(\"09:00:00\")",
-                        "t=/= 9", "Time(\"00:00:00\")"),
+        assertEquals(Map.of("Time.hour(t): = 9 at Time.hour(t)", "Time(\"09:00:00\")",
+                        "Time.hour(t): /= 9 at Time.hour(t)", "Time(\"00:00:00\")"),
                 offeredForEachClass(AN_HOUR_SINGLED_OUT, "k"));
     }
 
     /** And a class of a total singled out is offered a list coming to it. */
     @Test
     void aClassOfATotalSingledOutIsOfferedAList() {
-        assertEquals(Map.of("ns== 9", "[9]", "ns=/= 9", "[10]"),
+        assertEquals(Map.of("List.sum(ns): = 9 at List.sum(ns)", "[9]",
+                "List.sum(ns): /= 9 at List.sum(ns)", "[10]"),
                 offeredForEachClass(A_TOTAL_SINGLED_OUT, "m"));
     }
 
@@ -238,19 +241,16 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
     private static String offered(String source, String behavior) {
         Compilation compilation = measured(source);
         return souther.compiler.report.GeneratedRows.of(compilation, "example.taken", behavior,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static String report(String source) {
         Compilation compilation = measured(source);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 }

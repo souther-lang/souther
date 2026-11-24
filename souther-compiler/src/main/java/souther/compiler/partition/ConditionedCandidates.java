@@ -57,9 +57,11 @@ final class ConditionedCandidates {
             return known;
         }
         FieldDomains.ConstructionLimits limits = rules.limitsAt(asked.at(), asked.settled());
+        // A position of the plan, which a rule naming something under it would have laid out as
+        // positions rather than left to be chosen whole: nothing around is left to hold it to.
         Proposals stands = Witnesses.firstWhatThePlaceAdmits(position.type(), limits,
-                reading, Set.of(), () -> Partitions.displacedRepresentativesOf(position.type(),
-                        reading, limits));
+                reading, Set.of(), Partitions.RulesAround.NONE,
+                () -> Partitions.displacedRepresentativesOf(position.type(), reading, limits));
         met = met.and(stands.met());
         found.put(asked, stands.values());
         return stands.values();

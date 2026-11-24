@@ -172,7 +172,7 @@ public sealed interface AffineConstraint<A> {
         ExactRatio mine = valueOf(one);
         ExactRatio theirs = valueOf(other);
         return (one.form().equals(other.form()) && mine.equals(theirs))
-                || (one.form().equals(other.form().negated()) && mine.equals(theirs.negated()));
+                || (one.form().isNegationOf(other.form()) && mine.equals(theirs.negated()));
     }
 
     private static ExactRatio valueOf(AffineConstraint<?> constraint) {

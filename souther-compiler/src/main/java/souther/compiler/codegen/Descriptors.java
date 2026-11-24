@@ -124,6 +124,9 @@ final class Descriptors {
      * taking a copy of that value off the stack and leaving the original where it was. */
     static final MethodTypeDesc MTD_Probe_condition = MethodTypeDesc.of(ConstantDescs.CD_void,
             ConstantDescs.CD_boolean, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_Probe_compared = MethodTypeDesc.of(ConstantDescs.CD_void,
+            ConstantDescs.CD_boolean, ConstantDescs.CD_long, ConstantDescs.CD_long,
+            ConstantDescs.CD_int);
     /**
      * What a run of the measuring classes is asked to answer with at an arm that carries its
      * siblings. Reached the way {@link #CD_Probe} is, and for the same reason.
@@ -132,6 +135,9 @@ final class Descriptors {
     /** {@code Intervention.replacementAt(int)}: the part to answer with at a site, or {@code -1}. */
     static final MethodTypeDesc MTD_Intervention_replacementAt =
             MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int);
+    /** {@code Intervention.walkAt(int)}: the rewrite to run a walk as, or {@code -1}. The same
+     *  shape as {@link #MTD_Intervention_replacementAt}. */
+    static final MethodTypeDesc MTD_Intervention_walkAt = MTD_Intervention_replacementAt;
     /**
      * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
      * ships. Reached the way {@link #CD_Probe} is, and for the same reason.
@@ -151,14 +157,18 @@ final class Descriptors {
      *  name and type of the runtime's own: what {@link CodegenContext#boundRuntime} binds there. */
     static final ClassDesc CD_BoundUnderEvaluation =
             ClassDesc.of("souther.compiler.evaluate.BoundUnderEvaluation");
-    /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
-    static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
+    /** {@code UnreachableReached.reached(String, String, int, int)}: aborts with what it says and
+     *  where it is written, typed as answering the position's value. */
+    static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String, CD_String,
+            ConstantDescs.CD_int, ConstantDescs.CD_int);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
     static final ClassDesc CD_InvariantFailure = ClassDesc.of("souther.runtime.InvariantFailure");
-    static final MethodTypeDesc MTD_failureOf =
-            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String, CD_String);
-    static final MethodTypeDesc MTD_failureUnnamed =
-            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String);
+    static final ClassDesc CD_InvariantFailureDeclared =
+            ClassDesc.of("souther.runtime.InvariantFailure$Declared");
+    static final MethodTypeDesc MTD_failureOf = MethodTypeDesc.of(CD_InvariantFailure, CD_String,
+            CD_String, CD_String, CD_String, CD_String, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_failureUnnamed = MethodTypeDesc.of(CD_InvariantFailure,
+            CD_String, CD_String, CD_String, CD_String, ConstantDescs.CD_int);
     /** {@code clause()}: the failing clause's name, or null where it was declared without one. */
     static final MethodTypeDesc MTD_failureClause = MethodTypeDesc.of(CD_String);
     /** {@code meta()}: the rejecting type, and the clause where it has a name. */
@@ -293,6 +303,9 @@ final class Descriptors {
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_apply = MethodTypeDesc.of(CD_Object, CD_Object);
     static final MethodTypeDesc MTD_orThrow = MethodTypeDesc.of(CD_Object, CD_Result);
+    /** {@code orThrow(Result, module, line, column)}: the same, naming the construction. */
+    static final MethodTypeDesc MTD_orThrowAt = MethodTypeDesc.of(CD_Object, CD_Result, CD_String,
+            ConstantDescs.CD_int, ConstantDescs.CD_int);
     static final ClassDesc CD_StringBuilder = ClassDesc.of("java.lang.StringBuilder");
     static final MethodTypeDesc MTD_SB_appendString =
             MethodTypeDesc.of(CD_StringBuilder, CD_String);
@@ -523,6 +536,10 @@ final class Descriptors {
     /** The same helper with the failing clause's name captured ahead of the two SAM arguments. */
     static final MethodTypeDesc MTD_invariantFailureNamed =
             MethodTypeDesc.of(CD_RResult, CD_String, CD_Object, CD_RPath);
+    /** The invariant's helper, with which clause it is captured beside the name: the declaration's
+     *  module, the declaration, and the clause's place among its clauses. */
+    static final MethodTypeDesc MTD_invariantFailureOfAClause = MethodTypeDesc.of(CD_RResult,
+            CD_String, CD_String, CD_String, ConstantDescs.CD_int, CD_Object, CD_RPath);
     static final MethodTypeDesc MTD_Rfail4 =
             MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String, CD_Map);
     static final MethodTypeDesc MTD_Rencode_variant =

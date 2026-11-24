@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import souther.compiler.cst.SourceSpace;
 import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
@@ -443,7 +444,7 @@ final class Repair {
     private static Edit under(String source, Witness.CommentAbove witness) {
         int from = source.indexOf('\n', witness.unit().at());
         int to = from;
-        while (to < source.length() && Character.isWhitespace(source.charAt(to))) {
+        while (to < source.length() && SourceSpace.is(source.charAt(to))) {
             to++;
         }
         while (to > from && source.charAt(to - 1) != '\n') {
@@ -557,7 +558,7 @@ final class Repair {
                     "the item before a separation ends the file, so nothing is written after it");
         }
         int to = from;
-        while (to < source.length() && Character.isWhitespace(source.charAt(to))) {
+        while (to < source.length() && SourceSpace.is(source.charAt(to))) {
             to++;
         }
         while (to > from && source.charAt(to - 1) != '\n') {

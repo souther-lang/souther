@@ -1,10 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
+import souther.test.RepositoryJavaSources;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
@@ -44,10 +44,10 @@ class AScopeIsAssembledWithoutSayingAnythingToAnyoneTest {
     private static final List<String> ASSEMBLY = List.of("Scoping.java", "ModuleUniverse.java");
 
     @Test
-    void theAssemblyNamesNothingAReaderIsToldWith() throws IOException {
+    void theAssemblyNamesNothingAReaderIsToldWith() {
         Set<String> reaching = new LinkedHashSet<>();
         for (Path source : sources()) {
-            String text = Files.readString(source);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             for (String said : SAYING) {
                 if (text.contains(said)) {
                     reaching.add(source.getFileName() + ": " + said);
@@ -61,7 +61,7 @@ class AScopeIsAssembledWithoutSayingAnythingToAnyoneTest {
 
     /** The assembly's own sources — asked for by name, and each one has to be there. A file that
      *  moved would otherwise leave this passing over nothing. */
-    private static List<Path> sources() throws IOException {
+    private static List<Path> sources() {
         List<Path> found = EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources().stream()
                 .filter(p -> ASSEMBLY.contains(p.getFileName().toString()))
                 .toList();

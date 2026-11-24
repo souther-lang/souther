@@ -2,10 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -13,8 +16,10 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -56,7 +61,9 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               ValueTemplates templates,
                               Map<BindingId, ElementAnswer> answers,
                               Map<BindingId, ClosureUses> uses,
-                              OrderOfElements order) {
+                              OrderOfElements order,
+                              Map<BindingId, AssembledWalk> assembled,
+                              Map<BindingId, BindingId> handing) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -68,6 +75,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         projected = Map.copyOf(projected);
         answers = Map.copyOf(answers);
         uses = Map.copyOf(uses);
+        assembled = Map.copyOf(assembled);
+        handing = Map.copyOf(handing);
         if (templates == null) {
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
@@ -86,7 +95,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                            Map<BindingId, ElementAnswer> answers,
                            Map<BindingId, ClosureUses> uses) {
         this(containers, held, provenance, projected, templates, answers, uses,
-                OrderOfElements.NOT_KNOWN);
+                OrderOfElements.NOT_KNOWN, Map.of(), Map.of());
     }
 
     /** Of a body whose closures are asked for no more than what they answered. */
@@ -115,7 +124,7 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
 
     /**
      * What this and {@code other} say together, of two bodies that share no binding — a body, and
-     * the body of a behavior it calls read where the call stands.
+     * the body of a recursive helper it calls read where the call stands.
      *
      * <p>A value built in either means what it means wherever it is built, so the values both build
      * are one meaning each.
@@ -136,9 +145,70 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         joinedAnswers.putAll(other.answers);
         Map<BindingId, ClosureUses> joinedEntries = new LinkedHashMap<>(uses);
         joinedEntries.putAll(other.uses);
+        Map<BindingId, AssembledWalk> joinedAssembled = new LinkedHashMap<>(assembled);
+        joinedAssembled.putAll(other.assembled);
+        Map<BindingId, BindingId> joinedHanding = new LinkedHashMap<>(handing);
+        joinedHanding.putAll(other.handing);
         return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
                 joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
-                joinedEntries, order.and(other.order));
+                joinedEntries, order.and(other.order), joinedAssembled, joinedHanding);
+    }
+
+    /**
+     * Whether the walk that hands {@code element} its elements is a walk an operation applies its
+     * closure by, over the container it was handed: so an application of the walk handed the
+     * element written at some place of that container is an application of the operation's
+     * closure handed that same element ({@link ElementProvenance#handedEachElementOf}).
+     *
+     * <p>That and no more. How many applications the operation makes, and in what order, is not
+     * said: an operation that applies its closure to every element may apply it twice to one, or
+     * by two walks, and each such application is handed the element it is handed. So a reader may
+     * take what an application handed an element states, and may not count applications off this.
+     *
+     * <p>Proved where the operation stood and held to the walk the copy left, as what a walk
+     * assembles is ({@link #assembledAt}). A walk over anything else — the container turned round,
+     * a part of it, another container the copy holds — is no walk this says anything of.
+     */
+    public boolean walksWhatItsOperationHandsEachElementOf(BindingId element) {
+        return element != null && handing.containsKey(element);
+    }
+
+    /**
+     * What the walk that hands {@code element} its elements answers, a piece of each of them put
+     * end to end, or null where nothing an expansion wrote says it answers that.
+     *
+     * <p>Keyed by the element because the element is what a walk the rewrite left still has: the
+     * binding is found from the walk ({@link GrowingFold#elementBindingOf}),
+     * and what the walk answers is this, proved where the operation stood.
+     */
+    public AssembledWalk assembledAt(BindingId element) {
+        return element == null ? null : assembled.get(element);
+    }
+
+    /**
+     * A walk whose answer is a piece of each element of {@code walked}, put end to end in the order
+     * of the elements: the operation an expansion wrote it for answers that
+     * ({@link ElementProvenance#assembledFrom}), and the walk is that operation's answer.
+     *
+     * @param parameter the closure's own parameter, which the element arrives under where the
+     *                  closure is applied in the walk's step: what the closure answers on an
+     *                  element is what the {@code let} binding it answers, with it handed the
+     *                  element
+     * @param walked    the container the walk is over, as the walk is handed it
+     * @param piece     what the piece of one element is
+     */
+    public record AssembledWalk(BindingId parameter, Core walked, PieceOfAnElement piece) {
+
+        public AssembledWalk {
+            Objects.requireNonNull(parameter, "a closure is applied under some parameter");
+            Objects.requireNonNull(walked, "a walk is over some container");
+            Objects.requireNonNull(piece, "and makes some piece of each element");
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(parameter, Core.hashWithoutWalking(walked), piece);
+        }
     }
 
     /**
@@ -211,6 +281,29 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         return binding == null ? null : uses.get(binding);
     }
 
+    /**
+     * Which calls of the language's operations handed {@code binding} what it holds, every one of
+     * them: none where none did, or where no source wrote the call.
+     *
+     * <p>Read off the applications of the closure it is a parameter of ({@link #usesOf}), each of
+     * which is a call, and not kept apart from them: which call handed what is a fact of the
+     * applications, and kept beside them it would be a second account of one fact that two bodies'
+     * bindings could be told apart by when nothing else tells them apart.
+     */
+    public Set<ACallOfAnOperation> handedBy(BindingId binding) {
+        ClosureUses of = usesOf(binding);
+        if (of == null) {
+            return Set.of();
+        }
+        Set<ACallOfAnOperation> by = new LinkedHashSet<>();
+        for (ClosureUses.Application each : of.applications()) {
+            if (each.held().contains(binding)) {
+                each.written().ifPresent(by::add);
+            }
+        }
+        return by;
+    }
+
     public boolean isEmpty() {
         return containers.isEmpty();
     }
@@ -254,9 +347,12 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, ElementAnswer> standing = new LinkedHashMap<>();
-        walk(body, found, held, provenance, answered, standing);
+        Set<BindingId> sources = new HashSet<>();
+        provenance.assembledFrom().values().forEach(from -> sources.add(from.source()));
+        Map<BindingId, Core> answeredUnder = new LinkedHashMap<>();
+        walk(body, found, held, provenance, answered, standing, sources, answeredUnder);
         for (Core template : templates) {
-            walk(template, found, held, provenance, answered, standing);
+            walk(template, found, held, provenance, answered, standing, sources, answeredUnder);
         }
         // What one walk hands its closure is what a licence and a projection are about, and a
         // binding taking elements of more than one container has no one walk to be about. The
@@ -284,7 +380,107 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
                 : new ElementBindings(found, held, provenance, projected, values, closures,
-                        entered, OrderOfElements.of(roots, held));
+                        entered, OrderOfElements.of(roots, held),
+                        assembledWalks(provenance, held, answeredUnder, entered),
+                        handingWalks(provenance, held, entered));
+    }
+
+    /**
+     * The walks whose answer is what an operation an expansion wrote answers, a piece of each
+     * element of a container, keyed by the element each walk hands its step.
+     *
+     * <p>What was proved is of the operation: its answer is a walk over the container from its
+     * first element, every step of which puts the piece its closure makes of the element after
+     * what it carries ({@link BoundOperationFacts#assembles}). The tree says which walk that is, and
+     * each of the three things asked of it is asked of whoever holds it. The closure's parameter is
+     * bound to the element a walk hands, which is the one binding the walk and the fact have in
+     * common. That walk is the one application its step has, to every element of a container
+     * holding what the operation's container binding holds. And it is what the expansion answers:
+     * what the {@code let} giving that binding comes to, through the bindings after it.
+     *
+     * <p>A walk the third is not asked of would be any walk over the container that applies the
+     * closure, and nothing was proved of what such a walk answers. An element two parameters are
+     * bound to is one whose step applies the closure twice, and nothing is said of it.
+     */
+    private static Map<BindingId, AssembledWalk> assembledWalks(
+            ElementProvenance provenance, Map<BindingId, Core> held,
+            Map<BindingId, Core> answeredUnder, Map<BindingId, ClosureUses> uses) {
+        Map<BindingId, AssembledWalk> out = new LinkedHashMap<>();
+        Set<BindingId> twice = new HashSet<>();
+        provenance.assembledFrom().forEach((parameter, from) -> {
+            ClosureUses.Application applied =
+                    theWalkHandingItsElementTo(parameter, from.source(), held, uses);
+            Core answer = answeredUnder.get(from.source());
+            if (applied == null || answer == null
+                    || Core.withoutStanding(applied.call()) != answer) {
+                return;
+            }
+            BindingId element = applied.held().iterator().next();
+            if (out.putIfAbsent(element,
+                    new AssembledWalk(parameter, applied.container(), from.piece())) != null) {
+                twice.add(element);
+            }
+        });
+        twice.forEach(out::remove);
+        return out;
+    }
+
+    /**
+     * The walks an operation an expansion wrote applies its closure by over the container it was
+     * handed, against that container's binding, keyed by the element each walk hands its step
+     * ({@link #walksWhatItsOperationHandsEachElementOf}).
+     *
+     * <p>Asked as what a walk assembles is asked ({@link #theWalkHandingItsElementTo}), and of
+     * nothing more: what the walk answers is not the question. A step applying the closure twice
+     * to the element binds two parameters to it, each handed the elements of the one container,
+     * and that is still one walk; an element said of two containers is said of none.
+     */
+    private static Map<BindingId, BindingId> handingWalks(
+            ElementProvenance provenance, Map<BindingId, Core> held,
+            Map<BindingId, ClosureUses> uses) {
+        Map<BindingId, BindingId> out = new LinkedHashMap<>();
+        Set<BindingId> twice = new HashSet<>();
+        provenance.handedEachElementOf().forEach((parameter, container) -> {
+            ClosureUses.Application applied =
+                    theWalkHandingItsElementTo(parameter, container, held, uses);
+            if (applied == null) {
+                return;
+            }
+            BindingId element = applied.held().iterator().next();
+            BindingId before = out.putIfAbsent(element, container);
+            if (before != null && !before.equals(container)) {
+                twice.add(element);
+            }
+        });
+        twice.forEach(out::remove);
+        return out;
+    }
+
+    /**
+     * The walk a fact an expansion wrote of {@code parameter} and {@code source} is about, or null
+     * where the tree holds no such walk.
+     *
+     * <p>Each of the things asked is asked of whoever holds it. The parameter is bound to the
+     * element a walk hands, which is the one binding the walk and the fact have in common. That walk
+     * is the one application its step has, to every element of a container, handing the step the
+     * element and nothing else; and the container it is over reads what the operation's container
+     * binding holds, followed through the names the copy gave it and through nothing that turns it
+     * round or takes a part of it.
+     */
+    private static ClosureUses.Application theWalkHandingItsElementTo(
+            BindingId parameter, BindingId source, Map<BindingId, Core> held,
+            Map<BindingId, ClosureUses> uses) {
+        if (!(Core.withoutStanding(held.get(parameter)) instanceof Core.Read read)
+                || read.binding() == null) {
+            return null;
+        }
+        BindingId element = read.binding();
+        ClosureUses of = uses.get(element);
+        ClosureUses.Application applied =
+                of == null ? null : of.theOnlyApplication().orElse(null);
+        return applied == null || applied.applied() != HowAClosureIsApplied.TO_EVERY_ELEMENT
+                || applied.position() != null || !applied.held().equals(Set.of(element))
+                || !readsWhatIsHeldBy(applied.container(), source, held) ? null : applied;
     }
 
     /**
@@ -383,9 +579,20 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, ElementAnswer> standing) {
+                             Map<BindingId, ElementAnswer> standing, Set<BindingId> sources,
+                             Map<BindingId, Core> answeredUnder) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
+            // What a binding an expansion gave the container an operation makes pieces of answers
+            // is what the expansion answers, which is what its body comes to through the bindings
+            // after it.
+            if (sources.contains(let.binder().binding())) {
+                Core answer = Core.withoutStanding(let.body());
+                while (answer instanceof Core.LetIn after) {
+                    answer = Core.withoutStanding(after.body());
+                }
+                answeredUnder.putIfAbsent(let.binder().binding(), answer);
+            }
             // What a name was given, as it was written. A build of a value is held as the build:
             // what the value is defined as is read where definitions are read, by the one place
             // that says what a name stands for (InputReads#meaningOf), and what this table answers
@@ -413,8 +620,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
             // than from a fact an expansion would have had to leave behind.
             handed(preserved.declared().operation(), preserved.args(), found, standing, held);
         }
-        Core.forEachChild(e, child ->
-                walk(child, found, held, provenance, answered, standing));
+        Core.forEachChild(e, child -> walk(child, found, held, provenance, answered, standing,
+                sources, answeredUnder));
     }
 
     /**
@@ -510,7 +717,10 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         }
         ValueName operation = call.declared().operation();
         Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
-        return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
+        if (handed == null) {
+            return null;
+        }
+        return answersOnePerElementOf(operation, handed.container(), call.args())
                 ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
                 : null;
     }
@@ -521,12 +731,13 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      * ({@link BoundOperationFacts#assembles}).
      *
      * @param step    the step
+     * @param closure the argument the step is written as, which stands where the step is read
      * @param element the parameter of the step each element arrives on
      * @param walked  the argument whose elements it is handed
      * @param piece   what the piece of one element is
      */
-    public record PiecesOfEachElement(Core.Block step, Core.Binder element, Core walked,
-                                      PieceOfAnElement piece) {}
+    public record PiecesOfEachElement(Core.Block step, Core closure, Core.Binder element,
+                                      Core walked, PieceOfAnElement piece) {}
 
     /**
      * The step {@code container} is put together of a piece of each element by, or null where it
@@ -556,9 +767,71 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 && closure >= 0 && closure < call.args().size()
                 && call.args().get(source) == handed.container()
                 && call.args().get(closure) == handed.closure()
-                ? new PiecesOfEachElement(handed.step(), handed.element(), handed.container(),
-                        assembled.piece())
+                ? new PiecesOfEachElement(handed.step(), handed.closure(), handed.element(),
+                        handed.container(), assembled.piece())
                 : null;
+    }
+
+    /**
+     * The one element a list is written with, and what decided the arm that writes it, outermost
+     * first: the attempt that held, the case taken, the condition that came out one way.
+     *
+     * <p>What a name the element reads was bound to is only so under the decisions: the name
+     * {@code if Name(d) as n then [n] else []} writes stands for what was built where the attempt
+     * held.
+     */
+    public record ElementWritten(Core element, List<Choice.Decides> decided) {
+
+        public ElementWritten {
+            decided = List.copyOf(decided);
+        }
+    }
+
+    /**
+     * The one element every list {@code body} may answer is written with, with the decisions of
+     * the arm that writes it, or null where the lists it answers are written with none or with
+     * more than one.
+     *
+     * <p>Read through the choices of the body: {@code if keep(x) then [x] else []} answers {@code x}
+     * where it answers anything, and so does a {@code match} whose arms answer {@code [x]} or
+     * {@code []}. Two arms writing the same expression are one element; two writing different ones
+     * are two, and a list written with a second element or answered by a call is a list this does
+     * not see inside.
+     */
+    public static ElementWritten theOneElementWrittenAfter(Core body) {
+        Core written = Core.withoutStanding(body);
+        if (written instanceof Core.ListLit list) {
+            return list.elements().size() == 1
+                    ? new ElementWritten(list.elements().getFirst(), List.of()) : null;
+        }
+        Choice choice = Choice.of(written);
+        return choice == null || choice.kind() == Choice.Kind.THE_ARGUMENTS ? null
+                : sharedElement(choice.arms());
+    }
+
+    /** The element the arms agree on, ignoring those that answer no list written with one. Arms
+     *  agree where they write one value ({@link Core#sameValue}): the same name, or the same field
+     *  of one value, whichever node each is written as. */
+    private static ElementWritten sharedElement(List<Choice.Arm> arms) {
+        ElementWritten agreed = null;
+        for (Choice.Arm arm : arms) {
+            if (Core.withoutStanding(arm.answers()) instanceof Core.ListLit list
+                    && list.elements().isEmpty()) {
+                continue;
+            }
+            ElementWritten inner = theOneElementWrittenAfter(arm.answers());
+            if (inner == null
+                    || (agreed != null && !Core.sameValue(agreed.element(), inner.element()))) {
+                return null;
+            }
+            if (agreed == null) {
+                List<Choice.Decides> decided = new ArrayList<>();
+                decided.add(arm.decidedBy());
+                decided.addAll(inner.decided());
+                agreed = new ElementWritten(inner.element(), decided);
+            }
+        }
+        return agreed;
     }
 
     /**

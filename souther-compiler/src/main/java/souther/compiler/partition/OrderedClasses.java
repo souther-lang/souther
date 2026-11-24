@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -91,7 +92,7 @@ final class OrderedClasses {
                 // leave nothing of is those values, and a class beside them holding nothing is one
                 // no row is ever counted at — and so is a run with nothing taken out of it that the
                 // declarations leave nothing in.
-                NumericSet rest = taken.isEmpty() ? new NumericSet.InARun(run)
+                NumericSet.OfRuns rest = taken.isEmpty() ? new NumericSet.InARun(run)
                         : new NumericSet.InARunExcept(run, taken);
                 if (anythingLeft(rest, carrier, min, max, held)) {
                     classes.add(Intervals.classOf(run, taken, term, type, reading, ruleReading,
@@ -115,7 +116,7 @@ final class OrderedClasses {
      * <p>Kept where neither could say: a class nobody can show is empty is one the rows are still
      * owed at, and dropped on a guess it would be a distinction gone missing from the denominator.
      */
-    private static boolean anythingLeft(NumericSet rest, Carrier carrier, Endpoint min,
+    private static boolean anythingLeft(NumericSet.OfRuns rest, Carrier carrier, Endpoint min,
                                         Endpoint max, HeldValues held) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         for (LevelInterval part : Criterion.Within.runsInside(rest.region(carrier), carrier,
@@ -148,7 +149,7 @@ final class OrderedClasses {
         for (Place value : values) {
             classes.add(theValue(value, orders, type, reading, ruleReading));
         }
-        NumericSet rest = new NumericSet.AwayFrom(values);
+        NumericSet.OfRuns rest = new NumericSet.AwayFrom(values);
         if (!anythingLeft(rest, carrier, within == null ? null : within.min(),
                 within == null ? null : within.max(), held)) {
             return classes;
@@ -159,12 +160,13 @@ final class OrderedClasses {
         // written into are not two spellings of one thing. Out of what the declarations hold the
         // number to, which is a set on the order it is answered on: the strings a position is held
         // to say nothing of which lengths to try until they are read through the term, and put to
-        // the lengths as they are they admit none.
+        // the lengths as they are they admit none. Near where the number is usually near, since a
+        // value singled out is no reason for the rest to stand beside it.
         Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, held.named(),
-                perWitness.get());
+                perWitness.get(), UsualPlaces.of(orders.term(), carrier, ruleReading.today()));
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        classes.add(classAt(orders.term().atOnePosition() + "/" + label, label,
+        classes.add(classAt(PartitionClass.idOf(orders.term().atOnePosition(), label), label,
                 orders, rest, other, type, reading, ruleReading));
         return classes;
     }
@@ -173,7 +175,8 @@ final class OrderedClasses {
     private static PartitionClass theValue(Place value, TermOrders orders, Type type,
                                            Quantities reading, RuleReadingContext ruleReading) {
         String written = orders.answered().written(value);
-        return classAt(orders.term().atOnePosition() + "/= " + written, "= " + written,
+        String label = "= " + written;
+        return classAt(PartitionClass.idOf(orders.term().atOnePosition(), label), label,
                 orders, new NumericSet.At(value), value, type, reading, ruleReading);
     }
 
@@ -189,8 +192,10 @@ final class OrderedClasses {
     private static PartitionClass classAt(String id, String label, TermOrders orders,
                                           NumericSet is, Place at, Type type, Quantities reading,
                                           RuleReadingContext ruleReading) {
-        String what = "a value whose " + Intervals.measureOf(orders.term().atOnePosition()) + " is "
-                + (is instanceof NumericSet.At ? "the one" : "none of the ones") + " singled out";
+        SearchMessage measure = Intervals.measureOf(orders.term().atOnePosition());
+        SearchMessage what = is instanceof NumericSet.At
+                ? new SearchMessage.AValueWhoseMeasureIsTheOneSingledOut(measure)
+                : new SearchMessage.AValueWhoseMeasureIsNoneSingledOut(measure);
         Recognition holding = new Recognition.OfACount(orders.term().atOnePosition(), orders, is);
         if (at == null) {
             // No number was named beside the ones singled out, which is this compiler naming one
@@ -198,8 +203,7 @@ final class OrderedClasses {
             return PartitionClass.of(id, label, holding,
                     new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
                             Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)),
-                            "nothing here composed " + what
-                                    + ", which does not make one unwritable"));
+                            new SearchMessage.NothingHereComposedIt(what)));
         }
         // The number this reader named, and what stands at it asked of what writes a value for a
         // number. Written here out of the carrier instead, a number taken of the position went into

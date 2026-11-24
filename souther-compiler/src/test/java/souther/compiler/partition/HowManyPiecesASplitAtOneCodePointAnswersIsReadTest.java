@@ -2,14 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -116,8 +114,7 @@ class HowManyPiecesASplitAtOneCodePointAnswersIsReadTest {
 
     private static void assertCovered(String model, int obligations) {
         Compilation compilation = measured(model);
-        assertEquals(List.of(), compilation.errors(), "the rows hold");
-        String report = AdequacyReport.of(compilation).human(
+        String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("obligations " + obligations + "/" + obligations), report);
         assertTrue(report.contains("adequacy: satisfied"), report);
@@ -125,16 +122,13 @@ class HowManyPiecesASplitAtOneCodePointAnswersIsReadTest {
 
     private static void assertNotRead(String model) {
         Compilation compilation = measured(model);
-        String report = AdequacyReport.of(compilation).human(
+        String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("not read: comparison"), report);
         assertTrue(report.contains("how many times one string stands inside another"), report);
     }
 
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

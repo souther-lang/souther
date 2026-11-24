@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -170,6 +171,12 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == Map.class) {
             return Map.of();
         }
+        if (type == Set.class) {
+            return Set.of();
+        }
+        if (type == Optional.class) {
+            return Optional.empty();
+        }
         if (type == TermPath.class) {
             return TermPath.of("x");
         }
@@ -206,6 +213,10 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         }
         if (type == InputReads.WhatItHolds.class) {
             return new InputReads.WhatItHolds.Unsaid();
+        }
+        if (type == RunSource.TraversalOrder.class) {
+            return new RunSource.TraversalOrder(TermPath.of("x").element(),
+                    TraversalDirection.FORWARD);
         }
         if (type.isEnum()) {
             return type.getEnumConstants()[0];

@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.report.InEnglish;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -39,7 +41,7 @@ class WhatAQuestionStandsOnIsSaidInTheOrderItWasWrittenTest {
      *  it. What the figure stood at is the run's, so the sentence is asked up to its name. */
     private static final String COSTLY = "read to the end, and the values the rules about this"
             + " position leave between them are more than this compiler will work out, stopped at "
-            + WorkFigure.ADMITTED_VALUES_ONE_MACHINE.counts() + " ("
+            + InEnglish.said(WorkFigure.ADMITTED_VALUES_ONE_MACHINE.countsSaid()) + " ("
             + WorkFigure.ADMITTED_VALUES_ONE_MACHINE.name() + ", ";
 
     /** And about the form nothing takes apart. */
@@ -103,9 +105,9 @@ class WhatAQuestionStandsOnIsSaidInTheOrderItWasWrittenTest {
     private static List<String> standingOn(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip)
                 .filter(each -> each.contains("not accounted for:"))
                 .map(each -> each.substring(each.lastIndexOf(": ") + 2))

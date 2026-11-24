@@ -1,23 +1,31 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.EntryHeld;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.PlacesTheRulesRead;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
+import souther.compiler.numeric.Today;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
@@ -96,6 +104,13 @@ public final class MeasuredInput {
      */
     private final RuleRoots ruleRoots;
     /**
+     * The day the reading was made on, which every value chosen for a row is chosen near.
+     *
+     * <p>Part of what makes two of these one: two readings made on different days offer different
+     * values.
+     */
+    private final Today today;
+    /**
      * What has been offered at a position, by its type and what the rules leave it.
      *
      * <p>Kept because every point a search looks for a row at composes the row again, and each
@@ -129,28 +144,53 @@ public final class MeasuredInput {
      * makes two of these one, for the reason {@link #offered} is not.
      */
     private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
+    /**
+     * The relations of the statements put to the rows of this input ({@link #putToRows}).
+     *
+     * <p>Kept because every reading of every line where a part of a statement decides puts that
+     * part to rows again: the statements are many, one for each place a line decides, and the
+     * relations in them are the comparisons of the model, each met again in every statement of the
+     * lines it decides. What one comes to put to rows is the relation's and this reading's
+     * quantities', and nothing a line brings. No part of what makes two of these one, for the
+     * reason {@link #offered} is not.
+     */
+    private final Map<AStatementAtARow.RelationRead, AStatementAtARow.OneRelation> relations =
+            new ConcurrentHashMap<>();
+    /**
+     * What the rules of the values standing in this input need its containers to hold
+     * ({@link #membersTheRulesNeed}).
+     *
+     * <p>Worked out with the input because every way composed for every point asks it, and it is
+     * the reading's and nothing a way brings. No part of what makes two of these one: it is
+     * derived from {@link #ruleRoots} and the rules read.
+     */
+    private final ContentsAsked membersNeeded;
 
-    /** A position as what it is offered turns on: where the value stops, how much it holds, the
-     *  class it is held to and the values its rules name — and not the rest of what the rules
-     *  admit, which nothing offered here reads. */
-    private record Offered(Type type, NumericDomain.Bounds values, FieldDomains.Held held,
-                           HeldClass heldTo, FieldDomains.ConstructionLimits.ValuesNamed named) {
+    /** A position as what it is offered turns on: where the value stops and the runs it is in, how
+     *  much it holds, the class it is held to and the values its rules name — and not the rest of
+     *  what the rules admit, which nothing offered here reads. */
+    private record Offered(Type type, NumericDomain.Bounds values, OrderedRuns ordered,
+                           FieldDomains.Held held, HeldClass heldTo,
+                           FieldDomains.ConstructionLimits.ValuesNamed named) {
 
         Offered(Type type, FieldDomains.ConstructionLimits limits) {
-            this(type, limits.values(), limits.held(), limits.heldTo(), limits.valuesNamed());
+            this(type, limits.values(), limits.ordered(), limits.held(), limits.heldTo(),
+                    limits.valuesNamed());
         }
     }
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
                           Partitions.Partitioning divided, DeclarationReadings machines,
-                          NameReach reach, RuleRoots ruleRoots) {
+                          NameReach reach, RuleRoots ruleRoots, Today today) {
         this.machines = machines;
+        this.today = today;
         this.behavior = behavior;
         this.written = written;
         this.quantities = quantities;
         this.divided = divided;
         this.reach = reach;
         this.ruleRoots = ruleRoots;
+        this.membersNeeded = membersNeeded(ruleRoots, written.rules());
     }
 
     /**
@@ -190,7 +230,8 @@ public final class MeasuredInput {
             read.quantities().ordersOf(axis.term());
         }
         return new MeasuredInput(behavior, BehaviorInputs.of(read), read.quantities(), divided,
-                read.domain().machines(), read.domain().reach(), read.domain().ruleRoots());
+                read.domain().machines(), read.domain().reach(), read.domain().ruleRoots(),
+                read.domain().today());
     }
 
     /**
@@ -212,12 +253,14 @@ public final class MeasuredInput {
                 && quantities.equals(that.quantities)
                 && divided.equals(that.divided)
                 && reach.equals(that.reach)
-                && ruleRoots.equals(that.ruleRoots);
+                && ruleRoots.equals(that.ruleRoots)
+                && today.equals(that.today);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(behavior, written, quantities, divided, reach, ruleRoots);
+        return java.util.Objects.hash(behavior, written, quantities, divided, reach, ruleRoots,
+                today);
     }
 
     @Override
@@ -256,6 +299,24 @@ public final class MeasuredInput {
     }
 
     /**
+     * {@code stated}, ready to be asked of the rows of this input ({@link AStatementAtARow#of}),
+     * with each of its relations read once for this input however many statements hold it.
+     */
+    AStatementAtARow putToRows(Proposition stated, String behavior) {
+        return AStatementAtARow.readBy(stated, behavior, quantities, relations);
+    }
+
+    /**
+     * {@code stated}, a case a line decides in, asked of the rows of this input at some element of
+     * a list of every whole number between two it weighs ({@link ACaseAskedAtSomeElement}) — or
+     * nothing where it weighs none.
+     */
+    Optional<ACaseAskedAtSomeElement> putToRowsAtSomeElement(Proposition stated,
+                                                             String behavior) {
+        return ACaseAskedAtSomeElement.of(stated, behavior, quantities, relations);
+    }
+
+    /**
      * Where the walk that read this input saw a name of one value stand at a position of another.
      *
      * <p>For a reader deciding where a row writes to move a number. A number is read where the
@@ -276,6 +337,60 @@ public final class MeasuredInput {
      */
     List<RuleRoots.Naming> rulesNaming(TermPath path) {
         return named.computeIfAbsent(path, ruleRoots::naming);
+    }
+
+    /**
+     * Which containers of this input the rules of the values standing in it need to hold a member
+     * of the same value, as a way's demands are said ({@link ContentsAsked.Asked}): every value
+     * whose rules reach a position ({@link RuleRoots}), each member a clause of it cannot be true
+     * without ({@link PlacesTheRulesRead#membersNeeded}), at the places where the value stands.
+     *
+     * <p>A value standing in the elements of one container is asked of every element, and the
+     * demand is the plan's to meet in each element it writes. One inside two containers or more is
+     * asked of none here: what is asked inside an element names no container further in.
+     *
+     * <p>And the positions it holds apart: two keys of one container that the rules ask different
+     * numbers of the value of can not be one key, since a map holds one value under a key.
+     */
+    ContentsAsked membersTheRulesNeed() {
+        return membersNeeded;
+    }
+
+    private static ContentsAsked membersNeeded(RuleRoots ruleRoots, RuleReadingSource source) {
+        List<ContentsAsked.Asked> out = new ArrayList<>();
+        for (InputDomain.RuleRoot root : ruleRoots.roots()) {
+            List<TermPath> holding = root.at().containersHoldingIt();
+            if (holding.size() > 1) {
+                continue;
+            }
+            Optional<ContentsAsked.Around> around = holding.isEmpty() ? Optional.empty()
+                    : Optional.of(ContentsAsked.Around.over(holding.getFirst(), false));
+            for (ClauseRead read : PlacesTheRulesRead.membersNeeded(root.type(), source)) {
+                ClauseRead.Member member = read.member().orElseThrow();
+                out.add(new ContentsAsked.Asked(root.at().then(read.at().steps()),
+                        member.lookedFor().placedAs(key -> root.at().then(key.steps())),
+                        true, member.asAKey(), member.valueIn(), around));
+            }
+        }
+        List<RowDemand.OneValueAtBoth> apart = new ArrayList<>();
+        for (int i = 0; i < out.size(); i++) {
+            for (int j = i + 1; j < out.size(); j++) {
+                ContentsAsked.Asked one = out.get(i);
+                ContentsAsked.Asked other = out.get(j);
+                if (one.container().equals(other.container()) && one.around().equals(other.around())
+                        && one.valueIn().isPresent() && other.valueIn().isPresent()
+                        && EntryHeld.leaveNoNumberInCommon(one.valueIn().get(),
+                                other.valueIn().get())) {
+                    RowDemand.OneValueAtBoth pair =
+                            RowDemand.OneValueAtBoth.of(one.valueAt().orElseThrow(),
+                                    other.valueAt().orElseThrow(), false);
+                    if (pair != null) {
+                        apart.add(pair);
+                    }
+                }
+            }
+        }
+        return new ContentsAsked(out, apart, List.of());
     }
 
     /**
@@ -333,7 +448,7 @@ public final class MeasuredInput {
      * it once.
      */
     public WitnessSearch witnessSearch() {
-        return Partitions.witnessSearch(divided.measurements(), reach);
+        return Partitions.witnessSearch(divided.measurements(), reach, today);
     }
 
     /**
@@ -394,7 +509,28 @@ public final class MeasuredInput {
      * of it — and a line this measurement never drew is not one it can read a row at.
      */
     public BorderReading at(Border asked) {
-        Border held = divided.held(asked);
+        return readingOf(asked, divided.held(asked));
+    }
+
+    /**
+     * This measurement's lines for a caller that reads many of them ({@link #at} of each): asked
+     * one at a time, every line drawn is met for each line asked
+     * ({@link Partitions.Partitioning#lines}).
+     */
+    public Lines lines() {
+        Partitions.HeldLines held = divided.lines();
+        return asked -> readingOf(asked, held.held(asked));
+    }
+
+    /** The lines of one measurement, each read where it is ({@link #lines}). */
+    @FunctionalInterface
+    public interface Lines {
+
+        /** This measurement's reading of the line it read where {@code asked} is ({@link #at}). */
+        BorderReading at(Border asked);
+    }
+
+    private BorderReading readingOf(Border asked, Border held) {
         if (held == null) {
             throw new IllegalArgumentException("the measurement of " + behavior
                     + " read no line where this one is: " + asked.cut());
@@ -436,7 +572,7 @@ public final class MeasuredInput {
      * position that arrives at one.
      */
     public RuleReadingContext ruleReading() {
-        return RuleReadingContext.of(rules(), written.policy(), machines);
+        return RuleReadingContext.of(rules(), written.policy(), machines, today);
     }
 
     /**

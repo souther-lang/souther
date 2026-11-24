@@ -41,7 +41,13 @@ public record ConditionOccurrence(String behavior, Reading reading, int ordinal)
         /** What divides the body's positions ({@link ComparisonReadings}). */
         DIVIDING,
         /** Which ways the body decides ({@link DecisionReading}). */
-        DECIDING
+        DECIDING,
+        /**
+         * The constructions the ways of {@link #DECIDING} get past ({@link PassedConstruction}).
+         * Named by that reading and counted apart from its conditions, since a construction is no
+         * condition: the conditions keep the numbers they have whatever the body builds.
+         */
+        GETTING_PAST
     }
 
     public ConditionOccurrence {
@@ -63,9 +69,15 @@ public record ConditionOccurrence(String behavior, Reading reading, int ordinal)
      * the decision is the decision's, a line is the division's — so the reading is what the
      * surrounding identity already says, and spelled here it would rename every published identity
      * for nothing a consumer can tell apart.
+     *
+     * <p>Except a construction got past, which is no condition and is counted on its own: written
+     * as a condition, the first construction of a body and its first condition would be published
+     * under one name.
      */
     @Override
     public String toString() {
-        return "condition " + ordinal + " of `" + behavior + "`";
+        return reading == Reading.GETTING_PAST
+                ? "construction " + ordinal + " got past in `" + behavior + "`"
+                : "condition " + ordinal + " of `" + behavior + "`";
     }
 }

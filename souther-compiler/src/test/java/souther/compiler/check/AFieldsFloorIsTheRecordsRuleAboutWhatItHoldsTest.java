@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Compilation;
@@ -32,14 +34,14 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
 
     private static FieldDomains domainsIn(String source, String type,
                                           java.util.Map<RuleKey, Count> settled) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` in " + module);
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), settled);
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY), settled);
     }
 
     private static final String AGAINST_A_SIBLING = """

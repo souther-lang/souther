@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -64,11 +65,11 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
     void eachNumberIsPartedAtTheValueThatSettlesTheComparison() {
         String parameters = "(a: M, b: M, c: D, d: D)";
         String condition = "a.v + c.v < b.v";
-        assertEquals(List.of("a.v/1 <= x < 11", "a.v/11 <= x <= 12"),
+        assertEquals(List.of("a.v: 1 <= x < 11", "a.v: 11 <= x <= 12"),
                 classesAt(MONTHS_AND_DAYS, parameters, condition, "a.v"));
-        assertEquals(List.of("b.v/1 <= x <= 2", "b.v/2 < x <= 12"),
+        assertEquals(List.of("b.v: 1 <= x <= 2", "b.v: 2 < x <= 12"),
                 classesAt(MONTHS_AND_DAYS, parameters, condition, "b.v"));
-        assertEquals(List.of("c.v/1 <= x < 11", "c.v/11 <= x <= 31"),
+        assertEquals(List.of("c.v: 1 <= x < 11", "c.v: 11 <= x <= 31"),
                 classesAt(MONTHS_AND_DAYS, parameters, condition, "c.v"));
     }
 
@@ -76,22 +77,20 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
     @Test
     void aRunWhoseUpperEndIsLeftOutIsTheRunOfTheWholeNumbersBelowIt() {
         String leftOut = MONTHS_AND_DAYS.replace("v <= 31", "v < 32");
-        assertEquals(List.of("a.v/1 <= x < 11", "a.v/11 <= x <= 12"),
+        assertEquals(List.of("a.v: 1 <= x < 11", "a.v: 11 <= x <= 12"),
                 classesAt(leftOut, "(a: M, b: M, c: D, d: D)", "a.v + c.v < b.v", "a.v"));
     }
 
     private static List<String> classesAt(String declarations, String parameters,
                                           String condition, String path) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + declarations + """
+        Compilation compilation = ACompiledModel.measured("module demo\n\n" + declarations + """
 
                 behavior f : %s -> Int
 
                 let f %s =
                     if %s then 1 else 0
                 """.formatted(parameters, parameters.replaceAll(": [A-Za-z]+", ""), condition),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                Adequacy.Asked.fullReport());
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))
@@ -99,19 +98,15 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
     }
 
     private static String reportOf(String declarations, String parameters, String condition) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + declarations + """
+        Compilation compilation = ACompiledModel.measured("module demo\n\n" + declarations + """
 
                 behavior f : %s -> Int
 
                 let f %s =
                     if %s then 1 else 0
                 """.formatted(parameters, parameters.replaceAll(": [A-Za-z]+", ""), condition),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList());
+                Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

@@ -402,9 +402,13 @@ sealed interface StatedByClauses {
             return new Part(byValues.either(opening.byValues(), other.byValues()),
                     byOrder.either(opening.byOrder(), other.byOrder()),
                     // And no opening for the numbers an operation answers: what that reading makes
-                    // of a choice is the envelope of what its branches leave
-                    // ({@link BoundaryState#either}), which is not the rule the choice states.
-                    byDerivedNumbers.eitherWithoutAJoin(other.byDerivedNumbers()),
+                    // of an end is the envelope of what its branches leave
+                    // ({@link BoundaryState#either}), which is not the rule the choice states. The
+                    // values it leaves are joined whole ({@link BoundaryState#runsAt}), and a
+                    // choice between rules about nothing but such numbers is taken in by them.
+                    leavesOnlyNumbersReadWhole(other)
+                            ? byDerivedNumbers.eitherExactly(other.byDerivedNumbers())
+                            : byDerivedNumbers.eitherWithoutAJoin(other.byDerivedNumbers()),
                     // Nor for how a container's elements stand to each other. Either of two rules
                     // about them is no rule a builder keeps: keeping both refuses containers the
                     // choice admits, and keeping one admits what the other refuses.
@@ -427,6 +431,38 @@ sealed interface StatedByClauses {
                     // open is what the alternatives leave that number, and that is settled once,
                     // where they are ({@link BoundaryState#either}).
                     under(choice, reached(boundsLeftOpen, other.boundsLeftOpen())));
+        }
+
+        /**
+         * Whether the choice between this and {@code other} is one the reading of the numbers an
+         * operation answers composes exactly: each alternative says something about one number
+         * only, takes every rule of it in whole, and is a rule of the same number as the one
+         * beside it.
+         *
+         * <p>Only then is the join of the runs the choice. An alternative that also holds the
+         * strings, the order or the elements of a position to something says that beside the
+         * number, and the two read apart are a product of what the alternatives say together: a
+         * code of two letters beginning with A or one of five beginning with B is not a code of
+         * either length beginning with either letter. And so are two numbers: a name and a code
+         * each shorter than three or each longer than five are not a name and a code each of
+         * either, so what each is left as runs is more than the choice leaves it.
+         */
+        private boolean leavesOnlyNumbersReadWhole(Part other) {
+            return aloneOnTheNumbers(this) && aloneOnTheNumbers(other)
+                    && boundary.byNumber().size() == 1
+                    && boundary.byNumber().keySet().equals(other.boundary().byNumber().keySet());
+        }
+
+        private static boolean aloneOnTheNumbers(Part part) {
+            return part.byDerivedNumbers().tookEveryPartInWhole()
+                    && part.byValues().read().isEmpty() && part.byOrder().read().isEmpty()
+                    && part.byElements().read().isEmpty() && part.aboutStrings().isEmpty()
+                    && part.boundary().open().isEmpty()
+                    && !part.boundary().byNumber().isEmpty()
+                    && part.boundary().byNumber().entrySet().stream()
+                            .allMatch(each -> each.getKey().holdsItsHolesAsRuns()
+                                    && (each.getValue() instanceof BoundaryState.Left.Known
+                                    || each.getValue() instanceof BoundaryState.Left.NothingLeft));
         }
 
         /** The same ends, with {@code choice} standing between them and the walk. */
@@ -682,12 +718,16 @@ sealed interface StatedByClauses {
      * @param keptApart what the builders of each container position keep its elements apart at
      *                  ({@link ElementsApart#keptAt}), which is what the reading of how elements
      *                  stand to each other is held to; a position with nothing kept is absent
+     * @param builtFor  the rules about a container and a place beside it that the builders of the
+     *                  record keep ({@link EntryHeld#writtenOn}, {@link SidesBalanced#writtenOn}),
+     *                  which is what the reading of them is held to
      */
     static Reading readingOf(Terms terms, Map<FactSubject, Type> byName,
                              Symbols symbols, Alternatives alternatives,
                              Allowance<FactSubject> allowed, StringMachineAnswers machines,
                              StatedLines lines, BoundaryReading boundaries,
-                             Map<FactSubject, List<List<String>>> keptApart) {
+                             Map<FactSubject, List<List<String>>> keptApart,
+                             BuiltFor builtFor) {
         // The positions as chains of names, made once beside the table for every reading that asks
         // which subexpression of a clause is a position.
         List<Term> held = new ArrayList<>(byName.size());
@@ -696,9 +736,44 @@ sealed interface StatedByClauses {
         }
         Term.Chains chains = new Term.Chains(held);
         return new Reading(
-                AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed),
+                AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed,
+                        builtFor),
                 OrderedReading.of(terms, byName), terms, byName, chains, alternatives,
-                machines, lines, boundaries, Map.copyOf(keptApart));
+                machines, lines, boundaries, Map.copyOf(keptApart), builtFor);
+    }
+
+    /**
+     * The rules about a container and a place beside it that the builders of a record keep.
+     *
+     * @param entryKeys     for each map, the places a key of an entry the builders hold it to
+     *                      stands at
+     * @param balancedLists the lists the builders balance the sides of
+     * @param noEntryHolds  the maps the rules ask for an entry that no value of the map's value type
+     *                      can be, which no map holds ({@link EntryHeld#askingForNoEntry})
+     */
+    record BuiltFor(Map<FactSubject, Set<FactSubject>> entryKeys, Set<FactSubject> balancedLists,
+                    Set<FactSubject> noEntryHolds) {
+
+        public BuiltFor {
+            entryKeys = Map.copyOf(entryKeys);
+            balancedLists = Set.copyOf(balancedLists);
+            noEntryHolds = Set.copyOf(noEntryHolds);
+        }
+
+        /** Whether the rules ask {@code map} for an entry no map holds. */
+        boolean asksForNoEntry(FactSubject map) {
+            return noEntryHolds.contains(map);
+        }
+
+        /** Whether the builders hold {@code map} to an entry under the key at {@code key}. */
+        boolean keepsAnEntry(FactSubject map, FactSubject key) {
+            return entryKeys.getOrDefault(map, Set.of()).contains(key);
+        }
+
+        /** Whether the builders balance the sides of {@code list}. */
+        boolean balances(FactSubject list) {
+            return balancedLists.contains(list);
+        }
     }
 
 
@@ -726,7 +801,7 @@ sealed interface StatedByClauses {
     record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
                    Map<FactSubject, Type> byName, Term.Chains chains, Alternatives alternatives,
                    StringMachineAnswers machines, StatedLines lines, BoundaryReading boundaries,
-                   Map<FactSubject, List<List<String>>> keptApart)
+                   Map<FactSubject, List<List<String>>> keptApart, BuiltFor builtFor)
             implements ClauseReading<StatedByClauses, Denotations> {
 
         /** What a binding under a clause is entered as, for a fold over this reading. The one
@@ -751,7 +826,11 @@ sealed interface StatedByClauses {
          * than one.
          */
         @Override
-        public StatedByClauses whole(ClauseExpr.Part part, Denotations at) {
+        public StatedByClauses whole(ClauseExpr.Part written, Denotations at) {
+            // Every language reads what the part states, and an emptiness check states a size
+            // held against nought: handed the call, one that reads sizes would read it as a form
+            // it has no word for, while the same rule spelled as the size is read.
+            ClauseExpr.Part part = ClauseExpr.withTheSizeMeant(written);
             Core e = part.of();
             boolean positive = part.positive();
             PlannedValues<FactSubject> said = values.leaf(part, at);
@@ -848,10 +927,33 @@ sealed interface StatedByClauses {
                                                                            Denotations at) {
             AdmissibleReading.KeptApart stated = values.keptApartAt(part, at);
             if (stated == null) {
-                return Adoption.nothing();
+                // Or a map asked for an entry under a key beside it: taken in at both, since the
+                // rule is about the two together and the builders of the map are told it.
+                AdmissibleReading.EntryAt entry = values.entryHeldAt(part, at);
+                if (entry == null) {
+                    // Or the sides of a list: taken in at the list where its builders balance
+                    // them, choosing how many elements stand at each case and what each adds.
+                    FactSubject list = values.sidesBalancedAt(part, at);
+                    if (list == null) {
+                        return Adoption.nothing();
+                    }
+                    boolean built = builtFor.balances(list);
+                    return Adoption.at(Set.of(list), built ? Set.of(list) : Set.of(), !built);
+                }
+                // Taken in at both where the builders hold the map to an entry under that key,
+                // and given up on where they do not: a rule they were never told of is a rule no
+                // map keeps. Taken in as well where the entry asked for is one no map holds, which
+                // every map composed satisfies since there is none.
+                Set<FactSubject> both = Set.of(entry.container(), entry.key());
+                boolean built = builtFor.keepsAnEntry(entry.container(), entry.key())
+                        || builtFor.asksForNoEntry(entry.container());
+                return Adoption.at(both, built ? both : Set.of(), !built);
             }
             Set<FactSubject> container = Set.of(stated.container());
-            boolean kept = ElementsApart.covers(
+            // Kept where the builders keep the run and the leaf answers for every container they
+            // compose: a container composed apart that the leaf stops on is one that does not keep
+            // it, whatever the leaf says where it answers.
+            boolean kept = stated.answersEverywhere() && ElementsApart.covers(
                     keptApart.getOrDefault(stated.container(), List.of()), stated.run());
             return Adoption.at(container, kept ? container : Set.of(), !kept);
         }
@@ -861,7 +963,7 @@ sealed interface StatedByClauses {
             return switch (read) {
                 case BoundaryReading.Read.NoLineStated _ -> BoundaryState.nothing();
                 case BoundaryReading.Read.Bounded it ->
-                        BoundaryState.bounded(it.number(), it.range());
+                        BoundaryState.bounded(it.number(), it.range(), it.runs());
                 case BoundaryReading.Read.LeftOpen it -> BoundaryState.leftOpen(it.end());
             };
         }
@@ -1980,7 +2082,8 @@ sealed interface StatedByClauses {
             // Built for the block the position is on, which is what the machine is being made for:
             // positions the rules hold as one value have one answer between them, and one purse.
             asked.forEach((position, plans) -> {
-                if (!answered.speaksFor(position)) {
+                if (answered.stoppedAt(position).stream().anyMatch(
+                        each -> StoppedReading.carriesAFigure(each.why()))) {
                     // Nothing was asked for, so no limit of the sets' allowance is why: what
                     // stopped them is what stopped the position's own answer, figure and all —
                     // every figure it reached, and whether anything else stopped it too.

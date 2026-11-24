@@ -57,7 +57,7 @@ class ABehaviorNobodyHasWrittenYetIsNotAnInjectionTargetTest {
     void itsRowsWaitForTheLetTheWayAnyUnwrittenBehaviorsDo() {
         Compilation compilation = Compilation.ofSource(OWED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         AdequacyReport.BehaviorReport outer = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().stream()

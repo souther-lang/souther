@@ -390,6 +390,9 @@ public sealed interface ObligationDisposition {
                      // on before any reading of one could be asked for — a question this sentence's
                      // reading never reached, and not a gap in the reading itself.
                      Weakening.ItemsPlaceNotWorkedOut _,
+                     // And how a position weighs into a value the line cuts, which is the
+                     // computation's and not a reading of any one point of the line.
+                     Weakening.AWeightNotDecided _,
                      // And a reading of the line that could not be tied to the point: what it came
                      // to is about the line, and this sentence's reading is not short of it.
                      Weakening.AReadingNotTiedToItsLine _,
@@ -397,6 +400,8 @@ public sealed interface ObligationDisposition {
                      // A body this image does not carry says nothing about a point of a line
                      // either: whether a row stands at one is not what it is short of.
                      Weakening.BodyNotInEvaluation _,
+                     // Nor a body left unread for its author to change, for the same reason.
+                     Weakening.BehaviorToBeChangedFirst _,
                      Weakening.BoundaryNotDerived _,
                      Weakening.InputNotRead _,
                      Weakening.PairSpaceTruncated _,
@@ -416,8 +421,6 @@ public sealed interface ObligationDisposition {
                      // which is short of one criterion's universe and says nothing about where a
                      // value stands against a line.
                      Weakening.MeetingsNotWalked _,
-                     // And one the classes do not place, for the same reason.
-                     Weakening.MeetingsNotPlaced _,
                      // And a sum of kept elements whose decisions were not joined to evaluations.
                      Weakening.MeetingsNotJoined _,
                      // And a decision whose ways could not all be written down, which is about

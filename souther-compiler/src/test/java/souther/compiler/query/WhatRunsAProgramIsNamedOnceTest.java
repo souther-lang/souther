@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
+import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.ProgramExecution;
+import souther.compiler.execute.ValueBuild;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.observe.ArmObservation;
@@ -13,6 +15,9 @@ import souther.compiler.observe.RowRun;
 import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
 import souther.compiler.source.SourceId;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -59,6 +64,14 @@ class WhatRunsAProgramIsNamedOnceTest {
         @Override
         public ConstantOutcome check(ConstantConstruction written) {
             return new ConstantOutcome.NotEvaluatedHere();
+        }
+
+        @Override
+        public Map<String, ConstantOutcome> build(ValueBuild asked, EvaluationPolicy policy) {
+            Map<String, ConstantOutcome> answered = new LinkedHashMap<>();
+            asked.inOrder().forEach(each ->
+                    answered.put(each.name(), new ConstantOutcome.NotEvaluatedHere()));
+            return answered;
         }
 
         @Override

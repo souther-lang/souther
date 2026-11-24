@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -47,9 +48,7 @@ class WhatASequenceHoldsIsAPositionTest {
             """;
 
     private static List<Position> positionsOfRoster() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(MODULE)).value();
         assertNotNull(inputs, "the model under test compiles");
@@ -138,22 +137,21 @@ class WhatASequenceHoldsIsAPositionTest {
      */
     @Test
     void aClauseStatedOfEveryElementIsShortAtTheSequenceItIsWrittenAbout() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.roster
 
                 data Age = Int
                 data Person =
                     { age: Age
                     }
-                data Roster = List<Person>
+                data Team = List<Person>
                     invariant grown = List.all(p -> p.age.value >= 18, value)
                 data Size = Int
 
-                behavior roster : (people: Roster) -> Size
+                behavior roster : (people: Team) -> Size
                     constructs Size
-                let roster (people) = Size(List.length(people))
-                """, "Main");
-        compilation.answerEverything();
+                let roster (people) = Size(List.length(people.value))
+                """);
         InputDomain read = compilation.db().ask(new Adequacy.Inputs(MODULE)).value().get("roster");
         assertNotNull(read, "the model under test compiles");
 

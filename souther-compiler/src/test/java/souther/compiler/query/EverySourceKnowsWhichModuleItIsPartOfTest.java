@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,7 @@ class EverySourceKnowsWhichModuleItIsPartOfTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(MODEL_ID.value(), MODEL);
         byId.put(ATTACHED_ID.value(), ATTACHED);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     @Test

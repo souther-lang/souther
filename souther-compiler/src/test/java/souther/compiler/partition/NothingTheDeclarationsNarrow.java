@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.TestDay;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.ValueSet;
 
@@ -18,7 +19,7 @@ final class NothingTheDeclarationsNarrow {
 
     static final WitnessSearch LOOKING = new WitnessSearch(
             _ -> new AdmittedValues.Admitted.Values(ValueSet.ANY),
-            PatternPlan.Budget.OF_A_WITNESS::meter);
+            PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
 
     private NothingTheDeclarationsNarrow() {}
 }

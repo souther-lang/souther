@@ -73,8 +73,7 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
             """;
 
     private static List<Core> nodes(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         assertEquals(List.of(),
                 compilation.db().allReports().stream().map(Object::toString).toList(),
                 "the model compiles");
@@ -151,16 +150,15 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
      */
     @Test
     void aLineIsDrawnOnlyWhereADateIsWritten() {
-        assertTrue(report(CONSTRUCTED).contains("border      borders 1   obligations 0/4"),
-                report(CONSTRUCTED));
-        assertFalse(report(ANSWERS_ONE).contains("obligations 0/4"), report(ANSWERS_ONE));
-        assertTrue(report(ANSWERS_ONE).contains("decision    rules 2"), report(ANSWERS_ONE));
+        String constructed = report(CONSTRUCTED);
+        assertTrue(constructed.contains("border      borders 1   obligations 0/4"), constructed);
+        String answersOne = report(ANSWERS_ONE);
+        assertFalse(answersOne.contains("obligations 0/4"), answersOne);
+        assertTrue(answersOne.contains("decision    rules 2"), answersOne);
     }
 
     private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

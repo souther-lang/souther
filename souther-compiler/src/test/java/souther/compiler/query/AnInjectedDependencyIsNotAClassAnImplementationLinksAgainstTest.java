@@ -2,7 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.Severity;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
@@ -94,13 +94,10 @@ class AnInjectedDependencyIsNotAClassAnImplementationLinksAgainstTest {
      */
     @Test
     void whereEverythingCameOutBothMayBeRun() {
-        Compiled clean = compile("1");
+        Compilation clean = compile("1", List.of());
 
-        assertEquals(List.of(), clean.refusals(),
-                () -> "nothing is refused about this model, and it was refused about "
-                        + clean.refusals());
-        assertEquals(Set.of("fetch"), clean.runnable("example.supplier"));
-        assertEquals(Set.of("place"), clean.runnable("example.consumer"));
+        assertEquals(Set.of("fetch"), runnable(clean, "example.supplier"));
+        assertEquals(Set.of("place"), runnable(clean, "example.consumer"));
     }
 
     /**
@@ -112,13 +109,10 @@ class AnInjectedDependencyIsNotAClassAnImplementationLinksAgainstTest {
      */
     @Test
     void aRefusedImplementationTakesItsCallerAndLeavesWhatDependsOnIt() {
-        Compiled refused = compile("0");
+        Compilation refused = compile("0", List.of(THE_REFUSED_CONSTRUCTION));
 
-        assertEquals(List.of(THE_REFUSED_CONSTRUCTION), refused.refusals(),
-                () -> "this model is refused about the construction alone, and it was refused"
-                        + " about " + refused.refusals());
-        assertEquals(Set.of(), refused.runnable("example.supplier"));
-        assertEquals(Set.of("place"), refused.runnable("example.consumer"),
+        assertEquals(Set.of(), runnable(refused, "example.supplier"));
+        assertEquals(Set.of("place"), runnable(refused, "example.consumer"),
                 "`place` is handed what it depends on rather than constructing it");
     }
 
@@ -131,9 +125,9 @@ class AnInjectedDependencyIsNotAClassAnImplementationLinksAgainstTest {
      */
     @Test
     void andItsRowIsObservedAgainstTheStandInTheRowWrote() {
-        Compiled refused = compile("0");
+        Compilation refused = compile("0", List.of(THE_REFUSED_CONSTRUCTION));
 
-        List<RowOutcome> ran = new ArrayList<>(refused.compilation().db()
+        List<RowOutcome> ran = new ArrayList<>(refused.db()
                 .ask(new Output.RowsRead("example.consumer")).value()
                 .byBehavior().get("place").ran());
 
@@ -142,31 +136,19 @@ class AnInjectedDependencyIsNotAClassAnImplementationLinksAgainstTest {
                 () -> "the row ran and held: " + ran.getFirst());
     }
 
-    /** A compilation of the model, and the answers this asks of it. */
-    private record Compiled(Compilation compilation) {
-
-        Set<String> runnable(String module) {
-            Answer<Bodies.Implementations> answer =
-                    compilation.db().ask(new Bodies.RunnableImplementations(module));
-            assertTrue(answer.present(), "a module that settled is one this answers about");
-            return answer.value().runnable();
-        }
-
-        List<String> refusals() {
-            return compilation.diagnostics().values().stream()
-                    .flatMap(List::stream)
-                    .filter(each -> each.diagnostic().severity() == Severity.ERROR)
-                    .map(each -> each.diagnostic().code().toString())
-                    .sorted()
-                    .toList();
-        }
+    private static Set<String> runnable(Compilation compilation, String module) {
+        Answer<Bodies.Implementations> answer =
+                compilation.db().ask(new Bodies.RunnableImplementations(module));
+        assertTrue(answer.present(), "a module that settled is one this answers about");
+        return answer.value().runnable();
     }
 
-    private static Compiled compile(String constructs) {
+    /** The model measured and answered in full, held to be refused with {@code refusedWith}
+     *  and nothing else. */
+    private static Compilation compile(String constructs, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSources(
                 List.of(SUPPLIER.formatted(constructs), CONSUMER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return new Compiled(compilation);
+        return ACompiledModel.refusedWith(refusedWith, compilation);
     }
 }

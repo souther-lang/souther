@@ -56,16 +56,14 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
     }
 
     private static Made reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return new Made(AdequacyReport.of(compilation),
                 SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String humanOf(String source) {
         Made made = reportOf(source);
-        return made.report().human(made.sources());
+        return made.report().humanInEnglish(made.sources());
     }
 
     private static JsonNode partitionOf(String source) {

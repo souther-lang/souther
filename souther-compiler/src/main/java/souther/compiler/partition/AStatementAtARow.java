@@ -1,8 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.ElementKey;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
@@ -10,9 +12,16 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.OnOneElement;
+import souther.compiler.meaning.PartedString;
+import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.ReadThroughNames;
+import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.StatementReading;
+import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -22,7 +31,13 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Recognizer;
+import souther.compiler.types.ValueName;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
+import souther.compiler.values.WrittenValues;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,7 +47,10 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -81,13 +99,24 @@ final class AStatementAtARow {
 
     private final Proposition stated;
     private final Map<Relation, OneRelation> relations;
-    private final Map<String, OverTheElements> elements;
+    private final Map<Spelling,OverTheElements> elements;
     /** The positions a part asks of their own value: whether it is true, whether there is one. */
     private final Set<TermPath> positions;
+    /**
+     * Whether {@code stated} holds one value at each element's position, as a row does. One that
+     * holds two at one is no statement of a row, which hands each position one value, and is not
+     * known at any row ({@link ReadThroughNames#holdsOneValueAtEachElement}).
+     */
+    private final boolean ofARow;
+    /** {@link #hashCode}, or {@code 0} before it is asked; the same whoever works it out. */
+    private int hash;
+    /** The parts numbered on the first row asked; the same whoever numbers them. */
+    private volatile PartsOfTheStatement parts;
 
     private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
-                             Map<String, OverTheElements> elements, Set<TermPath> positions) {
+                             Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
         this.stated = stated;
+        this.ofARow = ReadThroughNames.holdsOneValueAtEachElement(stated);
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
         this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
@@ -108,7 +137,46 @@ final class AStatementAtARow {
      * it says nothing about.
      */
     static boolean askable(Proposition stated) {
-        return askable(stated, false);
+        return askable(stated, false, false);
+    }
+
+    /**
+     * Whether a row can be asked {@code stated} where a case a line decides in is put to rows: at
+     * some element, where it weighs the element of a list of every whole number between two
+     * ({@link ACaseAskedAtSomeElement}), and so where it is a statement a row can be asked with the element
+     * put at a value; as it stands otherwise.
+     */
+    static boolean askableAtSomeElement(Proposition stated) {
+        Optional<Quantity.OfABinding> element = OnOneElement.theElementOf(stated);
+        return element.isEmpty() ? askable(stated)
+                : StatementReading.<Boolean>over((each, again) ->
+                        askableAt(each, element.get(), again)).read(stated);
+    }
+
+    /**
+     * Whether {@code stated}, with {@code element} put at a value, is a statement a row can be
+     * asked: asked part by part, each relation with the element put in it alone, since a
+     * relation's form is all the element is weighed in; and a part the statement shares, once
+     * ({@code again}). The statement with the element put in it is never built. A part the
+     * element would settle to a constant is asked as it is put, whatever it settles to, so a
+     * statement whose other parts no row can be asked is not one either.
+     */
+    private static boolean askableAt(Proposition stated, Quantity.OfABinding element,
+                                     StatementReading<Boolean> again) {
+        return switch (stated) {
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
+                    stated.everyPart(again);
+            case Proposition.Compared compared -> OnOneElement.at(compared, element,
+                    LinearForm.constant(ExactRatio.ZERO)) instanceof Proposition there
+                    && askable(there);
+            case Proposition.Always _, Proposition.Truth _, Proposition.Present _,
+                 Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _,
+                 Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.Carried _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> askable(stated);
+        };
     }
 
     /**
@@ -116,56 +184,176 @@ final class AStatementAtARow {
      * one at a time — for a line, or for what else each relates.
      */
     static boolean askableBesideItsRelations(Proposition stated) {
-        return askable(stated, true);
+        return askable(stated, true, false);
     }
 
-    private static boolean askable(Proposition stated, boolean besideItsRelations) {
+    /**
+     * The same of every part of {@code stated} that is neither a relation nor a part nothing read:
+     * for the lines of a statement read beside what it left unread, each of which is still asked
+     * where it decides ({@link #askable}), so that one deciding on what was not read is no line.
+     */
+    static boolean askableBesideItsRelationsAndItsStops(Proposition stated) {
+        return askable(stated, true, true);
+    }
+
+    /**
+     * Whether what keeps a row from being asked {@code stated} is its parts nothing read and
+     * nothing else: with those taken as asked, every part of it is.
+     */
+    static boolean turnsOnWhatWasNotRead(Proposition stated) {
+        return !askable(stated, false, false) && askable(stated, false, true);
+    }
+
+    private static boolean askable(Proposition stated, boolean besideItsRelations,
+                                   boolean besideItsStops) {
+        return StatementReading.<Boolean>over((each, again) ->
+                askableHere(each, besideItsRelations, besideItsStops, again)).read(stated);
+    }
+
+    private static boolean askableHere(Proposition stated, boolean besideItsRelations,
+                                       boolean besideItsStops, StatementReading<Boolean> again) {
         return switch (stated) {
+            case Proposition.Unread _ when besideItsStops -> true;
             case Proposition.Always _ -> true;
-            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, String _),
-                 Proposition.Present(DecisionSubject.AnInput _, boolean _, String _) -> true;
+            case Proposition.Truth(DecisionSubject.AnInput _, boolean _, Spelling _),
+                 Proposition.Present(DecisionSubject.AnInput _, boolean _, Spelling _) -> true;
             // A row names the case it wrote at a position, and that answers only cases of a sum:
             // whether an optional holds a value is asked as whether it is present.
             case Proposition.InCases(DecisionSubject.AnInput _, CasesLeft cases, boolean _,
-                                     String _) ->
+                                     Spelling _) ->
                     cases.atoms().stream().allMatch(Refinement.SumCase.class::isInstance);
-            case Proposition.SameValue(DecisionSubject.AnInput _, DecisionSubject.AnInput _,
-                                       boolean _, String _) -> true;
+            // A row writes the value at a position, and whether it is another's, or the one
+            // written, is read off that value.
+            case Proposition.SameValue same -> same.one() instanceof DecisionSubject.AnInput
+                    && (same.otherSubject() == null
+                            || same.otherSubject() instanceof DecisionSubject.AnInput);
+            // A row writes the string at a position, and whether it is one of a language's is
+            // read off that string. So is a piece of it, where the pieces held are the one piece
+            // at an index: the row's string is parted and the piece there is read. Which of
+            // several pieces a statement is about is the quantifier's and no row's.
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
+                                          StringsLanguage _, boolean _, Spelling _) -> true;
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.OfAPiece(
+                    var _, Optional<PartedString> parted), StringsLanguage _, boolean _,
+                    Spelling _) -> onePieceOf(parted) != null;
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.WhereItAnswers where -> askable(where.answers(), besideItsRelations)
-                    && askable(where.states(), besideItsRelations);
-            case Proposition.SoManyHold counted -> counted.statements().stream()
-                    .allMatch(each -> askable(each, besideItsRelations));
-            case Proposition.Some some -> askable(some.ofTheElement(), besideItsRelations);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
+                    stated.everyPart(again);
             case Proposition.Compared compared -> besideItsRelations
                     || switch (compared.relation()) {
                 case Relation.Affine affine ->
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
                         || productIn(affine) != null
+                        || pieceMembershipIn(affine) != null
+                        || thePieceBeingAValueIn(affine) != null
                         || remainderByAnInputIn(affine) != null
                         || remainderOfADividendIn(affine) != null
-                        || (countIn(affine) instanceof Quantity.HowManyMeet count
-                                && askable(count.ofTheElement()));
-                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
+                        || (countIn(affine) instanceof Quantity count
+                                && askable(meetingOf(count)));
+                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place _,
+                                      Rel _) ->
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
             };
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.InTheStrings _, Proposition.StringInside _,
+                 Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
 
-    /** The one count {@code affine} weighs where it weighs one and nothing else, or null. */
-    static Quantity.HowManyMeet countIn(Relation.Affine affine) {
-        return affine.form().coefs().size() == 1
-                && affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyMeet count ? count : null;
+    /**
+     * The one count {@code affine} weighs where it weighs one and nothing else, or null: how many
+     * elements of a container meet a statement, or how many different values those hold
+     * ({@link Quantity.HowManyDifferentMeet}).
+     */
+    static Quantity countIn(Relation.Affine affine) {
+        if (affine.form().coefs().size() != 1) {
+            return null;
+        }
+        Quantity only = affine.form().coefs().keySet().iterator().next();
+        return countsElements(only) ? only : null;
+    }
+
+    /** Whether {@code quantity} is a count of the elements of a container meeting something, or
+     *  of the different values they hold: the counts {@link #elementsOf} answers for. */
+    static boolean countsElements(Quantity quantity) {
+        return quantity instanceof Quantity.HowManyMeet
+                || quantity instanceof Quantity.HowManyMeetAcross
+                || quantity instanceof Quantity.HowManyDifferentMeet;
+    }
+
+    /** What an element of {@code count}, one {@link #countIn} answers, is counted for meeting. */
+    static Proposition meetingOf(Quantity count) {
+        return elementsOf(count).ofTheElement();
+    }
+
+    /**
+     * How many elements meet what {@code count}, one {@link #countIn} answers, counts them for,
+     * each of them counted: the count itself, or the count of the elements whose different values
+     * it is.
+     */
+    static Quantity.HowManyMeet elementsOf(Quantity count) {
+        return switch (count) {
+            case Quantity.HowManyMeet meeting -> meeting;
+            case Quantity.HowManyMeetAcross across -> across.elementsMeetingIt();
+            case Quantity.HowManyDifferentMeet different -> different.elementsMeetingIt();
+            default -> throw new IllegalArgumentException(count + " is no count of elements");
+        };
+    }
+
+    /** Where the values {@code count}, one {@link #countIn} answers, counts once each stand, where
+     *  it counts values rather than elements. */
+    static Optional<Quantity.TheValue> differentAt(Quantity count) {
+        return count instanceof Quantity.HowManyDifferentMeet different
+                ? Optional.of(different.ofTheElement()) : Optional.empty();
+    }
+
+    /**
+     * The container inside each element of which the containers {@code count}, one
+     * {@link #countIn} answers, counts the elements of stand, where it counts every element of
+     * those put end to end ({@link Quantity.HowManyDifferentMeet#across}) rather than the elements
+     * of one.
+     */
+    static Optional<TermPath> acrossOf(Quantity count) {
+        return switch (count) {
+            case Quantity.HowManyDifferentMeet different when different.across() ->
+                    Optional.of(different.container().inputPosition());
+            case Quantity.HowManyMeetAcross across ->
+                    Optional.of(across.container().inputPosition());
+            default -> Optional.empty();
+        };
+    }
+
+    /**
+     * Every element the row wrote in the container at {@code container}, each read with it chosen
+     * — or, where {@code across} names the container whose elements hold one each, every element
+     * of every one of those ({@link WhatATermRead#everyElementAbove}). That container stands
+     * inside no other, so those are every occurrence's.
+     *
+     * @return could not walk where the walk could not reach a container on the way
+     */
+    static WalkResult<List<BorderQuantity.Observation>> elementsIn(BorderQuantity.Observation row,
+                                                                 TermPath container,
+                                                                 Optional<TermPath> across) {
+        return across.isEmpty() ? row.eachElementOf(container)
+                : WhatATermRead.everyElementAbove(row, container.element());
+    }
+
+    /** Asks {@code row} for the containers {@link #elementsIn} reads, as the walk finding which
+     *  containers a row chooses an element of asks. */
+    static void lookAtTheElementsIn(BorderQuantity.Observation row, TermPath container,
+                                    Optional<TermPath> across) {
+        if (across.isEmpty()) {
+            row.eachElementOf(container);
+            return;
+        }
+        if (row.eachElementOf(across.get())
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>>(var outer)) {
+            outer.forEach(each -> each.eachElementOf(container));
+        }
     }
 
     /** The one remainder by an input's number {@code affine} weighs where it weighs one and
@@ -198,7 +386,7 @@ final class AStatementAtARow {
         // A number beside the remainder is apart from the form it is the remainder of, and not
         // merely another number: one read off a place the form reads moves with it.
         for (NumericTerm term : otherNumbersWithTheRemainder(affine.form()).coefs().keySet()) {
-            for (NumericTerm of : remainder.dividend().coefs().keySet()) {
+            for (NumericTerm of : remainder.numbersOfTheInput().keySet()) {
                 if (term.sharesAPlaceWith(of)) {
                     return null;
                 }
@@ -212,11 +400,75 @@ final class AStatementAtARow {
     static LinearForm<NumericTerm> otherNumbersWithTheRemainder(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
         form.coefs().forEach((atom, weight) -> {
-            if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+            if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 out.put(term, weight);
             }
         });
         return new LinearForm<>(ExactRatio.ZERO, out);
+    }
+
+    /**
+     * The one string being among the pieces of another that {@code affine} weighs where it weighs
+     * one and nothing else, and both strings are a position's own or a case conversion of it —
+     * or null.
+     *
+     * <p>The one place that says which relations are over a piece's membership, so that the row
+     * it is asked at is of the relations a reader may ask.
+     */
+    static Quantity.IsAmongThePieces pieceMembershipIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.IsAmongThePieces among
+                && OneRelation.OnPieceMembership.readsARow(among) ? among : null;
+    }
+
+    /**
+     * A string of the input being the piece of another that stands at one index: what
+     * {@code affine} weighs where it weighs those two as equal and nothing else; its denial is the
+     * same relation not holding. Asked of a row as {@link OneRelation.OnTheOnePiece}.
+     *
+     * @param piece the piece, whose window of pieces is the one piece
+     * @param value the string of the input it is held against
+     */
+    record PieceBeingAValue(Quantity.APieceOf piece, Quantity value) {
+
+        /** The string the piece is of, and how it is parted, as a statement about it says them. */
+        PartedString parted() {
+            ConvertedText string = ConvertedText.of(piece.string());
+            return new PartedString(string.place().position(), string.through(),
+                    piece.separator().getAsInt(), piece.from(), OptionalLong.of(piece.among()));
+        }
+
+        /** The numbers the two strings are made of, in the order of the input. */
+        List<NumericTerm> terms() {
+            return NumericTerms.inOrder(List.of(ConvertedText.of(value).place(),
+                    ConvertedText.of(piece.string()).place()));
+        }
+    }
+
+    /** The one piece {@code affine} holds a string against as equal or not, or null. */
+    static PieceBeingAValue thePieceBeingAValueIn(Relation.Affine affine) {
+        Map<Quantity, ExactRatio> coefs = affine.form().coefs();
+        if (coefs.size() != 2 || !affine.form().constant().isZero()
+                || affine.proposition() != Rel.EQ) {
+            return null;
+        }
+        Quantity.APieceOf piece = null;
+        Quantity value = null;
+        for (Quantity each : coefs.keySet()) {
+            if (each instanceof Quantity.APieceOf found) {
+                piece = found;
+            } else {
+                value = each;
+            }
+        }
+        return piece != null && value != null
+                && coefs.get(piece).negated().equals(coefs.get(value))
+                && piece.among() == piece.from() + 1
+                && piece.separator().isPresent()
+                && ValueName.Stdlib.operation("String", "split").equals(piece.operation())
+                && ConvertedText.of(piece.string()) != null && ConvertedText.of(value) != null
+                ? new PieceBeingAValue(piece, value) : null;
     }
 
     /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
@@ -238,85 +490,149 @@ final class AStatementAtARow {
      * @param quantities the reading of the input, which says which order each number is on
      */
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
+        return readBy(stated, behavior, quantities, new HashMap<>());
+    }
+
+    /**
+     * The same, with each relation looked for in {@code read} first and put there once read.
+     *
+     * <p>For a reader that puts many statements to the same rows. What a relation comes to put to
+     * rows is the relation's and the quantities' of the input, and nothing the statement holding it
+     * brings; so a relation met again in another statement is the one read before, and the
+     * statements share it. Nothing put to a row changes one.
+     *
+     * @param read the relations read so far over {@code quantities}, and over nothing else
+     */
+    static AStatementAtARow readBy(Proposition stated, String behavior, Quantities quantities,
+                                   Map<RelationRead, OneRelation> read) {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
-        Map<String, OverTheElements> elements = new LinkedHashMap<>();
+        Map<Spelling,OverTheElements> elements = new LinkedHashMap<>();
         Set<TermPath> positions = new LinkedHashSet<>();
-        gather(stated, behavior, quantities, relations, elements, positions);
+        gather(stated, behavior, quantities, read, relations, elements, positions);
         return new AStatementAtARow(stated, relations, elements, positions);
     }
 
+    /**
+     * The positions {@code part} asks of their own value — whether one is true, holds a value, is
+     * a case of a sum, is the value another holds, is a string of a language — or null where it
+     * is no such part.
+     *
+     * <p>The one place that says which they are, so that a reader gathering what a statement
+     * reads and a reader asking which container it is about cannot differ over a part.
+     */
+    static List<TermPath> positionsAskedBy(Proposition part) {
+        return switch (part) {
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean _,
+                                   Spelling _) ->
+                    List.of(at);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean _,
+                                     Spelling _) -> List.of(at);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft _,
+                                     boolean _, Spelling _) -> List.of(at);
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition(
+                    TermPath at, var _), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.OfAPiece(
+                    var _, Optional<PartedString> parted), StringsLanguage _, boolean _, Spelling _)
+                    when onePieceOf(parted) != null -> List.of(parted.get().string());
+            case Proposition.SameValue same when askable(same) -> same.otherSubject() == null
+                    ? List.of(same.one().inputPosition())
+                    : List.of(same.one().inputPosition(), same.otherSubject().inputPosition());
+            default -> null;
+        };
+    }
+
+    /** A relation as it is read to be put to rows: for which behavior's input. */
+    record RelationRead(Relation relation, String behavior) {}
+
+    /** {@code relation} put to rows, the one in {@code read} or read now and put there. */
+    private static OneRelation relationRead(Relation relation, String behavior,
+                                            Quantities quantities,
+                                            Map<RelationRead, OneRelation> read) {
+        RelationRead key = new RelationRead(relation, behavior);
+        OneRelation had = read.get(key);
+        if (had != null) {
+            return had;
+        }
+        OneRelation made = OneRelation.of(relation, behavior, quantities);
+        OneRelation raced = read.putIfAbsent(key, made);
+        return raced == null ? made : raced;
+    }
+
     private static void gather(Proposition stated, String behavior, Quantities quantities,
+                               Map<RelationRead, OneRelation> reading,
                                Map<Relation, OneRelation> into,
-                               Map<String, OverTheElements> elements, Set<TermPath> positions) {
+                               Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
+        StatementReading.<Boolean>over((each, again) -> gatherAt(each, behavior, quantities,
+                reading, into, elements, positions, again)).read(stated);
+    }
+
+    private static boolean gatherAt(Proposition stated, String behavior, Quantities quantities,
+                                    Map<RelationRead, OneRelation> reading,
+                                    Map<Relation, OneRelation> into,
+                                    Map<Spelling,OverTheElements> elements,
+                                    Set<TermPath> positions, StatementReading<Boolean> again) {
+        List<TermPath> asked = positionsAskedBy(stated);
+        if (asked != null) {
+            positions.addAll(asked);
+            return true;
+        }
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
-                    positions.add(at);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _, String _) ->
-                    positions.add(at);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
-                                     boolean _, String _) -> positions.add(at);
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _,
-                                       String _) -> {
-                positions.add(one);
-                positions.add(other);
-            }
-            case Proposition.All all -> all.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
-            case Proposition.Any any -> any.parts().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
-            case Proposition.WhereItAnswers where -> {
-                gather(where.answers(), behavior, quantities, into, elements, positions);
-                gather(where.states(), behavior, quantities, into, elements, positions);
-            }
-            case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
-                    gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.eachPart(again);
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
-                            of(some.ofTheElement(), behavior, quantities)));
+                            readBy(some.ofTheElement(), behavior, quantities, reading),
+                            Optional.empty(), Optional.empty()));
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    && countIn(affine) instanceof Quantity count ->
                     elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
-                            count.container().inputPosition(),
-                            of(count.ofTheElement(), behavior, quantities)));
-            case Proposition.Compared compared when askable(compared) ->
-                    into.computeIfAbsent(compared.relation(),
-                            relation -> OneRelation.of(relation, behavior, quantities));
+                            elementsOf(count).container().inputPosition(),
+                            readBy(meetingOf(count), behavior, quantities, reading),
+                            differentAt(count), acrossOf(count)));
+            case Proposition.Compared compared when askable(compared) -> {
+                OneRelation made = into.computeIfAbsent(compared.relation(),
+                        relation -> relationRead(relation, behavior, quantities, reading));
+                if (made instanceof OneRelation.OnStrings strings) {
+                    positions.addAll(strings.positions());
+                }
+            }
             // Put to no row: answered as not known where it is asked ({@link #notAsked}).
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
-                 Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> { }
+                 Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> { }
             case Proposition.Carried carried -> throw carried.handedToAReader();
         }
+        return true;
     }
 
     /**
      * Every number of the input {@code stated} reads, the numbers of the elements it reads among
      * them; for a statement {@link #askable} says a row can be asked.
      */
-    static Set<NumericTerm> numbersOf(Proposition stated) {
+    static SequencedSet<NumericTerm> numbersOf(Proposition stated) {
         Set<NumericTerm> out = new LinkedHashSet<>();
         gatherNumbers(stated, out);
-        return Collections.unmodifiableSet(out);
+        return NumericTerms.setInOrder(out);
     }
 
     private static void gatherNumbers(Proposition stated, Set<NumericTerm> into) {
+        StatementReading.<Boolean>over((each, again) -> gatherNumbersAt(each, into, again))
+                .read(stated);
+    }
+
+    private static boolean gatherNumbersAt(Proposition stated, Set<NumericTerm> into,
+                                           StatementReading<Boolean> again) {
         switch (stated) {
-            case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
-            case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
-            case Proposition.WhereItAnswers where -> {
-                gatherNumbers(where.answers(), into);
-                gatherNumbers(where.states(), into);
-            }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(part -> gatherNumbers(part, into));
-            case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
+                    stated.eachPart(again);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
-                    gatherNumbers(count.ofTheElement(), into);
+                    && countIn(affine) instanceof Quantity count ->
+                    again.read(meetingOf(count));
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> {
@@ -324,6 +640,11 @@ final class AStatementAtARow {
                                 WhatTheDeclarationsLeave.ofTheInput(affine.form());
                         if (form != null) {
                             into.addAll(form.coefs().keySet());
+                        } else if (pieceMembershipIn(affine)
+                                instanceof Quantity.IsAmongThePieces membership) {
+                            into.addAll(membership.positionsItIsMadeOf());
+                        } else if (thePieceBeingAValueIn(affine) instanceof PieceBeingAValue one) {
+                            into.addAll(one.terms());
                         } else if (productIn(affine) instanceof Quantity.ProductOfTwo product) {
                             into.addAll(product.factors());
                         } else if (remainderByAnInputIn(affine)
@@ -331,31 +652,38 @@ final class AStatementAtARow {
                             into.addAll(remainder.operands());
                         } else if (remainderOfADividendIn(affine)
                                 instanceof Quantity.RemainderOfADividend remainder) {
-                            into.addAll(remainder.dividend().coefs().keySet());
+                            into.addAll(remainder.numbersOfTheInput().keySet());
                             into.addAll(
                                     otherNumbersWithTheRemainder(affine.form()).coefs().keySet());
                         }
                     }
-                    case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _,
+                    case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place _,
                                           Rel _) -> into.add(term);
                     case Relation.Ordered _ -> { }
                 }
             }
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
-                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _,
+                 Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> { }
         }
+        return true;
     }
 
     /** What some element of a container meeting a statement is read as, whichever way it holds. */
-    private static String keyOf(Proposition.Some some) {
-        return some.container() + " [" + some.ofTheElement().key() + "]";
+    private static Spelling keyOf(Proposition.Some some) {
+        return Spelling.of(some.container() + " [", some.ofTheElement().spelling(), "]");
     }
 
-    /** What a count of the elements of a container meeting a statement is read as. */
-    private static String keyOf(Quantity.HowManyMeet count) {
-        return count.container() + " [" + count.ofTheElement().key() + "]";
+    /** What a count of the elements of a container meeting a statement is read as, or of the
+     *  different values they hold. */
+    private static Spelling keyOf(Quantity count) {
+        Quantity.HowManyMeet elements = elementsOf(count);
+        return Spelling.of(differentAt(count).map(at -> "different " + at + " of ").orElse("")
+                + acrossOf(count).map(outer -> "across " + outer + " ").orElse("")
+                + elements.container() + " [", elements.ofTheElement().spelling(), "]");
     }
 
     /**
@@ -367,6 +695,302 @@ final class AStatementAtARow {
         relations.values().forEach(each -> out.addAll(each.terms()));
         elements.values().forEach(each -> out.addAll(each.ofTheElement().numbers()));
         return NumericTerms.inOrder(out);
+    }
+
+    /**
+     * What one element's answer to a statement turns on, among the elements of a container held
+     * as groups under one value at a place inside each — or each on its own where there is no such
+     * place. Each takes in the ones before it.
+     */
+    enum TurnsOn {
+
+        /** The element's own values, and values outside the container. */
+        THE_ELEMENT,
+
+        /** Which elements hold its value at the place, and what they come to: how often the
+         *  value occurs, a total or an end gathered under it. */
+        THOSE_UNDER_ITS_VALUE,
+
+        /** Which of the elements holding its value was handed last, as a total from the last one
+         *  put does. */
+        THE_ORDER_OF_THOSE_UNDER_ITS_VALUE,
+
+        /** Elements under other values: something of the container as a whole, a value gathered
+         *  under one key whichever element is asked, or what elements are grouped by elsewhere. */
+        OTHER_ELEMENTS;
+
+        TurnsOn orMore(TurnsOn other) {
+            return compareTo(other) >= 0 ? this : other;
+        }
+    }
+
+    /**
+     * What an element of {@code container} answers of this turns on, where the elements are held
+     * as groups under one value at {@code under}, or each on its own where it is null: the most
+     * any number it reads turns on ({@link #readOf}), and other
+     * elements where it asks a position holding the container, or says something of the
+     * container's elements itself.
+     *
+     * @param across the container whose elements each hold one at {@code container}, where the
+     *               elements grouped are every element of all of those ({@link #elementsIn})
+     */
+    TurnsOn turnsOnAmong(TermPath container, Quantity.TheValue under, Optional<TermPath> across) {
+        // Whether an element is the last of those holding a value is read off the elements beside
+        // it, and is no number or position to gather.
+        TurnsOn out = Proposition.saysTheLastToHold(stated) ? TurnsOn.OTHER_ELEMENTS
+                : TurnsOn.THE_ELEMENT;
+        for (NumericTerm each : numbers()) {
+            out = out.orMore(readOf(each, container, under, across).turnsOn());
+        }
+        for (TermPath each : positions) {
+            if (acrossTheElements(each, container)) {
+                out = TurnsOn.OTHER_ELEMENTS;
+            }
+        }
+        for (OverTheElements each : elements.values()) {
+            out = out.orMore(among(List.of(each.container()), container) ? TurnsOn.OTHER_ELEMENTS
+                    : each.ofTheElement().turnsOnAmong(container, under, across));
+        }
+        return out;
+    }
+
+    /**
+     * Whether what an element of {@code container} answers of this is the same however the
+     * elements of all the containers at {@code container}, inside the elements of {@code across},
+     * are shared out over those containers: nothing it reads is a place of a container that holds
+     * the element, or of the elements of {@code across} outside the container's own.
+     *
+     * <p>The elements of every one of the containers put end to end are chosen as one, and what
+     * each answers is read of them there. It is the same answer wherever they are written only
+     * for a statement that reads the element itself, what is read of every element of all the
+     * containers, and what stands outside {@code across}.
+     *
+     * <p>Asked of the statement and not of what was gathered from it to put to a row
+     * ({@link #gather}), which leaves out what a row needs no number for: the last of the elements
+     * holding a value is no number and no position of its own, and is read off the order of the
+     * elements in the container that holds them. A statement that reads something that is no
+     * place of the input is not known to be the same wherever they are written.
+     */
+    boolean answersHoweverTheElementsAreSharedOut(TermPath container, TermPath across) {
+        return PositionsAStatementReads.everyPlaceOf(stated)
+                .map(places -> places.stream()
+                        .noneMatch(place -> aroundTheElement(place, container, across)))
+                .orElse(false);
+    }
+
+    /** Whether {@code term} is read off a place around an element of {@code container}, inside
+     *  {@code across} ({@link #answersHoweverTheElementsAreSharedOut}). */
+    static boolean readsAroundTheElement(NumericTerm term, TermPath container, TermPath across) {
+        return term.placesReadOff().stream()
+                .anyMatch(place -> aroundTheElement(place, container, across));
+    }
+
+    /**
+     * Whether {@code place} may be in {@code across} and not in an element of {@code container}:
+     * the outer container, one of its elements, or the container inside one. False only where the
+     * place is shown apart from {@code across} or inside an element of {@code container}
+     * ({@link TermPath#toTheElementsOf}).
+     */
+    private static boolean aroundTheElement(TermPath place, TermPath container, TermPath across) {
+        return place.toTheElementsOf(across) != TermPath.ToTheElements.APART
+                && place.toTheElementsOf(container) != TermPath.ToTheElements.INSIDE_ONE;
+    }
+
+    /**
+     * Whether what an element of {@code container} answers of this may turn on which value stands
+     * at {@code at}, and not only on which elements hold one value there: some number it reads
+     * reads that place ({@link WhatItReads#theValue}), or some position it asks of its own value
+     * reads it along ({@link Quantity.TheValue#isReadAlong}) — or it reads other elements, of which
+     * nothing is shown.
+     *
+     * @param across as {@link #turnsOnAmong} has it
+     */
+    boolean readsTheValueAt(TermPath container, Quantity.TheValue at,
+                            Optional<TermPath> across) {
+        if (Proposition.saysTheLastToHold(stated)) {
+            return true;
+        }
+        for (NumericTerm each : numbers()) {
+            WhatItReads read = readOf(each, container, at, across);
+            if (read.turnsOn() == TurnsOn.OTHER_ELEMENTS || read.theValue()) {
+                return true;
+            }
+        }
+        for (TermPath each : positions) {
+            if (at.isReadAlong(each)) {
+                return true;
+            }
+        }
+        return elements.values().stream()
+                .anyMatch(each -> each.ofTheElement().readsTheValueAt(container, at, across));
+    }
+
+    /**
+     * What a number of an element reads, among the elements of a container held as groups under
+     * one value at a place inside each.
+     *
+     * @param turnsOn  what the number turns on
+     * @param theValue whether it reads the value at that place itself, and not only which
+     *                 elements hold one value there
+     */
+    record WhatItReads(TurnsOn turnsOn, boolean theValue) {
+
+        /** What the two read between them. */
+        WhatItReads and(WhatItReads other) {
+            return new WhatItReads(turnsOn.orMore(other.turnsOn), theValue || other.theValue);
+        }
+    }
+
+    /**
+     * What {@code term}, read of an element of {@code container}, reads where the elements are held
+     * as groups under one value at {@code under}, or each on its own where it is null — of every
+     * part it is made of: where it is read among, the key it is gathered under, the value it
+     * gathers, and the statement keeping the elements it is of.
+     *
+     * <p>A number of one position is the element's, and reads the value where it is that place —
+     * save one at a place holding the container, or not shown apart from it nor inside the
+     * element, which turns on the other elements ({@link #acrossTheElements}). One
+     * read among the elements of a container is the element's where that container is inside it
+     * or elsewhere, and turns on other elements where it is this one or holds it — save how often
+     * the value at {@code under} occurs and what is gathered under it, which turn on those holding
+     * that value, and read the value where what they gather stands at it. What keeps the elements
+     * such a number is of is asked of each of them, and the number reads what that reads.
+     *
+     * <p>Where the elements grouped are every element of the containers at {@code container}
+     * inside the elements of the one at {@code across}, a number gathered over all of those is
+     * read among them as one gathered over one container is among its elements; and a number
+     * read among the elements of one of them turns on which one it is.
+     */
+    static WhatItReads readOf(NumericTerm term, TermPath container, Quantity.TheValue under,
+                              Optional<TermPath> across) {
+        return switch (term) {
+            case NumericTerm.FromOnePosition one -> new WhatItReads(
+                    acrossTheElements(one.position(), container) ? TurnsOn.OTHER_ELEMENTS
+                            : TurnsOn.THE_ELEMENT, readsTheValue(one.position(), under));
+            // One number of all the values it is read across, and of what it reads beside them.
+            case NumericTerm.TakenOver _, NumericTerm.OccurrencesOfAKey _,
+                 NumericTerm.GatheredUnderAKey _ ->
+                    new WhatItReads(acrossOrOwn(term, container), false);
+            case NumericTerm.Multiplicity often -> new WhatItReads(underItsValue(
+                    term.runsReadAcross().getFirst(), container, across,
+                    isAt(under, often.place()), TurnsOn.THOSE_UNDER_ITS_VALUE), false);
+            case NumericTerm.ExtremeOfItsKey end -> new WhatItReads(underItsValue(
+                    term.runsReadAcross().getFirst(), container, across, isAt(under, end.key()),
+                    TurnsOn.THOSE_UNDER_ITS_VALUE), readsTheValue(end.value(), under));
+            case NumericTerm.OccurrencesOfItsValue often -> {
+                List<TermPath> ranged = term.runsReadAcross().getFirst();
+                yield new WhatItReads(ranged.size() == 1 || ranged.equals(over(container, across))
+                        ? underItsValue(ranged, container, across,
+                                isAt(under, often.subjectPath()), TurnsOn.THOSE_UNDER_ITS_VALUE)
+                        : acrossOrOwn(term, container), false)
+                        .and(keeping(often.selection(), container, under, across));
+            }
+            case NumericTerm.GatheredUnderItsKey gathered -> {
+                List<TermPath> ranged = term.runsReadAcross().getFirst();
+                boolean readsIt = gathered.value().reads().stream()
+                        .anyMatch(each -> readsTheValue(each.from(gathered.elements()), under));
+                if (ranged.size() != 1 && !ranged.equals(over(container, across))) {
+                    yield new WhatItReads(among(ranged, container) ? TurnsOn.OTHER_ELEMENTS
+                            : TurnsOn.THE_ELEMENT, readsIt)
+                            .and(keeping(gathered.selection(), container, under, across));
+                }
+                boolean underIt = under != null
+                        && under.isWhereFiled(gathered.key(), gathered.elements());
+                yield new WhatItReads(underItsValue(ranged, container, across, underIt,
+                        switch (gathered.gathering()) {
+                            case NumericTerm.GatheredUnderItsKey.Gathering.Total _,
+                                 NumericTerm.GatheredUnderItsKey.Gathering.End _ ->
+                                    TurnsOn.THOSE_UNDER_ITS_VALUE;
+                            case NumericTerm.GatheredUnderItsKey.Gathering.SinceAPut _ ->
+                                    TurnsOn.THE_ORDER_OF_THOSE_UNDER_ITS_VALUE;
+                        }), readsIt).and(keeping(gathered.selection(), container, under, across));
+            }
+            // Made of the numbers of its two forms, and reads what all of them read.
+            case NumericTerm.ProductOf product -> {
+                WhatItReads read = new WhatItReads(TurnsOn.THE_ELEMENT, false);
+                for (LinearForm<NumericTerm> form : product.factors()) {
+                    for (NumericTerm each : form.coefs().keySet()) {
+                        read = read.and(readOf(each, container, under, across));
+                    }
+                }
+                yield read;
+            }
+        };
+    }
+
+    /** What the statement keeping some elements, asked of each, reads among the elements of
+     *  {@code container} grouped at {@code under} — nothing where every element is kept. */
+    private static WhatItReads keeping(KeptOccurrences kept, TermPath container,
+                                       Quantity.TheValue under, Optional<TermPath> across) {
+        return kept == null ? new WhatItReads(TurnsOn.THE_ELEMENT, false)
+                : new WhatItReads(kept.perElement().turnsOnAmong(container, under, across),
+                        under != null
+                                && kept.perElement().readsTheValueAt(container, under, across));
+    }
+
+    /** Whether what reads {@code path} reads the value the elements are grouped under
+     *  ({@link Quantity.TheValue#isReadAlong}); never where they stand alone. */
+    private static boolean readsTheValue(TermPath path, Quantity.TheValue under) {
+        return under != null && under.isReadAlong(path);
+    }
+
+    /** Whether the elements are grouped under the value at {@code place} of every element. */
+    private static boolean isAt(Quantity.TheValue under, TermPath place) {
+        return under != null && under.isAt(place);
+    }
+
+    /** The containers the elements grouped stand inside, outermost first, as a number read over
+     *  all of them names them: {@code container} and, where it is one of them, {@code across}. */
+    private static List<TermPath> over(TermPath container, Optional<TermPath> across) {
+        return across.map(outer -> List.of(outer, container)).orElse(List.of(container));
+    }
+
+    /**
+     * What a number read among the elements of {@code counted}, the containers it is read over
+     * outermost first, turns on: {@code grouped} where those are the containers the elements are
+     * grouped over and the number is of the value they are grouped under.
+     */
+    private static TurnsOn underItsValue(List<TermPath> counted, TermPath container,
+                                         Optional<TermPath> across, boolean ofTheValue,
+                                         TurnsOn grouped) {
+        if (counted.equals(over(container, across))) {
+            return ofTheValue ? grouped : TurnsOn.OTHER_ELEMENTS;
+        }
+        return among(counted, container) ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    }
+
+    /**
+     * What a number of the values it is read across turns on: other elements where some run it
+     * is read across ({@link NumericTerm#runsReadAcross}) reaches across the elements of
+     * {@code container} — both maps of a join — or some place it reads beside them
+     * ({@link NumericTerm#placesReadBeside}), the root of a tree among them, is not shown inside
+     * one or apart; the element's own otherwise.
+     */
+    private static TurnsOn acrossOrOwn(NumericTerm term, TermPath container) {
+        boolean acrossThem = term.runsReadAcross().stream()
+                .anyMatch(run -> among(run, container))
+                || term.placesReadBeside().stream()
+                        .anyMatch(place -> acrossTheElements(place, container));
+        return acrossThem ? TurnsOn.OTHER_ELEMENTS : TurnsOn.THE_ELEMENT;
+    }
+
+    /** Whether reading across the elements of any of {@code counted} reads across those of
+     *  {@code container}: one of them is it, or holds it inside its elements. */
+    private static boolean among(List<TermPath> counted, TermPath container) {
+        return counted.stream().anyMatch(each -> acrossTheElements(each, container));
+    }
+
+    /**
+     * Whether what is read at {@code read} may be read across the elements of {@code container}
+     * rather than off one of them: it is shown neither inside one nor apart from them
+     * ({@link TermPath#toTheElementsOf}). The container itself, a place holding it, and a place
+     * narrowed to cases the container is not on every row all are.
+     */
+    private static boolean acrossTheElements(TermPath read, TermPath container) {
+        return switch (read.toTheElementsOf(container)) {
+            case INSIDE_ONE, APART -> false;
+            case HOLDING_THEM, NOT_SHOWN -> true;
+        };
     }
 
     /**
@@ -385,21 +1009,21 @@ final class AStatementAtARow {
     void lookAt(BorderQuantity.Observation row, Set<TermPath> taken) {
         for (OneRelation each : relations.values()) {
             if (each instanceof OneRelation.OnAQuantity read && read.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 read.over().lookAt(row);
             }
             if (each instanceof OneRelation.OnAProduct product && product.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 product.factors().lookAt(row);
             }
             if (each instanceof OneRelation.OnARemainderByAnInput remainder
                     && remainder.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 remainder.numbers().lookAt(row);
             }
             if (each instanceof OneRelation.OnARemainderOfAForm remainder
                     && remainder.terms().stream()
-                    .noneMatch(term -> under(term.subjectPath(), taken))) {
+                    .noneMatch(term -> readUnder(term, taken))) {
                 remainder.numbers().lookAt(row);
                 if (remainder.addedNumbers() != null) {
                     remainder.addedNumbers().lookAt(row);
@@ -413,16 +1037,39 @@ final class AStatementAtARow {
         }
         for (OverTheElements each : elements.values()) {
             if (!under(each.container(), taken)) {
-                row.eachElementOf(each.container());
+                lookAtTheElementsIn(row, each.container(), each.across());
             }
             Set<TermPath> wider = new HashSet<>(taken);
             wider.add(each.container());
+            each.across().ifPresent(wider::add);
             each.ofTheElement().lookAt(row, wider);
         }
     }
 
+    /** Whether {@code path} may stand at or under one of {@code taken}: false only where it is
+     *  shown not to, as the value is reached ({@link TermPath#standsAtOrUnder}). */
     private static boolean under(TermPath path, Set<TermPath> taken) {
-        return taken.stream().anyMatch(path::isAtOrUnder);
+        for (TermPath each : taken) {
+            if (path.standsAtOrUnder(each)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether some place {@code term} is read off ({@link NumericTerm#placesReadOff}) may stand
+     *  at or under one of {@code taken}: a total of a join read under it by either map is. With
+     *  nothing taken there is nothing to stand under, and the places are not worked out. */
+    private static boolean readUnder(NumericTerm term, Set<TermPath> taken) {
+        if (taken.isEmpty()) {
+            return false;
+        }
+        for (TermPath place : term.placesReadOff()) {
+            if (under(place, taken)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -436,7 +1083,118 @@ final class AStatementAtARow {
      * row wherever it stands.
      */
     Answer at(BorderQuantity.Observation row) {
-        return at(stated, row, new HashMap<>());
+        if (!ofARow) {
+            return new Answer.CouldNotTell(Set.of(new ReadingGap.ReachNotRead(
+                    ReadingGap.ReachNotRead.Why.A_PART_NOT_READ)));
+        }
+        PartsOfTheStatement numbered = parts;
+        if (numbered == null) {
+            numbered = PartsOfTheStatement.of(stated, relations, elements);
+            parts = numbered;
+        }
+        return at(numbered.root(), row, new Answer[numbered.size()], numbered);
+    }
+
+    /**
+     * A part of the statement as a row reads it, with what a row would otherwise look up for it by
+     * a key built of its spelling.
+     *
+     * @param parts the numbers of the parts it is made of, in the order they are asked
+     * @param over for a quantifier, or a count of the elements meeting a statement, what it is
+     *             read over
+     * @param relation for a comparison, how it is read
+     */
+    private record APart(Proposition part, List<Integer> parts, OverTheElements over,
+                         OneRelation relation) {
+
+        APart {
+            parts = Collections.unmodifiableList(new ArrayList<>(parts));
+        }
+    }
+
+    /**
+     * The statement's parts numbered once, so a row asks no spelling of anything.
+     *
+     * <p>A part is numbered by its spelling, so parts spelled alike are one part however many
+     * objects stand for them, and the parts of one are numbered once. A part comes after the parts
+     * it is made of, and a statement over the ways after what it is written out to, which is
+     * written out here and not at each row. Every part a row asks is one of these, and each is
+     * asked by number.
+     *
+     * <p>Worked out from the statement alone, so it is no part of what makes two statements equal.
+     *
+     * @param parts every part, each after the parts it is made of
+     * @param root the number of the statement
+     */
+    private record PartsOfTheStatement(List<APart> parts, int root) {
+
+        PartsOfTheStatement {
+            parts = Collections.unmodifiableList(new ArrayList<>(parts));
+        }
+
+        static PartsOfTheStatement of(Proposition stated, Map<Relation,OneRelation> relations,
+                                      Map<Spelling,OverTheElements> elements) {
+            Numbering numbering = new Numbering(relations, elements);
+            int root = numbering.number(stated);
+            return new PartsOfTheStatement(numbering.parts, root);
+        }
+
+        int size() {
+            return parts.size();
+        }
+
+        APart part(int number) {
+            return parts.get(number);
+        }
+    }
+
+    /** The numbering under way: what has been numbered, and what a part is read by. */
+    private static final class Numbering {
+
+        private final List<APart> parts = new ArrayList<>();
+        private final Map<Spelling,Integer> bySpelling = new HashMap<>();
+        private final Map<Relation,OneRelation> relations;
+        private final Map<Spelling,OverTheElements> elements;
+
+        Numbering(Map<Relation,OneRelation> relations, Map<Spelling,OverTheElements> elements) {
+            this.relations = relations;
+            this.elements = elements;
+        }
+
+        int number(Proposition part) {
+            Integer had = bySpelling.get(part.spelling());
+            if (had != null) {
+                return had;
+            }
+            APart made = switch (part) {
+                case Proposition.All all -> madeOf(part, all.parts());
+                case Proposition.Any any -> madeOf(part, any.parts());
+                case Proposition.WhereItAnswers where ->
+                        madeOf(part, List.of(where.answers(), where.states()));
+                case Proposition.SoManyHold counted -> madeOf(part, counted.statements());
+                case Proposition.OfTheWays ways -> madeOf(part, List.of(ways.written()));
+                case Proposition.Some some -> new APart(part, List.of(),
+                        elements.get(keyOf(some)), null);
+                case Proposition.Compared compared
+                        when compared.relation() instanceof Relation.Affine affine
+                        && countIn(affine) instanceof Quantity count ->
+                        new APart(part, List.of(), elements.get(keyOf(count)), null);
+                case Proposition.Compared compared -> new APart(part, List.of(), null,
+                        relations.get(compared.relation()));
+                default -> new APart(part, List.of(), null, null);
+            };
+            parts.add(made);
+            bySpelling.put(part.spelling(), parts.size() - 1);
+            return parts.size() - 1;
+        }
+
+        private APart madeOf(Proposition part, List<Proposition> made) {
+            List<Integer> numbers = new ArrayList<>();
+            for (Proposition each : made) {
+                numbers.add(number(each));
+            }
+            return new APart(part, numbers, null, null);
+        }
     }
 
     /**
@@ -450,16 +1208,58 @@ final class AStatementAtARow {
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
-        return row.keptOf(new MeetingIn(this, container));
+        return howManyMeetIn(container, Optional.empty(), row);
     }
 
-    /** How many elements of a container meet one statement, by the statement and the container. */
-    private record MeetingIn(AStatementAtARow statement, TermPath container)
+    /**
+     * What the statement says of one element of a container, and the key the element is filed
+     * under where the container is a map.
+     *
+     * @param answer what the statement says of the element
+     * @param key    the key, or null where the container is not a map or it could not be read
+     */
+    record OfAnElement(Answer answer, ObservedValue key) {}
+
+    /**
+     * What the statement says of each element of the container at {@code container}, one by one, in
+     * the order the row writes them — or null where the walk could not reach the container.
+     *
+     * <p>{@link #howManyMeetIn} counts them, and a count says nothing of which element met the
+     * statement: asked of a map filled to the fewest it is held with, it cannot tell the entry that
+     * is the question from the entries that were put beside it.
+     */
+    List<OfAnElement> eachIn(TermPath container, BorderQuantity.Observation row) {
+        if (!(elementsIn(row, container, Optional.empty())
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+            return null;
+        }
+        List<OfAnElement> out = new ArrayList<>();
+        for (BorderQuantity.Observation element : reached.value()) {
+            // The one the element is read with chosen: a row holds as many keys as it wrote.
+            ObservedValue key = element.at(container.key())
+                    instanceof WalkResult.Reached<ObservationAtPoint>(
+                            ObservationAtPoint.Value(ObservedValue value)) ? value : null;
+            out.add(new OfAnElement(at(element), key));
+        }
+        return out;
+    }
+
+    /** The same, of every element of the containers at {@code container} inside the elements of
+     *  the container at {@code across}, put end to end, where it names one. */
+    private HowManyAtARow howManyMeetIn(TermPath container, Optional<TermPath> across,
+                                        BorderQuantity.Observation row) {
+        return row.keptOf(new MeetingIn(this, container, across));
+    }
+
+    /** How many elements of a container meet one statement, by the statement, the container and
+     *  the container holding the containers, where every one of them is counted. */
+    private record MeetingIn(AStatementAtARow statement, TermPath container,
+                             Optional<TermPath> across)
             implements BorderQuantity.ReadAlike<HowManyAtARow> {
 
         @Override
         public HowManyAtARow readAt(BorderQuantity.Observation row) {
-            if (!(row.eachElementOf(container)
+            if (!(elementsIn(row, container, across)
                     instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
                 return null;
             }
@@ -477,6 +1277,95 @@ final class AStatementAtARow {
                 }
             }
             return new HowManyAtARow(meet, unread, why);
+        }
+    }
+
+    /**
+     * How many elements of {@code container} the row wrote meet this statement, as
+     * {@link #howManyMeetIn} counts them — or, where {@code differentAt} names a place of each,
+     * how many different values the elements meeting it hold there: the least it can be, and how
+     * many more it may be where an element, or its value, could not be read.
+     *
+     * <p>A value one meeting element holds is counted once however many others hold it. An element
+     * nothing could say of adds one more at most, and none where its value is one a meeting element
+     * already holds. Where {@code across} names the container whose elements each hold one of
+     * {@code container}, the values are those of every element of all of them.
+     *
+     * @return null where the walk could not reach the container
+     */
+    HowManyAtARow howManyIn(TermPath container, Optional<Quantity.TheValue> differentAt,
+                            Optional<TermPath> across, BorderQuantity.Observation row) {
+        return differentAt.isPresent()
+                ? row.keptOf(new DifferentMeetingIn(this, container, differentAt.get(), across))
+                : howManyMeetIn(container, across, row);
+    }
+
+    /**
+     * The value {@code element}, a reading of the row with one element chosen, holds at
+     * {@code at}: at the one place, or at the place the case it holds chooses — or null where it
+     * could not be read, or no case of the key's takes it.
+     */
+    static ObservedValue valueAt(BorderQuantity.Observation element, Quantity.TheValue at) {
+        TermPath place = switch (at) {
+            case Quantity.TheValue.AtAPlace(DecisionSubject.AnInput(TermPath path, var _)) -> path;
+            case Quantity.TheValue.AtAPlace _ -> null;
+            case Quantity.TheValue.ChosenByCase(TermPath of, ElementKey.ByCase key) -> {
+                if (!(element.at(key.subject().from(of)) instanceof WalkResult.Reached<
+                        ObservationAtPoint>(ObservationAtPoint.Value(ObservedValue subject)))) {
+                    yield null;
+                }
+                ElementProjection way = key.readAlong(cases -> cases.leaves(subject));
+                yield way == null ? null : way.from(of);
+            }
+        };
+        return place != null && element.at(place) instanceof WalkResult.Reached<
+                ObservationAtPoint>(ObservationAtPoint.Value(ObservedValue value)) ? value : null;
+    }
+
+    /** How many different values the elements of a container meeting one statement hold, by the
+     *  statement, the container, where the value stands and the container holding the
+     *  containers, where every one of them is counted. */
+    private record DifferentMeetingIn(AStatementAtARow statement, TermPath container,
+                                      Quantity.TheValue at, Optional<TermPath> across)
+            implements BorderQuantity.ReadAlike<HowManyAtARow> {
+
+        @Override
+        public HowManyAtARow readAt(BorderQuantity.Observation row) {
+            if (!(elementsIn(row, container, across)
+                    instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+                return null;
+            }
+            Set<ObservedValue> meeting = new HashSet<>();
+            Set<ObservedValue> maybe = new HashSet<>();
+            int unreadValues = 0;
+            Set<ReadingGap> why = new LinkedHashSet<>();
+            for (BorderQuantity.Observation element : reached.value()) {
+                Answer answer = statement.at(element);
+                if (answer instanceof Answer.Fails) {
+                    continue;
+                }
+                if (answer instanceof Answer.CouldNotTell(var stopped)) {
+                    why.addAll(stopped);
+                }
+                ObservedValue value = valueAt(element, at);
+                if (value == null) {
+                    why.add(ReadingGap.COULD_NOT_WALK);
+                    unreadValues++;
+                    continue;
+                }
+                // Told apart from the others by equality as records, which is the language's
+                // sameness only for some values; for the rest the element may be one of the
+                // others or not, and is counted as one that could be another.
+                ReadingGap notTold = ReadingGap.ofComparingAsRecords(value);
+                if (notTold != null) {
+                    why.add(notTold);
+                    unreadValues++;
+                    continue;
+                }
+                (answer instanceof Answer.Holds ? meeting : maybe).add(value);
+            }
+            maybe.removeAll(meeting);
+            return new HowManyAtARow(meeting.size(), maybe.size() + unreadValues, why);
         }
     }
 
@@ -522,56 +1411,79 @@ final class AStatementAtARow {
         }
     }
 
-    private Answer at(Proposition part, BorderQuantity.Observation row,
-                      Map<String, Answer> answered) {
-        Answer known = answered.get(part.key());
+    private Answer at(int number, BorderQuantity.Observation row, Answer[] answered,
+                      PartsOfTheStatement numbered) {
+        Answer known = answered[number];
         if (known != null) {
             return known;
         }
-        Answer answer = atOnce(part, row, answered);
-        answered.put(part.key(), answer);
+        Answer answer = atOnce(numbered.part(number), row, answered, numbered);
+        answered[number] = answer;
         return answer;
     }
 
-    private Answer atOnce(Proposition part, BorderQuantity.Observation row,
-                          Map<String, Answer> answered) {
+    private Answer atOnce(APart node, BorderQuantity.Observation row, Answer[] answered,
+                          PartsOfTheStatement numbered) {
+        Proposition part = node.part();
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
             // Of the element this row is read with chosen: the last of those holding the value it
             // holds at the position.
-            case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container),
-                                        DecisionSubject.AnInput(TermPath position), boolean holds,
-                                        String _) -> heldAs(holds, switch (
+            case Proposition.LastToHold(DecisionSubject.AnInput(TermPath container, var _),
+                                        DecisionSubject.AnInput(TermPath position, var _),
+                                        boolean holds, Spelling _) -> heldAs(holds, switch (
                     row.lastToHold(container, position)) {
                 case BorderQuantity.Lastness.Last _ -> Said.TRUE;
                 case BorderQuantity.Lastness.NotLast _ -> Said.FALSE;
                 case BorderQuantity.Lastness.CouldNotTell(ReadingGap why) ->
                         new Said.NotRead(Set.of(why));
             });
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds,
-                                   String _) -> heldAs(holds, ofItsValue(at, row,
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                                   Spelling _) -> heldAs(holds, ofItsValue(at, row,
                     value -> value instanceof ObservedValue.Bool(boolean truth) ? truth : null));
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
-                                     String _) -> heldAs(holds, ofItsValue(at, row,
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                                     Spelling _) -> heldAs(holds, ofItsValue(at, row,
                     value -> !(value instanceof ObservedValue.Absent)));
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
-                                     boolean holds, String _) when askable(part) ->
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft cases,
+                                     boolean holds, Spelling _) when askable(part) ->
                     heldAs(holds, amongCases(at, cases, row));
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean holds,
-                                       String _) -> heldAs(holds, theSame(one, other, row));
-            case Proposition.All all -> joined(all.parts().stream()
-                    .map(each -> at(each, row, answered)).toList(), true);
-            case Proposition.Any any -> joined(any.parts().stream()
-                    .map(each -> at(each, row, answered)).toList(), false);
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
+                                       Operand.At<DecisionSubject>(
+                                               DecisionSubject.AnInput(TermPath other, var _)),
+                                       boolean holds, Spelling _) ->
+                    heldAs(holds, theSame(one, other, row));
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath at, var _),
+                                       Operand.Written<DecisionSubject>(Value written),
+                                       boolean holds, Spelling _) ->
+                    heldAs(holds, theSameAsWritten(at, written, row));
+            case Proposition.InTheStrings(
+                    Proposition.InTheStrings.Strings.AtAPosition(TermPath at, var _),
+                    StringsLanguage language, boolean holds, Spelling _) ->
+                    switch (textAt(at, row)) {
+                        case TextAtARow.Written(String text) -> heldAs(holds, Recognizer
+                                .recognizes(language, language.meaning(), text)
+                                .<Said>map(Said.Is::new)
+                                .orElseGet(() -> new Said.NotRead(Set.of(ReadingGap.NO_VALUE))));
+                        case TextAtARow.Unsaid(Said said) -> heldAs(holds, said);
+                    };
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.OfAPiece(
+                    var _, Optional<PartedString> parted), StringsLanguage language,
+                    boolean holds, Spelling _) when onePieceOf(parted) != null ->
+                    heldAs(holds, theOnePieceIn(parted.get(), language, row));
+            case Proposition.All _ -> joined(node.parts().stream()
+                    .map(each -> at(each, row, answered, numbered)).toList(), true);
+            case Proposition.Any _ -> joined(node.parts().stream()
+                    .map(each -> at(each, row, answered, numbered)).toList(), false);
             // At a row it answered at, what it states; at one it did not, nothing holds — and its
             // denial is asked as its own proposition, so a row that stopped holds neither.
-            case Proposition.WhereItAnswers where -> joined(List.of(
-                    at(where.answers(), row, answered), at(where.states(), row, answered)), true);
-            case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
-                    .stream().map(each -> at(each, row, answered)).toList());
+            case Proposition.WhereItAnswers _ -> joined(node.parts().stream()
+                    .map(each -> at(each, row, answered, numbered)).toList(), true);
+            case Proposition.SoManyHold counted -> howManyHold(counted, node.parts()
+                    .stream().map(each -> at(each, row, answered, numbered)).toList());
+            case Proposition.OfTheWays _ ->
+                    at(node.parts().getFirst(), row, answered, numbered);
             case Proposition.Some some -> {
-                OverTheElements over = elements.get(keyOf(some));
+                OverTheElements over = node.over();
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
@@ -580,24 +1492,25 @@ final class AStatementAtARow {
             }
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count -> {
-                OverTheElements over = elements.get(keyOf(count));
-                HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
+                    && countIn(affine) instanceof Quantity _ -> {
+                HowManyAtARow counted = node.over().howManyIn(row);
                 if (counted == null) {
                     yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
                 }
                 yield countedAgainst(compared, affine, counted);
             }
             case Proposition.Compared compared when askable(compared) ->
-                    heldAs(compared.holds(), switch (relations.get(compared.relation())) {
+                    heldAs(compared.holds(), switch (node.relation()) {
                         case OneRelation.OnAQuantity read -> heldAt(read, row);
                         case OneRelation.OnAProduct product -> product.at(row);
                         case OneRelation.OnARemainderByAnInput remainder -> remainder.at(row);
                         case OneRelation.OnARemainderOfAForm remainder -> remainder.at(row);
+                        case OneRelation.OnStrings strings -> strings.at(row);
                         case OneRelation.NoQuantity unread -> unread.at();
                     });
             case Proposition.Compared _, Proposition.Truth _, Proposition.Present _,
-                 Proposition.InCases _, Proposition.SameValue _, Proposition.Unread _,
+                 Proposition.InCases _, Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _, Proposition.Unread _,
                  Proposition.OnAnApplication _, Proposition.SomeReachable _,
                  Proposition.LastToHold _ -> notAsked(part);
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -629,7 +1542,19 @@ final class AStatementAtARow {
         if (!readsOf(stated, about, read)) {
             return null;
         }
-        numbersOf(stated).forEach(term -> read.add(term.subjectPath()));
+        // Every place a number is read off: a container it is read across the elements of is
+        // one it is about, and any other place one it reads — for a number of the elements a
+        // statement keeps, what the statement reads.
+        for (NumericTerm term : numbersOf(stated)) {
+            List<List<TermPath>> runs = term.runsReadAcross();
+            for (TermPath place : term.placesReadOff()) {
+                if (!place.insideAContainer() && runs.stream().anyMatch(run -> run.contains(place))) {
+                    about.add(place);
+                } else {
+                    read.add(place);
+                }
+            }
+        }
         for (TermPath each : read) {
             if (!each.insideAContainer()) {
                 return null;
@@ -646,46 +1571,34 @@ final class AStatementAtARow {
      * to {@code read}. False where it reads something no position of the input is.
      */
     private static boolean readsOf(Proposition stated, Set<TermPath> about, Set<TermPath> read) {
+        return StatementReading.<Boolean>over((each, again) -> readsOfAt(each, about, read, again))
+                .read(stated);
+    }
+
+    private static boolean readsOfAt(Proposition stated, Set<TermPath> about, Set<TermPath> read,
+                                     StatementReading<Boolean> again) {
+        List<TermPath> asked = positionsAskedBy(stated);
+        if (asked != null) {
+            read.addAll(asked);
+            return true;
+        }
         return switch (stated) {
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(part -> readsOf(part, about, read));
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(part -> readsOf(part, about, read));
-            case Proposition.WhereItAnswers where -> readsOf(where.answers(), about, read)
-                    && readsOf(where.states(), about, read);
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.everyPart(again);
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
-                    read) && readsOf(some.ofTheElement(), about, read);
+                    read) && again.read(some.ofTheElement());
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
-                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
-                    overElementsOf(count.container().inputPosition(), about, read)
-                            && readsOf(count.ofTheElement(), about, read);
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean _, String _) -> {
-                read.add(at);
-                yield true;
-            }
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean _,
-                                     String _) -> {
-                read.add(at);
-                yield true;
-            }
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft _,
-                                     boolean _, String _) -> {
-                read.add(at);
-                yield true;
-            }
-            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
-                                       DecisionSubject.AnInput(TermPath other), boolean _,
-                                       String _) -> {
-                read.add(one);
-                read.add(other);
-                yield true;
+                    && countIn(affine) instanceof Quantity count -> {
+                differentAt(count).ifPresent(value -> read.addAll(value.places()));
+                yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
+                        && again.read(meetingOf(count));
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,
-                 Proposition.SameValue _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.InTheStrings _, Proposition.SameValue _,
+                 Proposition.StringInside _,
+                 Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
@@ -710,8 +1623,8 @@ final class AStatementAtARow {
      * What this says of each element of {@code container}, by what it is read as: what some element
      * meets, or what the elements a count counts meet.
      */
-    Map<String, AStatementAtARow> ofEachElementOf(TermPath container) {
-        Map<String, AStatementAtARow> out = new LinkedHashMap<>();
+    Map<Spelling,AStatementAtARow> ofEachElementOf(TermPath container) {
+        Map<Spelling,AStatementAtARow> out = new LinkedHashMap<>();
         elements.forEach((key, over) -> {
             if (over.container().equals(container)) {
                 out.put(key, over.ofTheElement());
@@ -729,7 +1642,7 @@ final class AStatementAtARow {
      * choice: a part about anything but how many elements meet something is not known, and a part
      * standing in many places is one part.
      */
-    Counting counting(TermPath container, Map<String, Integer> index, int most) {
+    Counting counting(TermPath container, Map<Spelling,Integer> index, int most) {
         Counting.Built built = new Counting.Built(most);
         int root = built.node(stated, this, container, index);
         return built.done(root);
@@ -862,7 +1775,7 @@ final class AStatementAtARow {
             private final List<Integer> counts = new ArrayList<>();
             private final List<Byte> answer = new ArrayList<>();
             private final List<byte[]> byNumber = new ArrayList<>();
-            private final Map<String, Integer> read = new HashMap<>();
+            private final Map<Spelling,Integer> read = new HashMap<>();
 
             Built(int most) {
                 this.most = most;
@@ -873,8 +1786,8 @@ final class AStatementAtARow {
             }
 
             int node(Proposition part, AStatementAtARow of, TermPath container,
-                     Map<String, Integer> index) {
-                Integer had = read.get(part.key());
+                     Map<Spelling,Integer> index) {
+                Integer had = read.get(part.spelling());
                 if (had != null) {
                     return had;
                 }
@@ -890,6 +1803,7 @@ final class AStatementAtARow {
                     case Proposition.WhereItAnswers where -> add(Kind.ALL, new int[] {
                             node(where.answers(), of, container, index),
                             node(where.states(), of, container, index)}, 0, EITHER, null);
+                    case Proposition.OfTheWays ways -> node(ways.written(), of, container, index);
                     case Proposition.Some some
                             when of.elements.get(keyOf(some)) instanceof OverTheElements over
                             && over.container().equals(container)
@@ -906,13 +1820,14 @@ final class AStatementAtARow {
                                     byNumber(compared, affine));
                     // A count of statements comes to either here: that claims nothing of it.
                     case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
-                         Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                         Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                         Proposition.SameValue _,                         Proposition.StringInside _,
                          Proposition.LastToHold _, Proposition.Carried _,
                          Proposition.SomeReachable _, Proposition.Unread _,
                          Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
                             add(Kind.SETTLED, null, 0, EITHER, null);
                 };
-                read.put(part.key(), out);
+                read.put(part.spelling(), out);
                 return out;
             }
 
@@ -964,6 +1879,102 @@ final class AStatementAtARow {
         };
     }
 
+    /** {@code parted} where it says the one piece at an index of a string, or null. */
+    private static PartedString onePieceOf(Optional<PartedString> parted) {
+        return parted.isPresent() && parted.get().isOnePiece() ? parted.get() : null;
+    }
+
+    /**
+     * What {@code row} says of the one piece {@code parted} names being one of the strings of
+     * {@code language}: its string worked out as the run time works it out
+     * ({@link BoundUnderEvaluation#mapped}) and parted as the run time parts it
+     * ({@link BoundUnderEvaluation#parted}). Nothing there where the string has fewer pieces, so
+     * the piece is in no language and out of none.
+     */
+    private static Said theOnePieceIn(PartedString parted, StringsLanguage language,
+                                      BorderQuantity.Observation row) {
+        return switch (onePieceAt(parted, row)) {
+            case TextAtARow.Unsaid(Said said) -> said;
+            case TextAtARow.Written(String piece) -> Recognizer.recognizes(language,
+                            language.meaning(), piece)
+                    .<Said>map(Said.Is::new)
+                    .orElseGet(() -> new Said.NotRead(Set.of(ReadingGap.NO_VALUE)));
+        };
+    }
+
+    /**
+     * The one piece {@code parted} names, of the string {@code row} puts at its position: worked
+     * out as the run time works it out ({@link BoundUnderEvaluation#mapped}) and parted as the
+     * run time parts it ({@link BoundUnderEvaluation#parted}). Nothing there where the string has
+     * fewer pieces.
+     *
+     * <p>The one place a row's piece is read, for what is said of the piece and for what it is
+     * held against.
+     */
+    private static TextAtARow onePieceAt(PartedString parted, BorderQuantity.Observation row) {
+        TextAtARow text = textAt(parted.string(), row);
+        if (!(text instanceof TextAtARow.Written(String whole))) {
+            return text;
+        }
+        String converted = BoundUnderEvaluation.mapped(parted.conversion(), whole);
+        if (converted == null) {
+            return new TextAtARow.Unsaid(new Said.NotRead(Set.of(ReadingGap.NO_VALUE)));
+        }
+        List<String> pieces = BoundUnderEvaluation.parted(converted, parted.separator());
+        return parted.from() >= pieces.size() ? new TextAtARow.Unsaid(Said.NOTHING_THERE)
+                : new TextAtARow.Written(pieces.get(Math.toIntExact(parted.from())));
+    }
+
+    /** The string a row put at a position, or why a reader has none to read. */
+    private sealed interface TextAtARow {
+
+        /** The string the row wrote. */
+        record Written(String text) implements TextAtARow { }
+
+        /** Nothing to read: the row put nothing there, or the walk or the value did not say. */
+        record Unsaid(Said said) implements TextAtARow { }
+    }
+
+    /**
+     * The string {@code row} put at {@code at}, a position of the input a string stands at.
+     *
+     * <p>A newtype is no step of a path, so what stands at a position declared a newtype over
+     * {@code String} is the construction, and the string is the one inside it
+     * ({@link ObservedValue#scalarInside}), taken off the way a term of the position is read.
+     */
+    private static TextAtARow textAt(TermPath at, BorderQuantity.Observation row) {
+        return switch (row.at(at)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ -> new TextAtARow.Unsaid(
+                    new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK)));
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue value) -> {
+                    ObservedValue inside = ObservedValue.scalarInside(value);
+                    if (inside.cause() != null) {
+                        yield new TextAtARow.Unsaid(
+                                new Said.NotRead(Set.of(ReadingGap.of(inside.cause()))));
+                    }
+                    yield inside instanceof ObservedValue.Text(String text)
+                            ? new TextAtARow.Written(text)
+                            : new TextAtARow.Unsaid(new Said.NotRead(Set.of(ReadingGap.NO_VALUE)));
+                }
+                case ObservationAtPoint.WroteNothing _,
+                     ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new TextAtARow.Unsaid(Said.NOTHING_THERE);
+            };
+        };
+    }
+
+    /** What is said where some string of a statement could not be read: what stopped the first
+     *  that was stopped, and otherwise that the row put nothing there. */
+    private static Said unsaid(TextAtARow... texts) {
+        for (TextAtARow each : texts) {
+            if (each instanceof TextAtARow.Unsaid(Said said) && said instanceof Said.NotRead) {
+                return said;
+            }
+        }
+        return Said.NOTHING_THERE;
+    }
+
     /**
      * What a row put at {@code at}, asked {@code asked}: what it answers, nothing where the row put
      * nothing there, and not read where the walk did not get there or what stands there is no value
@@ -1009,8 +2020,12 @@ final class AStatementAtARow {
         }
         // The value this reading holds at the position is there, so nothing of it standing under
         // the cases is that value being another case — whether the row wrote nothing there at
-        // all, or only the other elements of a container this reading did not choose did.
-        return switch (row.at(DeclaredInput.narrowedTo(at, cases))) {
+        // all, or only the other elements of a container this reading did not choose did. A value
+        // the position is narrowed to cases sharing none with these is none of them.
+        if (!at.admits(cases)) {
+            return Said.FALSE;
+        }
+        return switch (row.at(at.refine(cases))) {
             case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
                     new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
@@ -1039,15 +2054,34 @@ final class AStatementAtARow {
             return Said.NOTHING_THERE;
         }
         // A value any part of which could not be read is no value to be equal or unequal to
-        // another.
-        ReadingGap notRead = ReadingGap.ofAComparisonOf(left);
-        if (notRead == null) {
-            notRead = ReadingGap.ofAComparisonOf(right);
+        // another, and equal as records is the language's sameness only for the values that say
+        // so: a decimal at two scales and a sequence that is a list or a set are not told by a
+        // row.
+        ReadingGap notTold = ReadingGap.ofComparingAsRecords(left, right);
+        if (notTold != null) {
+            return new Said.NotRead(Set.of(notTold));
         }
+        return new Said.Is(left.equals(right));
+    }
+
+    /** Whether the value a row writes at {@code at} is {@code written}, as the language
+     *  compares values: a number by what it denotes, not by how many digits it was written with. */
+    private static Said theSameAsWritten(TermPath at, Value written,
+                                         BorderQuantity.Observation row) {
+        if (!(row.at(at) instanceof WalkResult.Reached<ObservationAtPoint>(
+                ObservationAtPoint point))) {
+            return new Said.NotRead(Set.of(ReadingGap.COULD_NOT_WALK));
+        }
+        if (!(point instanceof ObservationAtPoint.Value(ObservedValue seen))) {
+            return Said.NOTHING_THERE;
+        }
+        ReadingGap notRead = ReadingGap.ofAComparisonOf(seen);
         if (notRead != null) {
             return new Said.NotRead(Set.of(notRead));
         }
-        return new Said.Is(left.equals(right));
+        Boolean same = WrittenValues.denotes(seen, written);
+        return same == null ? new Said.NotRead(Set.of(ReadingGap.NO_VALUE))
+                : new Said.Is(same);
     }
 
     /**
@@ -1058,7 +2092,7 @@ final class AStatementAtARow {
      * holding no value a part is about is on neither side of it, so the part and its denial both
      * fail there — read off a failing answer, the denial would hold.
      */
-    private sealed interface Said {
+    sealed interface Said {
 
         /** The part is {@code truth} at the row. */
         record Is(boolean truth) implements Said {}
@@ -1133,6 +2167,35 @@ final class AStatementAtARow {
             return new Answer.CouldNotTell(unread);
         }
         return every ? Answer.HOLDS : Answer.FAILS;
+    }
+
+    /**
+     * How many totals in a row {@code total} is tried at for an element of whole numbers to stand
+     * where a relation this reads puts it: where a relation weighs an element's number {@code w}
+     * times the total, the element comes to the line only at a total of one remainder by
+     * {@code w}, so as many totals in a row are one of each. One where no relation reads the total
+     * beside an element's number at a whole multiple of it.
+     */
+    int remaindersOf(NumericTerm total) {
+        int out = 1;
+        for (OneRelation each : relations.values()) {
+            if (!(each instanceof OneRelation.OfAForm(LinearQuantity _,
+                    LinearForm<NumericTerm> form, Rel _))
+                    || !(form.coefs().get(total) instanceof ExactRatio weight)) {
+                continue;
+            }
+            for (Map.Entry<NumericTerm, ExactRatio> other : form.coefs().entrySet()) {
+                if (other.getKey() instanceof NumericTerm.ValueOf value
+                        && value.position().insideAContainer()
+                        && other.getValue().dividedBy(weight).orNull() instanceof ExactRatio apart
+                        && apart.isWhole()
+                        && apart.floor().orNull() instanceof BigInteger whole
+                        && whole.abs().bitLength() < Integer.SIZE - 1) {
+                    out = Math.max(out, whole.abs().intValue());
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -1229,6 +2292,13 @@ final class AStatementAtARow {
                         return null;
                     }
                 }
+                // What is said of strings turns on the strings and on no place of an order, which
+                // is not known.
+                case OneRelation.OnStrings strings -> {
+                    if (strings.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 // A relation no row is read at turns wherever it does, which is not known.
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
@@ -1288,6 +2358,11 @@ final class AStatementAtARow {
                         return null;
                     }
                 }
+                case OneRelation.OnStrings strings -> {
+                    if (strings.terms().contains(term)) {
+                        return null;
+                    }
+                }
                 case OneRelation.NoQuantity(LinearForm<NumericTerm> form) -> {
                     if (form.coefs().containsKey(term)) {
                         return null;
@@ -1298,11 +2373,24 @@ final class AStatementAtARow {
         return out;
     }
 
-    /** A statement about the elements of a container: the container, and what each is asked. */
-    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement) {}
+    /**
+     * A statement about the elements of a container: the container, what each is asked, and,
+     * where how many different values those meeting it hold is what is counted, where the values
+     * stand — and the container whose elements hold one each, where every one of them is counted.
+     */
+    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement,
+                                   Optional<Quantity.TheValue> differentAt,
+                                   Optional<TermPath> across) {
+
+        /** How many elements meet what each is asked at {@code row}, or how many different values
+         *  they hold; null where the walk could not reach the container. */
+        HowManyAtARow howManyIn(BorderQuantity.Observation row) {
+            return ofTheElement.howManyIn(container, differentAt, across, row);
+        }
+    }
 
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
-    private sealed interface OneRelation {
+    sealed interface OneRelation {
 
         /** The numbers of a row the relation is about, whether or not a row can be read at them. */
         List<NumericTerm> terms();
@@ -1318,6 +2406,127 @@ final class AStatementAtARow {
             @Override
             default List<NumericTerm> terms() {
                 return over().terms();
+            }
+        }
+
+        /**
+         * Whether a string is among the pieces of another parted at a code point, as the number
+         * one where it is and nought where it is not, weighed and with a constant added, against
+         * nought.
+         *
+         * <p>Each string is the string at a position, or what case conversions make of it, worked
+         * out as the run time works it out ({@link BoundUnderEvaluation#mapped}) and parted as
+         * the run time parts it ({@link BoundUnderEvaluation#parted}). No number of the row is
+         * read, so it divides no order and a place a term turns at is not known.
+         *
+         * @param value    the string looked for
+         * @param string   the string parted
+         * @param weight   what the membership is weighed by
+         * @param constant what is added to it
+         */
+        record OnPieceMembership(ConvertedText value, ConvertedText string, int separator,
+                                 int from, int among, ExactRatio weight, ExactRatio constant,
+                                 Rel rel, List<NumericTerm> terms) implements OnStrings {
+
+            /** Whether the strings of {@code membership} are ones a row is read at. */
+            static boolean readsARow(Quantity.IsAmongThePieces membership) {
+                return ValueName.Stdlib.operation("String", "split").equals(membership.operation())
+                        && membership.separator().isPresent()
+                        && ConvertedText.of(membership.value()) != null
+                        && ConvertedText.of(membership.string()) != null;
+            }
+
+            static OnPieceMembership of(Relation.Affine affine,
+                                        Quantity.IsAmongThePieces membership) {
+                return new OnPieceMembership(ConvertedText.of(membership.value()),
+                        ConvertedText.of(membership.string()),
+                        membership.separator().getAsInt(), membership.from(), membership.among(),
+                        affine.form().coefs().get(membership), affine.form().constant(),
+                        affine.proposition(),
+                        NumericTerms.inOrder(membership.positionsItIsMadeOf()));
+            }
+
+            @Override
+            public List<TermPath> positions() {
+                return List.of(value.place().position(), string.place().position());
+            }
+
+            /**
+             * What the relation is at {@code row}: nothing there where the row holds no string at
+             * a position, and not read where a string could not be read.
+             */
+            @Override
+            public Said at(BorderQuantity.Observation row) {
+                TextAtARow looked = textAt(value.place().position(), row);
+                TextAtARow parted = textAt(string.place().position(), row);
+                if (!(looked instanceof TextAtARow.Written(String lookedFor))
+                        || !(parted instanceof TextAtARow.Written(String whole))) {
+                    return unsaid(looked, parted);
+                }
+                String needle = BoundUnderEvaluation.mapped(value.through(), lookedFor);
+                String converted = BoundUnderEvaluation.mapped(string.through(), whole);
+                if (needle == null || converted == null) {
+                    return new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
+                }
+                List<String> pieces = BoundUnderEvaluation.parted(converted, separator);
+                int until = among > 0 ? Math.min(among, pieces.size()) : pieces.size();
+                boolean found = from < until && pieces.subList(from, until).contains(needle);
+                ExactAnswer<ExactRatio> sum =
+                        found ? weight.plus(constant) : ExactAnswer.held(constant);
+                return switch (sum) {
+                    case ExactAnswer.Held<ExactRatio>(ExactRatio held) ->
+                            new Said.Is(rel.holds(held.signum()));
+                    case ExactAnswer.Unheld<ExactRatio> unheld ->
+                            new Said.NotRead(Set.of(ReadingGap.of(unheld.why())));
+                };
+            }
+        }
+
+        /** A relation over strings a row writes, read off them as the run time reads them. */
+        sealed interface OnStrings extends OneRelation {
+
+            /** The positions whose strings a row is read at. */
+            List<TermPath> positions();
+
+            /** What the relation is at {@code row}: nothing there where the row holds no string at
+             *  a position, and not read where a string could not be read. */
+            Said at(BorderQuantity.Observation row);
+        }
+
+        /**
+         * The one piece of a string at an index being the string at a position, as the row
+         * writes them: nothing there where the row's string has no piece at the index, which is
+         * neither the relation nor its denial.
+         *
+         * @param piece the string the piece is of, how it is parted and where the piece is
+         * @param value the string it is held against
+         */
+        record OnTheOnePiece(PartedString piece, ConvertedText value, List<NumericTerm> terms)
+                implements OnStrings {
+
+            static OnTheOnePiece of(PieceBeingAValue one) {
+                return new OnTheOnePiece(one.parted(), ConvertedText.of(one.value()), one.terms());
+            }
+
+            @Override
+            public List<TermPath> positions() {
+                return List.of(value.place().position(), piece.string());
+            }
+
+            @Override
+            public Said at(BorderQuantity.Observation row) {
+                TextAtARow looked = textAt(value.place().position(), row);
+                return switch (onePieceAt(piece, row)) {
+                    case TextAtARow.Unsaid pieceUnsaid -> unsaid(looked, pieceUnsaid);
+                    case TextAtARow.Written(String text) -> {
+                        if (!(looked instanceof TextAtARow.Written(String lookedFor))) {
+                            yield unsaid(looked);
+                        }
+                        String needle = BoundUnderEvaluation.mapped(value.through(), lookedFor);
+                        yield needle == null ? new Said.NotRead(Set.of(ReadingGap.NO_VALUE))
+                                : new Said.Is(needle.equals(text));
+                    }
+                };
             }
         }
 
@@ -1551,6 +2760,10 @@ final class AStatementAtARow {
             return switch (relation) {
                 case Relation.Affine affine when productIn(affine) != null ->
                         ofAProduct(affine, productIn(affine), behavior, quantities);
+                case Relation.Affine affine when pieceMembershipIn(affine) != null ->
+                        OnPieceMembership.of(affine, pieceMembershipIn(affine));
+                case Relation.Affine affine when thePieceBeingAValueIn(affine) != null ->
+                        OnTheOnePiece.of(thePieceBeingAValueIn(affine));
                 case Relation.Affine affine when remainderByAnInputIn(affine) != null ->
                         ofARemainderByAnInput(affine, remainderByAnInputIn(affine), behavior,
                                 quantities);
@@ -1568,7 +2781,8 @@ final class AStatementAtARow {
                     yield over == null ? new NoQuantity(form)
                             : new OfAForm(over, form, affine.proposition());
                 }
-                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
+                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), Place at,
+                                      Rel rel)
                         when term.atOnePosition() != null -> new OnAnOrder(
                                 Cutting.readAt(behavior, term.atOnePosition(), quantities),
                                 term, at, rel);
@@ -1586,7 +2800,7 @@ final class AStatementAtARow {
                     : Cutting.readAt(behavior, added, quantities);
             if (of == null || (addedNumbers == null && !added.coefs().isEmpty())) {
                 Map<NumericTerm, ExactRatio> every = new LinkedHashMap<>(
-                        remainder.dividend().coefs());
+                        remainder.numbersOfTheInput());
                 every.putAll(added.coefs());
                 return new NoQuantity(new LinearForm<>(ExactRatio.ZERO, every));
             }
@@ -1623,14 +2837,22 @@ final class AStatementAtARow {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof AStatementAtARow that && stated.equals(that.stated)
+        return this == other || (other instanceof AStatementAtARow that
+                && hashCode() == that.hashCode() && stated.equals(that.stated)
                 && relations.equals(that.relations) && elements.equals(that.elements)
-                && positions.equals(that.positions);
+                && positions.equals(that.positions));
     }
 
+    /** Worked out on the first ask: a row's memo is keyed by a reading that holds the statement,
+     *  and asks it at every row. */
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(stated, relations, elements, positions);
+        int known = hash;
+        if (known == 0) {
+            known = Objects.hash(stated, relations, elements, positions);
+            hash = known;
+        }
+        return known;
     }
 
     /** Every relation over the input's own numbers this reads, for the quantities a reader of it

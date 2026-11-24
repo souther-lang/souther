@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -177,7 +178,7 @@ class ABudgetIsTheCompilationsToSetTest {
                                 Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String document = AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(document.contains("behavior_distinctions_too_costly"),
@@ -206,7 +207,7 @@ class ABudgetIsTheCompilationsToSetTest {
                         Budgets.measures(),
                         new AdequacyPolicy.OfTheGeneration(Budgets.generation().rowLimit(), cells)));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> filling =
                 Adequacy.generatedOf(compilation.db(), "example.two");
         assertNotNull(filling, "the module was asked for rows");
@@ -262,7 +263,7 @@ class ABudgetIsTheCompilationsToSetTest {
                                 Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         PartitionEvidence evidence = partitions.get("pick");

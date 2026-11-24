@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -27,11 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
 
     private static List<String> fullReport(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
     }
 
     private static List<String> said(String source) {
@@ -51,9 +51,22 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 + " here settle it on their own is not worked out, about `" + position + "`";
     }
 
+    private static String untold(String at, String position) {
+        return "· not read: comparison@" + at + " — what it states was read, but a run evaluating"
+                + " it works out an operation that may end the run where nothing here says, so the"
+                + " rows a run gets past it with are not shown, about `" + position + "`";
+    }
+
+    private static String overARegion(String at, String position) {
+        return "· not read: comparison@" + at + " — what it states was read, and it relates the"
+                + " value here to another value; its classes hold the values it was shown over,"
+                + " and the rest are shown on neither side of it, about `" + position + "`";
+    }
+
     @Test
     void aValueHeldAgainstAPieceIsRelatedToTheString() {
-        assertEquals(Set.of(relates("3:36", "email"), notShown("3:36", "d")), Set.copyOf(said("""
+        assertEquals(Set.of(relates("3:36", "email"), overARegion("3:36", "d")),
+                Set.copyOf(said("""
                 module w1
                 behavior m : (email: String, d: String) -> Bool
                 let m (email, d) = List.any(p -> p == d, String.split("@", email))
@@ -62,7 +75,8 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
 
     @Test
     void aValueHeldAgainstOneOfTheFirstPiecesIsRelatedToTheString() {
-        assertEquals(Set.of(relates("3:36", "email"), notShown("3:36", "d")), Set.copyOf(said("""
+        assertEquals(Set.of(relates("3:36", "email"), overARegion("3:36", "d")),
+                Set.copyOf(said("""
                 module w1
                 behavior m : (email: String, d: String) -> Bool
                 let m (email, d) = List.any(p -> p == d, List.take(1, String.split("@", email)))
@@ -74,12 +88,16 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 + " says about the values here is not worked out, about `" + position + "`";
     }
 
+    /**
+     * Each statement is read. The second is reached only where the first holds, which ties
+     * {@code d} to the pieces of {@code email}: both sides of the second, so its strings are not
+     * shown as the declarations leave them, and which values of {@code d} it is reached at is not
+     * worked out.
+     */
     @Test
     void severalStatementsAboutTheFirstFewPiecesAreEachRead() {
         assertEquals(Set.of(relates("7:27", "email"), relates("8:27", "email"),
-                        notShown("7:27", "d"), notShown("8:27", "d"),
-                        ofTheFork("7:5", "d"), ofTheFork("7:5", "email"),
-                        ofTheFork("8:5", "d"), ofTheFork("8:5", "email")),
+                        overARegion("7:27", "d"), notShown("8:27", "d")),
                 Set.copyOf(said("""
                         module w1
                         data A
@@ -97,7 +115,9 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
     /**
      * A string with a piece that is the value and one that is not satisfies both of these, so a
      * path that holds both is one some row can take, and the report does not shut it out as a
-     * statement and its denial.
+     * statement and its denial. The second is reached only where the first holds, which ties
+     * {@code d} to the pieces of {@code email}, so which values of {@code d} it is reached at is
+     * not worked out.
      */
     @Test
     void aPieceThatIsTheValueAndAPieceThatIsNotCanBothBeSaid() {
@@ -112,8 +132,8 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                     then Both
                     else Other
                 """;
-        assertEquals(Set.of(relates("6:24", "email"), notShown("6:24", "d"),
-                        ofTheFork("6:5", "d"), ofTheFork("6:5", "email"),
+        assertEquals(Set.of(relates("6:24", "email"), overARegion("6:24", "d"),
+                        ofTheFork("6:5", "email"),
                         notShown("7:32", "d"), relates("7:32", "email")),
                 Set.copyOf(said(source)));
         List<String> report = fullReport(source).stream().map(String::strip).toList();
@@ -125,10 +145,11 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
         assertTrue(bothOnOnePath, "both are said of one path: " + report);
     }
 
+    /** None of the pieces taken, the closure is applied to none, and the comparison in it is one
+     *  no run makes: it relates nothing and leaves nothing unread. */
     @Test
     void noPieceTakenIsNoRelation() {
-        assertEquals(List.of("· not read: comparison@3:36 — written in a form this compiler does not"
-                + " read, about `d`"), said("""
+        assertEquals(List.of(), said("""
                 module w1
                 behavior m : (email: String, d: String) -> Bool
                 let m (email, d) = List.any(p -> p == d, List.take(0, String.split("@", email)))
@@ -145,9 +166,12 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 """));
     }
 
+    /** A piece wrapped in a newtype is the same piece. Making it checks the invariant, which a
+     *  piece shorter than three refuses, and nothing in the comparison tells of that stop. */
     @Test
     void aPieceWrappedInANewtypeIsTheSamePiece() {
-        assertEquals(Set.of(notShown("6:36", "d"), notShown("6:36", "email")), Set.copyOf(said("""
+        assertEquals(Set.of(notShown("6:36", "d"), notShown("6:36", "email"),
+                untold("6:36", "d"), untold("6:36", "email")), Set.copyOf(said("""
                 module w1
                 data Domain = String
                     invariant String.length(value) >= 3
@@ -155,5 +179,15 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                     constructs Domain
                 let m (email, d) = List.any(p -> p == d, List.map(x -> Domain(x), String.split("@", email)))
                 """)));
+        // With no invariant, making it stops no run, and no stop is left untold.
+        List<String> free = said("""
+                module w1
+                data Domain = String
+                behavior m : (email: String, d: Domain) -> Bool
+                    constructs Domain
+                let m (email, d) = List.any(p -> p == d, List.map(x -> Domain(x), String.split("@", email)))
+                """);
+        assertTrue(free.stream().noneMatch(line -> line.contains(
+                UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)), free::toString);
     }
 }

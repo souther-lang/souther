@@ -4,7 +4,9 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.BehaviorAnswers;
-import souther.compiler.check.CalledBody;
+import souther.compiler.check.CallPassage;
+import souther.compiler.check.ConstructionsShownToHold;
+import souther.compiler.core.Core;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryConstraints;
@@ -63,6 +65,7 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Region;
@@ -1322,7 +1325,7 @@ public final class Shapes {
                 // One world for every conjunct below, since every one of them is read in it. Made
                 // per conjunct, this asked the store what a reading may spend once for each.
                 RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
-                        db.ask(new Front.Reading()).value(), db.readings());
+                        db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
                 Map<TypeSymbol, List<ClauseDischarge>> out = new LinkedHashMap<>();
                 for (Hir.Data data : declaring.declarationsThatState()) {
                     List<ClauseDischarge> clauses = new ArrayList<>();
@@ -1383,7 +1386,7 @@ public final class Shapes {
             Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(named));
             return Answer.of(declared.present()
                     ? CardinalityPremise.of(declared.value().declares(), declared.value(),
-                            RuleReadingContext.of(reading.value(), policy.value(), db.readings()))
+                            RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db)))
                     : CardinalityPremise.NOTHING);
         }
     }
@@ -1566,7 +1569,7 @@ public final class Shapes {
             }
             try {
                 RuleReadingContext world =
-                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db));
                 return Answer.of(TypeCardinality.ofComponent(members, world,
                         cardinalityPremises(db, world), new CountedElsewhere(db)));
             } catch (CompileException e) {
@@ -1707,7 +1710,7 @@ public final class Shapes {
                 // be answered together, what each reads, and what their rules ask a collection to
                 // hold, which is what the question about who is at fault for a lack is asked of.
                 RuleReadingContext world =
-                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db));
                 TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
                         declarations, world, cardinalityPremises(db, world), counts::get);
                 // Not counted where a rule the count read could not be read at all. What makes a
@@ -2138,23 +2141,37 @@ public final class Shapes {
     }
 
     /**
-     * What any behavior's body answers, for a reader of a call to one.
+     * The body of any recursive helper, for a reader of a call to one, and which constructions are
+     * shown to hold where they are made.
      *
      * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
-     * reader taking one depends on the bodies of the behaviors it asks about and on nothing else.
+     * reader taking one depends on what it asks about and on nothing else.
      */
     public static BehaviorAnswers behaviorAnswers(Db db) {
         return new BehaviorAnswers() {
 
             @Override
-            public Optional<CalledBody> bodyOf(ValueName.Behavior behavior) {
-                return Optional.ofNullable(db.ask(new Adequacy.BodyAtACall(behavior)).value());
-            }
-
-            @Override
             public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
                 return Optional.ofNullable(db.ask(new Bodies.RecursionAtACall(recursion.module(),
                         recursion.name())).value());
+            }
+
+            @Override
+            public CallPassage passageOf(ValueName.Behavior behavior) {
+                return db.ask(new Adequacy.RowsRunsGetPast(behavior.module(), behavior.name()))
+                        .value();
+            }
+
+            @Override
+            public boolean builtWhereItsModuleIsBuilt(String module, SourcePos construction) {
+                Answer<Set<SourcePos>> built = db.ask(new Output.BuiltValues(module));
+                return built.present() && built.value().contains(construction);
+            }
+
+            @Override
+            public boolean shownToHold(String module, Core.Construct made) {
+                Answer<ConstructionsShownToHold> shown = db.ask(new Bodies.ShownToHold(module));
+                return shown.present() && shown.value().holds(made);
             }
         };
     }
@@ -2408,7 +2425,7 @@ public final class Shapes {
                 return Answer.absent();
             }
             InvariantStatements statements = InvariantStatements.of(
-                    RuleReadingContext.of(reading.value(), policy.value(), db.readings()));
+                    RuleReadingContext.of(reading.value(), policy.value(), db.readings(), Front.dayOf(db)));
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.Def def : settled.value().defs()) {

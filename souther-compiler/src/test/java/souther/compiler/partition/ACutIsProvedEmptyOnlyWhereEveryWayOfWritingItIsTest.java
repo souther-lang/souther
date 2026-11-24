@@ -27,7 +27,8 @@ class ACutIsProvedEmptyOnlyWhereEveryWayOfWritingItIsTest {
                     new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0)),
             new RowDemand.Relational(new TakenConstraint.Affine(
                     LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("r").then("deadline"))),
-                    Rel.GE)));
+                    Rel.GE)),
+            NamedElements.NONE);
 
     private static final ReachabilityGap PROVED = new ReachabilityGap.ProvedImpossible(CUT);
 

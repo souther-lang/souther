@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -42,7 +43,8 @@ class ANewtypeIsMadeOfTheOneValueItIsANameForTest {
 
     /** The shapes the check settled for {@code demo}, by the declaration each is of. */
     private static Map<TypeSymbol.AtModule, ValueShape> shapes() {
-        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY));
         Map<TypeSymbol.AtModule, ValueShape> shapes =
                 compilation.db().ask(new Shapes.ValueShapes("demo")).value();
         assertNotNull(shapes, "the check answered what a value of each declaration is made of");

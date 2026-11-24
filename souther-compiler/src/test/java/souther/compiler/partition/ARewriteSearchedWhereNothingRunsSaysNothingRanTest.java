@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -60,7 +61,7 @@ class ARewriteSearchedWhereNothingRunsSaysNothingRanTest {
 
     /** What looking for a row the body answering zero always is told apart on came to. */
     private static ReplacementDisposition searchedWith(Generator.Trial trial) {
-        Compilation compilation = Compilation.ofSource(DOUBLED, "Main");
+        Compilation compilation = ACompiledModel.answered(DOUBLED);
         String module = compilation.modules().getFirst();
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
@@ -80,7 +81,8 @@ class ARewriteSearchedWhereNothingRunsSaysNothingRanTest {
                 inputs.reading(rules));
         ReplacementOwed owed = new ReplacementOwed.ByOneAnswer(new Replacement.ByOneAnswer(
                 new ObservedValue.Integer(0),
-                new RowRef("doubled", new SourceId("m.sou"), new RowIdentity.Unnamed(1))));
+                new RowRef("doubled", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
+                List.of(List.of(new ObservedValue.Integer(0))));
         FillResult filled = Generator.fill(GenerationPlan.of(subject, List.of(), List.of(),
                         List.of(), List.of(), List.of(owed),
                         new RewriteSearch(RewriteSearch.For.THE_MEASURE, 8)),

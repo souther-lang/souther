@@ -4,12 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -101,9 +103,8 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
      * instead, the search was never made and the block said nothing while the report asked for a
      * row.
      *
-     * <p>What comes back here is a figure of this compiler's rather than a row, which is the other
-     * half of the same rule: a side is never settled by looking, so what such a search says is that
-     * it left something untried. That is a thing an author can act on; silence is not.
+     * <p>The search finds one, and what it offers is held to the lines themselves: each row offered
+     * is a pair the two lines answer differently, whichever pair the search came to first.
      */
     @Test
     void aLineOnAnOrderWithNoValueBesideItIsStillSearched() {
@@ -125,13 +126,23 @@ class ARowThatTellsALineFromTheOneBesideItIsComposedTest {
                   | (12.0m, 24.0m) -> true
                 """);
 
-        assertEquals(List.of("no row tells `-2 * x + y = 0` from `-3 * x + y = 0`,"
-                        + " and a row at `x = -1, y = -2` would"), findings(report),
-                () -> "the rows meet every point this order owes one at and still leave a line"
-                        + " standing:\n" + report);
-        assertTrue(report.contains("no row for `-2 * x + y = 0 against -3 * x + y = 0` in `f`"),
-                () -> "and the block says what looking for a row came to, rather than passing"
-                        + " over a line whose point against it the order cannot write:\n" + report);
+        List<String> found = findings(report);
+        assertEquals(1, found.size(), () -> "the rows meet every point this order owes one at and"
+                + " still leave a line standing:\n" + report);
+        assertTrue(found.get(0).startsWith(
+                        "no row tells `-2 * x + y = 0` from `-3 * x + y = 0`"),
+                () -> "and it is the line beside the one the model draws:\n" + report);
+        List<String> rows = offered(report);
+        assertFalse(rows.isEmpty(), () -> "the block offers a row rather than passing over a line"
+                + " whose point against it the order cannot write:\n" + report);
+        for (String row : rows) {
+            String[] pair = row.replaceAll("[()m ]", "").split(",");
+            BigDecimal x = new BigDecimal(pair[0]);
+            BigDecimal y = new BigDecimal(pair[1]);
+            assertTrue((y.compareTo(x.multiply(BigDecimal.TWO)) <= 0)
+                            != (y.compareTo(x.multiply(BigDecimal.valueOf(3))) <= 0),
+                    () -> "a row offered is one the two lines answer differently: " + row);
+        }
     }
 
     /** The model, with the rows handed in. */

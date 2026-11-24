@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -49,9 +50,8 @@ class AThresholdOnAnElementIsMetByARowTest {
 
     /** Every point against the line of {@code countOverThreshold}, as the rows leave it. */
     private static List<BorderAssessment.Point> pointsFor(String operator) {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("OP", operator), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL.replace("OP", operator),
+                Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), MODULE);
         assertNotNull(boundaries, () -> "the model under test compiles: " + operator);
@@ -120,11 +120,9 @@ at.get(0).owed().coverage().made().orElseThrow(),
      */
     @Test
     void aRowHoldingAnItemAtTheThresholdReachesThePoint() {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("OP", ">=")
+        Compilation compilation = ACompiledModel.measured(MODEL.replace("OP", ">=")
                 .replace("Item { charge = 1000 }", "Item { charge = 21000 }")
-                .replace("-> Total(1)", "-> Total(2)"), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                .replace("-> Total(1)", "-> Total(2)"), Adequacy.Asked.fullReport());
         List<BorderAssessment> lines = compilation.db()
                 .ask(new Adequacy.Boundaries(MODULE, "countOverThreshold")).value();
         BorderAssessment.Point at = BorderAssessment.pointsOf(lines).stream()

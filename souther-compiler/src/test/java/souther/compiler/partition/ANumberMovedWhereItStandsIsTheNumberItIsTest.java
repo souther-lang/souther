@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Case;
@@ -76,13 +77,18 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
             AStatementAtARow.of(FLAGGED, "f", null));
 
     private static NumericTerm.TakenOver totalOver(RunSource run) {
+        // The values of a line are nodes, so what is taken of a line is how many there are.
+        if (run instanceof RunSource.SearchedLine) {
+            return NumericTerm.TakenOver.howManyOf(run, Type.Prim.INT, NewtypeInners.NONE,
+                    SYMBOLS);
+        }
         return NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"), run,
                 Type.Prim.INT, NewtypeInners.NONE, SYMBOLS);
     }
 
     /** One run of each kind. */
     private static List<RunSource> runs() {
-        ElementValue byPosition = new ElementValue.ByPosition(
+        ElementValue byPosition = new ElementValue.Choose(
                 new ElementValue.PositionTest(2, Rel.EQ, 0),
                 new ElementValue.Affine(LinearForm.atom(ITSELF)),
                 new ElementValue.Affine(new LinearForm<>(ExactRatio.ZERO,
@@ -92,12 +98,15 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                 new RunSource.FlattenedOccurrences(LINE),
                 RunSource.computedOverTheElementsAt(ELEMENT,
                         new ElementValue.Affine(LinearForm.atom(N)), Type.Prim.INT, null),
-                ((NumericTerm.TakenOver) InputNumber.overWhatWasComputedByPosition(
+                ((NumericTerm.TakenOver) InputNumber.overWhatWasComputed(
                         ValueName.Stdlib.operation("List", "sum"), XS, byPosition,
                         Type.Prim.INT, TraversalDirection.FORWARD, NewtypeInners.NONE, SYMBOLS))
                         .source(),
+                new RunSource.JoinedOccurrences(ELEMENT, TermPath.of("ys").element()),
                 RunSource.overTheNodesBelow(TermPath.of("n"), List.of("kids"),
-                        List.of("xs")));
+                        List.of("xs")),
+                RunSource.overTheLineDown(TermPath.of("n"), "kids", List.of("id"),
+                        TermPath.of("who")));
     }
 
     /** At least one number of each kind, a selection and a key chosen by case among them. */
@@ -112,6 +121,8 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
         ElementValue n = new ElementValue.Affine(LinearForm.atom(N));
         List<NumericTerm> out = new ArrayList<>(Arrays.asList(
                 new NumericTerm.ValueOf(TermPath.of("x")),
+                NumericTerm.ProductOf.of(LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))),
+                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("y")))),
                 NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"),
                         ObservationSource.asItStands(TermPath.of("s")), TakenArguments.NONE,
                         Type.STRING, NewtypeInners.NONE, SYMBOLS),
@@ -120,6 +131,10 @@ class ANumberMovedWhereItStandsIsTheNumberItIsTest {
                         NewtypeInners.NONE),
                 NumericTerm.CodePointValueSum.of(TermPath.of("s"), Type.STRING,
                         NewtypeInners.NONE),
+                NumericTerm.CodePointAt.of(TermPath.of("s"), 3, Type.STRING, NewtypeInners.NONE),
+                NumericTerm.WholeUnitsOf.of(ValueName.Stdlib.operation("DateTime", "toDate"),
+                        TermPath.of("t"), Type.Prim.DATETIME, NewtypeInners.NONE,
+                        ScopedDeclarations.accessOf(SYMBOLS)),
                 NumericTerm.Multiplicity.of(XS, ELEMENT.then("k")),
                 NumericTerm.ExtremeOfItsKey.of(XS, ELEMENT.then("k"), ELEMENT.then("n"),
                         Extreme.LEAST),

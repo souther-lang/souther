@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Today;
 import souther.compiler.semantics.TakenAs.DatePart;
 import souther.test.Nightly;
 
@@ -41,6 +42,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @Nightly
 class ADateAnsweringDrawnMovedPartsIsOneEveryAskAdmitsTest {
+
+    /** The day every search here is asked on, for the reason
+     *  {@code ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest} asks on it. */
+    private static final Today ASKED_ON = new Today(LocalDate.of(2000, 1, 1));
 
     /** The days a walk covers. A year asked for stands within a few years of this, and a move
      *  takes a date by under two of them. */
@@ -122,7 +127,7 @@ class ADateAnsweringDrawnMovedPartsIsOneEveryAskAdmitsTest {
             }
 
             TermRealizations.Search found =
-                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
+                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE, ASKED_ON);
 
             boolean somethingAnswers = false;
             for (long day = FIRST; day <= LAST && !somethingAnswers; day++) {
@@ -153,10 +158,11 @@ class ADateAnsweringDrawnMovedPartsIsOneEveryAskAdmitsTest {
     }
 
     /** The first day a walk of one cycle starts at, where the asks are defined there. */
-    private static final long CYCLE_FROM = LocalDate.of(2000, 1, 1).toEpochDay();
+    private static final long CYCLE_FROM = ASKED_ON.firstOfItsYear();
 
     /** The days of one Gregorian cycle, counted with {@code java.time}. */
-    private static final long CYCLE = LocalDate.of(2400, 1, 1).toEpochDay() - CYCLE_FROM;
+    private static final long CYCLE =
+            LocalDate.ofEpochDay(CYCLE_FROM).plusYears(400).toEpochDay() - CYCLE_FROM;
 
     /** The month and the day of every date from a little before the cycle to a little after it,
      *  so a walk over all of them reads an array rather than the calendar. */
@@ -217,7 +223,7 @@ class ADateAnsweringDrawnMovedPartsIsOneEveryAskAdmitsTest {
             }
 
             TermRealizations.Search found =
-                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
+                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE, ASKED_ON);
 
             String where = asks.toString();
             assertTrue(found.everyOne(), "a cycle is every day there is to ask: " + where);

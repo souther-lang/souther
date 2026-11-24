@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.diag.Messages;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermOrders;
@@ -19,6 +21,7 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -229,13 +232,14 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     void everyWayTriedAndNoneComposedSaysSo() {
         TermRealizations.Realization.None came = assertInstanceOf(
                 TermRealizations.Realization.None.class,
-                realizing(NO_CASE_COMPOSES, AMOUNT, namedIn(NO_CASE_COMPOSES, "Entries")),
+                realizing(RuleReadings.ofSource(NO_CASE_COMPOSES, List.of("E1013")), AMOUNT,
+                        namedIn(NO_CASE_COMPOSES, "Entries")),
                 "the ways down are there and neither of them builds a value");
 
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
         assertEquals("`ns[*].method@Card.amount`, `ns[*].method@Cash.amount` were ways down to"
                         + " `ns[*].method.amount`, and none of them composed a value",
-                came.detail(),
+                Messages.render(came.detail(), Locale.ENGLISH),
                 "and the ways that were walked are named, so a reader is not left to tell this"
                         + " from a demand nothing reaches");
     }
@@ -255,7 +259,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
         assertEquals("nothing standing at `ns[*].settled` gives a way down to"
                         + " `ns[*].settled.amount`",
-                came.detail(),
+                Messages.render(came.detail(), Locale.ENGLISH),
                 "and what it says is that there was never a way, which is not that the ways came"
                         + " to nothing");
     }
@@ -268,8 +272,9 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     private static final List<String> UNDER_A_TRUTH = List.of("settled", "amount");
 
     /**
-     * The same sum with both cases holding a string longer than one is worth writing out, so the
-     * way down to the amount is there and neither case composes a value.
+     * The same sum with each case holding the sum again, so the way down to the amount is there and
+     * neither case composes a value. No value of the model exists, which the compiler refuses
+     * with E1013.
      */
     private static final String NO_CASE_COMPOSES = """
             module g
@@ -319,7 +324,12 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     /** The same, over a container of {@code held}. */
     private static TermRealizations.Realization realizing(String source, List<String> steps,
                                                           Type held) {
-        RuleReadingSource rules = RuleReadings.ofSource(source);
+        return realizing(RuleReadings.ofSource(source), steps, held);
+    }
+
+    /** The same, over the reading of a model already compiled. */
+    private static TermRealizations.Realization realizing(RuleReadingSource rules,
+                                                          List<String> steps, Type held) {
         Symbols symbols = rules.symbols();
         Type entries = held;
         TermPath read = TermPath.of("ns").element();
@@ -336,7 +346,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
         assertNotNull(orders.answered(), "and the order it answers on is the amounts'");
 
         return TermRealizations.at(entries, orders, SIX, NothingTheRulesSay.REGION,
-                RuleReadingContext.unshared(rules, POLICY));
+                RuleReadingContext.unshared(rules, POLICY, TestDay.TODAY));
     }
 
     private static Type named(String data) {

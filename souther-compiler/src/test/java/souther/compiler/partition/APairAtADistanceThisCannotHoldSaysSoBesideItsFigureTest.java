@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.TestDay;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
@@ -64,7 +65,7 @@ class APairAtADistanceThisCannotHoldSaysSoBesideItsFigureTest {
         WitnessSearch any = new WitnessSearch(
                 AdmittedValues.of(Map.of(ON.position(), ValueSet.ANY,
                         AGAINST.position(), ValueSet.ANY), NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
         return new LevelRealizer().realize(
                 new Standing.OfTwoOnOneCarrier(ON, AGAINST, new Carrier.Whole(),
                         new Criterion.AtTheLevel(new Level.OfTheQuantity(apart))),

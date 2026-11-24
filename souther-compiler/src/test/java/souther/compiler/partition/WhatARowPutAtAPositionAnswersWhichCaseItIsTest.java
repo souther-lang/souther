@@ -4,10 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -104,6 +106,11 @@ class WhatARowPutAtAPositionAnswersWhichCaseItIsTest {
     private static AStatementAtARow.Answer at(Proposition stated,
                                               Map<TermPath, ObservationAtPoint> walked) {
         return AStatementAtARow.of(stated, "f", null).at(new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

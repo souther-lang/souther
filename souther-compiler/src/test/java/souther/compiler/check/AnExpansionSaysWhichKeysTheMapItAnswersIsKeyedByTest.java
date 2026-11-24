@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementQuestion;
 import souther.compiler.inputs.ElementStep;
@@ -95,7 +96,7 @@ class AnExpansionSaysWhichKeysTheMapItAnswersIsKeyedByTest {
     }
 
     private static Bodies.Elaborated checked(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

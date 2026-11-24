@@ -59,7 +59,19 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
     private static RowOutcome onlyRowOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(List.of(source), published());
         compilation.withEvaluationPolicy(policy);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
+        return onlyRowOf(compilation);
+    }
+
+    /** The one row of a model whose row runs out of its budget, which the model is told of. */
+    private static RowOutcome onlyRowThatSpendsItsBudgetOf(String source, EvaluationPolicy policy) {
+        Compilation compilation = Compilation.ofSources(List.of(source), published());
+        compilation.withEvaluationPolicy(policy);
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
+        return onlyRowOf(compilation);
+    }
+
+    private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("app.uses").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("app.uses", sourceId, ArmObservation.OMIT))
@@ -99,7 +111,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
      */
     @Test
     void aRowThatLoopsInsideThePathModuleSpendsItsBudgetThere() {
-        RowOutcome row = onlyRowOf("""
+        RowOutcome row = onlyRowThatSpendsItsBudgetOf("""
                 module app.uses
                 import lib.spin ( Amount, spun )
 
@@ -155,7 +167,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                   | "reaches the dependency body": (Amount(1)) -> Receipt { total = Amount(0) }
                 """), ModulePath.of(jar));
         compilation.withEvaluationPolicy(EvaluationPolicy.of(50_000L));
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
 
         assertFalse(compilation.db()
                         .ask(new Output.EvaluationLinked("app.calls", ArmObservation.OMIT))
@@ -184,7 +196,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                 example run
                   | "answers": (N(1)) -> Out(1)
                 """), name -> null);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertNull(compilation.failure());
         assertTrue(compilation.db()

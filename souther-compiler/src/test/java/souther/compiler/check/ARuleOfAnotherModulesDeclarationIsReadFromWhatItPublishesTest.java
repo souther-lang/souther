@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -171,8 +172,8 @@ class ARuleOfAnotherModulesDeclarationIsReadFromWhatItPublishesTest {
         byId.put("base.sou", BASE_MODULE);
         byId.put("middle.sou", MIDDLE_MODULE);
         byId.put("cart.sou", CART);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the workspace compiles: " + c.db().allReports());
         return c;

@@ -75,7 +75,7 @@ public final class Machines {
             StringMachineAnswers recorder =
                     StringMachineAnswers.unborrowed(db.readings().revision());
             RuleReadingContext reading =
-                    RuleReadingContext.of(source.value(), policy.value(), db.readings());
+                    RuleReadingContext.of(source.value(), policy.value(), db.readings(), Front.dayOf(db));
             FieldDomains domains = FieldDomains.of(declared,
                     reading.whileTheAnswerIsMade(named, recorder));
             // And whether the rules leave a value at all, which is the question every reading of

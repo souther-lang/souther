@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -27,9 +28,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     /** The lines that behavior's positions met, whosever the row at each point is. */
     private static java.util.List<souther.compiler.query.BorderAssessment> lines(
             String model, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         java.util.List<souther.compiler.query.BorderAssessment> read =
                 Adequacy.readingsOf(compilation.db(), "demo").get(behavior);
         assertNotNull(read, behavior + " was measured");
@@ -37,9 +36,14 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     }
 
     private static PartitionEvidence measured(String model, String behavior) {
+        return measured(model, behavior, List.of());
+    }
+
+    /** The same, for a model the check refuses for {@code errors}. */
+    private static PartitionEvidence measured(String model, String behavior, List<String> errors) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(errors, compilation);
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, "the model under test compiles");
@@ -97,7 +101,7 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
                 data Cyclic = Cyclic
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
-                """, "run");
+                """, "run", List.of("E1013"));
 
         assertEquals(List.of(UndividedPosition.Reason.TYPE_UNRESOLVED), whyAt(measured, "x"));
         assertTrue(couldNotDerive(measured, "x"), "and nothing is established either way");

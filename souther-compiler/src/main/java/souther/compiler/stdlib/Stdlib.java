@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
@@ -164,6 +165,19 @@ public final class Stdlib {
             }
             return List.copyOf(all);
         }
+
+        /** Two rewrites are one where they write the same call: the same target, as many
+         *  arguments kept, and the same constants supplied after them. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Rewrite that && target.equals(that.target)
+                    && supplied.equals(that.supplied) && keptArgs == that.keptArgs;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(target, supplied, keptArgs);
+        }
     }
 
     /** A kernel the library names, and the signature it was declared with. The kernel is the
@@ -184,6 +198,9 @@ public final class Stdlib {
     /** And the same declarations by the library module that writes them, worked out once with
      *  everything else rather than gathered on each ask. */
     private final Map<String, Map<String, Hir.Def>> byModule;
+    /** The unit data the language declares, each one value, worked out once with everything else
+     *  so that a reader of a body asks the library rather than opening the declaration. */
+    private final Set<TypeSymbol> unitData;
     /** What the language declares of its kernels, worked out once here so that a program and a
      *  backend hold one value rather than two readings of it. Kept as the snapshot and not as the
      *  declarations it was built from: what a reader has business asking is what a kernel takes and
@@ -218,14 +235,19 @@ public final class Stdlib {
         this.language = language;
         Map<String, TypeSymbol> identities = new LinkedHashMap<>();
         Map<String, Map<String, Hir.Def>> grouped = new LinkedHashMap<>();
+        Set<TypeSymbol> units = new LinkedHashSet<>();
         for (Map.Entry<TypeKey, Hir.Def> e : language.entrySet()) {
             TypeKey address = e.getKey();
             identities.put(address.name(), TypeSymbols.declared(address));
             grouped.computeIfAbsent(address.module(), _ -> new LinkedHashMap<>())
                     .put(address.name(), e.getValue());
+            if (e.getValue() instanceof Hir.UnitData) {
+                units.add(TypeSymbols.declared(address));
+            }
         }
         grouped.replaceAll((_, defs) -> Collections.unmodifiableMap(defs));
         this.byModule = Collections.unmodifiableMap(grouped);
+        this.unitData = Collections.unmodifiableSet(units);
         Map<Kernel, KernelSignature> declared = new EnumMap<>(Kernel.class);
         intrinsics.forEach((kernel, intrinsic) -> declared.put(kernel, intrinsic.signature()));
         this.kernels = KernelSignatures.of(declared);
@@ -443,6 +465,12 @@ public final class Stdlib {
      */
     public Map<TypeKey, Hir.Def> languageDeclarations() {
         return language;
+    }
+
+    /** Whether {@code type} is a unit data the language declares: a type with one value, which
+     *  naming it is. */
+    public boolean declaresAUnit(TypeSymbol type) {
+        return unitData.contains(type);
     }
 
     /** What the language declares in {@code moduleName}, keyed by the name written there. Empty

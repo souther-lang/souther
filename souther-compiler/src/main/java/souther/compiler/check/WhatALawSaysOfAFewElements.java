@@ -66,7 +66,8 @@ final class WhatALawSaysOfAFewElements {
                     holds(compared.form(), compared.states(), container, size);
             case LawProposition.Observed<DeclaredArgument> _,
                  LawProposition.SomeElement<DeclaredArgument> _,
-                 LawProposition.Same<DeclaredArgument> _ -> null;
+                 LawProposition.Same<DeclaredArgument> _,
+                 LawProposition.Inside<DeclaredArgument> _ -> null;
         };
     }
 

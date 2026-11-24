@@ -140,6 +140,7 @@ class CompileUnitValueTest {
                         .map(found -> DiagnosticRenderer.legacyBody(found.report().diagnostic()))
                         .noneMatch(said -> said.contains("never builds")),
                 "and the entry is not reported as one the body never built");
+        ACompiledModel.refusedWith(List.of("E1026"), compilation);
     }
 
     /** A unit has no fields, so an invariant on it has nothing to observe and nothing it could

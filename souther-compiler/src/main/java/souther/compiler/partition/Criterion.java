@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UsualPlace;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +47,11 @@ public sealed interface Criterion {
         @Override
         public String operator() {
             return "=";
+        }
+
+        @Override
+        public String askedAs() {
+            return "reading.at";
         }
     }
 
@@ -91,18 +97,23 @@ public sealed interface Criterion {
             return "in";
         }
 
+        @Override
+        public String askedAs() {
+            return "reading.in";
+        }
+
         /**
-         * A place of {@code carrier} this item accepts, or null where nothing composed one.
+         * Whether {@code other} is a run beside the same line, on the same side of it and apart
+         * from the same value, which two readings of one line ask a row for.
          *
-         * <p>The item's own values, held to what the rules leave the position, asked of the order
-         * the position is on, from the end this point is named for. Which is the same question a border's point over a form asks of the
-         * order its levels are on, and it is asked the same way — one run, and the order says what
-         * it has inside it. Written twice instead, the two disagreed about a run whose ends are
-         * lines the quantity stands at no value of: what was in it was decided exactly, and what was
-         * looked for was found by stepping past it (issues #901, #903).
+         * <p>A reading reaches the other lines of the quantity that are on the way to it, so the run
+         * beside a line stops at the nearest of those and can differ from one reading to the
+         * other. That is the same point asked for under two ways, and not two points.
          */
-        public Place somewhereInside(Carrier carrier, Endpoint min, Endpoint max) {
-            return somewhereIn(region(), away, carrier, min, max);
+        public boolean besideTheSameLineAs(Within other) {
+            return away == other.away && (except == null ? other.except == null
+                    : other.except != null
+                            && except.canonical().equals(other.except.canonical()));
         }
 
         /**
@@ -119,6 +130,23 @@ public sealed interface Criterion {
             LevelSpace space = LevelSpace.onACarrier(carrier);
             for (LevelInterval look : runsInside(region, carrier, min, max)) {
                 Level found = space.witness(look, away).level();
+                if (found instanceof Level.OnACarrier on) {
+                    return on.at();
+                }
+            }
+            return null;
+        }
+
+        /**
+         * The same, of a value standing for {@code region} rather than one beside a line: wanted
+         * near no end of a run, and so near where the number is usually near where a run is left
+         * open ({@link LevelSpace#standingFor}).
+         */
+        static Place standingIn(LevelRegion region, Carrier carrier, Endpoint min, Endpoint max,
+                                UsualPlace usual) {
+            LevelSpace space = LevelSpace.onACarrier(carrier);
+            for (LevelInterval look : runsInside(region, carrier, min, max)) {
+                Level found = space.standingFor(look, usual).level();
                 if (found instanceof Level.OnACarrier on) {
                     return on.at();
                 }
@@ -253,6 +281,10 @@ public sealed interface Criterion {
 
     /** How this relates a row's quantity to what it is against. */
     String operator();
+
+    /** The catalog's phrase for the same relation, filled with what it is against: a reader in
+     *  another language is told the relation in theirs. */
+    String askedAs();
 
     /**
      * The level this is written against, or null where what it is written against is a run rather

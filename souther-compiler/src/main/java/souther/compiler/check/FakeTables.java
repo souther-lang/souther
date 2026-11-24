@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.function.UnaryOperator;
 
@@ -148,6 +150,19 @@ public final class FakeTables {
      *  reached a behavior. */
     public List<Occurrence> written() {
         return written;
+    }
+
+    /**
+     * The block written at {@code at}, which is where a stand-in that a table answers says it is
+     * written. Nothing where no block is written there, as for a {@code with} on a row.
+     */
+    public Optional<Occurrence> writtenAt(SourcePos at) {
+        for (Occurrence each : written) {
+            if (each.read().pos().equals(at)) {
+                return Optional.of(each);
+            }
+        }
+        return Optional.empty();
     }
 
     /** How many blocks name {@code behavior}. */

@@ -45,10 +45,9 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
             data Ok
             data R = { a: Int, b: Int }
                 invariant first  = a < b
-                invariant second = b < a
+                invariant second = a <= b
 
             behavior f : (r: R) -> Ok
-                constructs Ok
             let f (r) = Ok
             """;
 
@@ -72,8 +71,8 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
 
             behavior f : (a: Int, b: Int) -> Ok
                 constructs Ok
-                ensures low  = a < b
-                ensures high = b < a
+                ensures low  = a < b && value.v == a
+                ensures high = a <= b && value.v == a
             let f (a, b) = Ok { v = a }
             """;
 
@@ -90,10 +89,9 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
         // owed both rules. What was one line is the pair at one position.
         assertEquals(4, rulesNotRead(TWO_INVARIANTS).size(), () -> withoutALine(TWO_INVARIANTS));
         assertEquals(2, ruleIdsNotRead(TWO_INVARIANTS).size(), () -> withoutALine(TWO_INVARIANTS));
-        assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (first)"),
-                human(TWO_INVARIANTS));
-        assertTrue(namesRule(human(TWO_INVARIANTS), "invariant R (second)"),
-                human(TWO_INVARIANTS));
+        String report = human(TWO_INVARIANTS);
+        assertTrue(namesRule(report, "invariant R (first)"), report);
+        assertTrue(namesRule(report, "invariant R (second)"), report);
     }
 
     /**
@@ -119,8 +117,9 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     @Test
     void twoEnsuresClausesWithNoLineAreTwoFindings() {
         assertEquals(2, ruleIdsNotRead(TWO_ENSURES).size(), () -> withoutALine(TWO_ENSURES));
-        assertTrue(namesRule(human(TWO_ENSURES), "ensures f (low)"), human(TWO_ENSURES));
-        assertTrue(namesRule(human(TWO_ENSURES), "ensures f (high)"), human(TWO_ENSURES));
+        String report = human(TWO_ENSURES);
+        assertTrue(namesRule(report, "ensures f (low)"), report);
+        assertTrue(namesRule(report, "ensures f (high)"), report);
     }
 
     /**
@@ -171,11 +170,12 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
         List<PartitionEvidence.NotRead> said = rulesNotRead(model);
 
         assertEquals(1, said.size(), () -> withoutALine(model));
-        assertTrue(human(model).contains("not read: comparison@"), human(model));
-        assertTrue(human(model).lines()
+        String report = human(model);
+        assertTrue(report.contains("not read: comparison@"), report);
+        assertTrue(report.lines()
                         .filter(line -> line.contains("not read:"))
                         .noneMatch(line -> line.contains("Int.clamp")),
-                human(model));
+                report);
     }
 
     /**
@@ -300,7 +300,6 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
                     invariant mixed = a < b && Int.multiply(a, a) < 10
 
                 behavior f : (r: R) -> Ok
-                    constructs Ok
                 let f (r) = Ok
                 """;
 
@@ -372,15 +371,15 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     private static PartitionEvidence measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 
     private static String human(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String withoutALine(String model) {
@@ -392,7 +391,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     private static String json(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

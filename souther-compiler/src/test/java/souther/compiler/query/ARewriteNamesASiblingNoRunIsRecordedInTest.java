@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 
@@ -35,10 +36,7 @@ class ARewriteNamesASiblingNoRunIsRecordedInTest {
     void theSiblingIsNamedThoughNoSiteIsItsOwn() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
 
         List<Integer> measured = compilation.db().ask(new Bodies.Checked("example.always"))
                 .value().plan().arms("f").stream()
@@ -47,7 +45,7 @@ class ARewriteNamesASiblingNoRunIsRecordedInTest {
         assertEquals(List.of(0), measured, "only the `then` is an arm a run is recorded in");
 
         String page = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(page.contains(
                         "! no row would come out differently if `then` (5:13) answered as `else`"),
                 () -> "the `else` named all the same: " + page);

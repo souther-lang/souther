@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -91,9 +92,7 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
             List.of("openedInTheParameter", "openedInTheBody", "aliasedInTheBody");
 
     private static Map<String, PartitionEvidence> measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
     }
@@ -106,9 +105,7 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
 
     /** The lines each behavior's positions met, whosever the row at each point is. */
     private static Map<String, List<BorderAssessment>> lines() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
     }
 
@@ -126,7 +123,7 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
     void theFieldSpellingDividesThePositionTheBodyCompares() {
         PartitionEvidence read = measured().get("throughTheField");
 
-        assertEquals(List.of("temp: [temp/x < 240, temp/240 <= x < 260, temp/260 <= x]"),
+        assertEquals(List.of("temp: [temp: x < 240, temp: 240 <= x < 260, temp: 260 <= x]"),
                 classesOf(read));
         assertEquals(List.of("temp = 239 ON", "temp = 240 OFF",
                         "temp = 259 ON", "temp = 260 OFF"),

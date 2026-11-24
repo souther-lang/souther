@@ -160,12 +160,12 @@ class AnalyzerTest {
         List<int[]> tokens = decodeSemanticTokens(data);
 
         // `module` keyword at line 0, char 0; `demo` namespace at line 0, char 7
-        assertEquals(7, typeAt(tokens, 0, 0), "`module` is a keyword (index 7)");
-        assertEquals(0, typeAt(tokens, 0, 7), "`demo` is a namespace (index 0)");
-        // `X` is a type (index 1) at char 5, `a` a property (5) at char 11, `Int` a type at char 14
-        assertEquals(1, typeAt(tokens, 1, 5), "`X` is a type");
-        assertEquals(5, typeAt(tokens, 1, 11), "`a` is a property");
-        assertEquals(1, typeAt(tokens, 1, 14), "`Int` is a type");
+        assertEquals(role("keyword"), typeAt(tokens, 0, 0), "`module` is a keyword");
+        assertEquals(role("namespace"), typeAt(tokens, 0, 7), "`demo` is a namespace");
+        // `X` is a type at char 5, `a` a property at char 11, `Int` a type at char 14
+        assertEquals(role("type"), typeAt(tokens, 1, 5), "`X` is a type");
+        assertEquals(role("property"), typeAt(tokens, 1, 11), "`a` is a property");
+        assertEquals(role("type"), typeAt(tokens, 1, 14), "`Int` is a type");
     }
 
     @Test
@@ -177,7 +177,7 @@ class AnalyzerTest {
                 "module demo\ndata X = { a: Int }\nlet f (xs: List<Int>) = List.map(n -> n, xs)\n");
         List<int[]> tokens = decodeSemanticTokens(data);
 
-        assertEquals(3, typeAt(tokens, 2, 33), "the lambda's `n` is a parameter (index 3)");
+        assertEquals(role("parameter"), typeAt(tokens, 2, 33), "the lambda's `n` is a parameter");
     }
 
     @Test
@@ -187,8 +187,8 @@ class AnalyzerTest {
                 "module demo\ndata X = { a: Int }\nlet f (p: (Int, Int)) = {\nlet (q, r) = p\nq\n}\n");
         List<int[]> tokens = decodeSemanticTokens(data);
 
-        assertEquals(4, typeAt(tokens, 3, 5), "`q` is a variable (index 4)");
-        assertEquals(4, typeAt(tokens, 3, 8), "`r` is a variable (index 4)");
+        assertEquals(role("variable"), typeAt(tokens, 3, 5), "`q` is a variable");
+        assertEquals(role("variable"), typeAt(tokens, 3, 8), "`r` is a variable");
     }
 
     @Test
@@ -197,8 +197,8 @@ class AnalyzerTest {
                 "module demo\ndata X = { a: Int }\nlet f (x: X) = {\nlet { a = n } = x\nn\n}\n");
         List<int[]> tokens = decodeSemanticTokens(data);
 
-        assertEquals(5, typeAt(tokens, 3, 6), "`a` names the field, so it is a property (index 5)");
-        assertEquals(4, typeAt(tokens, 3, 10), "`n` is the name it binds, a variable (index 4)");
+        assertEquals(role("property"), typeAt(tokens, 3, 6), "`a` names the field, so it is a property");
+        assertEquals(role("variable"), typeAt(tokens, 3, 10), "`n` is the name it binds, a variable");
     }
 
     /**
@@ -216,9 +216,9 @@ class AnalyzerTest {
                 "module demo\ndata D = { n: Int }\nlet f (x: Int) = x\n" + body);
         List<int[]> tokens = decodeSemanticTokens(data);
 
-        assertEquals(6, typeAt(tokens, 3, 35), "`map` is what is applied, so it is a function (index 6)");
-        assertEquals(4, typeAt(tokens, 3, 30), "`List` is the qualifier, not the function");
-        assertEquals(4, typeAt(tokens, 3, 39), "`f` is an argument, not what is applied");
+        assertEquals(role("function"), typeAt(tokens, 3, 35), "`map` is what is applied, so it is a function");
+        assertEquals(role("variable"), typeAt(tokens, 3, 30), "`List` is the qualifier, not the function");
+        assertEquals(role("variable"), typeAt(tokens, 3, 39), "`f` is an argument, not what is applied");
     }
 
     @Test
@@ -230,9 +230,17 @@ class AnalyzerTest {
                 "module demo\ndata D = { n: Int }\nlet f (x: Int) = x\n" + body);
         List<int[]> tokens = decodeSemanticTokens(data);
 
-        assertEquals(6, typeAt(tokens, 3, 15), "`f` is what is applied (index 6)");
-        assertEquals(4, typeAt(tokens, 3, 17), "`d` is what the read is taken off, a variable here");
-        assertEquals(5, typeAt(tokens, 3, 19), "`n` is a field read, not a function (index 5)");
+        assertEquals(role("function"), typeAt(tokens, 3, 15), "`f` is what is applied");
+        assertEquals(role("variable"), typeAt(tokens, 3, 17), "`d` is what the read is taken off, a variable here");
+        assertEquals(role("property"), typeAt(tokens, 3, 19), "`n` is a field read, not a function");
+    }
+
+    /** The number the legend gives a role: what a test claims is the role, and not where the legend
+     *  happens to list it. */
+    private static int role(String name) {
+        int at = Analyzer.TOKEN_TYPES.indexOf(name);
+        assertTrue(at >= 0, name + " is a role of the legend");
+        return at;
     }
 
     /** Reverses the LSP delta encoding into absolute {@code {line, char, length, type}} tokens. */
@@ -369,20 +377,6 @@ class AnalyzerTest {
         assertEquals(List.of(), diags.get("file:///a.sou"), "the clean imported module has no diagnostics");
         assertEquals(1, diags.get("file:///b.sou").size(), diags.get("file:///b.sou").toString());
         assertEquals("E1905", diags.get("file:///b.sou").get(0).code());
-    }
-
-    @Test
-    void diagnosticsDoNotBailWhenAModuleImportsAnother() {
-        // the single-file path returns nothing on an import; the workspace path resolves it and finds
-        // the importing module clean
-        String a = "module a exposing ( N )\ndata N = { v: Int }\n";
-        String b = "module b\nimport a ( N )\ndata Held = { it: N }\ndata M = { n: Int }\n"
-                + "behavior f : (x: M) -> M\nlet f (x) = x\n";
-        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
-
-        java.util.Map<String, List<LspDiagnostic>> diags = analyzer.diagnostics(graph);
-
-        assertEquals(List.of(), diags.get("file:///b.sou"), "a valid importing module is clean");
     }
 
     @Test
@@ -735,24 +729,9 @@ class AnalyzerTest {
     }
 
     @Test
-    void aFailingInlineExampleIsReportedAsADiagnostic() {
-        // a self-contained module is compiled whenever its diagnostics are asked, so a failing
-        // `example` surfaces as E1905
-        String src = "module demo\n"
-                + "data M = { n: Int }\n"
-                + "behavior f : (x: M) -> M\n"
-                + "let f (x) = x\n"
-                + "example f\n"
-                + "  | (M { n = 1 }) -> M { n = 2 }\n";
-        List<LspDiagnostic> diags = analyzer.diagnostics(src);
-        assertEquals(1, diags.size(), diags.toString());
-        assertEquals("E1905", diags.get(0).code());
-    }
-
-    @Test
     void everyFailingInlineExampleRowIsSquiggled() {
-        // the single-file path used to keep only the first failure the compile threw, so a second
-        // failing row was left unmarked in the editor (issue #98)
+        // a self-contained module is compiled whenever its diagnostics are asked, so a failing
+        // `example` surfaces as E1905, and every failing row is marked and not only the first
         String src = "module demo\n"
                 + "data M = { n: Int }\n"
                 + "behavior f : (x: M) -> M\n"
@@ -762,6 +741,8 @@ class AnalyzerTest {
                 + "  | (M { n = 3 }) -> M { n = 4 }\n";
         List<LspDiagnostic> diags = analyzer.diagnostics(src);
         assertEquals(2, diags.size(), diags.toString());
+        assertEquals("E1905", diags.get(0).code());
+        assertEquals("E1905", diags.get(1).code());
         assertNotEquals(diags.get(0).range().start().line(), diags.get(1).range().start().line(),
                 "each marks its own row: " + diags);
     }

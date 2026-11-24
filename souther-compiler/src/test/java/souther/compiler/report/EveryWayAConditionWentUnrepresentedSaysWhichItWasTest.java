@@ -15,6 +15,7 @@ import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DemandGap;
+import souther.compiler.partition.NamedElements;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
 import souther.compiler.partition.RowDemand;
@@ -71,7 +72,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 "every way a condition goes unrepresented is one this asks for a sentence");
         List<String> said = new ArrayList<>();
         for (ConditionGap gap : ways.values()) {
-            String sentence = AdequacyReport.whyLeftOut(gap);
+            String sentence = InEnglish.said(AdequacyReport.whyLeftOut(gap));
             assertNotNull(sentence, () -> "a sentence for " + gap);
             assertFalse(sentence.isBlank(), () -> "a sentence for " + gap);
             said.add(sentence);
@@ -100,10 +101,10 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
      */
     @Test
     void aLocationAskedForNumbersNothingComposesOneValueForIsNotToldAsAPositionNothingBuiltAt() {
-        String numbers = AdequacyReport.whyLeftOut(ofTheInput(
-                new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
-        String positions = AdequacyReport.whyLeftOut(ofTheInput(
-                new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+        String numbers = InEnglish.said(AdequacyReport.whyLeftOut(ofTheInput(
+                new ReachabilityGap.Why.TwoNumbersAtOneLocation())));
+        String positions = InEnglish.said(AdequacyReport.whyLeftOut(ofTheInput(
+                new ReachabilityGap.Why.NoValueComposedForItsPositions())));
 
         assertTrue(numbers.contains(ABOUT_ANOTHER_NUMBER), () -> numbers);
         assertFalse(numbers.contains(ABOUT_THE_POSITIONS), () -> numbers);
@@ -175,7 +176,8 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
     private static OnTheWay.TakenIn cut() {
         return new OnTheWay.TakenIn(where(), new RowDemand.Relational(
                 new TakenConstraint.Affine(
-                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE)));
+                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE)),
+                NamedElements.NONE);
     }
 
     /** Which question a report about the condition under test would put. */

@@ -2,11 +2,10 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,7 +66,7 @@ class WhatACaseMeansIsDecidedInOnePlaceTest {
                 continue;
             }
             seen.add(where);
-            if (Files.readString(source, StandardCharsets.UTF_8).contains("instanceof Type.OptionOf")) {
+            if (RepositoryJavaSources.forThisFork().mainText(source).contains("instanceof Type.OptionOf")) {
                 readers.add(where);
             }
         }
@@ -90,7 +89,7 @@ class WhatACaseMeansIsDecidedInOnePlaceTest {
                 continue;
             }
             emitters++;
-            String text = Files.readString(source, StandardCharsets.UTF_8);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             if (text.contains("caseTypes().size()") || text.contains("caseTypes().get(0)")) {
                 askers.add(where);
             }
@@ -138,7 +137,7 @@ class WhatACaseMeansIsDecidedInOnePlaceTest {
                 found = true;
                 continue;
             }
-            if (Files.readString(source, StandardCharsets.UTF_8).contains("CoveringNames")) {
+            if (RepositoryJavaSources.forThisFork().mainText(source).contains("CoveringNames")) {
                 readers.add(where);
             }
         }

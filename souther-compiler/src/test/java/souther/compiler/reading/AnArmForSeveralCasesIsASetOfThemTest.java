@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meta.ModulePath;
@@ -51,7 +52,7 @@ class AnArmForSeveralCasesIsASetOfThemTest {
      */
     @Test
     void anArmInsideAnArmForSeveralCasesIsReachedByEachCaseTheyShare() {
-        Compilation compilation = Compiler.analyzedModules(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compiler.analyzedModules(List.of("""
                 module example.nested
 
                 data A
@@ -75,7 +76,7 @@ class AnArmForSeveralCasesIsASetOfThemTest {
 
                 example judge
                     | (A) -> Ok { n = 1 }
-                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport());
+                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport()));
         CoverageRead.Read read = compilation.db()
                 .ask(new Adequacy.Meets("example.nested")).value().get("judge");
 
@@ -95,7 +96,7 @@ class AnArmForSeveralCasesIsASetOfThemTest {
      */
     @Test
     void anArmPastAnAttemptThatTheWayToItRulesOutIsReachedByNoRun() {
-        Compilation compilation = Compiler.analyzedModules(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compiler.analyzedModules(List.of("""
                 module example.pastattempt
 
                 data A
@@ -125,7 +126,7 @@ class AnArmForSeveralCasesIsASetOfThemTest {
 
                 example judge
                     | (A, "a") -> Ok { n = 1 }
-                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport());
+                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport()));
         CoverageRead.Read read = compilation.db()
                 .ask(new Adequacy.Meets("example.pastattempt")).value().get("judge");
 

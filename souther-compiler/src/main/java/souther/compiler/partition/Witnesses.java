@@ -6,11 +6,14 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ElementsApart;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.core.IntNegation;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -18,6 +21,9 @@ import souther.compiler.check.TypeView;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -243,7 +249,7 @@ final class Witnesses {
      * for, so a collection past the figure was refused at one door and built at the next. Past it,
      * a value is one this compiler does not build, which is not one the model cannot have.
      */
-    private static CompositionBudget pastTheElements(int count) {
+    static CompositionBudget pastTheElements(int count) {
         return count > CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum()
                 ? CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS : null;
     }
@@ -591,6 +597,95 @@ final class Witnesses {
         return out;
     }
 
+    /**
+     * {@code constant}, as the fold reads one, written at a place of {@code type} under the names
+     * that type wears — or null where there is none, or it is no value a scalar place holds.
+     *
+     * <p>The way back is {@link #constantOf}: a value a reader of the rules wrote down is handed to
+     * a builder this way, and what a builder has written is handed back to that reader the other.
+     */
+    static FixtureTemplate writtenAs(Object constant, Type type, RuleReadingContext reading) {
+        if (constant == null || type == null) {
+            return null;
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        if (!(view.shape() instanceof Shape.Scalar(Type.Prim prim))) {
+            return null;
+        }
+        // A constant is written at a place of its own kind and no other: the language converts
+        // between none of them, so a number of one kind at a place of another is no value of it.
+        FixtureTemplate written = switch (constant) {
+            case String text when prim == Type.Prim.STRING -> FixtureTemplate.string(text);
+            case Long number when prim == Type.Prim.INT -> FixtureTemplate.integer(number);
+            case BigDecimal number when prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL ->
+                    FixtureTemplate.decimal(number);
+            case Boolean truth when prim == Type.Prim.BOOL -> FixtureTemplate.bool(truth);
+            default -> null;
+        };
+        return written == null ? null : WornNames.under(view.wrappers(), written, source);
+    }
+
+    /**
+     * {@code value} written at a place of {@code type} under the names that type wears — or null
+     * where it is no value a scalar place holds: a case, or a number of the other kind. A number
+     * is the same at an {@code Int} place and at a {@code Decimal} one, which the type says.
+     */
+    static FixtureTemplate writtenAs(Value value, Type type, RuleReadingContext reading) {
+        return switch (value) {
+            case Value.Text(String text) -> writtenAs((Object) text, type, reading);
+            case Value.Truth(boolean truth) -> writtenAs((Object) truth, type, reading);
+            case Value.Number(BigDecimal number) -> Partitions.writtenNumberAt(type, number,
+                    reading);
+            case Value.Case _ -> null;
+        };
+    }
+
+    /**
+     * A value of {@code type} that holds {@code many} — that many characters, that many
+     * elements — under the names that type wears, or null where the type builds none of that
+     * many or the names cannot be written.
+     */
+    static FixtureTemplate holdingMany(Type type, BigInteger many, RuleReadingContext reading) {
+        if (type == null || many.signum() < 0 || many.bitLength() > Integer.SIZE - 2) {
+            return null;
+        }
+        RuleReadingSource source = reading.source();
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        for (FixtureTemplate each : ofSize(view, many.intValue(), List.of(), reading, Set.of())
+                .values()) {
+            return WornNames.under(view.wrappers(), each, source);
+        }
+        return null;
+    }
+
+    /**
+     * The constant {@code written} is, as the fold reads one, with the names written around it
+     * taken off — or null where it is no constant: a record, a collection, a case.
+     */
+    static Object constantOf(FixtureTemplate written) {
+        return constantOf(bare(written.value()));
+    }
+
+    private static Object constantOf(Hir.Expr written) {
+        return switch (written) {
+            case Hir.StringLit text -> text.value();
+            case Hir.BoolLit truth -> truth.value();
+            case Hir.IntLit number -> number.value();
+            case Hir.DecimalLit number -> number.value();
+            case Hir.Neg negated when IntNegation.isTheLeastInt(negated.operand()) ->
+                    Long.MIN_VALUE;
+            case Hir.Neg negated -> switch (constantOf(negated.operand())) {
+                case Long number -> -number;
+                case BigDecimal number -> number.negate();
+                case null, default -> null;
+            };
+            default -> null;
+        };
+    }
+
     /** {@code value} with the names a fixture writes around it taken off, so that two values are
      *  compared as what they wrap. */
     private static Hir.Expr bare(Hir.Expr value) {
@@ -604,7 +699,7 @@ final class Witnesses {
 
     /** The type at the end of {@code fields} taken from a value of {@code type}, or null where one
      *  of them is no field of a record. */
-    private static Type typeAt(Type type, List<String> fields, RuleReadingContext reading) {
+    static Type typeAt(Type type, List<String> fields, RuleReadingContext reading) {
         RuleReadingSource source = reading.source();
         Type at = type;
         for (String field : fields) {
@@ -625,8 +720,8 @@ final class Witnesses {
      * and whatever the rules admit everywhere else — or nothing where one of them cannot be, with
      * what composing the rest met.
      */
-    private static Proposals holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
-                                       RuleReadingContext reading) {
+    static Proposals holdingAt(Type type, Map<List<String>, FixtureTemplate> placed,
+                               RuleReadingContext reading) {
         if (placed.containsKey(List.of())) {
             // The value itself, which two runs cannot both be.
             return placed.size() == 1 ? Proposals.of(List.of(placed.get(List.of())))
@@ -658,7 +753,8 @@ final class Witnesses {
             given.put(each.getKey(), inner.values().getFirst());
         }
         Proposals composed = Partitions.composed(named,
-                Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given);
+                Partitions.rulesOver(view.wrappers(), named, source), reading, Set.of(), given,
+                Partitions.RulesAround.NONE);
         met = met.and(composed.met());
         FixtureTemplate written = composed.isEmpty() ? null
                 : WornNames.under(view.wrappers(), composed.values().getFirst(), source);
@@ -834,59 +930,68 @@ final class Witnesses {
      * about. Every other entry is keyed apart from it, since a map holds one entry under a key.
      *
      * <p>{@code eachFiled} are keys each asked of an entry of its own, over whatever value the
-     * rules admit. A key among them that is {@code filed}'s, or another of them, is one entry.
+     * rules admit, or over the value of {@code holding} it names. A key among them that is
+     * {@code filed}'s, or another of them, is one entry.
      */
     static Proposals holding(Shape.Mapping map,
                              List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                             Filed filed, List<FixtureTemplate> eachFiled,
+                             Filed filed, List<Filed> eachFiled,
                              List<FixtureTemplate> keysKeptOut,
                              DeclaredBounds.CountRange holds,
                              RuleReadingContext reading) {
         Set<String> out = new LinkedHashSet<>();
         keysKeptOut.forEach(each -> out.add(each.text()));
-        if (filed != null && out.contains(filed.key().text())) {
+        List<Filed> every = new ArrayList<>();
+        if (filed != null) {
+            every.add(filed);
+        }
+        every.addAll(eachFiled);
+        Map<String, Filed> byKey = Filed.byKey(every);
+        if (byKey == null || byKey.keySet().stream().anyMatch(out::contains)) {
             return Proposals.NONE;
         }
-        Set<String> filedKeys = new LinkedHashSet<>();
-        if (filed != null) {
-            filedKeys.add(filed.key().text());
-        }
-        List<FixtureTemplate> apart = new ArrayList<>();
-        for (FixtureTemplate each : eachFiled) {
-            if (out.contains(each.text())) {
-                return Proposals.NONE;
-            }
-            if (filedKeys.add(each.text())) {
-                apart.add(each);
-            }
-        }
+        Set<String> filedKeys = new LinkedHashSet<>(byKey.keySet());
+        Filed placed = filed == null ? null : byKey.remove(filed.key().text());
+        List<Filed> apart = new ArrayList<>(byKey.values());
         // A key chosen over no value in particular needs an entry to be the key of, so the map holds
         // at least one value for each such key whatever else is asked of it.
         int keyed = filedKeys.size();
+        // Each key asked over a value is an entry of its own, so a value several keys are asked
+        // over is held that many times: what the map must hold is each value once, and what is
+        // filed under each key is asked of each key.
+        Map<String, Integer> filedOver = new LinkedHashMap<>();
+        List<Filed> eachAsked = new ArrayList<>(apart);
+        if (placed != null) {
+            eachAsked.add(placed);
+        }
+        for (Filed each : eachAsked) {
+            if (each.value() != null) {
+                filedOver.merge(each.value().text(), 1, Integer::sum);
+            }
+        }
+        Set<String> held = new LinkedHashSet<>();
+        int copies = 0;
+        for (FixtureTemplate each : holding) {
+            if (held.add(each.text())) {
+                copies += Math.max(1, filedOver.getOrDefault(each.text(), 0));
+            }
+        }
         DeclaredBounds.CountRange room = keyed > 0
-                ? new DeclaredBounds.CountRange(Math.max(keyed, holds.least()), holds.most())
+                ? new DeclaredBounds.CountRange(Math.max(Math.max(keyed, copies), holds.least()),
+                        holds.most())
                 : holds;
         Elements filled = elementsHolding(map.value(), List.of(), holding, keptOut, room, reading);
         CompositionShortfall met = filled.met();
-        List<FixtureTemplate> values = filled.held();
+        List<FixtureTemplate> values = filled.held() == null ? null
+                : eachHeldAsOftenAsFiled(filled.held(), filedOver);
         if (values == null) {
             return Proposals.NONE.meeting(met);
         }
-        // Where the value the key is chosen for stands among them, asked of the values rather than
-        // assumed from the order they were handed in. Any of them, where none was chosen.
-        int under = -1;
-        if (filed != null) {
-            for (int i = 0; i < values.size() && under < 0; i++) {
-                if (filed.value() == null || values.get(i).text().equals(filed.value().text())) {
-                    under = i;
-                }
-            }
-            if (under < 0) {
-                throw new IllegalStateException(filed.value() == null
-                        ? "a key was chosen and the map was built holding no value to file it over"
-                        : "a key was chosen for a value the map is not built to hold: "
-                                + filed.value().text());
-            }
+        if (placed != null && placed.value() != null && values.stream()
+                .noneMatch(each -> each.text().equals(placed.value().text()))) {
+            throw new IllegalStateException(
+                    "a key was chosen for a value the map is not built to hold: "
+                            + placed.value().text());
         }
         // A key no entry may have is one no other entry is filed under either.
         Set<String> written = new LinkedHashSet<>(filedKeys);
@@ -914,13 +1019,126 @@ final class Witnesses {
         if (others.size() < needed) {
             return Proposals.NONE.meeting(met);
         }
+        // Every key asked over a named value is filed under a value of that name first, wherever
+        // the values put it, and the keys asked over none take what is left in the order they
+        // came: a key that wants any value is not given one a key that wants it by name needs.
+        FixtureTemplate[] filedUnder = new FixtureTemplate[values.size()];
+        List<FixtureTemplate> unnamed = new ArrayList<>();
+        for (Filed each : eachAsked) {
+            if (each.value() == null) {
+                unnamed.add(each.key());
+                continue;
+            }
+            int at = -1;
+            for (int i = 0; i < values.size() && at < 0; i++) {
+                if (filedUnder[i] == null && values.get(i).text().equals(each.value().text())) {
+                    at = i;
+                }
+            }
+            if (at < 0) {
+                return Proposals.NONE.meeting(met);
+            }
+            filedUnder[at] = each.key();
+        }
+        unnamed.addAll(others);
         List<FixtureTemplate> entries = new ArrayList<>();
-        int nextApart = 0;
         int next = 0;
         for (int i = 0; i < values.size(); i++) {
-            FixtureTemplate key = i == under ? filed.key()
-                    : nextApart < apart.size() ? apart.get(nextApart++) : others.get(next++);
-            entries.add(FixtureTemplate.entry(key, values.get(i)));
+            if (filedUnder[i] == null) {
+                filedUnder[i] = unnamed.get(next++);
+            }
+            entries.add(FixtureTemplate.entry(filedUnder[i], values.get(i)));
+        }
+        return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
+    }
+
+    /**
+     * {@code values}, each distinct one as often as {@code filedOver} says keys are filed over it
+     * and at least once, and as many of the first again as there were before.
+     */
+    private static List<FixtureTemplate> eachHeldAsOftenAsFiled(List<FixtureTemplate> values,
+                                                                Map<String, Integer> filedOver) {
+        Map<String, FixtureTemplate> distinct = new LinkedHashMap<>();
+        for (FixtureTemplate each : values) {
+            distinct.putIfAbsent(each.text(), each);
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        distinct.forEach((text, value) -> {
+            for (int i = 0; i < Math.max(1, filedOver.getOrDefault(text, 0)); i++) {
+                out.add(value);
+            }
+        });
+        while (out.size() < values.size()) {
+            out.add(values.getFirst());
+        }
+        return out.size() == values.size() ? out : null;
+    }
+
+    /**
+     * A map holding every entry in {@code asked}, and as many others as the rules leave room for
+     * at the least — or nothing where no map can.
+     *
+     * <p>Each entry is a key and the value under it, or a key alone where nothing was asked of the
+     * value. A key asked for twice is one entry; asked for two values it is no map at all, and the
+     * answer is nothing rather than either value. The values nothing was asked of, and the entries
+     * that make up the count, are the first value the map's type has and the type's other keys.
+     *
+     * <p>Apart from {@link #holding}, which holds values and files one of them under a key: this is
+     * asked of a map by entries, and every one of them is kept.
+     */
+    static Proposals holdingEntries(Shape.Mapping map, List<Filed> asked,
+                                    DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+        Map<String, Filed> byKey = Filed.byKey(asked);
+        if (byKey == null) {
+            return Proposals.NONE;
+        }
+        int count = Math.max(holds.least(), byKey.size());
+        if (count > holds.most()) {
+            return Proposals.NONE;
+        }
+        CompositionBudget past = pastTheElements(count);
+        if (past != null) {
+            return Proposals.NONE.meeting(CompositionShortfall.of(List.of(past)));
+        }
+        CompositionShortfall met = CompositionShortfall.NONE;
+        FixtureTemplate otherwise = null;
+        if (count > byKey.size() || byKey.values().stream().anyMatch(each -> each.value() == null)) {
+            Proposals values = distinctValuesOf(map.value(), 1, reading, Set.of());
+            met = met.and(values.met());
+            if (values.values().isEmpty()) {
+                return Proposals.NONE.meeting(met);
+            }
+            otherwise = values.values().getFirst();
+        }
+        int needed = count - byKey.size();
+        List<FixtureTemplate> others = new ArrayList<>();
+        if (needed > 0) {
+            Set<String> written = new LinkedHashSet<>(byKey.keySet());
+            Proposals keys = distinctValuesOf(map.key(), count + byKey.size(), reading, Set.of());
+            for (Proposals.Entry each : keys.entries()) {
+                if (others.size() == needed) {
+                    break;
+                }
+                switch (each) {
+                    case Proposals.Stopped(CompositionShortfall stop) -> met = met.and(stop);
+                    case Proposals.Offered(FixtureTemplate key) -> {
+                        if (written.add(key.text())) {
+                            others.add(key);
+                        }
+                    }
+                }
+            }
+            if (others.size() < needed) {
+                return Proposals.NONE.meeting(met);
+            }
+        }
+        List<FixtureTemplate> entries = new ArrayList<>();
+        for (Filed each : byKey.values()) {
+            entries.add(FixtureTemplate.entry(each.key(),
+                    each.value() == null ? otherwise : each.value()));
+        }
+        for (FixtureTemplate key : others) {
+            entries.add(FixtureTemplate.entry(key, otherwise));
         }
         return Proposals.of(List.of(FixtureTemplate.collection(entries))).meeting(met);
     }
@@ -936,6 +1154,27 @@ final class Witnesses {
 
         Filed {
             Objects.requireNonNull(key, "a key is filed");
+        }
+
+        /**
+         * What is asked of each key, once: the demands on a key are one entry, a demand naming a
+         * value holding where one naming none asks nothing more. Null where two demands on a key
+         * name different values, which no map holds — the one place a map's entries are made
+         * one by key, so that what a map is built holding and what it is checked against
+         * cannot come apart.
+         */
+        static Map<String, Filed> byKey(List<Filed> asked) {
+            Map<String, Filed> byKey = new LinkedHashMap<>();
+            for (Filed each : asked) {
+                Filed had = byKey.get(each.key().text());
+                if (had == null || had.value() == null) {
+                    byKey.put(each.key().text(), each);
+                } else if (each.value() != null
+                        && !had.value().text().equals(each.value().text())) {
+                    return null;
+                }
+            }
+            return byKey;
         }
     }
 
@@ -1099,7 +1338,7 @@ final class Witnesses {
         // a stop is kept where the walk came to it and one past the last value taken is never
         // reached.
         Proposals.Gathering out = Proposals.Gathering.distinct();
-        Placed placed = placed(type, atThePlace, reading, expanding);
+        Placed placed = placed(type, atThePlace, reading, expanding, Partitions.RulesAround.NONE);
         out.addAll(placed.offered(), many);
         if (placed.everyValue() || out.size() >= many) {
             return out.done();
@@ -1670,16 +1909,30 @@ final class Witnesses {
      * <p><b>Every value where the rules name finitely many.</b> A finite set the rules leave is an
      * upper bound however much of them was read ({@link AdmissibleSet}), so a value outside it is
      * one the rules refuse — stepped, composed or proposed, it only takes what holds it with it.
+     *
+     * <p><b>A string the place admits, before the classes.</b> A class stands for the values of the
+     * type that fall in it, and a string has one class whatever the rules of the place say of its
+     * strings: so where those rules are a record's and not the type's, what stood for the class was
+     * a string of the type the record refuses, and no value of the record was built at all.
      */
     static Placed placed(Type type, AdmissibleSet atThePlace, RuleReadingContext reading,
-                         Set<TypeSymbol> expanding) {
+                         Set<TypeSymbol> expanding, Partitions.RulesAround around) {
         RuleReadingSource source = reading.source();
         TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
                 source.sums());
         Proposals.Gathering out = Proposals.Gathering.inOrder();
+        if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
+            for (String each : atThePlace.approximation().stringsItNames()) {
+                FixtureTemplate written =
+                        WornNames.under(view.wrappers(), FixtureTemplate.string(each), source);
+                if (written != null) {
+                    out.add(written);
+                }
+            }
+        }
         for (PartitionClass each : PartitionClasses.of(
                 PartitionClasses.casesAt(view, atThePlace, reading), view, reading, expanding)) {
-            out.addAll(Partitions.standingFor(each.representatives(), reading, expanding));
+            out.addAll(Partitions.standingFor(each.representatives(), reading, expanding, around));
         }
         return new Placed(out.done(), namesFinitelyMany(atThePlace)
                 || namesFinitelyMany(PartitionClasses.admittedByItsNames(view, reading)));
@@ -1701,15 +1954,14 @@ final class Witnesses {
             return offered.values();
         }
 
-        /** These kept to the numbers {@code within} leaves, where a value is a number and a range
+        /** These kept to the numbers {@code limits} leaves, where a value is a number and a range
          *  is known; a value that is no number is not one a range says anything about. */
-        Placed within(NumericDomain.Bounds within) {
-            if (within == null) {
+        Placed within(FieldDomains.ConstructionLimits limits) {
+            if (limits.values() == null && limits.ordered() == null) {
                 return this;
             }
-            return new Placed(offered.map(each ->
-                    !(Counts.writtenIn(each.value()) instanceof Place at) || within.admits(at)
-                            ? each : null), everyValue);
+            return new Placed(offered.map(each -> heldWithin(each, limits) ? each : null),
+                    everyValue);
         }
 
         /** These first, and where they are not every value, {@code otherwise} after them, each
@@ -1732,16 +1984,35 @@ final class Witnesses {
      *
      * <p>Only where the place's rules say which values stand there. Where they say nothing, the
      * place divides into what its type does, which is what a builder already offers.
+     *
+     * @param around the rules of the values the place is inside, which a value built for one of
+     *               its classes is held to ({@link Partitions.RulesAround})
      */
     static Proposals firstWhatThePlaceAdmits(Type type, FieldDomains.ConstructionLimits limits,
                                              RuleReadingContext reading,
                                              Set<TypeSymbol> expanding,
+                                             Partitions.RulesAround around,
                                              Supplier<Proposals> otherwise) {
         if (limits.admits().approximation().isAny()) {
             return otherwise.get();
         }
-        return placed(type, limits.admits(), reading, expanding).within(limits.values())
+        return placed(type, limits.admits(), reading, expanding, around).within(limits)
                 .before(otherwise);
+    }
+
+    /**
+     * Whether {@code value} is inside the numbers {@code limits} leaves, where it is a number and a
+     * range is known; a value that is no number is not one a range says anything about.
+     *
+     * <p>Between the ends, and in one of the runs the order leaves: a number between the ends of two
+     * runs is one every alternative refuses.
+     */
+    static boolean heldWithin(FixtureTemplate value, FieldDomains.ConstructionLimits limits) {
+        NumericDomain.Bounds within = limits.values();
+        OrderedRuns ordered = limits.ordered();
+        return !(Counts.writtenIn(value.value()) instanceof Place at)
+                || ((within == null || within.admits(at))
+                        && (ordered == null || ordered.admits(at)));
     }
 
     /** Whether {@code admitted} names the values it leaves, and some of them. */

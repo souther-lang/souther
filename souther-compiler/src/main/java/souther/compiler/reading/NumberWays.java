@@ -200,7 +200,8 @@ final class NumberWays implements ComparisonWays {
         if (apart == null) {
             return PairsLeft.NONE;
         }
-        Rel needed = want ? claim.statedRelation() : claim.statedRelation().denied();        for (int sign = -1; sign <= 1; sign++) {
+        Rel needed = want ? claim.statedRelation() : claim.statedRelation().denied();
+        for (int sign = -1; sign <= 1; sign++) {
             if (needed.holds(sign) && standThatWay(one, other, sign)
                     && differsThatWay(apart, sign)) {
                 return PairsLeft.SOME;

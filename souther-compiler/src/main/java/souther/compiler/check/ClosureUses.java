@@ -1,13 +1,22 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.ACallOfAnOperation;
+import souther.compiler.types.AnApplicationOfACall;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Every use of one closure of a body: each application one of the language's operations makes of
@@ -39,9 +48,16 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
      * @param applied   how far the operation goes applying the closure
      * @param call      the call that applies it, which a reader of the closure's parameters asks
      *                  what else the operation hands the closure ({@link SeededWalk#of})
+     * @param position  the binding the closure is handed the element's position on, counted from
+     *                  nought in the order {@code container} holds its elements — or null where the
+     *                  operation is shown to hand it none ({@link Combinator#positionParam})
+     * @param step      the closure as the block it is, whose body runs on each application
+     * @param held      the bindings the closure is handed what {@code container} holds on: the
+     *                  element, and the key a map files it under
      */
     public record Application(ValueName operation, OccurrenceLineage lineage, Core container,
-                              HowAClosureIsApplied applied, Core call) {
+                              HowAClosureIsApplied applied, Core call, BindingId position,
+                              Core.Block step, Set<BindingId> held) {
 
         public Application {
             Objects.requireNonNull(operation, "an application is some operation's");
@@ -49,7 +65,96 @@ public record ClosureUses(List<Application> applications, boolean usedElsewhere)
             Objects.requireNonNull(container, "an operation walks some container");
             Objects.requireNonNull(applied, "and applies the closure some way");
             Objects.requireNonNull(call, "by some call");
+            Objects.requireNonNull(step, "a closure an operation applies is a block it reads");
+            held = Set.copyOf(held);
+            if (position != null && !parameterOf(step, position)) {
+                throw new IllegalArgumentException("the position is handed to a parameter of the"
+                        + " closure applied: " + position);
+            }
+            for (BindingId each : held) {
+                if (!parameterOf(step, each) || each.equals(position)) {
+                    throw new IllegalArgumentException("what the container holds is handed to a"
+                            + " parameter of the closure, apart from the position: " + each);
+                }
+            }
         }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(operation, lineage, Core.hashWithoutWalking(container),
+                    applied, Core.hashWithoutWalking(call), position, held);
+        }
+
+        /**
+         * The parameters whose value at one application the applications before it make: every one
+         * the closure is not handed what the container holds on — the position, which counts them,
+         * and what a walk carries from one to the next. Past the first element, a run hands them
+         * only where it got through every application before.
+         */
+        public Set<BindingId> madeByTheApplicationsBefore() {
+            Set<BindingId> out = new LinkedHashSet<>();
+            for (Core.Binder param : step.params()) {
+                if (param != null && param.binding() != null && !held.contains(param.binding())) {
+                    out.add(param.binding());
+                }
+            }
+            return out;
+        }
+
+        /** The call that makes this application, where it is a call of one of the language's
+         *  operations that some source wrote. */
+        public Optional<ACallOfAnOperation> written() {
+            ConstructOccurrence at = switch (Core.withoutStanding(call)) {
+                case Core.Call it -> it.occurrence();
+                case Core.PreservedCall it -> it.occurrence();
+                default -> null;
+            };
+            return at == null || !at.isWritten()
+                    || !(operation instanceof ValueName.Stdlib library) ? Optional.empty()
+                    : Optional.of(new ACallOfAnOperation(library, at));
+        }
+
+        /**
+         * The call of the model that makes these, which tells each of them apart by the element it
+         * is handed ({@link AnApplicationOfACall}): the call itself where the model wrote it, and
+         * otherwise the call of one of the language's operations that made the one copy of the
+         * operation's body it stands in. Empty where the call stands in an operation another
+         * operation called. Whether an application of this call is handed the element an
+         * application of that operation is handed is not said here: the expansion proves it of a
+         * walk where it does ({@link ElementBindings#walksWhatItsOperationHandsEachElementOf}).
+         *
+         * <p>Told by the call and not by the closure or its parameters. A reading where the
+         * language's operations stand and one where they are expanded hold the call, the closure
+         * and its parameters as other nodes and other bindings, and agree only about which
+         * construct of the model the call is.
+         */
+        public Optional<ModelOccurrence> callOfTheModel() {
+            ConstructOccurrence at = switch (Core.withoutStanding(call)) {
+                case Core.Call it -> it.occurrence();
+                case Core.PreservedCall it -> it.occurrence();
+                default -> null;
+            };
+            if (at == null) {
+                return Optional.empty();
+            }
+            Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(at);
+            return stated.isPresent() || !ModelOccurrence.calledByTheModel(at) ? stated
+                    : ModelOccurrence.operationCalledAround(at);
+        }
+
+        private static boolean parameterOf(Core.Block step, BindingId binding) {
+            return step.params().stream()
+                    .anyMatch(param -> param != null && binding.equals(param.binding()));
+        }
+    }
+
+    /**
+     * The one application an operation makes of the closure, where nothing else uses it: the
+     * closure is applied by that call and by no other.
+     */
+    public Optional<Application> theOnlyApplication() {
+        return usedElsewhere || applications.size() != 1 ? Optional.empty()
+                : Optional.of(applications.getFirst());
     }
 
     /** The containers the closure is entered over, one for each operation applying it, or none

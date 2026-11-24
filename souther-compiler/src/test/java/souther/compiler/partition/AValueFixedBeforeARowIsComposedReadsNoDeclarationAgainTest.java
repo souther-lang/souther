@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -79,7 +80,7 @@ class AValueFixedBeforeARowIsComposedReadsNoDeclarationAgainTest {
     private static Offered offered(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertTrue(compilation.diagnostics().values().stream().allMatch(List::isEmpty),
                 () -> "the model under test compiles clean: " + compilation.diagnostics());
         long before = InvariantChecker.readingsMade();

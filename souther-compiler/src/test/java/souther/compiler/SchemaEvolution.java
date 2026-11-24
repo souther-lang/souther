@@ -26,9 +26,11 @@ import java.util.function.IntPredicate;
  * <p><b>The ways a part grows.</b> A key taken out of {@code required}, a word added to an
  * {@code enum}, a key added to the {@code properties} of an object that admits no others, and a
  * {@code description} said differently, which changes nothing a document is held to. And a
- * condition on a word of a discriminator that did not ship, wrapped round a branch as it shipped,
- * where the owner held the discriminator to an {@code enum} without that word: no document that
- * shipped carries it, so none is asked more of ({@link #withoutConditionsOnWordsThatDidNotShip}).
+ * condition on a word of a discriminator that did not ship, wrapped round a branch as it shipped or
+ * added to an {@code allOf} with an {@code else} refusing only what was refused already, where the
+ * owner, or every branch of it, held the discriminator to an {@code enum} without that word: no
+ * document that shipped carries it, so none is asked more of
+ * ({@link #withoutConditionsOnWordsThatDidNotShip}).
  *
  * <p><b>Where a part growing grows the whole.</b> Only where the part is asked of a document the way
  * the whole is: under {@code properties}, {@code items}, {@code allOf}, {@code anyOf}, {@code then},
@@ -102,8 +104,8 @@ public final class SchemaEvolution {
             }
             return;
         }
-        compareGrowing(shipped, withoutConditionsOnWordsThatDidNotShip(shipped, current), at, out,
-                roots);
+        compareGrowing(shipped, withoutConditionsOnWordsThatDidNotShip(shipped, current, roots),
+                at, out, roots);
     }
 
     /** The same, of a part that may grow: each key as it shipped, and any added since. */
@@ -191,32 +193,150 @@ public final class SchemaEvolution {
      * document that shipped. A condition on a word the enum had, or on a discriminator the owner
      * held to no {@code enum}, is not taken out and is compared as any other part is.
      *
-     * <p>Only where the condition wraps what shipped: the branch it stands in, taken out, is the
-     * branch that shipped.
+     * <p>Where the condition wraps what shipped: the branch it stands in, taken out, is the branch
+     * that shipped. Or where it is a branch of the {@code allOf} added after the ones that shipped,
+     * the {@code allOf} itself among them: such a branch asks only its {@code else} of a document
+     * that shipped, and that narrows nothing where it is absent or refuses only keys the owner as
+     * it shipped refused already ({@link #asksNothingOfWhatShipped}).
+     *
+     * <p>The words a discriminator shipped with are those of the owner's own {@code enum}, or —
+     * where the owner names it in none of its own properties — those of the branches of its
+     * {@code oneOf} or {@code anyOf}, where each of them holds the discriminator to an
+     * {@code enum} or refuses an object holding it: a document carrying another word was refused
+     * by every branch.
      */
     private static JsonNode withoutConditionsOnWordsThatDidNotShip(JsonNode shipped,
-                                                                   JsonNode current) {
+                                                                   JsonNode current,
+                                                                   Roots roots) {
         JsonNode was = shipped.path("allOf");
         JsonNode is = current.path("allOf");
-        if (!was.isArray() || !is.isArray() || is.size() < was.size()) {
+        boolean noneShipped = !shipped.has("allOf");
+        if (!is.isArray() || (!noneShipped && (!was.isArray() || is.size() < was.size()))) {
             return current;
         }
-        Map<String, Set<String>> shippedWords = new HashMap<>();
-        for (String name : shipped.path("properties").propertyNames()) {
-            JsonNode held = shipped.get("properties").get(name).path("enum");
-            if (held.isArray()) {
-                shippedWords.put(name, words(held));
+        // What a condition asks of the keys of an object it asks of nothing else: a value that is
+        // no object meets its `if` whatever words shipped, and is held to its `then`. So none of
+        // this holds unless every document that shipped here was an object.
+        if (!takesObjectsAlone(shipped, roots.shipped(), new HashSet<>())) {
+            return current;
+        }
+        Set<String> asked = new LinkedHashSet<>();
+        for (JsonNode each : is) {
+            JsonNode held = followed(each, roots.current(), new HashSet<>());
+            if (held != null) {
+                asked.addAll(held.path("if").path("properties").propertyNames());
             }
         }
+        Map<String, Set<String>> shippedWords = wordsShipped(shipped, roots.shipped(), asked);
         if (shippedWords.isEmpty()) {
             return current;
         }
         ObjectNode copy = (ObjectNode) current.deepCopy();
         ArrayNode branches = (ArrayNode) copy.get("allOf");
-        for (int i = 0; i < was.size(); i++) {
+        int asShipped = noneShipped ? 0 : was.size();
+        for (int i = 0; i < asShipped; i++) {
             branches.set(i, withoutAWrapper(was.get(i), is.get(i), shippedWords));
         }
+        for (int i = branches.size() - 1; i >= asShipped; i--) {
+            if (asksNothingOfWhatShipped(branches.get(i), shipped, shippedWords, roots)) {
+                branches.remove(i);
+            }
+        }
+        if (noneShipped && branches.isEmpty()) {
+            copy.remove("allOf");
+        }
         return copy;
+    }
+
+    /**
+     * Each discriminator of {@code shipped} and the words it shipped with
+     * ({@link #withoutConditionsOnWordsThatDidNotShip}). A key no branch names, that a condition
+     * now {@code asked} about, shipped with none where every branch refuses an object holding it.
+     */
+    private static Map<String, Set<String>> wordsShipped(JsonNode shipped, JsonNode root,
+                                                         Set<String> asked) {
+        Map<String, Set<String>> out = new HashMap<>();
+        for (String name : shipped.path("properties").propertyNames()) {
+            JsonNode held = shipped.get("properties").get(name).path("enum");
+            if (held.isArray()) {
+                out.put(name, words(held));
+            }
+        }
+        for (String keyword : List.of("oneOf", "anyOf")) {
+            List<JsonNode> branches = new ArrayList<>();
+            for (JsonNode each : shipped.path(keyword)) {
+                JsonNode branch = followed(each, root, new HashSet<>());
+                if (branch == null) {
+                    return out;
+                }
+                branches.add(branch);
+            }
+            if (branches.isEmpty()) {
+                continue;
+            }
+            Set<String> named = new LinkedHashSet<>(asked);
+            branches.forEach(branch -> named.addAll(branch.path("properties").propertyNames()));
+            for (String name : named) {
+                if (shipped.path("properties").has(name)) {
+                    continue;
+                }
+                Set<String> words = new LinkedHashSet<>();
+                boolean everyBranchSays = true;
+                for (JsonNode branch : branches) {
+                    JsonNode held = branch.path("properties").path(name).path("enum");
+                    if (held.isArray()) {
+                        words.addAll(words(held));
+                    } else if (!refusesAnObjectHolding(branch, name, root, new HashSet<>())) {
+                        everyBranchSays = false;
+                    }
+                }
+                if (everyBranchSays) {
+                    out.put(name, words);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether {@code branch}, added to an {@code allOf}, asks no document that shipped anything:
+     * it is a conditional and nothing beside, on a word its discriminator did not ship with, so a
+     * document that shipped takes its {@code else} — and that is absent, or refuses only an object
+     * holding keys {@code shipped} refused every object holding.
+     */
+    private static boolean asksNothingOfWhatShipped(JsonNode branch, JsonNode shipped,
+                                                    Map<String, Set<String>> shippedWords,
+                                                    Roots roots) {
+        JsonNode held = followed(branch, roots.current(), new HashSet<>());
+        if (held == null || !held.has("if") || !onlyAConditional(held)
+                || !onANewWord(held.get("if"), shippedWords)) {
+            return false;
+        }
+        if (!held.has("else")) {
+            return true;
+        }
+        JsonNode otherwise = held.get("else");
+        for (String key : otherwise.propertyNames()) {
+            if (!Set.of("not", "description").contains(key)) {
+                return false;
+            }
+        }
+        JsonNode refused = otherwise.path("not");
+        for (String key : refused.propertyNames()) {
+            if (!key.equals("required")) {
+                return false;
+            }
+        }
+        Set<String> keys = words(refused.path("required"));
+        if (keys.isEmpty()) {
+            return false;
+        }
+        for (String key : keys) {
+            if (!refusesAnObjectHolding(shipped, key, roots.shipped(), new HashSet<>())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The branch {@code now}, with what wraps {@code before} on a new word taken out. */
@@ -302,8 +422,9 @@ public final class SchemaEvolution {
     /**
      * Whether no other branch of {@code branches} accepts a document branch {@code at} does.
      *
-     * <p>Shown one of two ways. By a key the document must carry to match the branch, held there to
-     * one value no other branch allows: every other branch holds the same key to a different
+     * <p>Shown one of two ways, each among objects and so only where the branch takes objects
+     * alone. By a key the document must carry to match the branch, held there to one value no
+     * other branch allows: every other branch holds the same key to a different
      * {@code const}. Or by a key the document must carry that no other branch lets an object carry
      * at all, where the branch takes objects alone ({@link #refusesAnObjectHolding}). Either way a
      * document the branch comes to accept is refused by every other branch, and the {@code oneOf}
@@ -314,7 +435,7 @@ public final class SchemaEvolution {
      * @param root  the schema the {@code oneOf} is in, which a {@code $ref} is followed into
      */
     private static boolean exclusive(JsonNode branches, int at, JsonNode owner, JsonNode root) {
-        return toldApartByAConst(branches, at, owner)
+        return toldApartByAConst(branches, at, owner, root)
                 || toldApartByAKeyNoOtherAdmits(branches, at, owner, root);
     }
 
@@ -339,6 +460,44 @@ public final class SchemaEvolution {
                 }
             }
             if (onlyHere) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether every value {@code schema} accepts is an object: it says so, every branch of a
+     * {@code oneOf} or an {@code anyOf} it holds does, or some part of an {@code allOf} does.
+     *
+     * <p>Asked before anything is read off the keys a schema names. {@code properties},
+     * {@code required} and a {@code const} under them ask nothing of a value that is no object, so
+     * what they tell apart, or what an {@code if} of them refuses, is told apart only among
+     * objects. False wherever that is not shown, as {@link #refusesAnObjectHolding} is.
+     *
+     * @param followed the definitions already followed on the way here
+     */
+    private static boolean takesObjectsAlone(JsonNode schema, JsonNode root, Set<String> followed) {
+        JsonNode held = followed(schema, root, followed);
+        if (held == null) {
+            return false;
+        }
+        if ("object".equals(held.path("type").asString(""))) {
+            return true;
+        }
+        for (String keyword : List.of("oneOf", "anyOf")) {
+            if (held.has(keyword) && !held.get(keyword).isEmpty()) {
+                boolean every = true;
+                for (JsonNode each : held.get(keyword)) {
+                    every &= takesObjectsAlone(each, root, new HashSet<>(followed));
+                }
+                if (every) {
+                    return true;
+                }
+            }
+        }
+        for (JsonNode each : held.path("allOf")) {
+            if (takesObjectsAlone(each, root, new HashSet<>(followed))) {
                 return true;
             }
         }
@@ -405,8 +564,18 @@ public final class SchemaEvolution {
         return followed(root.get("$defs").get(definition), root, followed);
     }
 
-    private static boolean toldApartByAConst(JsonNode branches, int at, JsonNode owner) {
+    /**
+     * Whether branch {@code at} requires a key no other branch lets hold the value it does, among
+     * objects — where every value it, or the owner, takes is one ({@link #takesObjectsAlone}): a
+     * value that is no object is held to no key, and meets the {@code const} of every branch.
+     */
+    private static boolean toldApartByAConst(JsonNode branches, int at, JsonNode owner,
+                                             JsonNode root) {
         JsonNode branch = branches.get(at);
+        if (!"object".equals(owner.path("type").asString(""))
+                && !takesObjectsAlone(branch, root, new HashSet<>())) {
+            return false;
+        }
         Set<String> required = words(branch.path("required"));
         required.addAll(words(owner.path("required")));
         for (String key : branch.path("properties").propertyNames()) {

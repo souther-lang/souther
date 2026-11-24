@@ -33,8 +33,9 @@ class AnImportLineThatCannotBeReadIsSaidWithoutTakingTheFileTest {
     private static final String A_SECOND_MISTAKE = "data Bad = { x: NoSuchTypeAnywhere }";
 
     /** The codes the author is shown about the one source. */
-    private static Set<String> saidAbout(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+    private static Set<String> saidAbout(Set<String> refusedWith, String source) {
+        Compilation compilation = ACompiledModel.refusedOnlyWith(refusedWith,
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         Set<String> codes = new LinkedHashSet<>();
         for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
             codes.add(said.diagnostic().code());
@@ -45,7 +46,7 @@ class AnImportLineThatCannotBeReadIsSaidWithoutTakingTheFileTest {
     /** The line names something this compiler's library does not publish. */
     @Test
     void aNameTheLibraryDoesNotHaveIsSaidBesideTheRest() {
-        Set<String> codes = saidAbout("""
+        Set<String> codes = saidAbout(Set.of("E1506", "E1023"), """
                 module app.own
                 import List ( noSuchOperation )
 
@@ -60,7 +61,7 @@ class AnImportLineThatCannotBeReadIsSaidWithoutTakingTheFileTest {
     /** One bare name arrives from two library modules at once. */
     @Test
     void aNamePublishedByTwoModulesIsSaidBesideTheRest() {
-        Set<String> codes = saidAbout("""
+        Set<String> codes = saidAbout(Set.of("E1508", "E1023"), """
                 module app.own
                 import Map ( insert )
                 import Set ( insert )
@@ -82,7 +83,7 @@ class AnImportLineThatCannotBeReadIsSaidWithoutTakingTheFileTest {
      */
     @Test
     void aNameThatCollidesWithADeclarationIsSaidBesideTheRest() {
-        Set<String> codes = saidAbout("""
+        Set<String> codes = saidAbout(Set.of("E1811", "E1508", "E1023"), """
                 module app.own
                 import List ( map )
 

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
@@ -9,6 +10,7 @@ import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Case;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
@@ -165,7 +167,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                 ScopedDeclarations.wrapsOf(symbolsOf(DEEP)),
                 symbolsOf(DEEP), ScopedDeclarations.kindsOf(symbolsOf(DEEP)),
                 ScopedDeclarations.sumsOf(symbolsOf(DEEP)), Set.of(deeper),
-                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY);
+                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
                 assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
@@ -191,7 +193,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                 symbolsOf(DEEP), ScopedDeclarations.kindsOf(symbolsOf(DEEP)),
                 ScopedDeclarations.sumsOf(symbolsOf(DEEP)), Set.of(),
                 Requirements.NONE.and(down(9), Refinement.of(new Case.Presence(true))),
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
                 assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
@@ -216,7 +218,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                 symbolsOf(TREE), ScopedDeclarations.kindsOf(symbolsOf(TREE)),
                 ScopedDeclarations.sumsOf(symbolsOf(TREE)),
                 Set.of(insideTheTree(6)), Requirements.NONE,
-                ConstructionPlan.ContentsComposed.NONE, NONE_OF_THEM);
+                ConstructionPlan.ContentsComposed.NONE, NONE_OF_THEM, _ -> false);
 
         ConstructionPlan.ModelRefusal.NoRoom why = assertInstanceOf(
                 ConstructionPlan.ModelRefusal.NoRoom.class,
@@ -242,7 +244,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                 symbolsOf(TREE), ScopedDeclarations.kindsOf(symbolsOf(TREE)),
                 ScopedDeclarations.sumsOf(symbolsOf(TREE)),
                 Set.of(insideTheTree(6)), Requirements.NONE,
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
                 assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
@@ -274,7 +276,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                 ScopedDeclarations.wrapsOf(symbolsOf(DEEP)),
                 symbolsOf(DEEP), ScopedDeclarations.kindsOf(symbolsOf(DEEP)),
                 ScopedDeclarations.sumsOf(symbolsOf(DEEP)), Set.of(inside),
-                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY);
+                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         ConstructionPlan plan = assertInstanceOf(ConstructionPlan.Result.Planned.class, asked,
                 "the position is one this plans at").plan();
@@ -372,7 +374,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                         ScopedDeclarations.wrapsOf(symbolsOf(source)), symbolsOf(source),
                         ScopedDeclarations.kindsOf(symbolsOf(source)),
                         ScopedDeclarations.sumsOf(symbolsOf(source)), decided, additional,
-                        ConstructionPlan.ContentsComposed.NONE, ANY),
+                        ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false),
                 "nothing here asks one position to be two things").plan();
     }
 
@@ -387,8 +389,8 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
     private record Read(Sig sig, Symbols symbols) {}
 
     private static Read readOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

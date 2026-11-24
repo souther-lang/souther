@@ -1,8 +1,11 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.partition.CasesTheRowsTook;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.RulesTaken;
@@ -71,11 +74,13 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
      */
     @Test
     void andARowNothingWatchedIsCountedAsOne() {
-        DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify", rulesTakenOf(compiled()),
+        Compilation compilation = compiled();
+        DecisionEvidence.RowsPlaced read = DecisionEvidence.of("classify",
+                        rulesTakenOf(compilation), rulesOf(compilation),
                         List.of(new WitnessedRow(new ObservedInputs(List.of(),
                                 new Generator.Watched.NoAccount(),
                                 new AnswerObservation.NotAnswered()), RowWitnesses.ANOTHER_ROW)),
-                        WeakeningSet.none())
+                        WeakeningSet.none(), CasesTheRowsTook.none())
                 .made().orElseThrow(
                         () -> new AssertionError("a row is read whether or not anything watched it"));
         assertEquals(1, read.rowsRead(), () -> "the row is one the reading was given: " + read);
@@ -89,8 +94,7 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1903"), compilation);
     }
 
     private static DecisionEvidence.RowsPlaced readOf(Compilation compilation) {
@@ -98,6 +102,12 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
                 .ask(new Adequacy.Decides(compilation.modules().get(0))).value().get("decides");
         return evidence.took().made()
                 .orElseThrow(() -> new AssertionError("the rows were read"));
+    }
+
+    /** The rules the body states, which is what a row may be at. */
+    private static List<DecisionRule> rulesOf(Compilation compilation) {
+        return compilation.db().ask(new Adequacy.Decides(compilation.modules().get(0))).value()
+                .get("decides").read().rules();
     }
 
     /** What the rules of this body are matched against, which a reading of no runs never asks. */

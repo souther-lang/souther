@@ -4,6 +4,7 @@ import souther.compiler.types.Type;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Where the values an operation walked came from, for a number taken over a run of them.
@@ -33,13 +34,54 @@ public sealed interface RunSource {
     TermPath subjectPath();
 
     /**
+     * Where a walk over these values stands: the container walked, which may hold none of them —
+     * what a walk over none comes to is the value it starts from — and the outermost of them for
+     * the occurrences inside several. The root for the nodes of a tree, which stand in no
+     * container.
+     *
+     * <p>Not {@link #subjectPath}, which is where the values are read from, inside the container.
+     */
+    default TermPath standsAt() {
+        return switch (this) {
+            case ProjectedOccurrences projected ->
+                    projected.subjectPath().containersHoldingIt().getLast();
+            case FlattenedOccurrences flattened ->
+                    flattened.subjectPath().containersHoldingIt().getFirst();
+            case ComputedOccurrences computed -> computed.elements().containersHoldingIt().getLast();
+            case JoinedOccurrences joined -> joined.elements().containersHoldingIt().getLast();
+            case ReachableNodes _, SearchedLine _ -> subjectPath();
+        };
+    }
+
+    /**
+     * The places whose every occurrence is a value the run is read across: the place it is read
+     * from and, for a join, the map it is joined to — each a place inside the containers it
+     * stands in. None for the nodes of a tree, which stand in no container and are found by
+     * walking down from the root.
+     *
+     * <p>Not {@link #subjectPath}, which is one place to read from: a total of what two maps hold
+     * under one key is read across both of them, and asked of the one it is read from it is read
+     * off nothing of the other.
+     */
+    default List<TermPath> readAcross() {
+        return switch (this) {
+            case ProjectedOccurrences projected -> List.of(projected.subjectPath());
+            case FlattenedOccurrences flattened -> List.of(flattened.subjectPath());
+            case ComputedOccurrences computed -> List.of(computed.elements());
+            case JoinedOccurrences joined -> List.of(joined.elements(), joined.alongside());
+            case ReachableNodes _, SearchedLine _ -> List.of();
+        };
+    }
+
+    /**
      * Whether the run is the elements of one container, one value for each: then how many it holds
      * is how many that container holds, and a count of it is a taking of the container's place.
      */
     default boolean isInOneContainer() {
         return switch (this) {
             case ProjectedOccurrences _, ComputedOccurrences _ -> true;
-            case FlattenedOccurrences _, ReachableNodes _ -> false;
+            case FlattenedOccurrences _, ReachableNodes _, JoinedOccurrences _,
+                 SearchedLine _ -> false;
         };
     }
 
@@ -65,7 +107,30 @@ public sealed interface RunSource {
             // inside a container it is one tree of many.
             case ReachableNodes nodes ->
                     overTheNodesBelow(at, nodes.through(), nodes.container());
+            // Both maps are handed to the move, and the join is the same one only where each is
+            // still the one container's values.
+            case JoinedOccurrences joined -> {
+                TermPath beside = moved.put(joined.alongside());
+                yield namesOneRun(at) && beside != null && namesOneRun(beside)
+                        && !at.equals(beside) ? new JoinedOccurrences(at, beside) : null;
+            }
+            // The tree and the value it is searched for are two inputs, and the line is the same
+            // one only where each is still one place.
+            case SearchedLine line -> overTheLineDown(at, line.through(), line.matchAt(),
+                    moved.put(line.key()));
         };
+    }
+
+    /**
+     * The line of nodes from the node at {@code root} down to the first one a search finds, or
+     * null where no one tree stands at {@code root} or the value searched for is not one place
+     * ({@link SearchedLine}).
+     */
+    static RunSource overTheLineDown(TermPath root, String through, List<String> matchAt,
+                                     TermPath key) {
+        return root != null && key != null && oneTreeStandsAt(root) && !key.insideAContainer()
+                && !key.standsAtUnderOrAround(root)
+                ? new SearchedLine(root, through, matchAt, key) : null;
     }
 
     /**
@@ -250,11 +315,70 @@ public sealed interface RunSource {
             return elements;
         }
 
+        /**
+         * The places each value is read off: what the computation reads of the element, below
+         * where the element stands, in the structural order. A computation that turns on where
+         * the element stands, or reads nothing of it, is read off the element itself.
+         *
+         * <p>What the run is filed under is the element, and what its values turn on is these: a
+         * total of {@code if i.active then i.price else 0} turns on the flag and the price of each
+         * element and on nothing else of it, as a total of {@code i.price} turns on the price.
+         */
+        public List<TermPath> placesReadOff() {
+            Set<ElementProjection> parts = computation.reads();
+            if (parts.isEmpty() || computation.readsThePosition()) {
+                return List.of(elements);
+            }
+            return parts.stream().map(part -> part.from(elements)).distinct()
+                    .sorted(TermPath.structuralOrder()).toList();
+        }
+
         @Override
         public String toString() {
             return "{" + computation + " | " + elements
                     + (order != null && order.direction() == TraversalDirection.REVERSE
                             ? " from the far end" : "") + "}";
+        }
+    }
+
+    /**
+     * The products of the values two maps hold under one key: for each key both hold, the value
+     * standing at {@code elements} times the value standing at {@code alongside}.
+     *
+     * <p>As many values as there are keys the two maps share, each made of the entry of one map
+     * and the entry of the other under that key. A key only one of them holds makes none, which is
+     * what a lookup in the other falling back on nought comes to when the entry is multiplied by
+     * it. The two maps are two inputs and neither is made of the other, so the run stands at
+     * both: it is read from {@code elements}, the map walked, and the map looked into is
+     * {@code alongside}.
+     *
+     * <p>Not {@link ComputedOccurrences}: that is one value for each element of one container,
+     * made of that element alone, and what the other map holds under the element's key is no field
+     * of the element. Nothing here is a field of one entry, and no entry is read apart from the
+     * key that joins it to the other map's.
+     *
+     * @param elements  where each value of the map walked stands
+     * @param alongside where each value of the map looked into stands
+     */
+    record JoinedOccurrences(TermPath elements, TermPath alongside) implements RunSource {
+
+        public JoinedOccurrences {
+            requireOneRun(elements);
+            requireOneRun(alongside);
+            if (elements.head().equals(alongside.head()) && elements.equals(alongside)) {
+                throw new IllegalArgumentException("a map joined to itself is no join of two: "
+                        + elements);
+            }
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return elements;
+        }
+
+        @Override
+        public String toString() {
+            return "{" + elements + " * " + alongside + " under one key}";
         }
     }
 
@@ -298,6 +422,67 @@ public sealed interface RunSource {
         public String toString() {
             return "{" + (container.isEmpty() ? "node" : String.join(".", container) + "[*]")
                     + " below " + root + " through " + through + "}";
+        }
+    }
+
+    /**
+     * The nodes on the line from the node at {@code root} down to the first node a search finds,
+     * the search going to the elements of the field {@code through} of each node in turn, first
+     * element to last and each element's nodes before the next element's, and stopping at the
+     * first node whose value at {@code matchAt} is the value standing at {@code key}: that node
+     * and each node above it down from the root, or none where no node of the tree has that
+     * value. The order is part of which node is first, so what reads the search, what reads a row
+     * and what writes one all take it ({@code TermReading#lineFound}); a search that takes the
+     * elements in another order is not this run.
+     *
+     * <p>Not {@link ReachableNodes}. That is every node of the tree and a search finds one of them,
+     * so a tree of a given height holds lines of every length up to it and the search answers one
+     * of those — the first node in the order it goes down, which is the root where the root has
+     * the value whatever is below it. What is claimed is how many nodes that line holds, from none
+     * (nothing matched) to the depth of the first match plus one, and nothing about which tree
+     * makes which: a tree's height is no length this holds, and a tree the declarations leave no
+     * way to write a matching node in has no line of that length.
+     *
+     * <p>Two inputs, as {@link JoinedOccurrences} is: the tree is read from {@code root} and the
+     * value it is searched for from {@code key}, a place holding one value apart from the tree.
+     *
+     * @param root    where the node the search starts from stands
+     * @param through the field of a node whose elements are the nodes below it
+     * @param matchAt the fields from a node to the value that is compared with the one at
+     *                {@code key}
+     * @param key     where the value searched for stands
+     */
+    record SearchedLine(TermPath root, String through, List<String> matchAt, TermPath key)
+            implements RunSource {
+
+        public SearchedLine {
+            Objects.requireNonNull(root, "a tree is searched from some node");
+            Objects.requireNonNull(through, "a search goes below a node through something");
+            matchAt = List.copyOf(matchAt);
+            Objects.requireNonNull(key, "a search is for some value");
+            if (matchAt.isEmpty()) {
+                throw new IllegalArgumentException("a node holds the value searched for at one of"
+                        + " its fields");
+            }
+            if (!oneTreeStandsAt(root)) {
+                throw new IllegalArgumentException("`" + root + "` stands inside a container, and"
+                        + " which of its trees a search went down is not said by it");
+            }
+            if (key.insideAContainer() || key.standsAtUnderOrAround(root)) {
+                throw new IllegalArgumentException("the value searched for stands at `" + key
+                        + "`, which is not one place apart from the tree at `" + root + "`");
+            }
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return root;
+        }
+
+        @Override
+        public String toString() {
+            return "{line below " + root + " through " + through + " to the node whose "
+                    + String.join(".", matchAt) + " is " + key + "}";
         }
     }
 

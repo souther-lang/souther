@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +18,7 @@ import souther.compiler.values.AsACompilationAllows;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -87,8 +89,9 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
      * @param source    the module handed over
      * @param allowance what it is read under, which is one thing and not a pair of settings a
      *                  caller might leave both of
+     * @param refusedFor the codes the model is refused with, empty where it compiles
      */
-    private record Witness(String source, Allowance allowance) {}
+    private record Witness(String source, Allowance allowance, List<String> refusedFor) {}
 
     /**
      * What a compilation of a model here is allowed.
@@ -110,7 +113,12 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
     }
 
     private static Witness of(String source) {
-        return new Witness(source, new Allowance.AsACompilationDoes());
+        return ofRefused(source, List.of());
+    }
+
+    /** A model this compiler refuses for {@code refusedFor} and still writes a document about. */
+    private static Witness ofRefused(String source, List<String> refusedFor) {
+        return new Witness(source, new Allowance.AsACompilationDoes(), refusedFor);
     }
 
     /** {@code t0 = 0.1m} and each {@code tN} the square of the one before it, so that the scale
@@ -137,12 +145,13 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
      * a compilation says and holds them to writing neither word.
      */
     private static Witness spending(String source, PatternPlan.Budget distinctions) {
-        return new Witness(source, new Allowance.ToMeasureWith(distinctions));
+        return new Witness(source, new Allowance.ToMeasureWith(distinctions), List.of());
     }
 
     /** The same, where what is said down is what a reading of the declarations may build with. */
-    private static Witness readingWith(String source, ReadingPolicy reading) {
-        return new Witness(source, new Allowance.ToReadWith(reading));
+    private static Witness readingWith(String source, ReadingPolicy reading,
+                                       List<String> refusedFor) {
+        return new Witness(source, new Allowance.ToReadWith(reading), refusedFor);
     }
 
     /** Room to answer what a position admits, and none to hand each of its rules on as the set it
@@ -169,8 +178,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         out.put(UndividedPosition.Reason.UNSUPPORTED_SYNTAX, of("""
                 module m
                 %s
-                behavior f : (x: Decimal) -> Answer
-                let f (x) = if x < Decimal.round(1, HALF_UP, 3.5m) then Yes else No
+                behavior f : (x: Int) -> Answer
+                let f (x) = if x < Int.floorMod(7, 3) then Yes else No
                 """.formatted(ANSWER)));
         // A rule whose end at a position rests on an alternative this compiler does not read. The
         // clause at the position was read and places its end; what the choice leaves is as far out
@@ -189,7 +198,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         // resolves while nothing expands the clauses of its module
         // ({@link souther.compiler.AnExpansionThatDidNotHappenIsARuleNotReachedTest}); one model
         // apiece would say the word belongs to the route rather than to the hole.
-        out.put(UndividedPosition.Reason.RULES_NOT_READ_AT_ALL, of("""
+        out.put(UndividedPosition.Reason.RULES_NOT_READ_AT_ALL, ofRefused("""
                 module m
 
                 data Ok
@@ -199,7 +208,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
 
                 behavior run : (b: Basket) -> Ok
                 let run (b) = Ok
-                """));
+                """, List.of("E1319")));
         // A position whose own answer is exact and whose rules were not handed on as the sets they
         // leave. What the rules say is contradictory, which is the model's business and not this
         // word's: the word is about the second allowance, and it is the allowance that is lowered.
@@ -214,7 +223,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 data Ok
 
                 behavior f : (c: Code) -> Ok
-                """, NOTHING_TO_HAND_ON_WITH));
+                """, NOTHING_TO_HAND_ON_WITH, List.of("E1013")));
         // A behavior's rule about the strings at a position, under an allowance that will not build
         // the two sides of one rule. Its own word beside the one above because that one is what the
         // declarations leave and this is what a body tells apart.
@@ -300,6 +309,33 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: Int, s: S) -> Answer
                 let f (n, s) = if n == String.length(s.value) then Yes else No
                 """.formatted(ANSWER)));
+        // A relation a run may stop on the way to: a square past the end of `Int` stops before
+        // the comparison, and which values of `a` get to it is what nothing here says.
+        out.put(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = {
+                    let square = a * a
+                    if a == b then Yes else No
+                }
+                """.formatted(ANSWER)));
+        // A relation shown over the values it can be shown over: a word of any code points is the
+        // second piece of a pair, but one holding a code point that is no stable starter is shown
+        // neither way.
+        out.put(UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION, of("""
+                module m
+                %s
+                data Pair = String
+                    invariant String.matches("[^:]+:[^:]+", value)
+                data Word = String
+                    invariant String.matches("[^:]+", value)
+                behavior f : (p: Pair, w: Word) -> Answer
+                let f (p, w) =
+                    match List.get(1, String.split(":", p.value)) with
+                        | Some second -> if second == w.value then Yes else No
+                        | None -> No
+                """.formatted(ANSWER)));
         // A rule about how a list's elements stand to each other, offered as one alternative of a
         // choice: no builder keeps either of two such rules, and no set of the list's own values
         // holds it.
@@ -359,7 +395,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 """.formatted(ANSWER)));
         // A newtype spine that comes back to itself: the walk over the names ends with the name
         // still on, so there is no base to read a shape from.
-        out.put(UndividedPosition.Reason.TYPE_UNRESOLVED, of("""
+        out.put(UndividedPosition.Reason.TYPE_UNRESOLVED, ofRefused("""
                 module m
 
                 data Ok
@@ -367,9 +403,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
 
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
-                """));
-        // A comparison over a product of two input fields one of which is weighed before the
-        // product is taken, and over a quotient by one held against a third: the arithmetic met a
+                """, List.of("E1013")));
+        // A comparison over a product of three input values, and over a quotient by one held against a third: the arithmetic met a
         // shape it has no term for, and nothing was made of either position. A quotient held
         // against a number is a line on each sign of the divisor, and only a number times the
         // divisor is a form; a value times it is a product.
@@ -377,7 +412,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if 2 * a * b > 10 then Yes else No
+                let f (a, b) = if a * b * a > 10 then Yes else No
                 """.formatted(ANSWER)));
         out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
                 module m
@@ -400,6 +435,15 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
                 let f (a, b) = if Int.floorMod(a - b, 7) >= 1 then Yes else No
+                """.formatted(ANSWER)));
+        // A comparison over a streak a fold counts, which no form of the input says: its line is
+        // on how far apart the sides come out on a run, and the list is divided by none of it.
+        out.put(UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS, of("""
+                module m
+                %s
+                behavior f : (xs: List<Int>) -> Answer
+                let f (xs) = if List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, xs) >= 3
+                    then Yes else No
                 """.formatted(ANSWER)));
         // A rule about a value an operation made of a position. Where the value came from is known;
         // what the rule says about the values there is not, because the value is one the body
@@ -430,6 +474,39 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     if List.any(positive, xs) && List.any(positive, ys) then Yes else No
                 }
                 """.formatted(ANSWER)));
+        // A value chosen by a membership of a list and held to a membership of the same list: the
+        // two memberships are two elements of one list, which no form over its position holds.
+        out.put(UndividedPosition.Reason.RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER, of("""
+                module m
+
+                behavior f : (hs: List<Int>, ns: List<Int>) -> List<Int>
+                let f (hs, ns) =
+                    ns
+                        |> List.map(n -> if Bool.not(List.contains(n, hs)) then n else n + 1)
+                        |> List.filter(d -> List.contains(d, hs))
+                """));
+        // A number of a range's element held to a membership, behind a walk that stops at the
+        // first element that holds: a remainder whose dividend is a number the body works out and
+        // no position holds, and which a run does not make on every element the walk is handed.
+        out.put(UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS, of("""
+                module m
+
+                behavior f : (hs: Set<Int>, from: Int, days: Int) -> Int
+                let f (hs, from, days) =
+                    List.rangeInclusive(0, days)
+                        |> List.map(n -> if Int.floorMod(from + n, 7) >= 1 && Bool.not(Set.contains(from + n, hs)) then from + n else from + n + 1)
+                        |> List.find(d -> Set.contains(d, hs))
+                        |> Option.withDefault(0)
+                """));
+        // The sum over what the option holds stops where that is the greatest Int, and is worked
+        // out on the arm that opens it, which no row of the input is asked to take.
+        out.put(UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ, of("""
+                module m
+
+                behavior f : (ds: List<Int>) -> Int
+                let f (ds) =
+                    if Option.withDefault(0, List.max(ds)) + 1 <= 10 then 1 else 2
+                """));
         // Read to the end, and the positions cancel: the rule is about the position and the
         // quantity it cuts is nothing.
         out.put(UndividedPosition.Reason.RULE_CUTS_NOTHING, of("""
@@ -490,7 +567,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 %s
                 behavior f : (a: Int, b: Int, c: Int) -> Answer
                 let f (a, b, c) = {
-                    let p = a * b
+                    let p = a * b * a
                     let q = Int.floorMod(a, b)
                     if Int.max(p, q) <= c then Yes else No
                 }
@@ -573,7 +650,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
             if (witness.allowance() instanceof Allowance.AsACompilationDoes) {
                 return;
             }
-            Set<String> written = wordsWritten(of(witness.source()));
+            Set<String> written = wordsWritten(ofRefused(witness.source(), witness.refusedFor()));
             if (written.contains(AdequacyReport.word(reason))) {
                 reached.put(AdequacyReport.word(reason), written);
             }
@@ -598,7 +675,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     compilation.withReadingPolicy(reading);
         };
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        compilation = ACompiledModel.refusedWith(witness.refusedFor(), compilation);
         Set<String> out = new LinkedHashSet<>();
         collect(JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()))),
                 out);

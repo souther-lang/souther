@@ -1,6 +1,7 @@
 package souther.runtime;
 
 import org.junit.jupiter.api.Test;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -159,13 +160,16 @@ class ARationalHoldsOneRepresentationOfEachValueTest {
      *
      * <p>The value below is odd and no multiple of five, so nothing about it comes off into an exponent and
      * it is stored as it was written. It stands where a bound on the parts would most plausibly have been put
-     * — a sixteenth of what the platform counts — and it is a value, it widens from the decimal it is the
-     * unscaled value of, and it compares.
+     * — past the most digits a value is spelled out in, which is the one bound on a number's size that
+     * this run time already has, and which a bound on the parts could be mistaken for or copied from. Four
+     * bits to each of those digits is more than the digits take, and a part of fewer bits would not tell a
+     * bound at that limit from none. It is a value, it widens from the decimal it is the unscaled value of,
+     * and it compares.
      */
     @Test
     void aPartOfAnySizeThePlatformHoldsIsAValue() {
-        int aSixteenthOfWhatThePlatformCounts = Integer.MAX_VALUE / 16;
-        BigInteger wide = BigInteger.ONE.shiftLeft(aSixteenthOfWhatThePlatformCounts + 1)
+        int pastTheMostDigitsSpeltOut = 4 * ExactDecimals.MAX_SPELT_OUT_DIGITS;
+        BigInteger wide = BigInteger.ONE.shiftLeft(pastTheMostDigitsSpeltOut + 1)
                 .subtract(BigInteger.valueOf(3));
         assertTrue(wide.testBit(0) && wide.mod(BigInteger.valueOf(5)).signum() != 0,
                 "nothing about it comes off into an exponent");

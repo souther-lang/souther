@@ -2,11 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,14 +39,14 @@ class OneMeasurementIsPairedWithOneReadingInOnePlaceTest {
     private static final String MINTED = "MeasuredInput.of(";
 
     @Test
-    void oneProductionPlaceMakesASubject() throws IOException {
+    void oneProductionPlaceMakesASubject() {
         List<Path> sources = REPOSITORY.mainJavaSources();
         assertTrue(sources.size() > 20,
                 () -> "the scan found only " + sources.size() + " sources, which is not the tree");
 
         List<String> makes = new ArrayList<>();
         for (Path source : sources) {
-            String text = code(Files.readString(source, StandardCharsets.UTF_8));
+            String text = code(RepositoryJavaSources.forThisFork().mainText(source));
             if (text.contains(MINTED)) {
                 makes.add(source.getParent().getFileName() + "/" + source.getFileName());
             }

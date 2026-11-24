@@ -172,8 +172,8 @@ class CrossProjectImportTest {
     }
 
     private static Compilation compiledAgainst(ModulePath path, String... sources) {
-        return Compiler.compiled(CompilationSources.modules(List.of(sources)), path,
-                new ArrayList<>());
+        return ACompiledModel.compiles(Compiler.compiled(CompilationSources.modules(List.of(sources)),
+                path, new ArrayList<>()));
     }
 
     private static Map<String, ClassFileImage> linked(Compilation compilation) {

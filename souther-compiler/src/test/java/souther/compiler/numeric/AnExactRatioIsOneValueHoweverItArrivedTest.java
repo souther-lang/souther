@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
+import souther.test.Allocated;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -9,6 +10,7 @@ import java.math.RoundingMode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -69,6 +71,92 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertEquals(ExactRatio.of(300), ExactRatio.of(new BigDecimal("3E+2")),
                 "a negative scale is a whole number written as a multiple of ten");
         assertEquals(ratio(-7, 100), ExactRatio.of(new BigDecimal("-0.07")));
+    }
+
+    @Test
+    void aDecimalAskedAgainOrAfterOthersFillTheSlotsIsTheSameValue() {
+        BigDecimal asked = new BigDecimal("0.125");
+        ExactRatio first = ExactRatio.of(asked);
+        assertSame(first, ExactRatio.of(new BigDecimal("0.125")),
+                "the same decimal in a new object is the ratio made before");
+        assertEquals(first, ExactRatio.of(new BigDecimal("0.1250")),
+                "a spelling with another scale is the same value, kept or not");
+        // far more decimals than slots, so most slots are overwritten and some decimals collide
+        for (int n = -20_000; n <= 20_000; n++) {
+            BigDecimal decimal = BigDecimal.valueOf(n, 3);
+            assertEquals(ratio(n, 1000), ExactRatio.of(decimal), decimal.toString());
+        }
+        assertEquals(first, ExactRatio.of(asked));
+    }
+
+    private static final int ASKS = 2_000;
+
+    /** The bytes this thread allocates while {@code asking} runs the second time, the first having
+     *  paid for whatever the code allocates once, in loading and linking it. */
+    private static long allocatedBy(Runnable asking) {
+        asking.run();
+        return Allocated.byWhichMayBeNothing(asking);
+    }
+
+    @Test
+    void aDecimalAskedAgainIsNotConvertedAgain() {
+        BigDecimal[] asks = new BigDecimal[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            asks[i] = new BigDecimal("12345.6789");
+        }
+        ExactRatio kept = ExactRatio.of(asks[0]);
+        long allocated = allocatedBy(() -> {
+            for (BigDecimal ask : asks) {
+                assertSame(kept, ExactRatio.of(ask));
+            }
+        });
+        assertTrue(allocated < ASKS,
+                "a ratio found by its decimal allocates nothing per ask, and " + allocated
+                        + " bytes were allocated for " + ASKS + " asks");
+    }
+
+    @Test
+    void twoDecimalsOfOneHashAskedInTurnAreNotConvertedAgain() {
+        // the pair a compile asks for in turn, which fall in one set of the table
+        BigDecimal zero = BigDecimal.valueOf(0);
+        BigDecimal least = BigDecimal.valueOf(Long.MIN_VALUE);
+        ExactRatio keptZero = ExactRatio.of(zero);
+        ExactRatio keptLeast = ExactRatio.of(least);
+        long allocated = allocatedBy(() -> {
+            for (int i = 0; i < ASKS; i++) {
+                assertSame(keptZero, ExactRatio.of(zero));
+                assertSame(keptLeast, ExactRatio.of(least));
+            }
+        });
+        assertTrue(allocated < ASKS,
+                "two decimals that hash alike keep their ratios, and " + allocated
+                        + " bytes were allocated for " + 2 * ASKS + " asks");
+    }
+
+    @Test
+    void aWholeNumberAskedAgainIsNotConvertedAgain() {
+        BigInteger[] asks = new BigInteger[ASKS];
+        for (int i = 0; i < ASKS; i++) {
+            asks[i] = new BigInteger("123456789012345678901234567890");
+        }
+        ExactRatio kept = ExactRatio.of(asks[0]);
+        long allocated = allocatedBy(() -> {
+            for (BigInteger ask : asks) {
+                assertSame(kept, ExactRatio.of(ask));
+            }
+        });
+        assertTrue(allocated < ASKS,
+                "a ratio found by its whole number allocates nothing per ask, and " + allocated
+                        + " bytes were allocated for " + ASKS + " asks");
+    }
+
+    @Test
+    void aDecimalTooLongToKeepIsConvertedAllTheSame() {
+        BigDecimal tooLong = new BigDecimal("1." + "0".repeat(120) + "5");
+        BigInteger denominator = BigInteger.TEN.pow(121);
+        assertEquals(ExactRatio.of(denominator.add(BigInteger.valueOf(5)), denominator),
+                ExactRatio.of(tooLong));
+        assertEquals(ExactRatio.of(tooLong), ExactRatio.of(tooLong));
     }
 
     @Test

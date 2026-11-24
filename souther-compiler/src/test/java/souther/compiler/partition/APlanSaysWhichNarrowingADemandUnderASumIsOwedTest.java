@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
@@ -227,7 +228,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 Requirements.NONE, ConstructionPlan.ContentsComposed.NONE,
                 (at, _) -> ConstructionPlan.ItMayHold.counting(at.equals(bag)
                         ? new DeclaredBounds.CountRange(0, 0)
-                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE)));
+                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE)), _ -> false);
 
         assertInstanceOf(ConstructionPlan.ModelRefusal.NoRoom.class,
                 assertInstanceOf(ConstructionPlan.Result.Refused.class, asked,
@@ -252,7 +253,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 ScopedDeclarations.sumsOf(symbolsOf(BESIDE_A_LIST)),
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         TermPath.of("query").then("item").then("bag").element()),
-                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY);
+                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
 
         assertEquals(TermPath.of("query").then("item").then("method"),
                 assertInstanceOf(ConstructionPlan.Result.Unnarrowed.class, asked,
@@ -277,7 +278,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 ScopedDeclarations.wrapsOf(symbolsOf(source)), symbolsOf(source),
                 ScopedDeclarations.kindsOf(symbolsOf(source)),
                 ScopedDeclarations.sumsOf(symbolsOf(source)), decided, Requirements.NONE,
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
     }
 
     private static Type typeOf(String source) {
@@ -291,8 +292,8 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
     private record Read(Sig sig, Symbols symbols) {}
 
     private static Read readOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

@@ -1,15 +1,20 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.TypeView;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.coverage.SeenComparison;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.BorderQuantity.Lastness;
-import souther.compiler.types.Type;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -209,6 +214,73 @@ public final class StandingAtAPoint {
         return putToRows(line, watched).met(observed, criterion);
     }
 
+    /** What a statement comes to at one row, read over the whole row. */
+    enum AtTheRow { HOLDS, FAILS, COULD_NOT_TELL }
+
+    /**
+     * The order of the elements of one container that a map filed from them is read in: which of
+     * the elements holding one value at {@code position} is the entry under it.
+     *
+     * <p>What a statement of the last to hold rests on, and the unit a row may be read the other
+     * way round in ({@link #atTheRow}): one container's order and no other's.
+     */
+    record OrderOfAKey(TermPath container, TermPath position) {
+
+        /** The order {@code last} rests on, or null where it is about a place no row writes. */
+        static OrderOfAKey of(Proposition.LastToHold last) {
+            return last.container() instanceof DecisionSubject.AnInput(TermPath container, var _)
+                    && last.position() instanceof DecisionSubject.AnInput(TermPath position, var _)
+                    ? new OrderOfAKey(container, position) : null;
+        }
+    }
+
+    /**
+     * What {@code stated} comes to at the row {@code observed} wrote, read over the whole row with
+     * no element of any container chosen — a statement about elements asks them itself.
+     *
+     * @param readTheOtherWay the orders read with the first element of a key as its entry rather
+     *                        than the last: what the statement would come to were those, and no
+     *                        others, the other way round
+     */
+    static AtTheRow atTheRow(Proposition stated, String behavior, Quantities quantities,
+                             BehaviorInputs where, ObservedInputs observed,
+                             Set<OrderOfAKey> readTheOtherWay) {
+        if (!AStatementAtARow.askable(stated)) {
+            return AtTheRow.COULD_NOT_TELL;
+        }
+        AStatementAtARow asked = AStatementAtARow.of(stated, behavior, quantities);
+        RowWalk walk = new RowWalk(where, observed, readTheOtherWay);
+        DiscoveringRow discovering = new DiscoveringRow(walk);
+        asked.lookAt(discovering);
+        Map<TermPath, Integer> containers = discovering.containers();
+        // Positions of the statement inside a container no quantifier of it ranges over stand for
+        // an element of it, so the statement is about the row where some element of each is
+        // chosen: it holds where a reading holds, as a line is met where a reading stands.
+        if (containers.isEmpty()) {
+            return atTheRow(asked.at(discovering));
+        }
+        boolean couldNotTell = false;
+        for (Map<TermPath, Integer> choice : readingsOver(containers)) {
+            switch (atTheRow(asked.at(new OneReadingOfARow(walk, choice)))) {
+                case HOLDS -> {
+                    return AtTheRow.HOLDS;
+                }
+                case COULD_NOT_TELL -> couldNotTell = true;
+                case FAILS -> { }
+            }
+        }
+        return couldNotTell || containersAllowMoreThan(containers, MOST_READINGS)
+                ? AtTheRow.COULD_NOT_TELL : AtTheRow.FAILS;
+    }
+
+    private static AtTheRow atTheRow(AStatementAtARow.Answer answer) {
+        return switch (answer) {
+            case AStatementAtARow.Answer.Holds _ -> AtTheRow.HOLDS;
+            case AStatementAtARow.Answer.Fails _ -> AtTheRow.FAILS;
+            case AStatementAtARow.Answer.CouldNotTell _ -> AtTheRow.COULD_NOT_TELL;
+        };
+    }
+
     /**
      * {@code line} put to rows, for as many rows and points as a caller asks of it: where it
      * decides and which elements a run meets its rule on are read once, and not once for every
@@ -218,7 +290,7 @@ public final class StandingAtAPoint {
      */
     public static AtALine putToRows(MeasuredInput.BorderReading line,
                                     List<ConditionOutcomeSite> watched) {
-        return new AtALine(line, watched, whereItDecides(line), metOn(line));
+        return new AtALine(line, watched, whereItDecides(line), metOn(line), Optional.empty());
     }
 
     /** One line put to rows ({@link #putToRows}). */
@@ -231,30 +303,256 @@ public final class StandingAtAPoint {
         private final Optional<WhereAPartDecides.AskedOfRows> decides;
         /** Which elements of the input a run gets an answer out of the line's rule on. */
         private final MetOnARow reached;
+        /** For a point of a class the line cuts: what a row has to be for it. Empty for a point
+         *  against the line. */
+        private final Optional<AsAClass> asAClass;
+        /** Where the line decides, as a point of it is searched inside ({@link #caseItDecidesIn}). */
+        private final Optional<TheCaseALineDecidesIn> caseItDecidesIn;
 
         private AtALine(MeasuredInput.BorderReading line, List<ConditionOutcomeSite> watched,
-                        Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached) {
+                        Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
+                        Optional<AsAClass> asAClass) {
             this.line = line;
             this.watched = List.copyOf(watched);
             this.decides = decides;
             this.reached = reached;
+            this.asAClass = asAClass;
+            this.caseItDecidesIn = decides.isEmpty() ? Optional.empty()
+                    : line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                            ? comparison.part().map(part -> new TheCaseALineDecidesIn(
+                                    part.decides()))
+                            : Optional.empty();
+        }
+
+        /**
+         * What a row read back here has to meet for the line to decide at it, where it has to:
+         * the case of a statement of several the line is one line of. Nothing for a point of a
+         * class, which lies over the whole quantity, nor for a line that is a whole comparison's.
+         * One for this line put to rows, however many values a point of it is searched with.
+         */
+        public Optional<TheCaseALineDecidesIn> caseItDecidesIn() {
+            return caseItDecidesIn;
+        }
+
+        /**
+         * This line put to rows for a point of a class it cuts, the class where the rule
+         * {@code holds} or the one where it does not.
+         *
+         * <p>A row is at such a point by being in the class, by the run having had the rule come
+         * out as the class says on every application of it, and by lying in no case that another
+         * reading of the same comparison decides in. Where this line decides is no part of it: that
+         * says where this line falls, and a class lies over the whole of the quantity. A row in the
+         * case of another reading is a row of that reading's classes, and a row the rule comes out
+         * the other way for is at the other class or at none.
+         *
+         * <p>The same line where nothing records a run through the rule, which an invariant's is:
+         * there writing the value is the whole of reaching it.
+         *
+         * @param otherReadings the other readings of the comparison this line is a reading of
+         */
+        public AtALine forAClass(boolean holds, OtherReadings otherReadings) {
+            return watched.isEmpty() ? this
+                    : new AtALine(line, watched, Optional.empty(), reached,
+                            Optional.of(new AsAClass(holds, otherReadings)));
         }
 
         /** {@link StandingAtAPoint#met}, of this line. */
         public Met met(List<ObservedInputs> observed, Criterion criterion) {
-            return StandingAtAPoint.met(line, decides, reached, observed, criterion, watched);
+            return StandingAtAPoint.met(line, decides, reached, observed, criterion,
+                    new Arrival(watched, asAClass));
         }
 
         /** {@link StandingAtAPoint#valuesOf}, of this line. */
         public RowsRead valuesOf(List<ObservedInputs> observed) {
-            return StandingAtAPoint.valuesOf(line, decides, reached, observed, watched);
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed,
+                    new Arrival(watched, asAClass), Optional.empty());
         }
+
+        /**
+         * What the readings of the rows that stand at {@code criterion}'s point read as, and
+         * nothing of the readings that do not.
+         *
+         * <p>For a caller that holds the numbers of the rows at a point to the line: a row stands
+         * there by one of its readings, and the numbers of its other readings are not numbers at
+         * the point. {@link #valuesOf} reads every reading of the row that reached the rule and
+         * leaves it to the caller to know which of them stood, which is the same question asked a
+         * second time and answered by whatever the caller made of it.
+         */
+        public RowsRead valuesAt(List<ObservedInputs> observed, Criterion criterion) {
+            return StandingAtAPoint.valuesOf(line, decides, reached, observed,
+                    new Arrival(watched, asAClass), Optional.of(criterion));
+        }
+    }
+
+    /**
+     * The other readings of the comparison a line is a reading of, and where each decides, put to
+     * rows: a row in one of those cases is a row of that reading.
+     *
+     * <p>Put to rows once, when a point of a class first asks, and shared by every point and every
+     * row asked after: a border none of whose classes lies outside its case never pays for it.
+     */
+    public static final class OtherReadings {
+
+        private final Supplier<List<MeasuredInput.BorderReading>> making;
+        private List<Deciding> deciding;
+        private List<WhereAPartDecides.AskedOfRows> asked;
+
+        private OtherReadings(Supplier<List<MeasuredInput.BorderReading>> making) {
+            this.making = making;
+        }
+
+        /** The readings {@code making} names, worked out when first asked. */
+        public static OtherReadings of(Supplier<List<MeasuredInput.BorderReading>> making) {
+            return new OtherReadings(making);
+        }
+
+        /**
+         * The region {@code within} leaves outside every one of these readings' cases: where a row
+         * at a class of this line can be.
+         *
+         * <p>Taken from the same cases {@link #askedOfRows} asks of a row, so that what a search
+         * leaves out and what a row is refused for are one set.
+         */
+        public SearchRegion outsideTheCases(SearchRegion within) {
+            return OutsideTheOtherReadings.of(
+                    deciding().stream().map(each -> each.part().decides()).toList())
+                    .apply(within);
+        }
+
+        private List<Deciding> deciding() {
+            if (deciding == null) {
+                deciding = making.get().stream()
+                        .flatMap(each -> decidingIn(each).stream()).toList();
+            }
+            return deciding;
+        }
+
+        private List<WhereAPartDecides.AskedOfRows> askedOfRows() {
+            if (asked == null) {
+                asked = deciding().stream().map(Deciding::askedOfRows).toList();
+            }
+            return asked;
+        }
+    }
+
+    /** Where one reading of a comparison decides, and the reading it is a part of. */
+    private record Deciding(WhereAPartDecides part, MeasuredInput.BorderReading line) {
+
+        WhereAPartDecides.AskedOfRows askedOfRows() {
+            return part.askedOfRows(line.quantity().behavior(), line.subject());
+        }
+    }
+
+    /** Where the line {@code line} reads decides, or empty where the line is a whole comparison's
+     *  or no comparison's. */
+    private static Optional<Deciding> decidingIn(MeasuredInput.BorderReading line) {
+        return line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                ? comparison.part().map(part -> new Deciding(part, line))
+                : Optional.empty();
+    }
+
+    /**
+     * What a row has to be, beside lying in the class, to be at a point of a class a line cuts.
+     *
+     * @param holds  whether the class is the one where the rule holds
+     * @param others the other readings of the same comparison
+     */
+    private record AsAClass(boolean holds, OtherReadings others) {}
+
+    /**
+     * What a run has to have done at the places it is recorded at for a row to have reached the
+     * rule.
+     *
+     * @param watched  every place a run through the rule is recorded; empty where writing the
+     *                 value is the whole of reaching it
+     * @param asAClass for a point of a class the line cuts, what else a row is held to; empty
+     *                 where any answer reaches it
+     */
+    private record Arrival(List<ConditionOutcomeSite> watched, Optional<AsAClass> asAClass) {
+
+        /**
+         * Whether the run got to the rule, and for a point of a class whether it got the answer the
+         * class says out of it.
+         *
+         * <p>The run's record is of the places the comparison is made at, which are the copies of
+         * it, and not of the element a reading chose. All of them are read before any answer is:
+         * an answer at one place says nothing of which application belongs to the element while
+         * another place answered the other way. Where every application anywhere came out as the
+         * class says, the answer is that. Where all came out the other way, or none was made, it
+         * is no. Where applications came out both ways ({@link
+         * RulesTaken.ExecutionEvidence#BOTH_WAYS}), at one place or between places, or the visits
+         * to a place were not all kept, the record does not say which application belongs to the
+         * element: that is not told, and is neither of the others.
+         */
+        Arrived by(AlignedObservation account) {
+            return arrivedAt(watched, asAClass.map(AsAClass::holds), account);
+        }
+
+        List<WhereAPartDecides.AskedOfRows> elsewhere() {
+            return asAClass.map(as -> as.others().askedOfRows()).orElse(List.of());
+        }
+    }
+
+    /**
+     * What {@code account} says of a comparison recorded at {@code watched}: whether it was made,
+     * and where {@code holds} is given, whether every application of it came out that way.
+     *
+     * <p>Every place is read before an answer is given. The places are the copies of one
+     * comparison, and a record of any one says nothing of which application belongs to the
+     * element a reading chose while another place answered the other way.
+     */
+    static Arrived arrivedAt(List<ConditionOutcomeSite> watched, Optional<Boolean> holds,
+                             AlignedObservation account) {
+        if (holds.isEmpty()) {
+            return gotAnAnswerOutOfTheRule(watched, account) ? Arrived.MATCHED : Arrived.MISSED;
+        }
+        boolean asTheClassSays = false;
+        boolean theOtherWay = false;
+        boolean untold = false;
+        for (ConditionOutcomeSite site : watched) {
+            RulesTaken.ExecutionEvidence seen = RulesTaken.ExecutionEvidence.of(
+                    account.saw(site, holds.get()), account.saw(site, !holds.get()));
+            asTheClassSays |= seen == RulesTaken.ExecutionEvidence.AS_THE_RULE_SAYS;
+            theOtherWay |= seen == RulesTaken.ExecutionEvidence.THE_OTHER_WAY;
+            untold |= seen == RulesTaken.ExecutionEvidence.BOTH_WAYS
+                    || (seen != RulesTaken.ExecutionEvidence.UNOBSERVED
+                            && !account.keptEveryVisit(site));
+        }
+        if (untold || (asTheClassSays && theOtherWay)) {
+            return new Arrived.Untold(Set.of(new ReadingGap.ReachNotRead(
+                    ReadingGap.ReachNotRead.Why.APPLICATIONS_NOT_TOLD_APART)));
+        }
+        return asTheClassSays ? Arrived.MATCHED : Arrived.MISSED;
+    }
+
+    /**
+     * What a run's record says of the comparison a point is read at, in the three answers it can
+     * give.
+     *
+     * <p>Named for the record and not for the point: whether a row stands at a point is {@link Met},
+     * and this is one thing it is made of. Reading one for the other is what these names keep apart.
+     */
+    sealed interface Arrived {
+
+        Arrived MATCHED = new Matched();
+
+        Arrived MISSED = new Missed();
+
+        /** The run made the comparison, and for a point of a class every time as the class says. */
+        record Matched() implements Arrived {}
+
+        /** It did not make it, or it came out another way every time. */
+        record Missed() implements Arrived {}
+
+        /** The record does not say which application belongs to the element a reading chose. */
+        record Untold(Set<ReadingGap> why) implements Arrived {}
     }
 
     private static Met met(MeasuredInput.BorderReading line,
                            Optional<WhereAPartDecides.AskedOfRows> decides, MetOnARow reached,
                            List<ObservedInputs> observed, Criterion criterion,
-                           List<ConditionOutcomeSite> watched) {
+                           Arrival arrival) {
+        List<ConditionOutcomeSite> watched = arrival.watched();
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -269,38 +567,15 @@ public final class StandingAtAPoint {
             // the readings are tried under each choice of an element of each.
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
-            Readings readings = readings(where, one, quantity, decides);
+            Readings readings =
+                    readings(where, one, quantity, decides, arrival.elsewhere(), watched);
             List<BorderQuantity.Observation> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
-                switch (quantity.standsAt(criterion, tried.get(which))) {
-                    // A reading that could not look. What the row wrote nothing at is not among
-                    // these: the quantity answers for the row there, since it is the quantity that
-                    // knows whether a position it wrote nothing at leaves it a value.
-                    case BorderQuantity.Stands.CouldNotTell it -> stopped.addAll(it.why());
-                    case BorderQuantity.Stands.No _ -> { }
-                    // And for a line of a statement of several, only somewhere the statement turns
-                    // on it: a row the statement answers alike on both sides of the line stands at
-                    // the line and says nothing about it.
-                    case BorderQuantity.Stands.Yes _ -> {
-                        BorderQuantity.Observation reading = tried.get(which);
-                        switch (decides.map(asked -> asked.at(reading))
-                                .orElse(WhereAPartDecides.AtARow.DECIDES)) {
-                            // And only through an element a run compared anything on: the
-                            // run getting an answer out of the rule on another element says
-                            // nothing of this one.
-                            case WhereAPartDecides.AtARow.Decides _ -> {
-                                switch (reached.at(reading)) {
-                                    case AStatementAtARow.Answer.Holds _ -> stands = true;
-                                    case AStatementAtARow.Answer.Fails _ -> { }
-                                    case AStatementAtARow.Answer.CouldNotTell(var why) ->
-                                            stopped.addAll(why);
-                                }
-                            }
-                            case WhereAPartDecides.AtARow.DecidesNothing _ -> { }
-                            case WhereAPartDecides.AtARow.CouldNotTell(var why) ->
-                                    stopped.addAll(why);
-                        }
-                    }
+                switch (stoodAt(quantity, criterion, tried.get(which), decides, reached,
+                        arrival.elsewhere())) {
+                    case Stood.Yes _ -> stands = true;
+                    case Stood.No _ -> { }
+                    case Stood.CouldNotTell it -> stopped.addAll(it.why());
                 }
                 if (stands) {
                     break;
@@ -312,8 +587,12 @@ public final class StandingAtAPoint {
                 }
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (gotAnAnswerOutOfTheRule(watched, account)) {
-                            return Met.REACHED;
+                        switch (arrival.by(account)) {
+                            case Arrived.Matched _ -> {
+                                return Met.REACHED;
+                            }
+                            case Arrived.Untold it -> unreadable.addAll(it.why());
+                            case Arrived.Missed _ -> { }
                         }
                     }
                     // It stands where the line is and nothing watched it get there. Said rather
@@ -338,6 +617,86 @@ public final class StandingAtAPoint {
             return new Met.CouldNotTell(unreadable, readTo);
         }
         return unwatched ? Met.NOT_WATCHED : Met.NOT_AT_POINT;
+    }
+
+    /**
+     * Whether one reading of a row stands at a point, which is the one definition both
+     * {@link #met} and {@link AtALine#valuesAt} ask: asked twice in two places, the reading that was found
+     * to stand and the reading whose numbers were taken could be two.
+     */
+    private sealed interface Stood {
+
+        /** The reading stands at the point, and the rule's comparison got an answer through it. */
+        record Yes() implements Stood {}
+
+        /** It does not. */
+        record No() implements Stood {}
+
+        /** Nothing could say, and why. */
+        record CouldNotTell(Set<ReadingGap> why) implements Stood {}
+    }
+
+    /**
+     * Whether a reading of a row stands at {@code criterion}'s point of the quantity and got an
+     * answer out of the line's rule there.
+     */
+    private static Stood stoodAt(BorderQuantity quantity, Criterion criterion,
+                                 BorderQuantity.Observation reading,
+                                 Optional<WhereAPartDecides.AskedOfRows> decides,
+                                 MetOnARow reached,
+                                 List<WhereAPartDecides.AskedOfRows> elsewhere) {
+        return switch (quantity.standsAt(criterion, reading)) {
+            // A reading that could not look. What the row wrote nothing at is not among these: the
+            // quantity answers for the row there, since it is the quantity that knows whether a
+            // position it wrote nothing at leaves it a value.
+            case BorderQuantity.Stands.CouldNotTell it -> new Stood.CouldNotTell(it.why());
+            case BorderQuantity.Stands.No _ -> new Stood.No();
+            case BorderQuantity.Stands.Yes _ -> answersHere(reading, decides, reached, elsewhere);
+        };
+    }
+
+    /**
+     * Whether a reading of a row is one the line's rule got an answer on.
+     *
+     * <p>For a line of a statement of several, only somewhere the statement turns on it: a row the
+     * statement answers alike on both sides of the line stands at the line and says nothing about
+     * it. And only through an element a run compared anything on: the run getting an answer out of
+     * the rule on another element says nothing of this one.
+     *
+     * <p>For a point of a class, in no case another reading of the comparison decides in
+     * ({@code elsewhere}): there the row belongs to that reading.
+     */
+    private static Stood answersHere(BorderQuantity.Observation reading,
+                                     Optional<WhereAPartDecides.AskedOfRows> decides,
+                                     MetOnARow reached,
+                                     List<WhereAPartDecides.AskedOfRows> elsewhere) {
+        for (WhereAPartDecides.AskedOfRows other : elsewhere) {
+            switch (other.at(reading)) {
+                case WhereAPartDecides.AtARow.Decides _ -> {
+                    return new Stood.No();
+                }
+                case WhereAPartDecides.AtARow.CouldNotTell(var why) -> {
+                    return new Stood.CouldNotTell(why);
+                }
+                case WhereAPartDecides.AtARow.DecidesNothing _ -> { }
+            }
+        }
+        return answersHere(reading, decides, reached);
+    }
+
+    private static Stood answersHere(BorderQuantity.Observation reading,
+                                     Optional<WhereAPartDecides.AskedOfRows> decides,
+                                     MetOnARow reached) {
+        return switch (decides.map(asked -> asked.at(reading))
+                .orElse(WhereAPartDecides.AtARow.DECIDES)) {
+            case WhereAPartDecides.AtARow.Decides _ -> switch (reached.at(reading)) {
+                case AStatementAtARow.Answer.Holds _ -> new Stood.Yes();
+                case AStatementAtARow.Answer.Fails _ -> new Stood.No();
+                case AStatementAtARow.Answer.CouldNotTell(var why) -> new Stood.CouldNotTell(why);
+            };
+            case WhereAPartDecides.AtARow.DecidesNothing _ -> new Stood.No();
+            case WhereAPartDecides.AtARow.CouldNotTell(var why) -> new Stood.CouldNotTell(why);
+        };
     }
 
     /**
@@ -380,7 +739,8 @@ public final class StandingAtAPoint {
     private static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                      Optional<WhereAPartDecides.AskedOfRows> decides,
                                      MetOnARow reached, List<ObservedInputs> observed,
-                                     List<ConditionOutcomeSite> watched) {
+                                     Arrival arrival, Optional<Criterion> at) {
+        List<ConditionOutcomeSite> watched = arrival.watched();
         // A row's numbers are read position by position, and only a form has positions to read
         // them at. A line on any other quantity is not one another line is written beside, and
         // the reader that would hold one against the rows asks that first.
@@ -398,8 +758,15 @@ public final class StandingAtAPoint {
             if (!watched.isEmpty()) {
                 switch (one.watched()) {
                     case Generator.Watched.Ran(var account) -> {
-                        if (!gotAnAnswerOutOfTheRule(watched, account)) {
-                            continue;   // it ran and never met this rule, so it says nothing here
+                        switch (arrival.by(account)) {
+                            case Arrived.Matched _ -> { }
+                            case Arrived.Missed _ -> {
+                                continue;   // it ran and never met this rule, so it says nothing
+                            }
+                            case Arrived.Untold it -> {
+                                unreadable.addAll(it.why());
+                                continue;
+                            }
                         }
                     }
                     case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> {
@@ -408,31 +775,26 @@ public final class StandingAtAPoint {
                     }
                 }
             }
-            Readings readings = readings(where, one, quantity, decides);
+            Readings readings =
+                    readings(where, one, quantity, decides, arrival.elsewhere(), watched);
             for (int which = 0; which < readings.tried().size(); which++) {
-                // Only where the statement turns on the line, for a line of a statement of several:
-                // a reading somewhere it does not says nothing about where this line falls.
+                // Only where the statement turns on the line, and only through an element the run
+                // met the rule on: a reading somewhere it does not says nothing about where this
+                // line falls, and its values there are no observation of this border. And, where
+                // the caller asks about one point, only a reading that stands at it — decided by
+                // the definition the walk for whether a row stands there uses.
                 BorderQuantity.Observation reading = readings.tried().get(which);
-                switch (decides.map(asked -> asked.at(reading))
-                        .orElse(WhereAPartDecides.AtARow.DECIDES)) {
-                    case WhereAPartDecides.AtARow.Decides _ -> { }
-                    case WhereAPartDecides.AtARow.DecidesNothing _ -> {
+                Stood stood = at.isPresent()
+                        ? stoodAt(quantity, at.get(), reading, decides, reached,
+                                arrival.elsewhere())
+                        : answersHere(reading, decides, reached, arrival.elsewhere());
+                switch (stood) {
+                    case Stood.Yes _ -> { }
+                    case Stood.No _ -> {
                         continue;
                     }
-                    case WhereAPartDecides.AtARow.CouldNotTell(var why) -> {
-                        unreadable.addAll(why);
-                        continue;
-                    }
-                }
-                // And only through an element the run met the rule on, for the reason a row that
-                // never met it is not read: its values there are no observation of this border.
-                switch (reached.at(reading)) {
-                    case AStatementAtARow.Answer.Holds _ -> { }
-                    case AStatementAtARow.Answer.Fails _ -> {
-                        continue;
-                    }
-                    case AStatementAtARow.Answer.CouldNotTell(var why) -> {
-                        unreadable.addAll(why);
+                    case Stood.CouldNotTell it -> {
+                        unreadable.addAll(it.why());
                         continue;
                     }
                 }
@@ -458,10 +820,7 @@ public final class StandingAtAPoint {
      */
     private static Optional<WhereAPartDecides.AskedOfRows> whereItDecides(
             MeasuredInput.BorderReading line) {
-        return line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
-                ? comparison.part().map(part -> part.askedOfRows(line.quantity().behavior(),
-                        line.subject().quantities()))
-                : Optional.empty();
+        return decidingIn(line).map(Deciding::askedOfRows);
     }
 
     /**
@@ -503,6 +862,21 @@ public final class StandingAtAPoint {
         public boolean everyOne() {
             return why.isEmpty() && !unwatched && tried instanceof ReadingsTried.EveryOne;
         }
+
+        /**
+         * These rows and {@code other}'s, which is what two readings of one line read between
+         * them: every row of either, whatever either went without, and every reading where both
+         * walked every one.
+         */
+        public RowsRead and(RowsRead other) {
+            List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> both =
+                    new ArrayList<>(each);
+            both.addAll(other.each);
+            Set<ReadingGap> without = new LinkedHashSet<>(why);
+            without.addAll(other.why);
+            return new RowsRead(both, without, tried.and(other.tried),
+                    unwatched || other.unwatched);
+        }
     }
 
     /**
@@ -526,7 +900,11 @@ public final class StandingAtAPoint {
 
         /** What this walk found at each path it was asked about, so that a row read once is read
          *  once however many quantities and items ask it. */
-        private final Map<TermPath, WalkResult<ObservationAtPoint>> found = new HashMap<>();
+        private final Map<TermPath, Found> found = new HashMap<>();
+
+        /** What the row wrote at a path, and what this walk made of it. Kept together because
+         *  both are asked at every asking, and each asking of a table by a path walks the path. */
+        private record Found(Written written, WalkResult<ObservationAtPoint> answer) {}
 
         WalkOfARow(RowWalk walk) {
             this.walk = walk;
@@ -535,6 +913,11 @@ public final class StandingAtAPoint {
         /** The walk over the row this is one of. */
         final RowWalk walk() {
             return walk;
+        }
+
+        @Override
+        public final Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
+            return walk.comparedOnTheRun();
         }
 
         /**
@@ -551,15 +934,19 @@ public final class StandingAtAPoint {
 
         @Override
         public final WalkResult<ObservationAtPoint> at(TermPath path) {
-            WalkResult<ObservationAtPoint> answer = found.computeIfAbsent(path, this::walkedTo);
+            Found had = found.get(path);
+            if (had == null) {
+                Written written = walk.at(path);
+                had = new Found(written, walkedTo(written));
+                found.put(path, had);
+            }
             // Asked every time, found before or not: the value under this walk's elements is what
             // they are, and an answer read of it turns on them.
-            walk.at(path).consultedBy(this);
-            return answer;
+            had.written().consultedBy(this);
+            return had.answer();
         }
 
-        private WalkResult<ObservationAtPoint> walkedTo(TermPath path) {
-            Written written = walk.at(path);
+        private WalkResult<ObservationAtPoint> walkedTo(Written written) {
             // Over the arms, so that a walk coming to answer a third way is one this has to be
             // taught about rather than one quietly read as a walk that could not be made.
             return switch (written.found()) {
@@ -642,9 +1029,10 @@ public final class StandingAtAPoint {
          * one's. A reading that chose no element of the container has none to be last.
          *
          * <p>A value any part of which could not be read, in this element or in one after it, is no
-         * value to be equal or unequal to another: it shows that the element is not the last only
-         * by another after it that was read whole and is equal, and shows that it is by nothing.
-         * What stopped it is said ({@link ReadingGap#ofAComparisonOf}).
+         * value to be equal or unequal to another, and nor is one whose equality as records is not
+         * its sameness: it shows that the element is not the last only by another after it that
+         * was read whole and is equal, and shows that it is by nothing. What kept it from being
+         * compared is said ({@link ReadingGap#ofComparingAsRecords(ObservedValue)}).
          *
          * <p>Worked out for every element of the occurrence at once, and kept for every reading
          * that chose alike where the working out asked.
@@ -655,7 +1043,7 @@ public final class StandingAtAPoint {
             if (mine == null) {
                 return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
             }
-            Map<Integer, Lastness> each = walk.kept(new LastOfItsValue(container, position), this,
+            Map<Integer, Lastness> each = walk.kept(new OrderOfAKey(container, position), this,
                     () -> lastnessOfEach(container, position));
             Lastness answer = each.get(mine);
             return answer != null ? answer : new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
@@ -667,7 +1055,8 @@ public final class StandingAtAPoint {
          * that holds nothing there, or for every element where the walk could not be made.
          *
          * <p>From the last element to the first, carrying what the elements after each hold: the
-         * values read whole, and the first in order that was not.
+         * values read whole, and the first in order that was not. Where the walk reads this order
+         * the other way, from the first to the last, so "after" is "before".
          */
         private Map<Integer, Lastness> lastnessOfEach(TermPath container, TermPath position) {
             Written written = walk.at(position);
@@ -685,9 +1074,10 @@ public final class StandingAtAPoint {
             Set<ObservedValue> readAfter = new HashSet<>();
             ReadingGap firstNotReadAfter = null;
             for (Map.Entry<Integer, List<ObservedValue>> element
-                    : byElement.descendingMap().entrySet()) {
+                    : (walk.readsTheOtherWay(new OrderOfAKey(container, position)) ? byElement
+                            : byElement.descendingMap()).entrySet()) {
                 ObservedValue held = element.getValue().getLast();
-                ReadingGap ownNotRead = ReadingGap.ofAComparisonOf(held);
+                ReadingGap ownNotRead = ReadingGap.ofComparingAsRecords(held);
                 // One after it that was read and is equal settles it, whatever else was not.
                 out.put(element.getKey(), ownNotRead != null ? new Lastness.CouldNotTell(ownNotRead)
                         : readAfter.contains(held) ? new Lastness.NotLast()
@@ -695,7 +1085,7 @@ public final class StandingAtAPoint {
                         : new Lastness.Last());
                 ReadingGap firstNotReadHere = null;
                 for (ObservedValue value : element.getValue()) {
-                    ReadingGap notRead = ReadingGap.ofAComparisonOf(value);
+                    ReadingGap notRead = ReadingGap.ofComparingAsRecords(value);
                     if (notRead == null) {
                         readAfter.add(value);
                     } else if (firstNotReadHere == null) {
@@ -708,9 +1098,6 @@ public final class StandingAtAPoint {
             }
             return out;
         }
-
-        /** Whether each element of an occurrence is the last to hold its value at a position. */
-        private record LastOfItsValue(TermPath container, TermPath position) {}
 
         /**
          * The occurrence of {@code container} this reading is in — what it chose of every other
@@ -751,6 +1138,12 @@ public final class StandingAtAPoint {
         @Override
         public final <T> T keptOf(BorderQuantity.ReadAlike<T> asked) {
             return walk.kept(asked, this, () -> asked.readAt(this));
+        }
+
+        /** Nothing is fixed beside a row: every number of it is read off what it wrote. */
+        @Override
+        public final Place fixedAt(NumericTerm term) {
+            return null;
         }
 
         /**
@@ -796,9 +1189,17 @@ public final class StandingAtAPoint {
         /** How many elements each container was found to hold, in the order the walk met them,
          *  which is the order the readings are taken in. */
         private final Map<TermPath, Integer> containers = new LinkedHashMap<>();
+        /** The quantities looked at: the same quantity is asked for by every statement holding
+         *  it. */
+        private final Set<LinearQuantity> lookedAt = new HashSet<>();
 
         DiscoveringRow(RowWalk walk) {
             super(walk);
+        }
+
+        @Override
+        public boolean firstLookAt(LinearQuantity quantity) {
+            return lookedAt.add(quantity);
         }
 
         @Override
@@ -931,9 +1332,6 @@ public final class StandingAtAPoint {
         private final BehaviorInputs where;
         private final ObservedInputs observed;
 
-        /** What each type is under the declarations, for every walk into the row. */
-        private final Map<Type, TypeView> views = new HashMap<>();
-
         private final Map<TermPath, Written> written = new HashMap<>();
 
         /**
@@ -951,16 +1349,66 @@ public final class StandingAtAPoint {
         /** How many answers were read rather than taken from those kept. */
         private long read;
 
+        /**
+         * The orders read with the first element of a key as its entry rather than the last: the
+         * row as a map filed the other way round would hold it. None for a row read as it is.
+         */
+        private final Set<OrderOfAKey> readTheOtherWay;
+
+        /** Where a run through the comparison the line being read was drawn from is recorded,
+         *  none for a line on no comparison a run records. */
+        private final List<ConditionOutcomeSite> recordedAt;
+
+        /** What {@link #comparedOnTheRun} answered, once it was asked; null before. */
+        private Optional<BorderQuantity.SidesOnARun> comparedOnTheRun;
+
         RowWalk(BehaviorInputs where, ObservedInputs observed) {
+            this(where, observed, Set.of());
+        }
+
+        RowWalk(BehaviorInputs where, ObservedInputs observed, Set<OrderOfAKey> readTheOtherWay) {
+            this(where, observed, readTheOtherWay, List.of());
+        }
+
+        RowWalk(BehaviorInputs where, ObservedInputs observed, Set<OrderOfAKey> readTheOtherWay,
+                List<ConditionOutcomeSite> recordedAt) {
             this.where = where;
             this.observed = observed;
+            this.readTheOtherWay = Set.copyOf(readTheOtherWay);
+            this.recordedAt = List.copyOf(recordedAt);
+        }
+
+        /**
+         * What the sides of the comparison came to on the row's run, every visit kept at every
+         * place it is recorded — or empty where the row's run was not watched.
+         */
+        Optional<BorderQuantity.SidesOnARun> comparedOnTheRun() {
+            // Every reading of the row asks, and the run is the row's: put together once.
+            if (comparedOnTheRun == null) {
+                if (observed.watched() instanceof Generator.Watched.Ran(AlignedObservation run)) {
+                    List<SeenComparison> out = new ArrayList<>();
+                    recordedAt.forEach(site -> out.addAll(run.comparedAt(site)));
+                    // Every place on its own word: one place visited past the kept leaves the
+                    // comparison's visits short, whatever the others kept between them.
+                    comparedOnTheRun = Optional.of(new BorderQuantity.SidesOnARun(out,
+                            recordedAt.stream().allMatch(run::keptEveryVisit)));
+                } else {
+                    comparedOnTheRun = Optional.empty();
+                }
+            }
+            return comparedOnTheRun;
+        }
+
+        /** Whether this walk reads {@code order} the other way round. */
+        boolean readsTheOtherWay(OrderOfAKey order) {
+            return readTheOtherWay.contains(order);
         }
 
         /** What the row wrote at {@code path}. */
         Written at(TermPath path) {
             Written known = written.get(path);
             if (known == null) {
-                known = new Written(this, where.occurrencesAt(observed.inputs(), path, views));
+                known = new Written(this, where.occurrencesAt(observed.inputs(), path));
                 written.put(path, known);
             }
             return known;
@@ -1413,21 +1861,27 @@ public final class StandingAtAPoint {
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity) {
-        return readings(where, observed, quantity, Optional.empty());
+        return readings(where, observed, quantity, Optional.empty(), List.of(), List.of());
     }
 
     /**
      * The same, with the containers where the line decides is read at chosen in each reading too:
      * a reading is one choice of an element in every container either is read at, so what the line
-     * reads and what is asked beside it are read of the same elements.
+     * reads and what is asked beside it are read of the same elements. {@code recordedAt} is where
+     * a run through the comparison the line was drawn from is recorded, which a number only a run
+     * works out is read at. {@code elsewhere} is where the other readings of the comparison
+     * decide, which a reading is asked of the same way.
      */
     private static Readings readings(BehaviorInputs where, ObservedInputs observed,
                                      BorderQuantity quantity,
-                                     Optional<WhereAPartDecides.AskedOfRows> decides) {
-        RowWalk walk = new RowWalk(where, observed);
+                                     Optional<WhereAPartDecides.AskedOfRows> decides,
+                                     List<WhereAPartDecides.AskedOfRows> elsewhere,
+                                     List<ConditionOutcomeSite> recordedAt) {
+        RowWalk walk = new RowWalk(where, observed, Set.of(), recordedAt);
         DiscoveringRow discovering = new DiscoveringRow(walk);
         quantity.lookAt(discovering);
         decides.ifPresent(asked -> asked.lookAt(discovering));
+        elsewhere.forEach(asked -> asked.lookAt(discovering));
         Map<TermPath, Integer> containers = discovering.containers();
         // The walk the containers were found by, where it is also a reading the point is tried
         // against. Where the row's positions are inside no container there is one choice and it is

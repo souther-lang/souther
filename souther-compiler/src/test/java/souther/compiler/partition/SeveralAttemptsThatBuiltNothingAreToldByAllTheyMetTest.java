@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -31,12 +32,14 @@ class SeveralAttemptsThatBuiltNothingAreToldByAllTheyMetTest {
 
     private static TermRealizations.Realization someOfThem() {
         return new TermRealizations.Realization.Unexhausted(CompositionShortfall.writing(
-                Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)), "walked some");
+                Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)),
+                new SearchMessage.Code("walked some"));
     }
 
     private static TermRealizations.Realization nothing() {
         return new TermRealizations.Realization.None(
-                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, "nothing");
+                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                new SearchMessage.Code("nothing"));
     }
 
     @Test
@@ -79,7 +82,7 @@ class SeveralAttemptsThatBuiltNothingAreToldByAllTheyMetTest {
                 TermRealizations.Realization.Unexhausted.class,
                 attempts.came(CompositionShortfall.NONE, nothing()));
 
-        assertEquals("walked some", told.detail());
+        assertEquals(new SearchMessage.Code("walked some"), told.detail());
     }
 
     @Test
@@ -117,7 +120,7 @@ class SeveralAttemptsThatBuiltNothingAreToldByAllTheyMetTest {
         List<List<NumericSet>> wanted = List.of(List.of(new NumericSet.At(Count.of(1))));
         CardinalityComposer.ValuesCountedFor search = new CardinalityComposer.ValuesCountedFor(
                 values, wanted, NumericDomain.Bounds.OPEN,
-                List.of(Count.of(100), Count.of(101)), (counted, others) ->
+                List.of(Count.of(100), Count.of(101)), (counted, others, room) ->
                         calls.getAndIncrement() == 0 ? stopped() : nothing());
 
         search.counting(0, new ArrayList<>(), 0);

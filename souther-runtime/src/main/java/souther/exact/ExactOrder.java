@@ -118,7 +118,7 @@ final class ExactOrder {
 
     /** How many bits the parts a value stores take up, which is what holding it costs. */
     static long storedBits(ExactParts of) {
-        return (long) of.numerator().abs().bitLength() + of.denominator().bitLength();
+        return of.numeratorMagnitudeBits() + of.denominatorBits();
     }
 
     /**

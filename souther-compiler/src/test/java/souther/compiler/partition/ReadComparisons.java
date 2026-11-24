@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementProvenance;
@@ -33,11 +34,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
 
     static ReadComparisons of(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " "
-                                + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -50,7 +47,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                         inputs.declared(rules), checked.elementBindings().get(behavior),
                         ValueDefinitions.of(checked.analysisBodies().get(behavior),
                                 rules.newtypes()),
-                        inputs.dependencies())).comparisons(),
+                        inputs.dependencies()), ComparisonWitnesses.AtComparisons.NONE).comparisons(),
                 inputs, rules);
     }
 
@@ -59,12 +56,15 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
      * as themselves — which is the tree a module's comparisons are read off when it is measured.
      */
     static ReadComparisons ofTheAnalysis(String source, String behavior) {
+        return ofTheAnalysis(source, behavior, ComparisonWitnesses.AtComparisons.NONE);
+    }
+
+    /** The same, with a witness of a count asked of {@code witnesses} where a reading asks for
+     *  one. */
+    static ReadComparisons ofTheAnalysis(String source, String behavior,
+                                         ComparisonWitnesses.AtComparisons witnesses) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " "
-                                + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -74,7 +74,8 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
         return new ReadComparisons(ComparisonReadings.of(behavior, analysis,
                 inputs.reading(rules), InputReads.ofParametersWhereCallsStand(
                         inputs.parameterReads(), inputs.declared(rules),
-                        ElementBindings.of(analysis, rules.newtypes()), inputs.dependencies()))
+                        ElementBindings.of(analysis, rules.newtypes()), inputs.dependencies()),
+                witnesses)
                 .comparisons(),
                 inputs, rules);
     }

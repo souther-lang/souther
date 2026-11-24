@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -103,9 +105,8 @@ class WrappingAValueDoesNotChangeWhatItsRulesAccountForTest {
     }
 
     private static List<BorderAssessment> boundariesOf(String declarations) {
-        Compilation compilation = Compilation.ofSource(sourceOf(declarations), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(sourceOf(declarations),
+                Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "example.wrapping");
         if (boundaries == null) {
@@ -117,15 +118,14 @@ class WrappingAValueDoesNotChangeWhatItsRulesAccountForTest {
     /** What the rules leave the value standing at the position, once every one of them has been
      *  read. The clauses here are about that number and nothing counts an {@code Int}. */
     private static NumericDomain.Bounds rangeOf(String declarations) {
-        Compilation compilation = Compilation.ofSource(sourceOf(declarations), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(sourceOf(declarations));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TermPath path = TermPath.of("n");
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(sigs.get("take"), reading,
                         TypeCardinality.Counts.workedOutIn(reading), Membership.none())
                 .at(path).boundsFor(new NumericTerm.ValueOf(path)).rangeLeft();

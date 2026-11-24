@@ -7,6 +7,7 @@ import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.MaterialisationSite;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ReferenceOrigin;
 
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * arrives as a compile error; it says nothing about a component added to a kind that is already
  * there. So the population is the components themselves, as the record declares them, and each is
  * asked which of the two it is by its type. What says where a node stands is the position every node
- * carries, the occurrence a comparison is of the model, the construction a written temporal was
+ * carries, the occurrence a comparison is of the model, the copy a negation stands in, the construction a written temporal was
  * spelled with, the two values a fork and a kept call hold their pairs in, and the region a build of
  * a value stands in. Everything else is what the term says.
  *
@@ -57,6 +58,7 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
     private static final Set<Class<?>> WHERE_IT_STANDS = Set.of(
             SourcePos.class,
             ConstructOccurrence.class,
+            OccurrenceLineage.class,
             ApplicationOrigin.class,
             ReferenceOrigin.class,
             Core.ForkPlace.class,

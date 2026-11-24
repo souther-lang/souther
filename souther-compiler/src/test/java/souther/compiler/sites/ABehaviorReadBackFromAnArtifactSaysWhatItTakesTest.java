@@ -1,5 +1,6 @@
 package souther.compiler.sites;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.SourcePos;
@@ -62,10 +63,8 @@ class ABehaviorReadBackFromAnArtifactSaysWhatItTakesTest {
 
     private static Compilation compiled() {
         ModulePath published = ModulePath.of(Compiler.compile(LIBRARY));
-        Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", CONSUMER), Set.of(), published);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("a.sou", CONSUMER), Set.of(), published));
     }
 
     @Test

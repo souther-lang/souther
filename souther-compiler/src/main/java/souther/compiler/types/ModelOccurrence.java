@@ -118,6 +118,33 @@ public record ModelOccurrence(SourceConstructOrigin origin, ExpansionLineage lin
     }
 
     /**
+     * Whether the one copy of the language's own operation {@code occurrence} stands in was made
+     * by a call the model wrote.
+     *
+     * <p>What an operation's fork decides by is what its caller handed it, so whose decision the
+     * fork is turns on who made that call. {@code Map.filterEntries} called by the model is handed
+     * the model's rule; called by {@code Map.intersection}, it is handed the library's, and the
+     * model only chose {@code intersection}. Asked of the copies and not of the rule's text: the
+     * copies say who called, wherever the rule ended up being written.
+     *
+     * <p>False where the construct stands in no copy of an operation, which is a construct the
+     * model states ({@link #statedAt}) and has no caller to ask about, and false where it stands
+     * in more than one: an operation reached through another is called by that other.
+     */
+    public static boolean calledByTheModel(ConstructOccurrence occurrence) {
+        ExpansionLineage.Expansion only = null;
+        for (ExpansionLineage.Expansion each : openAt(occurrence)) {
+            if (each.expanded() instanceof ValueName.Stdlib.Operation) {
+                if (only != null) {
+                    return false;
+                }
+                only = each;
+            }
+        }
+        return only != null && only.at() instanceof ExpansionSite.Written;
+    }
+
+    /**
      * The copies {@code occurrence} still stands in, the innermost on top: every copy made on the
      * way to it, less those a block handed over has crossed out of.
      */

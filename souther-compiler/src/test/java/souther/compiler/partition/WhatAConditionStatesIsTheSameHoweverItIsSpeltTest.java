@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -15,6 +16,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -22,6 +24,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -91,17 +94,53 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
      */
     @Test
     void whatNoElementDecidesIsNoPartOfWhatSomeElementMeets() {
-        String fixed = "String.startsWith(\"a\", \"ab\")";
-        assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
-                stated("List.any(v -> " + fixed + ", b.xs)"));
-        assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
-                stated("Bool.not(List.isEmpty(List.filter(v -> " + fixed + ", b.xs)))"));
-        assertEquals(stated("(" + fixed + " && Bool.not(List.isEmpty(b.xs))) || List.any(v -> v > 0, b.xs)"),
-                stated("List.any(v -> " + fixed + " || v > 0, b.xs)"),
-                "a disjunction is some element meeting one part or some element meeting the other");
-        assertEquals(stated(fixed + " && List.any(v -> v > 0, b.xs)"),
-                stated("List.any(v -> " + fixed + " && v > 0, b.xs)"),
-                "a part no element decides comes out of a conjunction the element does");
+        for (String fixed : List.of("String.startsWith(\"a\", \"ab\")", "b.x > 0")) {
+            assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
+                    stated("List.any(v -> " + fixed + ", b.xs)"), fixed);
+            assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
+                    stated("Bool.not(List.isEmpty(List.filter(v -> " + fixed + ", b.xs)))"), fixed);
+            assertEquals(stated("(" + fixed + " && Bool.not(List.isEmpty(b.xs)))"
+                            + " || List.any(v -> v > 0, b.xs)"),
+                    stated("List.any(v -> " + fixed + " || v > 0, b.xs)"),
+                    "a disjunction is some element meeting one part or some element meeting the"
+                            + " other: " + fixed);
+            assertEquals(stated(fixed + " && List.any(v -> v > 0, b.xs)"),
+                    stated("List.any(v -> " + fixed + " && v > 0, b.xs)"),
+                    "a part no element decides comes out of a conjunction the element does: "
+                            + fixed);
+        }
+    }
+
+    /**
+     * Some element meeting anything says nothing beside the container holding something, and no
+     * element meeting it nothing beside the container holding nothing. Kept, a part that always
+     * holds came out two ways by whether it was written inside the quantifier or outside it.
+     */
+    @Test
+    void someElementSaysNothingBesideTheContainerHoldingSomething() {
+        Proposition holding = stated("Bool.not(List.isEmpty(b.xs))");
+        assertEquals(holding, stated("List.any(v -> true || v > 0, b.xs)"));
+        assertEquals(holding,
+                stated("(true && Bool.not(List.isEmpty(b.xs))) || List.any(v -> v > 0, b.xs)"));
+        assertEquals(holding.denied(), stated("List.isEmpty(b.xs) && List.all(v -> v <= 0, b.xs)"));
+        assertInstanceOf(Proposition.Any.class,
+                stated("Bool.not(List.isEmpty(b.xs)) || List.any(v -> v.price > 0, b.items)"),
+                "an element of another container is no element of this one");
+        assertInstanceOf(Proposition.Any.class,
+                stated("List.isEmpty(b.xs) || List.any(v -> v > 0, b.xs)"),
+                "nor does the container holding nothing say whether some element meets it");
+    }
+
+    /** And the same of a list a dependency answers, which is a container as the input's is. */
+    @Test
+    void someElementOfAnAnswerSaysNothingBesideItHoldingSomething() {
+        Proposition holding = statedOfAnAnswer("Bool.not(List.isEmpty(xs))");
+        assertEquals(holding, statedOfAnAnswer("List.any(v -> true || v > 0, xs)"));
+        assertEquals(holding, statedOfAnAnswer(
+                "Bool.not(List.isEmpty(xs)) || List.any(v -> v > 0, xs)"));
+        assertInstanceOf(Proposition.Any.class, statedOfAnAnswer(
+                        "List.isEmpty(xs) || List.any(v -> v > 0, xs)"),
+                "nor does the answer holding nothing say whether some element meets it");
     }
 
     @Test
@@ -290,12 +329,24 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         }
         // A walk adding one for every element counts them, and one adding two counts them twice;
         // so does a walk putting one more in what it carries, and one that doubles what it
-        // carries is no count of anything.
+        // carries is no count of anything — though whether it puts in any is, so held at least
+        // one it is whether the elements are there, and held beyond one it is the number the walk
+        // answers on a run, added to how many items there are, and no number of the elements.
         assertEquals(once, stated(
                 "List.fold((acc, e) -> acc + 1, 0, b.xs) + List.length(b.items) >= 1"));
         assertEquals(once, stated(sum.formatted("List.fold((acc, e) -> acc ++ [e], [], b.xs)")));
-        assertInstanceOf(Proposition.Unread.class,
-                stated(sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
+        assertEquals(stated("List.length(b.xs) >= 1 || List.length(b.items) >= 1"), stated(
+                sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
+        Proposition beyondOne = stated(sum.formatted(
+                "List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)").replace(">= 1", ">= 2"));
+        Set<Quantity> added = assertInstanceOf(Relation.Affine.class,
+                assertInstanceOf(Proposition.Compared.class, beyondOne).relation())
+                .form().coefs().keySet();
+        assertEquals(1, added.stream().filter(Quantity.OfACall.class::isInstance).count(),
+                () -> "what the one walk answers: " + beyondOne);
+        assertEquals(List.of("List.length(b.items)"), added.stream()
+                .filter(each -> !(each instanceof Quantity.OfACall)).map(Object::toString)
+                .toList(), () -> "and how many items there are: " + beyondOne);
         Proposition twice = stated(
                 "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
         assertEquals(twice, stated(
@@ -330,7 +381,7 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, flattened);
         assertTrue(((Relation.Affine) compared.relation()).form().coefs().keySet().stream()
                         .anyMatch(number -> number instanceof DecisionAtom.OfTheInput(
-                                NumericTerm.TakenOver over)
+                                NumericTerm.TakenOver over, var _)
                                 && over.source().equals(new RunSource.FlattenedOccurrences(
                                         TermPath.of("b").then("items").element().then("parts")
                                                 .element()))),
@@ -448,18 +499,51 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         assertEquals(2, all.parts().size());
     }
 
+    /**
+     * The cases of one condition are one statement whichever way they are written: an {@code if}
+     * on it, a list chosen by it, each case joined to its condition by "and" and the two by "or",
+     * and what follows from the condition and from its denial joined by "and".
+     */
+    @Test
+    void theCasesOfAConditionAreOneStatementInEverySpelling() {
+        String every = "i -> i.price >= 1";
+        Proposition chosen = stated("List.all(" + every
+                + ", if b.open then b.items else b.others)");
+        assertEquals(chosen, stated("if b.open then List.all(" + every + ", b.items)"
+                + " else List.all(" + every + ", b.others)"));
+        assertEquals(chosen, stated("(b.open && List.all(" + every + ", b.items))"
+                + " || (Bool.not(b.open) && List.all(" + every + ", b.others))"));
+        assertEquals(chosen, stated("(Bool.not(b.open) || List.all(" + every + ", b.items))"
+                + " && (b.open || List.all(" + every + ", b.others))"));
+    }
+
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */
     private static Proposition stated(String condition) {
-        String model = "module demo\n\n" + INPUT + """
+        return statedIn("module demo\n\n" + INPUT + """
 
                 behavior f : (b: Box) -> Int
                 let f (b) = if %s then 1 else 0
-                """.formatted(condition);
+                """.formatted(condition));
+    }
+
+    /** The same, of a condition over {@code xs}, which is what one call of a dependency answers:
+     *  two calls are two answers, so the list is handed over once. */
+    private static Proposition statedOfAnAnswer(String condition) {
+        return statedIn("module demo\n\n" + INPUT + """
+
+                behavior listed : (b: Box) -> List<Int>
+
+                let asked (xs: List<Int>) = %s
+
+                behavior f : (b: Box) -> Int
+                    depends on listed
+                let f (b, listed) = if asked(listed(b)) then 1 else 0
+                """.formatted(condition));
+    }
+
+    private static Proposition statedIn(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        // The errors of what was asked, which is the body checked: a model that does not check
-        // has no fork to read, whatever its condition says.
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -469,7 +553,11 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 inputs.dependencies());
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()),
                 "the body is the fork");
-        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())
-                .proposition();
+        Proposition stated =
+                Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())
+                        .proposition();
+        // A model that does not check has no fork to read, whatever its condition says.
+        ACompiledModel.compiles(compilation);
+        return stated;
     }
 }

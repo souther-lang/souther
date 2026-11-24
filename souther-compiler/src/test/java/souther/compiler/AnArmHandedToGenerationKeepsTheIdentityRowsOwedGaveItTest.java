@@ -124,7 +124,7 @@ class AnArmHandedToGenerationKeepsTheIdentityRowsOwedGaveItTest {
                                         PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE))))));
         Adequacy.Filling tampered = new Adequacy.Filling(tamperedFill,
                 Generator.GenerationResult.NONE, Adequacy.Generated.RowsForRules.NOTHING,
-                List.of());
+                Adequacy.Generated.RowsForCases.NOTHING, List.of(), List.of());
 
         Map<String, Adequacy.Filling> withTamperedPlan = new LinkedHashMap<>(generated);
         withTamperedPlan.put("feeFor", tampered);
@@ -144,9 +144,6 @@ class AnArmHandedToGenerationKeepsTheIdentityRowsOwedGaveItTest {
     }
 
     private static Compilation measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 }

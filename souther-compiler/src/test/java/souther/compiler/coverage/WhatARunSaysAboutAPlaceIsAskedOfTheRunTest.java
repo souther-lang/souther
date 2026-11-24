@@ -54,9 +54,12 @@ class WhatARunSaysAboutAPlaceIsAskedOfTheRunTest {
                     "the arms some row of the module reached, unioned over the rows: what it is"
                             + " building is a set of places, and it names none of its own to be"
                             + " wrong about"),
-            new Licence("souther.compiler.query.Adequacy.outcomesSeenIn -> outcomes", 1,
-                    "the ways some row of the module brought a condition out, unioned over the"
-                            + " rows the same way, for the proofs about them a run takes back"));
+            new Licence("souther.compiler.coverage.ReachEvidence.ofRuns -> arms", 1,
+                    "the arms some run of the module went through, unioned over the runs, for the"
+                            + " proofs about them a run takes back"),
+            new Licence("souther.compiler.coverage.ReachEvidence.ofRuns -> outcomes", 1,
+                    "the ways some run of the module brought a condition out, unioned over the"
+                            + " runs the same way, for the proofs about them a run takes back"));
 
     @Test
     void whatTakesThePlacesWholeIsGatheringThemAndSaysSo() {

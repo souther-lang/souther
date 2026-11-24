@@ -41,10 +41,14 @@ final class AnswerWalk {
      * What the walk found and how much of the store it went into, beside what it met on the way —
      * which is what says a walk reached the answers a caller is asking about at all.
      *
-     * @param opened how many things it went into what they hold, which counts neither a leaf nor
-     *               something it stopped at
+     * @param opened     how many things it went into what they hold, which counts neither a leaf
+     *                   nor something it stopped at
+     * @param passedOver every field it met and did not go into, the rest deciding it
+     *                   ({@link AnswerShape#passedOver}), as {@code Declaring#field}: what it
+     *                   was not asked about, which a register holds it to
      */
-    record Walked(int opened, Set<String> classes, Covered<Found> covered) {}
+    record Walked(int opened, Set<String> classes, Set<String> passedOver,
+                  Covered<Found> covered) {}
 
     private AnswerWalk() {
     }
@@ -54,12 +58,14 @@ final class AnswerWalk {
         List<Found> out = new ArrayList<>();
         List<Gap> gaps = new ArrayList<>();
         Set<String> classes = new LinkedHashSet<>();
+        Set<String> passedOver = new LinkedHashSet<>();
         int visited = 0;
         for (Map.Entry<Key<?>, Answer<?>> each : db.everyAnswer().entrySet()) {
             visited += into(each.getKey().getClass().getName(), each.getValue(), out, gaps,
-                    classes);
+                    classes, passedOver);
         }
-        return new Walked(visited, classes, Covered.of(List.copyOf(out), List.copyOf(gaps)));
+        return new Walked(visited, classes, passedOver,
+                Covered.of(List.copyOf(out), List.copyOf(gaps)));
     }
 
     /**
@@ -74,13 +80,15 @@ final class AnswerWalk {
         List<Found> out = new ArrayList<>();
         List<Gap> gaps = new ArrayList<>();
         Set<String> classes = new LinkedHashSet<>();
-        int visited = into(question, root, out, gaps, classes);
-        return new Walked(visited, classes, Covered.of(List.copyOf(out), List.copyOf(gaps)));
+        Set<String> passedOver = new LinkedHashSet<>();
+        int visited = into(question, root, out, gaps, classes, passedOver);
+        return new Walked(visited, classes, passedOver,
+                Covered.of(List.copyOf(out), List.copyOf(gaps)));
     }
 
     private static int into(String question, Object root, List<Found> out, List<Gap> gaps,
-                            Set<String> classes) {
-        OfOneStore facts = new OfOneStore(question, classes);
+                            Set<String> classes, Set<String> passedOver) {
+        OfOneStore facts = new OfOneStore(question, classes, passedOver);
         Traversal<Object, Locus> walk = new Traversal<>(facts);
         walk.at(root, Locus.ROOT);
         switch (walk.covered()) {
@@ -108,10 +116,12 @@ final class AnswerWalk {
 
         private final String question;
         private final Set<String> classes;
+        private final Set<String> passedOver;
 
-        OfOneStore(String question, Set<String> classes) {
+        OfOneStore(String question, Set<String> classes, Set<String> passedOver) {
             this.question = question;
             this.classes = classes;
+            this.passedOver = passedOver;
         }
 
         @Override
@@ -189,6 +199,9 @@ final class AnswerWalk {
         public Covered<WhatStandsHere.Under<Object, Locus>> members(Object node, Locus where) {
             List<WhatStandsHere.Under<Object, Locus>> out = new ArrayList<>();
             List<Gap> fellShort = new ArrayList<>();
+            for (Field field : AnswerShape.passedOver(node.getClass())) {
+                passedOver.add(field.getDeclaringClass().getName() + "#" + field.getName());
+            }
             for (Field field : AnswerShape.fieldsOf(node.getClass())) {
                 Locus at = where.thenMember(field.getDeclaringClass(), field.getName());
                 Object held;

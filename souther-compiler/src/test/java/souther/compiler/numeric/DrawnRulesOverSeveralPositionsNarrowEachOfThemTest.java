@@ -7,15 +7,12 @@ import souther.compiler.numeric.RulesAsWritten.Written;
 import souther.test.Nightly;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static souther.compiler.numeric.RulesAsWritten.admits;
 import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
 import static souther.compiler.numeric.RulesAsWritten.someRuleHoldsNever;
 
@@ -23,10 +20,11 @@ import static souther.compiler.numeric.RulesAsWritten.someRuleHoldsNever;
  * Rules over several positions, drawn at random, narrow each of them and never past what the rules
  * admit.
  *
- * <p>The claims are {@code ARuleOverSeveralPositionsNarrowsEachOfThemTest}'s — no point the rules
- * admit is refused, the reduction is the same whatever order the rules arrived in, and a narrower
- * box never says less — and so is the oracle, every point of a bounded range. What this adds is the
- * rules: the chosen systems there are written for the steps the reduction takes, and these are drawn
+ * <p>The claim is {@code ARuleOverSeveralPositionsNarrowsEachOfThemTest}'s: a narrower box never
+ * says less. That no point the rules admit is refused, and that the answer is the same whatever
+ * order the rules arrived in, are asked of rules drawn at random for every reader of rules, this
+ * one among them, in {@code EveryReaderOfDrawnRulesAnswersByTheRulesAloneTest}. What this adds is
+ * the rules: the chosen systems are written for the steps the reduction takes, and these are drawn
  * over every weight from minus three to three on each of three positions, every relation, and every
  * threshold in the range, which reaches combinations no chosen system names. The seeds are fixed, so
  * a round that fails is the same round when it is run again.
@@ -74,103 +72,6 @@ class DrawnRulesOverSeveralPositionsNarrowEachOfThemTest {
     private static Reduction<String> reduced(FormReach<String> reading) {
         return AffineReduction.over(reading, atom -> Granularity.DISCRETE,
                 CanonicalOrder.asTheyAreSpelled());
-    }
-
-    /**
-     * No point the rules admit is ever left outside what this derives. The direction asserted is the
-     * only one that matters: a bound too tight refuses a row a model admits, and a bound too loose
-     * merely says less than it could.
-     */
-    @Test
-    void noPointTheRulesAdmitIsEverRefused() {
-        Random dice = new Random(4800);
-        int narrowed = 0;
-        for (int round = 0; round < CASES; round++) {
-            List<Written> written = someRules(dice);
-            if (heldNowhere(written)) {
-                continue;
-            }
-            List<Map<String, Integer>> admitted = pointsSatisfying(written, POSITIONS, LOW, HIGH);
-            List<AffineConstraint<String>> stated = read(written);
-            Box<String> from = between(LOW, HIGH);
-
-            FormReach<String> reading = reading(stated, from);
-            if (reading == null) {
-                assertTrue(admitted.isEmpty(),
-                        () -> "the differences hold nothing, but " + written + " admits " + admitted);
-                continue;
-            }
-            Reduction<String> found = reduced(reading);
-            if (found instanceof Reduction.NothingIsLeft) {
-                assertTrue(admitted.isEmpty(),
-                        () -> "said nothing is left, but " + written + " admits " + admitted);
-                continue;
-            }
-            Reduction.Tightened<String> tightened = (Reduction.Tightened<String>) found;
-            Box<String> after = from.meeting(tightened.atLeast(), tightened.atMost());
-            if (!tightened.atLeast().isEmpty() || !tightened.atMost().isEmpty()) {
-                narrowed++;
-            }
-            // A box holds every admitted point exactly when, at each position, it holds the least
-            // and the greatest value an admitted point has there — so those two points are the
-            // ones asked about.
-            for (String position : POSITIONS) {
-                Map<String, Integer> lowest = null;
-                Map<String, Integer> highest = null;
-                for (Map<String, Integer> point : admitted) {
-                    if (lowest == null || point.get(position) < lowest.get(position)) {
-                        lowest = point;
-                    }
-                    if (highest == null || point.get(position) > highest.get(position)) {
-                        highest = point;
-                    }
-                }
-                if (lowest == null) {
-                    continue;
-                }
-                for (Map<String, Integer> point : List.of(lowest, highest)) {
-                    ExactRatio at = num(point.get(position));
-                    assertTrue(admits(after.leastOf(position), at, false)
-                                    && admits(after.mostOf(position), at, true),
-                            () -> "refused a point the rules admit: " + point + " under " + written
-                                    + " left " + position + " in [" + after.leastOf(position)
-                                    + ", " + after.mostOf(position) + "]");
-                }
-            }
-            // Reductive: nothing came back wider than it went in.
-            for (String position : POSITIONS) {
-                assertEquals(after.leastOf(position),
-                        ExactCut.tighterLower(from.leastOf(position), after.leastOf(position)));
-                assertEquals(after.mostOf(position),
-                        ExactCut.tighterUpper(from.mostOf(position), after.mostOf(position)));
-            }
-        }
-        assertTrue(narrowed > CASES / 10,
-                "only " + narrowed + " of " + CASES + " narrowed anything, so this checked little");
-    }
-
-    /** And the same answers whatever order the rules arrived in. */
-    @Test
-    void theOrderTheRulesArrivedInIsNotPartOfTheAnswer() {
-        Random dice = new Random(16);
-        for (int round = 0; round < CASES; round++) {
-            List<Written> written = someRules(dice);
-            if (heldNowhere(written)) {
-                continue;
-            }
-            List<AffineConstraint<String>> stated = read(written);
-            Box<String> from = between(LOW, HIGH);
-            List<AffineConstraint<String>> shuffled = new ArrayList<>(stated);
-            Collections.shuffle(shuffled, dice);
-
-            FormReach<String> asRead = reading(stated, from);
-            FormReach<String> reread = reading(shuffled, from);
-            if (asRead == null || reread == null) {
-                continue;   // the differences hold nothing, which the closure answers before a round
-            }
-            assertEquals(reduced(asRead), reduced(reread),
-                    () -> "the reduction moved when the rules were reordered: " + stated);
-        }
     }
 
     /** Monotone: a narrower box never yields a wider answer. */

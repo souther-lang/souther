@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -50,8 +51,7 @@ final class ValueClasses {
         if (value instanceof Value.Number number && tooFarInScaleToWrite(number, view.shape())) {
             String named = ExactDecimals.spelledBounded(number.value());
             return PartitionClass.ungeneratable(named, named, is,
-                            "a model's own decimals put this value's plain notation past what a"
-                                    + " generated row can write")
+                            new SearchMessage.TheModelsDecimalsPutThisValuePastARow())
                     .holding(ValueSet.just(value));
         }
         FixtureTemplate bare = written(value, view.shape());
@@ -67,7 +67,7 @@ final class ValueClasses {
                 // either way and a row already sitting in it still covers it; what is absent is the
                 // offer of a new row (issue #696).
                 ? PartitionClass.ungeneratable(bare.text(), bare.text(), is,
-                        "nothing here can write a value of this position")
+                        new SearchMessage.NothingCanWriteAValueOfThisPosition())
                 : PartitionClass.of(bare.text(), bare.text(), is,
                         RepresentativeSource.of(stands)))
                 // The one value it was made from, which is the whole of what it holds.
@@ -96,12 +96,8 @@ final class ValueClasses {
      * than reasons to stop building it — the class is still what a row is read against.
      */
     private static Place placeOf(Value value, Type type, DeclarationAccess declarations) {
-        return placeOf(switch (value) {
-            case Value.Text text -> new ObservedValue.Text(text.value());
-            case Value.Truth truth -> new ObservedValue.Bool(truth.value());
-            case Value.Number number -> new ObservedValue.Decimal(number.value());
-            case Value.Case one -> new ObservedValue.Unit(one.data());
-        }, type, declarations);
+        Carrier carrier = Carrier.ofValue(type, declarations);
+        return carrier == null ? null : carrier.placeOf(value);
     }
 
     /**

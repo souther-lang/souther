@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * One clause of a declaration, as what it states rather than as where it is written.
@@ -61,15 +62,18 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
      *     ones reached through what the declaration spreads
      * @param reads the places of the declaration's value its form reads, and what it reads at each
      * @param parts the rules its author wrote it as, and how they are joined
+     * @param affine whether it states exactly comparisons of one sum of the places it reads, and
+     *     which; a fact about the clause's whole meaning, never a bound it implies
      */
     record Stated(Clause.Ref ref, TermMeaning states, Set<String> fieldsRead,
-                  Set<ClauseRead> reads, Parts parts)
+                  Set<ClauseRead> reads, Parts parts, ClauseAffineMeaning affine)
             implements ClauseMeaning {
 
         public Stated {
             Objects.requireNonNull(ref, "a clause that states something is some clause");
             Objects.requireNonNull(states, "a clause that has a form states what the form says");
             Objects.requireNonNull(parts, "a clause is written as some rules");
+            Objects.requireNonNull(affine, "a clause is exactly some comparisons or is not");
             fieldsRead = Set.copyOf(fieldsRead);
             reads = Set.copyOf(reads);
             if (fieldsRead.isEmpty() != reads.isEmpty()) {
@@ -110,12 +114,87 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
          * ({@code ClauseHelpers.AuthoredPart#idFor}), which is the one place that may put a number
          * beside a rule; carried as a number here, every reader that wanted the name would be
          * putting one beside whichever rule it happened to be holding.
+         *
+         * <p>The places it reads are said with it, because which rules hold two numbers beside each
+         * other is a question about the rules an author joined and not about the clause they were
+         * joined into: {@code a >= 0 && b >= 0} reads two places in one clause and relates neither
+         * to the other. A part that is itself a choice, or a comparison of several numbers, is one
+         * part and reads all of them.
+         *
+         * @param id which rule of which clause this is
+         * @param reads the places of the declaration's value this rule reads, and what it reads at
+         *     each
+         * @param statements the number of each statement the part states, in the order a reading
+         *     arrives at them; none where they are the part's own and numbered as it is read. Given
+         *     where the part is what a container states of every element, whose statements are
+         *     numbered within the statement of the container that says them, once, where it is
+         *     read — and not again at each place the elements stand
          */
-        record One(PartId<RuleRef.Invariant> id) implements Parts {
+        record One(PartId<RuleRef.Invariant> id, Set<ClauseRead> reads,
+                   List<StatementNumber> statements) implements Parts {
 
             public One {
                 Objects.requireNonNull(id, "a rule an author wrote is some part of a clause");
+                reads = Set.copyOf(reads);
+                statements = List.copyOf(statements);
             }
+
+            /** A part whose statements are numbered as it is read. */
+            public One(PartId<RuleRef.Invariant> id, Set<ClauseRead> reads) {
+                this(id, reads, List.of());
+            }
+
+            /**
+             * Whether the rule reads one place and nothing else, so that what it holds back is
+             * that place and it relates the place to no other.
+             *
+             * <p>Said of a read of the values there, or of how many it holds. A read of the
+             * elements or of a member is of a container together with what stands in it, so what
+             * it holds back is not one place's alone.
+             *
+             * <p>A place as the rules of the value call it: a name the cases of a sum share is one
+             * place of the value, however many cases it stands at, since one value is in one case.
+             */
+            public boolean readsOnePlaceAlone() {
+                return reads.size() == 1 && switch (reads.iterator().next().kind()) {
+                    case ITS_VALUES, HOW_MANY_IT_HOLDS -> true;
+                    case EACH_ELEMENTS_RUN, ELEMENTS_THE_CLAUSE_NEEDS_APART, A_LOOKED_UP_MEMBER,
+                         A_MEMBER_THE_CLAUSE_NEEDS -> false;
+                };
+            }
+        }
+
+        /** The same rules joined the same way, each with the places {@code readsOf} says it reads. */
+        default Parts withReads(Function<PartId<RuleRef.Invariant>, Set<ClauseRead>> readsOf) {
+            return switch (this) {
+                case One it -> new One(it.id(), readsOf.apply(it.id()), it.statements());
+                case Both it -> new Both(it.left().withReads(readsOf),
+                        it.right().withReads(readsOf));
+            };
+        }
+
+        /** Each rule the clause was written as, in the order it was written. */
+        default List<One> leaves() {
+            return switch (this) {
+                case One it -> List.of(it);
+                case Both it -> {
+                    List<One> out = new ArrayList<>(it.left().leaves());
+                    out.addAll(it.right().leaves());
+                    yield List.copyOf(out);
+                }
+            };
+        }
+
+        /** The name of every rule the clause was written as, in the order it was written. */
+        default List<PartId<RuleRef.Invariant>> ids() {
+            return switch (this) {
+                case One it -> List.of(it.id());
+                case Both it -> {
+                    List<PartId<RuleRef.Invariant>> out = new ArrayList<>(it.left().ids());
+                    out.addAll(it.right().ids());
+                    yield List.copyOf(out);
+                }
+            };
         }
 
         /**
@@ -134,7 +213,7 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
 
         private void found(ClauseExpr read, List<Clauses.StatedPart> out) {
             switch (this) {
-                case One it -> out.add(new Clauses.StatedPart(it.id(), read));
+                case One it -> out.add(new Clauses.StatedPart(it.id(), read, it.statements()));
                 case Both it -> {
                     if (!(read instanceof ClauseExpr.Joined joined)) {
                         throw new IllegalStateException("an author wrote two rules where this"

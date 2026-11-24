@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Machines;
@@ -46,7 +48,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
      * as the reading it comes from.
      */
     private static final String SOURCE = """
-            module demo exposing ( Held, keep )
+            module demo exposing ( Code, Common, Held, keep )
 
             data Code = String
                 invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
@@ -69,12 +71,12 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
 
     @Test
     void theCounterfactualMakesNoMachineTheReadingItComesFromHolds() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         FieldDomains reading = FieldDomains.of(
                 TypeSymbols.declared(new TypeKey("demo", "Held")),
                 RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
-                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()));
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings(),
+                        TestDay.TODAY));
 
         long before = StringMachineAnswers.machinesMade();
         List<TypeSymbol.AtModule> holding =
@@ -99,7 +101,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
      */
     @Test
     void whatTheReadingBuiltOnTopIsHandedOnToo() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         TypeKey held = new TypeKey("demo", "Held");
         StringFacts whole = compilation.db().ask(new Machines.OfDeclaration(held)).value();
         assertFalse(whole.extents().isEmpty(),
@@ -110,7 +112,8 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         FieldDomains reading = FieldDomains.of(TypeSymbols.declared(held),
                 RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
                         ReadAs.THE_COMPILATION_DOES,
-                        _ -> StringMachineAnswers.borrowing(part, RevisionKnowledge.NONE)));
+                        _ -> StringMachineAnswers.borrowing(part, RevisionKnowledge.NONE),
+                        TestDay.TODAY));
         assertTrue(StringMachineAnswers.machinesMade() > beforeReading,
                 "the reading builds what the lender had nothing to say about");
 
@@ -137,9 +140,10 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         FieldDomains.of(TypeSymbols.declared(new TypeKey("demo", "Held")),
                 RuleReadingContext.unshared(
                         RuleReadings.of(compilation, compilation.modules().get(0)),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES, TestDay.TODAY));
 
         assertTrue(StringMachineAnswers.machinesMade() > before,
                 "a reading with nothing to borrow from builds the machines its rules come to");
+        ACompiledModel.compiles(compilation);
     }
 }

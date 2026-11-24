@@ -159,8 +159,9 @@ final class GeneratedImplementation implements Answerer {
             apply.setAccessible(true);
         } catch (java.lang.reflect.InvocationTargetException ite) {
             // The constructor ran and threw. That is the model's code, so it goes out the way the
-            // behavior's own failure does.
-            throw new InvocationFailure(ite.getCause());
+            // behavior's own failure does — unless it is a class of this compile failing to link,
+            // which is not the model's.
+            throw InvocationFailure.ofGeneratedCode(ite.getCause());
         } catch (ReflectiveOperationException e) {
             throw new ImplementationNotReached(String.valueOf(e.getMessage()), e);
         }
@@ -168,8 +169,10 @@ final class GeneratedImplementation implements Answerer {
             return apply.invoke(instance, args);
         } catch (java.lang.reflect.InvocationTargetException ite) {
             // What the applied code came back with, carried out as it stands. Whose failure it is and
-            // what it means for the row are read where the row is.
-            throw new InvocationFailure(ite.getCause());
+            // what it means for the row are read where the row is. The classes are this compile's
+            // own, so one that will not link is its output failing and is said so before it is
+            // carried as something the applied code ended with.
+            throw InvocationFailure.ofGeneratedCode(ite.getCause());
         } catch (ReflectiveOperationException e) {
             throw new ImplementationNotReached(String.valueOf(e.getMessage()), e);
         }

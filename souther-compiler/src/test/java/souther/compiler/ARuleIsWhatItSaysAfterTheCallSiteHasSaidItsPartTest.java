@@ -27,7 +27,7 @@ class ARuleIsWhatItSaysAfterTheCallSiteHasSaidItsPartTest {
     private static Adequacy.BranchEvidence armsOf(String module, String behavior, String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                 .flatMap(List::stream).toList(), "the model under test compiles");
         Adequacy.BranchEvidence arms = compilation.db()

@@ -126,15 +126,36 @@ public sealed interface ValueOrigin<K> {
 
     private static <K> Gathering.Met<K> positionsOf(ValueOrigin<K> origin) {
         return switch (origin) {
-            case IsAPosition<K> it -> new Gathering.Holds<>(it.at());
-            case Applied<K> it -> new Gathering.Into<>(it.arguments());
-            case Composed<K> it -> new Gathering.Into<>(it.parts());
-            case Constructed<K> it -> new Gathering.Into<>(List.copyOf(it.fields().values()));
             case OneOf<K> it -> {
                 List<ValueOrigin<K>> parts = new ArrayList<>(it.decidedBy());
                 parts.addAll(it.alternatives());
                 yield new Gathering.Into<>(parts);
             }
+            default -> valuesOf(origin);
+        };
+    }
+
+    /**
+     * The positions some value this may be is, or was made from, however deeply, in the order the
+     * reader met them — and not a position that only decided which of several values it is.
+     *
+     * <p>What a reading that stopped on this was looking at. {@code r} chosen by a {@code match} on
+     * {@code side} depends on {@code side}, and none of the numbers it may be is one of
+     * {@code side}'s: a comparison over {@code r} is read once for each arm, each arm a value of its
+     * own, and what stopped one of them stopped on that value. The choice divides {@code side}, and
+     * nothing about the arithmetic does.
+     */
+    default Set<K> valuesFrom() {
+        return gathered(ValueOrigin::valuesOf);
+    }
+
+    private static <K> Gathering.Met<K> valuesOf(ValueOrigin<K> origin) {
+        return switch (origin) {
+            case IsAPosition<K> it -> new Gathering.Holds<>(it.at());
+            case Applied<K> it -> new Gathering.Into<>(it.arguments());
+            case Composed<K> it -> new Gathering.Into<>(it.parts());
+            case Constructed<K> it -> new Gathering.Into<>(List.copyOf(it.fields().values()));
+            case OneOf<K> it -> new Gathering.Into<>(it.alternatives());
             case NoValue<K> _, Written<K> _, MadeFromAPosition<K> _, Unnameable<K> _ ->
                     new Gathering.Into<>(List.of());
         };

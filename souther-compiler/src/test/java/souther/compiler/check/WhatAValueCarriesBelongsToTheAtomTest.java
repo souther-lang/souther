@@ -80,6 +80,37 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         return at;
     }
 
+    private static Core floorMod(Core of, Core by) {
+        return KeptCalls.to(ValueName.Stdlib.operation("Int", "floorMod"), List.of(of, by),
+                Type.INT, POS);
+    }
+
+    /** A remainder by a written divisor is bounded whatever the path says, so it carries its ends
+     * and has nothing to wait on: no recipe is recorded, and no reading derives anything for it. */
+    @Test
+    void aRemainderByAWrittenDivisorIsNoRecipe() {
+        Terms terms = terms();
+        BindingId x = binding(0);
+        FactSubject atom = terms.atomOf(floorMod(number(x), new Core.Int(7, Type.INT, POS)),
+                holding(x));
+
+        assertFalse(terms.knowledgeOf(atom).intrinsic().isEmpty());
+        assertEquals(AtomKnowledge.Computation.None.INSTANCE, terms.knowledgeOf(atom).computation());
+    }
+
+    /** A remainder by a divisor the path may put either side of nought waits on it: the guarantee
+     * is recorded as a recipe of the atom, which is where its divisor is derived first. */
+    @Test
+    void aRemainderByAVariableDivisorRecordsWhatItGuaranteesAsARecipe() {
+        Terms terms = terms();
+        BindingId x = binding(0);
+        BindingId n = binding(1);
+        FactSubject atom = terms.atomOf(floorMod(number(x), number(n)), holding(x, n));
+
+        assertTrue(terms.knowledgeOf(atom).computation()
+                instanceof AtomKnowledge.Computation.Derived(Derivation.GuaranteedWhere _));
+    }
+
     /** A size names an atom, and what that atom carries is filed where it was named. Nothing asks an
      * expression for it, which is the whole of what #988 turned on. */
     @Test

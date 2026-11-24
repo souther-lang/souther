@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Which of a declaration's arguments the value it answers with depends on.
@@ -60,12 +61,26 @@ public record AnswerDependencies(Map<ReachName.Declaration, Set<Integer>> bySlot
 
     /** What {@code declarations} answer out of. */
     public static AnswerDependencies of(Map<ReachName.Declaration, Hir.FnDef> declarations) {
+        return of(declarations, NONE);
+    }
+
+    /**
+     * What {@code declarations} answer out of, where what they call besides one another is read
+     * already and is {@code under}.
+     *
+     * <p>{@code under} is a lower part of the same reading: none of what it was read over calls any
+     * of {@code declarations}, so nothing these come to moves it, and the fixed point over both is
+     * {@code under} beside the fixed point over these with it held where it is. The library is such
+     * a part of every module's reading — it calls nothing a module writes — and is read once.
+     */
+    public static AnswerDependencies of(Map<ReachName.Declaration, Hir.FnDef> declarations,
+                                        AnswerDependencies under) {
         // Everything being read starts at nothing, so a declaration this has not got to yet is
         // told from a callable it will never read. Started from an empty map, the two were the same
         // absence: a call to something declared further down was read as resting on every argument,
         // and the passes only ever add — so the answer stayed at what the first pass could not
         // know, and forks resting on nothing were owed a row per call site.
-        Map<ReachName.Declaration, Set<Integer>> bySlot = new LinkedHashMap<>();
+        Map<ReachName.Declaration, Set<Integer>> bySlot = new LinkedHashMap<>(under.bySlot());
         declarations.keySet().forEach(each -> bySlot.put(each, Set.of()));
         boolean moved = true;
         while (moved) {
@@ -94,23 +109,25 @@ public record AnswerDependencies(Map<ReachName.Declaration, Set<Integer>> bySlot
             }
         }
         Set<Integer> out = new LinkedHashSet<>();
-        dependsOn(written.expr(), params, bySlot, new LinkedHashMap<>(), NamedCallables.NONE, out);
+        dependsOn(written.expr(), params, bySlot::get, new LinkedHashMap<>(), NamedCallables.NONE, out);
         return out;
     }
 
     /**
-     * Which of {@code params} the value of {@code e} depends on.
+     * Which slots of {@code direct} the value of {@code e} depends on.
      *
-     * <p>Written apart from the reading of what a fork rests on, which asks the narrower question of
-     * whether a rule reaches it. This one is about values reaching values and knows nothing about
-     * rules; the other projects this onto the parameters that carry one.
+     * <p>The one reading of values reaching values. {@code direct} says which bindings are slots
+     * worth reporting, and may be a subset of the parameters: what a fork rests on is this reading
+     * over the parameters that carry a rule. {@code answeredOutOf} says which of a callee's
+     * arguments its answer depends on, null where nothing says — and null is read as every argument,
+     * not as none.
      */
-    static void dependsOn(Hir.Expr e, Map<BindingId, Integer> params,
-                          Map<ReachName.Declaration, Set<Integer>> bySlot, Map<BindingId, Set<Integer>> bound,
-                          NamedCallables named, Set<Integer> out) {
+    static void dependsOn(Hir.Expr e, Map<BindingId, Integer> direct,
+                          Function<ReachName.Declaration, Set<Integer>> answeredOutOf,
+                          Map<BindingId, Set<Integer>> bound, NamedCallables named, Set<Integer> out) {
         switch (e) {
             case Hir.Var.Denoting read when read.denotes() instanceof ValueName.Local local -> {
-                Integer slot = params.get(local.id());
+                Integer slot = direct.get(local.id());
                 if (slot != null) {
                     out.add(slot);
                 }
@@ -121,10 +138,10 @@ public record AnswerDependencies(Map<ReachName.Declaration, Set<Integer>> bySlot
             }
             case Hir.LetIn let when let.binder() != null && let.binder().binding() != null -> {
                 Set<Integer> holds = new LinkedHashSet<>();
-                dependsOn(let.value(), params, bySlot, bound, named, holds);
+                dependsOn(let.value(), direct, answeredOutOf, bound, named, holds);
                 Map<BindingId, Set<Integer>> wider = new LinkedHashMap<>(bound);
                 wider.put(let.binder().binding(), holds);
-                dependsOn(let.body(), params, bySlot, wider,
+                dependsOn(let.body(), direct, answeredOutOf, wider,
                         named.and(let.binder().binding(), let.value()), out);
                 return;
             }
@@ -135,23 +152,23 @@ public record AnswerDependencies(Map<ReachName.Declaration, Set<Integer>> bySlot
                 // Only the arguments the callee answers out of. One it never reads is not something
                 // this call's value depends on, whatever else that argument would decide elsewhere.
                 ReachName.Declaration reaches = named.reached(callee);
-                Set<Integer> uses = reaches == null ? null : bySlot.get(reaches);
+                Set<Integer> uses = reaches == null ? null : answeredOutOf.apply(reaches);
                 for (int i = 0; i < call.args().size(); i++) {
                     // Every argument where nothing says which of them this call rests on. What is
                     // lost by reading one it does not is a value said to reach further than it
                     // does; what is lost the other way is a value that reaches and is not followed.
                     if (uses == null || uses.contains(i)) {
-                        dependsOn(call.args().get(i), params, bySlot, bound, named, out);
+                        dependsOn(call.args().get(i), direct, answeredOutOf, bound, named, out);
                     }
                 }
                 // And what is being applied. Applying a parameter is answering out of it, and a
                 // reading that only followed the arguments called a helper that applies what it was
                 // handed a helper that answers out of nothing.
-                dependsOn(call.function(), params, bySlot, bound, named, out);
+                dependsOn(call.function(), direct, answeredOutOf, bound, named, out);
                 return;
             }
             default -> { }
         }
-        Hir.forEachChild(e, child -> dependsOn(child, params, bySlot, bound, named, out));
+        Hir.forEachChild(e, child -> dependsOn(child, direct, answeredOutOf, bound, named, out));
     }
 }

@@ -2,21 +2,14 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.Carrier;
-import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.RuleRef;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
+import souther.compiler.coverage.NotCarriedReason;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PositionId;
-import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
@@ -26,22 +19,14 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.Border;
-import souther.compiler.partition.BorderQuantity;
-import souther.compiler.partition.BoundaryTarget;
-import souther.compiler.partition.ClauseStatementId;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
-import souther.compiler.partition.Level;
-import souther.compiler.partition.LineFacts;
-import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.RulesTaken;
-import souther.compiler.partition.WhichLine;
-import souther.compiler.check.PartId;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -75,10 +60,12 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
      * What a wider run may answer and nothing here names a figure for, and why.
      *
      * <p>A border nothing watched the runs for was stopped by how this build was asked to run, which
-     * is no figure. It is the one.
+     * is no figure. A weight left undecided by a run nothing watched is the same stop, said for the
+     * weights. Those are the two.
      */
     private static Set<String> wideningWithoutAFigure() {
-        return Set.of("ABorderNotHeldAgainstTheLinesBesideIt NOTHING_WATCHED_THE_RUNS");
+        return Set.of("ABorderNotHeldAgainstTheLinesBesideIt NOTHING_WATCHED_THE_RUNS",
+                "AWeightNotDecided A_RUN_WAS_NOT_WATCHED");
     }
 
     @Test
@@ -156,10 +143,10 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                 new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
 
         WeakeningSet both = WeakeningSet.of(
-                new Weakening.RewriteUndecided("b", rewrite, runsSpentAt(four)),
-                new Weakening.RewriteUndecided("b", rewrite, runsSpentAt(eight)));
+                new Weakening.RewriteUndecided("m", "b", rewrite, runsSpentAt(four)),
+                new Weakening.RewriteUndecided("m", "b", rewrite, runsSpentAt(eight)));
 
-        assertEquals(Set.of(new Weakening.RewriteUndecided("b", rewrite,
+        assertEquals(Set.of(new Weakening.RewriteUndecided("m", "b", rewrite,
                         new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way
                                 .atFigures(ReplacementEvidence.Undecided.Why.RUNS_SPENT,
                                         List.of(four, eight))).why())),
@@ -226,11 +213,18 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         for (ClosureGap gap : closureGaps()) {
             out.put("ModelReadingIncomplete " + gap, new Weakening.ModelReadingIncomplete(gap));
         }
-        out.put("OutputCasesUnreadable", new Weakening.OutputCasesUnreadable("b"));
-        out.put("InputCasesUnreadable", new Weakening.InputCasesUnreadable("b", 0));
+        RowRef unread = new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1));
+        out.put("OutputCasesUnreadable",
+                new Weakening.OutputCasesUnreadable("b", Set.of(unread)));
+        out.put("InputCasesUnreadable",
+                new Weakening.InputCasesUnreadable("b", 0, Set.of(unread)));
         out.put("ItemsPlaceNotWorkedOut", new Weakening.ItemsPlaceNotWorkedOut(border(),
                 UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.put("AReadingNotTiedToItsLine", new Weakening.AReadingNotTiedToItsLine(border()));
+        for (Weakening.AWeightNotDecided.Why why : Weakening.AWeightNotDecided.Why.values()) {
+            out.put("AWeightNotDecided " + why, new Weakening.AWeightNotDecided("b",
+                    OneBorder.derivedValue(), new NumericTerm.ValueOf(TermPath.of("x")), why));
+        }
         out.put("BorderReadingsNotExhausted", new Weakening.BorderReadingsNotExhausted(border(),
                 WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(256)));
         for (Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why why
@@ -239,6 +233,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                     new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(), why));
         }
         out.put("BodyNotInEvaluation", new Weakening.BodyNotInEvaluation("b"));
+        out.put("BehaviorToBeChangedFirst", new Weakening.BehaviorToBeChangedFirst("b",
+                CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.reached()));
         out.put("BoundaryNotDerived", new Weakening.BoundaryNotDerived("b"));
         out.put("InputNotRead", new Weakening.InputNotRead("b"));
         out.put("PairSpaceTruncated", new Weakening.PairSpaceTruncated("b", 9,
@@ -258,7 +254,6 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.put("DecisionRunNotWatched", new Weakening.DecisionRunNotWatched("b"));
         out.put("MeetingsNotWalked", new Weakening.MeetingsNotWalked("b", 1,
                 List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
-        out.put("MeetingsNotPlaced", new Weakening.MeetingsNotPlaced("b", 1));
         out.put("MeetingsNotJoined", new Weakening.MeetingsNotJoined("b", 1));
         out.put("DecisionReadingIncomplete", new Weakening.DecisionReadingIncomplete("b",
                 new DecisionReading.Enumeration.StoppedAtAFigure(
@@ -269,8 +264,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         Replacement rewrite = new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                 new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1)));
         for (ReplacementEvidence.Undecided.Way way : everyWayARewriteIsLeftOpen()) {
-            Weakening.RewriteUndecided undecided = new Weakening.RewriteUndecided("b", rewrite,
-                    new ReplacementEvidence.Undecided(way).why());
+            Weakening.RewriteUndecided undecided = new Weakening.RewriteUndecided("m", "b",
+                    rewrite, new ReplacementEvidence.Undecided(way).why());
             out.putIfAbsent("RewriteUndecided " + way.why()
                     + (way.figures().isEmpty() ? "" : " " + way.figures()), undecided);
         }
@@ -298,6 +293,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAForkCarries(
                 WorkFigure.NODES_A_FORK_CARRIES.at(4000))));
         out.add(ReplacementReading.wayOf(new ArmReplacements.Sibling.Why.PastWhatAMethodHolds()));
+        // And what a walk the classes carry no switch at leaves, which no run widens either.
+        out.add(ReplacementReading.wayOf(new NotCarriedReason.MethodTooLarge()));
         out.add(ReplacementEvidence.Undecided.Way.atNoAllowance(
                 ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ));
         return out;
@@ -328,7 +325,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                     ReplacementDisposition.Met.at(List.of(WorkFigure.EVALUATION_STEPS.at(100)))
                             .and(ReplacementDisposition.Met.AT_NO_FIGURE));
             case EVERY_ROW_ANSWERED_ALIKE, NOTHING_WAS_COMPOSED, ROWS_A_BLOCK_MAY_HOLD,
-                 NOTHING_RAN -> List.of(ReplacementDisposition.Met.AT_NO_FIGURE);
+                 A_RULE_REFUSED_A_CANDIDATE, NOTHING_RAN ->
+                    List.of(ReplacementDisposition.Met.AT_NO_FIGURE);
         };
     }
 
@@ -352,17 +350,6 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
 
     /** One border, since which border it is is no part of what this is about. */
     private static Border border() {
-        Carrier carrier = new Carrier.Whole();
-        NumericTerm.ValueOf value = new NumericTerm.ValueOf(TermPath.of("x"));
-        BoundaryTarget target = BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate("cap", value,
-                        TermOrdersFixtures.itself(value, carrier)),
-                new Level.OnACarrier(carrier, Count.of(100)));
-        LineOrigin origin = new LineOrigin.EnsuresOrigin(
-                new WhichLine.OfAComparisonOfAPart(new ClauseStatementId(new PartId<>(
-                        new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
-                        0), 0)),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
-        return Border.at(target, origin, new NumericDomain.Bounds(null, null));
+        return OneBorder.border();
     }
 }

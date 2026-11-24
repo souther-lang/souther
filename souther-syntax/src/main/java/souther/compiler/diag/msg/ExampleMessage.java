@@ -16,8 +16,8 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1902)
     record TheTargetCannotBeEvaluated(String target) implements ExampleMessage, Reported {}
 
-    /** What an example can run, and what this one is. */
-    record WhatAnExampleRuns(String here) implements ExampleMessage, Supporting {}
+    /** What an example can run, and that a helper of the name is not one of them. */
+    record WhatAnExampleRuns() implements ExampleMessage, Supporting {}
 
     /** `examples for` names a module that is not being compiled. */
     @Code(DiagnosticCode.E1907)
@@ -131,8 +131,13 @@ public sealed interface ExampleMessage extends Message {
     record ADependencyReachedThroughHasNoFake(String behavior, String dependency, String through)
             implements ExampleMessage, Reported {}
 
-    /** What to write for it. */
-    record WriteAFakeLikeThis(String shown) implements ExampleMessage, Supporting {}
+    /** What to write for it: a `with` on the row, or a `fake` table, each spelled the way this
+     *  module writes the dependency. */
+    record WriteAFakeOnTheRowOrInTheModule(String dependency) implements ExampleMessage, Supporting {}
+
+    /** Why no stand-in could be built: nothing this module can name says what the dependency
+     *  answers. */
+    record TheDependencyHasNoSignature(String dependency) implements ExampleMessage, Supporting {}
 
     /** The fake's value could not be built. */
     @Code(DiagnosticCode.E1908)
@@ -271,6 +276,13 @@ public sealed interface ExampleMessage extends Message {
     /** What to do about it. */
     record TheDepthLimitIsWhatShouldStopIt() implements ExampleMessage, Supporting {}
 
+    /** The evaluation had no room for an answer it worked out. */
+    @Code(DiagnosticCode.E1941)
+    record TheEvaluationHadNoRoomForAnAnswer(String what) implements ExampleMessage, Reported {}
+
+    /** What that says and what it does not. */
+    record RunningShortOfRoomIsNotAWrongAnswer() implements ExampleMessage, Supporting {}
+
     // --- what the rows do not cover ---
 
     /** No row expects a case the signature declares. */
@@ -355,6 +367,18 @@ public sealed interface ExampleMessage extends Message {
     record NoRowTellsThatLineFromAnother(String line, String another, String behavior)
             implements ExampleMessage, Reported {}
 
+    /**
+     * No rows of the behavior fix how one position weighs into a value a rule derives from several
+     * positions and cuts at several places.
+     *
+     * <p>The position and the value, because the value is cut by every threshold of a table and a
+     * weight is owed once for it: a sentence naming a threshold would send an author to a row for
+     * one border when rows on any of them answer.
+     */
+    @Code(DiagnosticCode.E1940)
+    record NoRowFixesTheWeightOfThatPosition(String position, String value, String behavior)
+            implements ExampleMessage, Reported {}
+
     /** What to write for it: an input the two answer differently at. */
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
@@ -380,7 +404,8 @@ public sealed interface ExampleMessage extends Message {
      */
     @Code(DiagnosticCode.E1939)
     record NoRowTellsAnArmOutOfSightFromItsSibling(Localizable arm, Localizable sibling,
-                                                   String definition, String behavior)
+                                                   String definition, Localizable construct,
+                                                   String behavior)
             implements ExampleMessage, Reported {}
 
     /**
@@ -393,6 +418,39 @@ public sealed interface ExampleMessage extends Message {
      */
     @Code(DiagnosticCode.E1939)
     record NoRowTellsTheBodyFromOneAnswer(String row, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row of the behavior would come out differently if the fold pointed at stopped after its
+     * first element. What a row of fewer than two elements cannot tell from the fold, since it
+     * runs the step once at most.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheFoldFromItsFirstStep(String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row of the behavior would come out differently if every step of the fold pointed at were
+     * handed the seed in the place of what the step before it answered.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheFoldFromStepsOnTheSeed(String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * The same as {@link NoRowTellsTheFoldFromItsFirstStep}, of a fold in code this build holds no
+     * source of: pointed at the behavior, and saying which definition wrote the fold, which is
+     * what tells two folds out of sight apart.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsAFoldOutOfSightFromItsFirstStep(String definition, Localizable construct,
+                                                     String behavior)
+            implements ExampleMessage, Reported {}
+
+    /** The same as {@link NoRowTellsTheFoldFromStepsOnTheSeed}, of a fold out of sight. */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsAFoldOutOfSightFromStepsOnTheSeed(String definition, Localizable construct,
+                                                       String behavior)
             implements ExampleMessage, Reported {}
 
     /**
@@ -537,7 +595,7 @@ public sealed interface ExampleMessage extends Message {
      * position's terms. One of these per reading, in the order the readings' sentences sort, so
      * that which reading a walk met first is not what a reader sees first.
      */
-    record TheLineAsReadAt(String at, String asks) implements ExampleMessage, Supporting {}
+    record TheLineAsReadAt(String at, Localizable asks) implements ExampleMessage, Supporting {}
 
     /** How many readings were not said, where a line has more than a sentence has room for. A
      *  count and not a silence: left out unsaid, the readings shown read as all there are. */

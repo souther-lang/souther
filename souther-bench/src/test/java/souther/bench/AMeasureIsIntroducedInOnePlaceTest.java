@@ -77,9 +77,9 @@ class AMeasureIsIntroducedInOnePlaceTest {
      */
     private static final Map<String, Integer> INTRODUCED_BY = new LinkedHashMap<>(
             Map.ofEntries(
-            Map.entry("souther.compiler.query.Coverages#pairsOf(Ljava/lang/String;Lsouther/compiler/query/Coverages$Readings;ZLsouther/compiler/partition/AdequacyPolicy$OfTheMeasures;Lsouther/compiler/partition/BodyInputReading;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 2),
+            Map.entry("souther.compiler.query.Coverages#pairsOf(Ljava/lang/String;Lsouther/compiler/query/Coverages$Readings;ZLsouther/compiler/partition/AdequacyPolicy$OfTheMeasures;Lsouther/compiler/partition/BodyInputReading;Lsouther/compiler/inputs/SearchRegion;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 2),
             Map.entry("souther.compiler.query.Coverages#coverageOf(Lsouther/compiler/query/Coverages$Readings$AtPosition;Lsouther/compiler/query/Coverages$Readings$AxisReading;Lsouther/compiler/query/Coverages$Readings;Lsouther/compiler/partition/Partitions$Partitioning;ZLsouther/compiler/partition/BodyDistinction;Lsouther/compiler/partition/InputUse;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 2),
-            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/partition/StandingAtAPoint$Met;Ljava/util/function/Supplier;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 3),
+            Map.entry("souther.compiler.query.Coverages#verdictOf(Lsouther/compiler/partition/StandingAtAPoint$Met;Ljava/util/function/Supplier;ZLsouther/compiler/partition/Border;Lsouther/compiler/query/Adequacy$RowReading;Ljava/util/Set;)Lsouther/compiler/query/Measurement;", 3),
             Map.entry("souther.compiler.query.Coverages#whyNoGuardLine(Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 2),
             Map.entry("souther.compiler.query.Coverages#whyNoInvariantLine(Lsouther/compiler/query/Adequacy$RowReading;)Lsouther/compiler/query/Measurement;", 1),
             // Two searches of one reading of one line, as that reading's measurement. It makes
@@ -108,10 +108,12 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.InputCaseEvidence#none(I)Lsouther/compiler/query/InputCaseEvidence;", 1),
             Map.entry("souther.compiler.query.InputCaseEvidence#of(Ljava/lang/String;ILjava/util/Set;Ljava/util/Set;Lsouther/compiler/query/InputCaseEvidence$Cases;ZLsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InputCaseEvidence;", 3),
             Map.entry("souther.compiler.query.BoundaryDerivation#noSubject()Lsouther/compiler/query/Measure;", 1),
+            // The lines of a behavior the build measures none of: not asked, and said so.
+            Map.entry("souther.compiler.query.BoundaryDerivation#notAsked()Lsouther/compiler/query/Measure;", 1),
             // One more than the partition beside it, because a reading of the lines answers two
             // questions: a reading that ran out and still could not hold a line against the lines
             // beside it is partial, which the partition has no counterpart of.
-            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;Lsouther/compiler/inputs/EmptyInput;)Lsouther/compiler/query/Measure;", 8),
+            Map.entry("souther.compiler.query.BoundaryDerivation#of(Ljava/util/List;Lsouther/compiler/query/WeakeningSet;Lsouther/compiler/partition/MeasureClosure$OfTheBorder;Lsouther/compiler/inputs/EmptyInput;)Lsouther/compiler/query/Measure;", 8),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#notASum(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#noRows(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#of(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 2),
@@ -122,7 +124,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#noArms(Lsouther/compiler/query/Adequacy$BranchEvidence$NoArms;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#notAsked(Lsouther/compiler/query/Adequacy$BranchEvidence$NotAsked;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             Map.entry("souther.compiler.query.Adequacy$BranchEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
-            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#bodyNotInEvaluation(Ljava/lang/String;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
+            Map.entry("souther.compiler.query.Adequacy$BranchEvidence#bodyNotRead(Ljava/lang/String;Lsouther/compiler/partition/BodyReading$Unread;)Lsouther/compiler/query/Adequacy$BranchEvidence;", 1),
             // Two sets of probes: the arms a row that states what it expects went through, and the
             // arms a row whose answer is owed went through. They are handed in apart because they
             // answer different questions about one arm.
@@ -138,9 +140,9 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // one was left open.
             Map.entry("souther.compiler.query.ReplacementEvidence#noBody()Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#notAsked(Lsouther/compiler/query/ReplacementEvidence$NotAsked;)Lsouther/compiler/query/ReplacementEvidence;", 1),
-            Map.entry("souther.compiler.query.ReplacementEvidence#bodyNotInEvaluation(Ljava/lang/String;)Lsouther/compiler/query/ReplacementEvidence;", 1),
+            Map.entry("souther.compiler.query.ReplacementEvidence#bodyNotRead(Ljava/lang/String;Lsouther/compiler/partition/BodyReading$Unread;)Lsouther/compiler/query/ReplacementEvidence;", 1),
             Map.entry("souther.compiler.query.ReplacementEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 1),
-            Map.entry("souther.compiler.query.ReplacementEvidence#measured(Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 2),
+            Map.entry("souther.compiler.query.ReplacementEvidence#measured(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 2),
             Map.entry("souther.compiler.query.ArmObligation#of(Ljava/util/List;Ljava/util/Map;Ljava/util/Set;Lsouther/compiler/query/WeakeningSet;Ljava/util/function/Function;)Lsouther/compiler/query/ArmObligation;", 3),
             // Which rules of a body's decision the rows took. Two places and each chooses between
             // states nothing else may: the gates say why no run could be placed at all — the build
@@ -148,8 +150,8 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // nothing evaluated — and the fold over the runs says how far placing them got. A
             // behavior no row names is neither: a reading over no rows was made and found no rule
             // taken, which is what an author writing the first row of it is told.
-            Map.entry("souther.compiler.query.Adequacy$Decides#whatTheRowsTook(Ljava/lang/String;Lsouther/compiler/partition/DecisionReading;Lsouther/compiler/partition/RunPlacement;Lsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;)Lsouther/compiler/query/Measure;", 4),
-            Map.entry("souther.compiler.query.DecisionEvidence#of(Ljava/lang/String;Lsouther/compiler/partition/RunPlacement;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/Measure;", 3),
+            Map.entry("souther.compiler.query.Adequacy$Decides#whatTheRowsTook(Ljava/lang/String;Lsouther/compiler/partition/DecisionReading;Lsouther/compiler/partition/RunPlacement;Lsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;Lsouther/compiler/partition/CasesTheRowsTook;)Lsouther/compiler/query/Measure;", 4),
+            Map.entry("souther.compiler.query.DecisionEvidence#of(Ljava/lang/String;Lsouther/compiler/partition/RunPlacement;Ljava/util/List;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;Lsouther/compiler/partition/CasesTheRowsTook;)Lsouther/compiler/query/Measure;", 3),
             // Which combinations of a body's decisions the rows made, the same two places and for
             // the same reason: the gates say why no run could be read at all, and the fold over
             // the runs says how far reading them got.

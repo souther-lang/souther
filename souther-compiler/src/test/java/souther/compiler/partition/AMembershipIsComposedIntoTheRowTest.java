@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ElementBindings;
@@ -142,7 +143,7 @@ class AMembershipIsComposedIntoTheRowTest {
                 Map.of(new RealizationTarget.AtOnePosition(size.atOnePosition()), Count.of(2)),
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(on, Count.of(2)))),
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
-                        Reachability.Ways.ONE, List.of()),
+                        Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY));
         List<String> campaigns = elementsOf(row.get(0), "campaigns");
         assertEquals(2, campaigns.size(), () -> "the size the point fixes: " + row);
@@ -225,11 +226,15 @@ class AMembershipIsComposedIntoTheRowTest {
     /**
      * Where the element type has too few values to fill the container with none of them the one
      * kept out, that is a row nothing composes — and not a condition this compiler could not read.
+     *
+     * <p>The way as it stands is composed against what it states, which its account says. The
+     * elements composed one by one for a count are a way that was cut by a figure, so the search
+     * is said to have left something unlooked at, and the account stays the way's.
      */
     @Test
     void tooFewValuesLeftIsWhatTheComposingCameTo() {
-        Generator.BoundaryAttempt.Unresolved none = assertInstanceOf(
-                Generator.BoundaryAttempt.Unresolved.class,
+        Generator.BoundaryAttempt.Stopped none = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class,
                 composedPast("paired", false, Generator.CandidateCheck.ANY));
         assertNotEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
                 none.why().reason(), "nothing here proved the model leaves no row");
@@ -279,7 +284,7 @@ class AMembershipIsComposedIntoTheRowTest {
         return Generator.probeFixing(subject(behavior), "past " + behavior, Map.of(),
                 NumbersAskedFor.ANYTHING,
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
-                        Reachability.Ways.ONE, List.of()),
+                        Reachability.Ways.ONE, List.of(), Optional.empty()),
                 check);
     }
 
@@ -308,14 +313,8 @@ class AMembershipIsComposedIntoTheRowTest {
         return stated;
     }
 
-    private static final Compilation COMPILATION = compiled();
-
-    private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
-    }
+    private static final Compilation COMPILATION =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     private static String module() {
         return COMPILATION.modules().getFirst();

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.meta.ModulePath;
 
@@ -69,13 +70,24 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
             "one body as the discharge analysis reads it",
             name -> new Bodies.BodyForInvariantDischarge(name, "go"));
 
-    private static Db dbFor(String source) {
-        return Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY).db();
+    private static Compilation modelOf(String source) {
+        return Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY);
+    }
+
+    /** The module with a value reaching itself, which is refused. */
+    private static Db dbOfTheCycle() {
+        Compilation c = modelOf(CYCLE_UNDER_AN_INVARIANT);
+        ACompiledModel.refusedWith(List.of("E1022"), c);
+        return c.db();
+    }
+
+    private static Db dbOfTheWellFoundedOne() {
+        return ACompiledModel.compiles(modelOf(WELL_FOUNDED)).db();
     }
 
     @Test
     void noneOfThemExpandsAModuleWhoseValuesAreNotWellFounded() {
-        Db db = dbFor(CYCLE_UNDER_AN_INVARIANT);
+        Db db = dbOfTheCycle();
         for (Map.Entry<String, Function<String, Key<?>>> asked : EXPANDING.entrySet()) {
             assertFalse(db.ask(asked.getValue().apply("m.a")).present(),
                     asked.getKey() + " was answered for a module with a value reaching itself");
@@ -84,7 +96,7 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
 
     @Test
     void allOfThemAnswerWhenTheyAre() {
-        Db db = dbFor(WELL_FOUNDED);
+        Db db = dbOfTheWellFoundedOne();
         for (Map.Entry<String, Function<String, Key<?>>> asked : EXPANDING.entrySet()) {
             assertTrue(db.ask(asked.getValue().apply("m.a")).present(),
                     asked.getKey() + " went absent on a module with nothing wrong with it");
@@ -97,7 +109,7 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
      */
     @Test
     void theRefusalIsTheOneTheOwnerSaid() {
-        Db db = dbFor(CYCLE_UNDER_AN_INVARIANT);
+        Db db = dbOfTheCycle();
         EXPANDING.values().forEach(key -> db.ask(key.apply("m.a")));
 
         List<Report> reports = db.ask(new Shapes.Expandable("m.a")).reports();

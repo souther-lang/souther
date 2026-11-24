@@ -59,13 +59,22 @@ public final class DeclaredClauses {
      * The conjuncts written on one of the names a value wears.
      *
      * @param worn      the name, as the reading of the position read it off
-     * @param conjuncts every conjunct of every rule written on it, in the order the author wrote
-     *                  them; empty where the name carries none
+     * @param conjuncts every conjunct of every rule written on it that was reached, in the order the
+     *                  author wrote them
+     * @param everyRuleReached whether every declaration whose rules govern the name was reached.
+     *                  Without it the conjuncts say what was found and nothing of what is not
+     *                  there: a name whose rules could not be expanded has none listed, which is
+     *                  not a name with none
      */
-    public record OnAName(TypeSymbol worn, List<Conjunct> conjuncts) {
+    public record OnAName(TypeSymbol worn, List<Conjunct> conjuncts, boolean everyRuleReached) {
 
         public OnAName {
             conjuncts = List.copyOf(conjuncts);
+        }
+
+        /** Whether the name is shown to carry no rule: none was listed and none was left out. */
+        public boolean carriesNone() {
+            return conjuncts.isEmpty() && everyRuleReached;
         }
     }
 
@@ -74,24 +83,25 @@ public final class DeclaredClauses {
     public static List<OnAName> of(List<TypeSymbol> worn, RuleReadingSource source) {
         List<OnAName> out = new ArrayList<>();
         for (TypeSymbol wears : worn) {
-            out.add(new OnAName(wears, writtenOn(wears, source)));
+            out.add(writtenOn(wears, source));
         }
         return List.copyOf(out);
     }
 
-    private static List<Conjunct> writtenOn(TypeSymbol wears, RuleReadingSource source) {
+    private static OnAName writtenOn(TypeSymbol wears, RuleReadingSource source) {
         // A name a module wrote is the only one there are rules of to read: what the language
         // declares carries none. Which declaration that name is, and what it states, are the walk's
         // to read from the world and the lookup it holds.
         if (!(wears instanceof TypeSymbol.AtModule named)) {
-            return List.of();
+            return new OnAName(wears, List.of(), true);
         }
         List<Conjunct> out = new ArrayList<>();
         // The clauses with the declaration each was written on, which is what names the line
         // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
         // spread it, and two clauses of one declaration were one rule.
-        for (TypeOps.Declared declared : TypeOps.expandedInvariants(
-                named, source.symbols(), source.invariants()).reached()) {
+        ExpandedRules expanded =
+                TypeOps.expandedInvariants(named, source.symbols(), source.invariants());
+        for (TypeOps.Declared declared : expanded.reached()) {
             // The parts the clause was split into, with the tree the expansion made of each. Split
             // again here, this would be a second answer to which parts a clause has — taken off a
             // tree an expansion left, where what a helper's body joined is as much a conjunction as
@@ -100,7 +110,7 @@ public final class DeclaredClauses {
                 out.add(new Conjunct(each.id(), each.read()));
             }
         }
-        return out;
+        return new OnAName(wears, out, expanded.everyRuleReached());
     }
 
     private DeclaredClauses() {}

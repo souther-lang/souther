@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * How an author wrote a clause as several rules, kept as the shape they wrote rather than as a list.
@@ -55,10 +56,14 @@ public sealed interface AuthoredShape {
      * unpublishable as it is — a node says where it stands, so a declaration moved down its file
      * would hand a reader parts that had changed. The expansion needs those nodes and is here;
      * every reader that only has to find the parts again in a tree it read takes this.
+     *
+     * <p>The parts are named here and read nothing yet: the places each reads are asked of the
+     * subtree the clause's reading holds for it, which {@link ClauseMeaning.Parts#onto} finds and
+     * {@link ClauseMeaning.Parts#withReads} puts beside the name.
      */
     default ClauseMeaning.Parts asWritten(RuleRef.Invariant rule) {
         return switch (this) {
-            case One it -> new ClauseMeaning.Parts.One(it.part().idFor(rule));
+            case One it -> new ClauseMeaning.Parts.One(it.part().idFor(rule), Set.of());
             case Both it -> new ClauseMeaning.Parts.Both(it.left().asWritten(rule),
                     it.right().asWritten(rule));
         };

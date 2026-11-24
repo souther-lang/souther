@@ -7,6 +7,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.Refinement;
@@ -183,8 +184,8 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
 
     /** The first arm of the first {@code match} of {@code visit}, as the checker built it. */
     private static Core.Case armSelecting(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Core body = compilation.db().ask(new Bodies.Checked(module)).value()
                 .behaviorBodies().get("visit");
@@ -241,7 +242,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     private static Hir.Module resolved(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY))
                 .db().ask(new Names.Resolved("m")).value();
     }
 }

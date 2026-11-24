@@ -345,10 +345,43 @@ public final class CallElaborator {
         // this applies is the callee's, and why the application is here is the application's — and
         // a call kept for a reader to quote is not always one an author wrote, a library operation
         // used as a value being expanded into a block whose application is kept the same way.
-        return new Core.PreservedCall(kept.declaring(), placed,
+        return asTheMapItIs(new Core.PreservedCall(kept.declaring(), placed,
                 new Core.KeptCallPlace(call.answered().origin(), call.application(),
                         ctx.lineage()),
-                settledWhereKept(call, env, ctx), applied.result(), call.pos());
+                settledWhereKept(call, env, ctx), applied.result(), call.pos()), ctx);
+    }
+
+    private static final ValueName FLAT_MAP = ValueName.Stdlib.operation("List", "flatMap");
+    private static final ValueName MAP = ValueName.Stdlib.operation("List", "map");
+
+    /**
+     * {@code call}, or the map it is where it puts end to end the lists its closure writes and the
+     * closure writes a list of one element in every case: {@code List.flatMap(x -> [f(x)], xs)}
+     * answers {@code List.map(x -> f(x), xs)}, one element for each, and is kept as it so that a
+     * reader of a map reads it whichever way it was written.
+     *
+     * <p>Only a closure written there with the one element in every case. One written under a
+     * choice ({@code if keep(x) then [x] else []}) answers none for some elements, and a closure
+     * named elsewhere says nothing here of what it writes. A kept call reaches no emitter, so what
+     * runs is what was written.
+     */
+    private static Core.PreservedCall asTheMapItIs(Core.PreservedCall call, CheckContext ctx) {
+        // What a closure answers does not turn on the type it stands as, and the map is kept with
+        // the type the call answers, which is the one the flatMap was given.
+        if (!call.declared().operation().equals(FLAT_MAP) || call.args().size() != 2
+                || !(Core.withoutStanding(call.args().getFirst()) instanceof Core.Block step)
+                || !(Core.withoutStanding(step.body()) instanceof Core.ListLit written)
+                || written.elements().size() != 1) {
+            return call;
+        }
+        CompleteSignature map = ctx.preserved().signatureOf(MAP);
+        if (map == null) {
+            return call;
+        }
+        Core.Block each = new Core.Block(step.params(), step.paramTypes(),
+                written.elements().getFirst(), step.pos());
+        return new Core.PreservedCall(map.declaring(), List.of(each, call.args().get(1)),
+                call.place(), call.settled(), call.type(), call.pos());
     }
 
     /**
@@ -875,7 +908,7 @@ public final class CallElaborator {
             if (orderedElement != null) {
                 orderingSubject = orderedElement;
             }
-            if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
+            if (DefaultBoundOperationFacts.get().foldsNumbers(callee.denotes())) {
                 applied = settlingTheElement(call, applied, expected);
             }
             Core.KernelFact fact;

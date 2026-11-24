@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -71,6 +72,10 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             """.formatted(IntStream.range(0, 20).mapToObj(at -> "f" + at + ": Bool")
             .collect(Collectors.joining(", ")));
 
+    /** The samples whose statement relates two values that are not shown to reach each other's. */
+    private static final Set<String> RELATIONS_NOT_SHOWN_TO_REACH =
+            Set.of("a string inside another");
+
     /** One condition for each way a statement can come out, each read to the end but the last. */
     private static Map<String, String> samples() {
         Map<String, String> out = new LinkedHashMap<>();
@@ -86,7 +91,11 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("a case", "match i.k with | A -> true | B -> false");
         out.put("a value being there",
                 "match Option.map(x -> x + 1, i.h.o) with | Some v -> true | None -> false");
+        out.put("a string being one of a language",
+                "List.any(t -> String.matches(\"[A-Z]{2}[0-9]\", t), String.split(\";\", i.s))");
         out.put("some element being a value", "List.contains(i.key, i.keys)");
+        out.put("some element being a value written", "List.contains(\"K\", i.keys)");
+        out.put("a string inside another", "String.contains(i.key, i.s)");
         out.put("the last element of a value",
                 "match Map.get(i.key, List.indexBy(k -> k, i.keys)) with"
                         + " | Some v -> true | None -> false");
@@ -110,6 +119,9 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         missing.removeAll(met);
         missing.remove(Proposition.OnAnApplication.class);
         missing.remove(Proposition.Carried.class);
+        // Held as how it is written only where the ways of keeping are more than a statement
+        // writes out at once, which no model here keeps that many elements of.
+        missing.remove(Proposition.OfTheWays.class);
         assertEquals(Set.of(), missing, "a kind of statement no condition here states");
     }
 
@@ -121,12 +133,39 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
                 return;
             }
             for (BlockReason.RuleWithoutLineReason why : walked.said()) {
+                if (RELATIONS_NOT_SHOWN_TO_REACH.contains(name)) {
+                    continue;
+                }
                 assertInstanceOf(BlockReason.ReadToEndWithoutLine.class, why,
                         () -> name + " was read to the end: " + why);
             }
             assertEquals(List.of(), walked.leftToTheFork(),
                     () -> name + " was read to the end, and leaves its fork nothing to state");
         });
+    }
+
+    /**
+     * A relation between two strings is read to the end, and whether it leaves the strings it
+     * relates undivided is a proof that has not been given: the string looked for is divided by
+     * the empty string, which stands inside every string, and the string looked in by the empty
+     * one when the other holds anything. So it is said to be not shown to reach every value — that
+     * word and no other, at every place the relation names.
+     */
+    @Test
+    void aRelationBetweenStringsIsSaidNotShownToReachEveryValueAndNothingElse() {
+        for (String name : RELATIONS_NOT_SHOWN_TO_REACH) {
+            Walked walked = walked(samples().get(name));
+            assertFalse(Proposition.leavesSomethingUnread(walked.stated()),
+                    () -> name + " is read to the end");
+            assertFalse(walked.said().isEmpty(), () -> name + " is said somewhere");
+            for (BlockReason.RuleWithoutLineReason why : walked.said()) {
+                assertInstanceOf(BlockReason.RelationNotShownToReachEveryValue.class, why,
+                        () -> name + " is not shown to reach, and is not said to have stopped"
+                                + " otherwise: " + why);
+            }
+            assertEquals(List.of(), walked.leftToTheFork(), () -> name + " leaves its fork"
+                    + " nothing to state");
+        }
     }
 
     /** The control: a statement with a part nobody read is said to have stopped, somewhere. */
@@ -149,14 +188,16 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(one -> kindsIn(one, into));
+            case Proposition.OfTheWays ways -> kindsIn(ways.written(), into);
             case Proposition.WhereItAnswers where -> {
                 kindsIn(where.answers(), into);
                 kindsIn(where.states(), into);
             }
             case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Unread _ -> { }
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.Unread _ -> { }
         }
     }
 
@@ -174,9 +215,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
                 let f (i) =
                     if (%s) then 1 else 0
                 """.formatted(condition), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), () -> "compiles: " + condition);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -188,14 +227,20 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()));
         Proposition stated =
                 Pullback.ofATruth(fork.cond(), reads, read, Optional.empty()).proposition();
-        ComparisonReadings walk = ComparisonReadings.of("f", analysis, read, reads);
+        ComparisonReadings walk = ComparisonReadings.of("f", analysis, read, reads,
+                ComparisonWitnesses.AtComparisons.NONE);
         List<BlockReason.RuleWithoutLineReason> said = new ArrayList<>();
         for (ComparisonReadings.Reading each : walk.comparisons()) {
             if (each.standing() instanceof BoundaryPolicy.Standing.Admitted(var assessment)) {
                 assessment.whatEachPlaceIsLeftWith().forEach(left -> said.add(left.why()));
             }
         }
+        PredicateReadings predicates = PredicateReadings.of("f", analysis, null, read,
+                inputs.parameterReads(), ElementBindings.of(analysis, rules.newtypes()),
+                new RuleReachNumbering(read.symbols().module(), "f"));
         return new Walked(stated, said, walk.forks().stream()
-                .flatMap(each -> each.leftHere().stream()).toList());
+                .flatMap(each -> each.leftHere().stream())
+                .filter(each -> !ComparisonReadings.leftUnread(each, predicates).isEmpty())
+                .toList());
     }
 }

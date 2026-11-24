@@ -55,10 +55,10 @@ class WhoMayBuildAFormNoPublishedResolutionHasTest {
      * a copy of that helper, standing where the call stood. It runs over a module this compile is
      * checking and is no part of reading a published one.
      *
-     * <p>The other three rebuild one they were handed with a part replaced, and a rewrite of an
+     * <p>The other two rebuild one they were handed with a part replaced, and a rewrite of an
      * expansion only ever happens where there was an expansion. {@code Hir} rewrites the tree under
-     * one when a body is walked; {@code HelperNames} puts back what a function argument stands in
-     * for; {@code NewtypeDesugar} replaces what it was bound with.
+     * one when a body is walked, which is also how {@code NewtypeDesugar} replaces what it was bound
+     * with; {@code HelperNames} puts back what a function argument stands in for.
      *
      * <p>A metavariable is made by the two that elaborate an application: {@code Elaborator} leaves
      * one where a signature's variable is not yet decided, and {@code HelperInliner} leaves one for
@@ -70,8 +70,7 @@ class WhoMayBuildAFormNoPublishedResolutionHasTest {
             "souther/compiler/check/Elaborator builds souther/compiler/types/Type$MetaVar",
             "souther/compiler/check/HelperInliner builds souther/compiler/ast/Hir$Expansion",
             "souther/compiler/check/HelperInliner builds souther/compiler/types/Type$MetaVar",
-            "souther/compiler/check/HelperNames builds souther/compiler/ast/Hir$Expansion",
-            "souther/compiler/check/NewtypeDesugar builds souther/compiler/ast/Hir$Expansion");
+            "souther/compiler/check/HelperNames builds souther/compiler/ast/Hir$Expansion");
 
     @Test
     void everyClassThatBuildsOneIsWrittenDown() {

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -59,7 +60,7 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
 
         ElementsWrittenAlike.Choices choices = ElementsWrittenAlike.of(new Reachability.Reaching(
                 reading().quantities().region(), Requirements.NONE, TruthsAsked.NONE, asked,
-                Reachability.Ways.ONE, List.of()));
+                Reachability.Ways.ONE, List.of(), Optional.empty()));
 
         assertEquals(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT, choices.stoppedBy());
         assertFalse(choices.ways().isEmpty(), () -> "the open way found: " + choices);
@@ -78,7 +79,7 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
                 new RowDemand.AnElementMeets(List.of(one, other)),
                 new RowDemand.Relational(new TakenConstraint.Affine(
                         LinearForm.atom(new NumericTerm.ValueOf(container.then("n"))), Rel.GE)),
-                Optional.empty()));
+                Optional.empty()), NamedElements.NONE);
     }
 
     private static RowDemand.ATruth truth(TermPath container, String field, boolean held) {
@@ -91,16 +92,16 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
         for (int each = 1; each <= ASKED_OF_Q; each++) {
             fields.add("q" + each + ": Bool");
         }
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data E = { %s }
-                data F = { b: Bool }
+                data Other = { b: Bool }
                 data Yes
 
-                behavior f : (xs: List<E>, ys: List<F>) -> Yes
+                behavior f : (xs: List<E>, ys: List<Other>) -> Yes
                 let f (xs, ys) = Yes
-                """.formatted(fields), "Main");
+                """.formatted(fields));
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

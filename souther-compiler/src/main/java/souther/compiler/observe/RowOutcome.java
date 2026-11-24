@@ -90,7 +90,8 @@ import java.util.Objects;
  * @param stage          how far it got
  * @param disposition    how it ended
  * @param failurePhase   where it stopped, when it did
- * @param expectedArm    the case the row's expectation constructs, or null when the text does not say
+ * @param expectedArm    the case the row's expectation is: the one it constructs, or where it
+ *                       constructs none, the one the value it builds to is. Null where neither says
  * @param resultArm      the case the behavior answered with, or null when it did not run or did not
  *                       answer with a case
  * @param answer         what the behavior answered, which a row has exactly where it got to
@@ -204,6 +205,11 @@ public record RowOutcome(SourcePos at,
             throw new IllegalArgumentException("a row whose answer is owed holds an answer to"
                     + " nothing: " + stage + " with " + disposition + " at " + failurePhase);
         }
+        // Nor does it expect a case: there is no expectation for one to be the case of.
+        if (owed && expectedArm != null) {
+            throw new IllegalArgumentException("a row whose answer is owed expects no case, and"
+                    + " this one is recorded expecting " + expectedArm);
+        }
         if (disposition == Disposition.FAILED && !failurePhase.failsARow()) {
             // A failed row says where the model did not do what it says. Stopped anywhere else, it
             // ends undecided, and a failed row carrying such a place would be read as a row the
@@ -224,6 +230,21 @@ public record RowOutcome(SourcePos at,
         }
     }
 
+    /**
+     * Whether the row got as far as handing its values over, which is what makes {@link #inputs}
+     * the row's inputs. A row that did not has what was built before it stopped or was refused,
+     * and that is not a tuple of the behavior's parameters: a position past its end is not a value
+     * that could not be read.
+     *
+     * <p>What a reader does with that prefix is the reader's own question. One that places each
+     * input where it was written (the classes, the generator) takes the prefix as it is, and the
+     * positions it never reached are unknown. One that needs the whole tuple at once (a border,
+     * which asks where the row stands on a line) takes only the rows that answer true here.
+     */
+    public boolean valuesHandedOver() {
+        return stage.reached(Stage.FIXTURES_VALIDATED);
+    }
+
     /** Whether the behavior answered for this row — it was applied and a value came back, which is
      * what {@link Stage#ANSWERED} is reached by. Where a row states what it expects the answer is
      * then compared, and where it is owed the row ends here; both saw the answer. Whether that
@@ -238,5 +259,41 @@ public record RowOutcome(SourcePos at,
      * disagreed still saw what it saw. */
     public boolean observed() {
         return answered() && resultArm != null;
+    }
+
+    /**
+     * Which case this row expects the answer to be.
+     *
+     * <p>One of three things, and {@link #expectedArm} being absent is two of them: a row whose
+     * answer is owed expects nothing, so it is evidence for no case; a row that states an
+     * expectation whose case could not be read may expect any of them. A count of the cases rows
+     * expect is exact past the first and undecided past the second, so the two are answered apart
+     * here rather than left for each reader to tell from the null.
+     */
+    public ExpectedCase expectedCase() {
+        if (expectation == ExpectationState.OWED) {
+            return new ExpectedCase.NoneAsserted();
+        }
+        return expectedArm != null ? new ExpectedCase.Names(expectedArm)
+                : new ExpectedCase.Unread();
+    }
+
+    /** What {@link #expectedCase} answers. */
+    public sealed interface ExpectedCase {
+
+        /** The row expects this case: the one it constructs, or the one its value is of. */
+        record Names(TypeSymbol arm) implements ExpectedCase {
+
+            public Names {
+                Objects.requireNonNull(arm, "a row naming a case names one");
+            }
+        }
+
+        /** The row's answer is owed, so it expects none. */
+        record NoneAsserted() implements ExpectedCase {}
+
+        /** The row states an expectation and which case it is was not read — its value is of no
+         *  case this can name, or the row stopped before its expectation was built. */
+        record Unread() implements ExpectedCase {}
     }
 }

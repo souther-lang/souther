@@ -1,9 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
 /**
  * What an option holds where it holds a value, followed through the operations that made it.
@@ -18,8 +16,8 @@ import souther.compiler.types.ValueName;
  * closure on what another option holds ({@link BoundOperationFacts#answersTheClosureOnWhatItHolds})
  * holds the closure's body read with its parameter standing for what the other holds — worked out
  * by this same walk. Every other option is the reader's to answer ({@link Reading#otherwise}): what
- * stands at a position of an input and what a lookup in an input's map answered are places only
- * the reading of an input has.
+ * stands at a position of an input, what a lookup in an input's map answered, and the element an
+ * index picks of a list made of an input are places only the reading of an input has.
  *
  * <p>Each step goes into an argument of the call before it, and each call is found through the
  * names it was bound to, so the descent ends where the tree does.
@@ -68,11 +66,11 @@ public final class WhatAnOptionHolds {
         if (applied == null) {
             return reading.otherwise(looked, null);
         }
-        if (applied.operation() instanceof ValueName.Stdlib.Operation listed
-                && reading.symbols().kernelOf(listed) == Kernel.LIST_GET) {
+        if (applied.picks() != null) {
             ElementsWrittenOut.Occurrence<E> picked =
                     ElementsWrittenOut.picked(looked.value(), looked.at(), reading);
-            return picked == null ? reading.unsaid() : reading.anElement(picked.value());
+            return picked == null ? reading.otherwise(looked, applied)
+                    : reading.anElement(picked.value());
         }
         BoundOperationFacts.ClosureOnWhatItHolds made =
                 DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(applied.operation());

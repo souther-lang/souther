@@ -28,8 +28,9 @@ class AWalkIsProvedToStayInARangeWithoutAnybodysVocabularyTest {
     }
 
     /** Both numbers are whole ones, which a range asserted about either of them is held to. */
-    private static final Map<Atom, Granularity> WHOLE_NUMBERS =
-            Map.of(Atom.ACCUMULATOR, Granularity.DISCRETE, Atom.ELEMENT, Granularity.DISCRETE);
+    private static final Map<Atom, NumberSpace> WHOLE_NUMBERS = Map.of(
+            Atom.ACCUMULATOR, NumberSpace.spacedOnly(Granularity.DISCRETE),
+            Atom.ELEMENT, NumberSpace.spacedOnly(Granularity.DISCRETE));
 
     private static final LinearForm<Atom> ACCUMULATOR =
             LinearForm.atom(Atom.ACCUMULATOR);

@@ -59,6 +59,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
 
+    /** Folded once, many sets come to what a union taken set by set comes to. */
+    @Test
+    void manySetsFoldedOnceAreWhatTheirUnionOneByOneComesTo() {
+        WeakeningSet first = observed(new SourcePos(1, 1));
+        WeakeningSet second = observed(new SourcePos(2, 2));
+        WeakeningSet third = observed(new SourcePos(3, 3));
+
+        assertEquals(first.union(second).union(third),
+                WeakeningSet.unionOf(List.of(first, WeakeningSet.none(), second, third)));
+        assertEquals(1, WeakeningSet.unionOf(List.of(first, second, third)).causes().size());
+        assertEquals(Set.of(Citation.of(new SourcePos(1, 1)), Citation.of(new SourcePos(2, 2)),
+                        Citation.of(new SourcePos(3, 3))),
+                WeakeningSet.unionOf(List.of(first, second, third)).observationCauses().iterator()
+                        .next().citations());
+        assertEquals(second, WeakeningSet.unionOf(List.of(WeakeningSet.none(), second)));
+        assertEquals(WeakeningSet.none(), WeakeningSet.unionOf(List.of()));
+    }
+
     @Test
     void anObservationMetAtTwoPlacesIsOneFact() {
         WeakeningSet here = observed(new SourcePos(1, 1));

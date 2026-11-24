@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.query.Bodies;
 
@@ -34,7 +35,7 @@ class AValuesComparisonIsNumberedLikeTheSameOneWrittenInlineTest {
             """;
 
     private static int placesOf(String source) {
-        Bodies.Elaborated checked = Compiler.compiled(source, "m").db()
+        Bodies.Elaborated checked = ACompiledModel.compiles(Compiler.compiled(source, "m")).db()
                 .ask(new Bodies.Checked("m")).value();
         return checked.plan().sites().size();
     }

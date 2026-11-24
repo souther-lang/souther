@@ -1,8 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenArguments;
@@ -132,6 +134,34 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
     }
 
     /**
+     * Whether the values {@code runs} leaves this number are the values the reading of the
+     * position holds of it, so that a rule leaving it there is carried out whole.
+     *
+     * <p>A run is asked as {@link #carriesOut(OrderedInterval)} asks it. Several are carried out
+     * only by a count, whose values are held as the numbers they are: a part of a date and a
+     * remainder are read back as one range or one class.
+     */
+    boolean carriesOut(OrderedRuns runs) {
+        if (runs.holdsNothing()) {
+            return false;
+        }
+        if (runs.isOneRun()) {
+            return carriesOut(runs.hull());
+        }
+        return holdsItsHolesAsRuns();
+    }
+
+    /**
+     * Whether the values left this number are read back out of it whole where the rules take some
+     * out from between its ends: the length of a string, whose values the strings a position holds
+     * are taken from ({@code StringsHeld}). The size of a container is counted and holds its ends
+     * and nothing between them, so a hole in it is a rule nothing reads.
+     */
+    boolean holdsItsHolesAsRuns() {
+        return RepresentationBounds.isTheLengthOfAString(operation);
+    }
+
+    /**
      * The class {@code left} on this number holds the values at {@link #position} to — the same
      * reading {@link #carriesOut} says is whole, beside it so that the two cannot part: a part of the
      * date left in a range, and a remainder left at one number. None where the range says nothing
@@ -149,6 +179,13 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
                     new HeldClass.OfResidues(new Congruences(residue, by));
             case null, default -> HeldClass.NONE;
         };
+    }
+
+    /** The part of the date this is, where it is a part taken of the date as it stands, and null
+     *  where it is any other number. */
+    TakenAs.DatePart partOfTheDate() {
+        return (from instanceof ValueTransformation.Identity && arguments.none()
+                && how() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)) ? part : null;
     }
 
     /** What this number's operation takes of the value, given what it was given beside it. */

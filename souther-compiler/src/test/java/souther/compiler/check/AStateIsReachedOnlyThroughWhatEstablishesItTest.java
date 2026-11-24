@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
@@ -7,12 +8,11 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.frontend.CstFrontend;
+import souther.test.RepositoryJavaSources;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -544,8 +544,9 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 data Amount = Int
                     invariant atLeast(value)
                 """;
-        souther.compiler.query.Compilation compilation = souther.compiler.query.Compilation
-                .ofSources(List.of(lib, uses), souther.compiler.meta.ModulePath.EMPTY);
+        souther.compiler.query.Compilation compilation = ACompiledModel.compiles(
+                souther.compiler.query.Compilation
+                        .ofSources(List.of(lib, uses), souther.compiler.meta.ModulePath.EMPTY));
         Hir.Module resolved = compilation.db()
                 .ask(new souther.compiler.query.Names.Resolved("shop")).value();
         assertNotEquals(resolved, HelperNames.withQualifiedInvariants(resolved),
@@ -672,10 +673,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      * puts the same value in the same hands and spells neither parenthesis.
      */
     @Test
-    void noReaderInTheCompilerTakesAStatesPayloadInsteadOfItsParts() throws IOException {
+    void noReaderInTheCompilerTakesAStatesPayloadInsteadOfItsParts() {
         List<String> reading = new ArrayList<>();
         for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
-            String text = Files.readString(source);
+            String text = RepositoryJavaSources.forThisFork().mainText(source);
             if (text.contains(".tree()") || text.contains("::tree")) {
                 reading.add(String.valueOf(source.getFileName()));
             }
@@ -717,7 +718,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      * and it fails until it is either given the part or written down as this one is.
      */
     @Test
-    void theModuleLeavesTheLadderInOnePlace() throws IOException {
+    void theModuleLeavesTheLadderInOnePlace() {
         List<String> handling = new ArrayList<>();
         for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             if (!source.toString().contains("/souther/compiler/check/")) {

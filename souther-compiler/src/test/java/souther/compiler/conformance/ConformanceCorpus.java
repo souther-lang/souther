@@ -1,6 +1,8 @@
 package souther.compiler.conformance;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
+import souther.compiler.TestDay;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.meta.ModulePath;
@@ -61,6 +63,9 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     /** What a line of the manifest begins with where it declares a purpose rather than uses one. */
     private static final String DECLARES = "purpose";
 
+    /** The checked-in diagnostics of a corpus, beside the answers about it. */
+    private static final String DIAGNOSTICS = "expected.diagnostics.txt";
+
     /** Where the answers about them are, which is this module's own resources. */
     static final String ROOT = "/souther/compiler/conformance/";
 
@@ -81,6 +86,15 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return out;
     }
 
+    /**
+     * The corpus the manifest names {@code name}, with the files it is made of in the order they
+     * are handed over and the text of each.
+     *
+     * <p>The one way in by name, and for any corpus the manifest names and not only a conformance
+     * one, because what a reader over every model this repository carries needs is the same
+     * reading. A name the manifest does not carry is refused here, so a reader of a model cannot go
+     * on reading one after it was taken out of the manifest.
+     */
     public static ConformanceCorpus load(String name) {
         if (!manifest().containsKey(name)) {
             throw new IllegalStateException("the manifest names no corpus `" + name + "`");
@@ -91,14 +105,7 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return new ConformanceCorpus(name, files, sources);
     }
 
-    /**
-     * The files one corpus is made of, in the order they are handed over.
-     *
-     * <p>Any corpus the manifest names and not only a conformance one, because what a reader over
-     * every model this repository carries needs is the same reading. Written a second time for the
-     * others, the two would part over a file added to one corpus and nothing would say so.
-     */
-    public static List<String> filesOf(String name) {
+    private static List<String> filesOf(String name) {
         List<String> out = new ArrayList<>();
         for (String line : read(MODELS + name + "/sources.txt").lines().toList()) {
             String file = line.strip();
@@ -109,13 +116,6 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         if (out.isEmpty()) {
             throw new IllegalStateException("the `" + name + "` corpus names no source");
         }
-        return List.copyOf(out);
-    }
-
-    /** The text of each of them. */
-    public static List<String> sourcesOf(String name) {
-        List<String> out = new ArrayList<>();
-        filesOf(name).forEach(file -> out.add(read(MODELS + name + "/" + file)));
         return List.copyOf(out);
     }
 
@@ -206,6 +206,44 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     }
 
     /**
+     * A compilation of this corpus of its own, written on the day every test is, answered in full
+     * and held to be refused with what the corpus is written to be refused with.
+     *
+     * <p>For a reader of a model that is not analysed, which is every corpus written for something
+     * other than the answers checked in. Never the compilation as it is: given without what it is
+     * written to be refused with, it leaves the reader to choose what to hold it to.
+     */
+    Compilation answered() {
+        return ACompiledModel.refusedWith(refusedWith(),
+                Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE));
+    }
+
+    /**
+     * The errors this corpus is written to be refused with, in the order the compiler gives them:
+     * the ones its checked-in diagnostics say, and none for a corpus with no diagnostics checked in,
+     * which compiles.
+     *
+     * <p>The one place this is said. It is what the checked-in answer already holds, and a second
+     * statement of it — a table of names, or a list in the test that wants it — answers separately
+     * and is wrong without anything failing the day the corpus is refused for something else.
+     * Held to the compiler by {@code TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest}.
+     */
+    public List<String> refusedWith() {
+        try (InputStream in = ConformanceCorpus.class
+                .getResourceAsStream(ROOT + name + "/" + DIAGNOSTICS)) {
+            if (in == null) {
+                return List.of();
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .filter(line -> line.startsWith("error "))
+                    .map(line -> line.split("\\s+")[1])
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
      * This corpus analysed, with everything the report needs measured and every warning collected.
      *
      * <p>The analysing entry point rather than the compiling one. What the rows cover is answered
@@ -221,8 +259,9 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      */
     public Analysed analyse() {
         List<Located> warnings = new ArrayList<>();
-        Compilation compilation = Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
-                Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith(),
+                Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
+                        Adequacy.Asked.fullReport(), TestDay.DATE));
         return new Analysed(this, compilation, compilation.errors(), warnings,
                 AdequacyReport.of(compilation));
     }
@@ -241,8 +280,55 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      * this settles is not which document but that there is one: the questions are put where the
      * analysis happens, and no caller can have the analysis without them.
      */
-    public record Analysed(ConformanceCorpus corpus, Compilation compilation,
-                           List<Located> errors, List<Located> warnings, AdequacyReport report) {
+    public static final class Analysed {
+
+        private final ConformanceCorpus corpus;
+
+        private final Compilation compilation;
+
+        private final List<Located> errors;
+
+        private final List<Located> warnings;
+
+        private final AdequacyReport report;
+
+        private Analysed(ConformanceCorpus corpus, Compilation compilation, List<Located> errors,
+                         List<Located> warnings, AdequacyReport report) {
+            this.corpus = corpus;
+            this.compilation = compilation;
+            this.errors = errors;
+            this.warnings = warnings;
+            this.report = report;
+        }
+
+        public ConformanceCorpus corpus() {
+            return corpus;
+        }
+
+        public List<Located> errors() {
+            return errors;
+        }
+
+        public List<Located> warnings() {
+            return warnings;
+        }
+
+        public AdequacyReport report() {
+            return report;
+        }
+
+        /**
+         * The compilation, held to be refused with what its corpus is written to be refused with
+         * and nothing else.
+         *
+         * <p>The only way to it, and not only from outside this package: an access level cannot
+         * say that, and a reader of the same package would be left to choose what to hold it to.
+         * Holding a corpus written to be refused to compile is the choice that failed
+         * twenty-five tests.
+         */
+        public Compilation answered() {
+            return ACompiledModel.refusedWith(corpus.refusedWith(), compilation);
+        }
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */
         public List<Located> said() {

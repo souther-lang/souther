@@ -1,0 +1,458 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ACompiledModel;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A walk adding the decimals of a list to a seed one at a time completes every step: each answer
+ * so far is a decimal. So a relation over its total is read as the same relation over a total
+ * given as an input is. A step that works out anything beside adding the element is no such walk,
+ * and tells nothing.
+ */
+class AWalkAddingDecimalsCompletesStepByStepTest {
+
+    private static final String DECLARATIONS = """
+            data Amount = Decimal
+                invariant value >= 0.0m
+            data Note = { gross: Amount }
+            data Line = { price: Amount, qty: Amount }
+            data Totals = { gross: Decimal, count: Int }
+            data Free = { price: Decimal, qty: Decimal }
+            data AtLeastOne = Decimal
+                invariant value >= 1.0m
+            data Bulk = { price: Amount, qty: AtLeastOne }
+            """;
+
+    private static final String INPUTS =
+            "gross: Amount, existing: List<Note>, net: Amount, tax: Amount";
+
+    private static final Set<String> THE_FOUR_TERMS =
+            Set.of("List.sum(existing[*].gross)", "gross", "net", "tax");
+
+    private static String report(String inputs, String body) {
+        return report("", inputs, body);
+    }
+
+    private static String report(String helpers, String inputs, String body) {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                %s
+                %s
+                behavior m : (%s) -> Bool
+                let m (%s) = %s
+                """.formatted(DECLARATIONS, helpers, inputs,
+                inputs.replaceAll(": (Map<[^>]*>|List<[^>]*>|[A-Za-z<>]+)", ""), body), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /** The places the report says the comparison relates rather than divides. */
+    private static Set<String> related(String report) {
+        return placesSaying(report, "· no line", "rather than dividing the values here");
+    }
+
+    /** The places the report says the comparison relates to a value not shown to reach them. */
+    private static Set<String> notShown(String report) {
+        return placesSaying(report, "· not read", "not shown to reach every value here");
+    }
+
+    private static Set<String> placesSaying(String report, String start, String words) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.startsWith(start) && line.contains(words))
+                .map(line -> line.substring(line.lastIndexOf("about `") + 7, line.length() - 1))
+                .collect(Collectors.toSet());
+    }
+
+    /** The comparison of the issue, over what the walk with {@code step} from {@code seed} over
+     *  {@code existing} comes to. */
+    private static String credited(String step, String seed) {
+        return """
+                {
+                    let credited = List.fold((acc, n) -> %s, %s, existing)
+                    Decimal.compare(Decimal.add(net.value, tax.value),
+                                    Decimal.subtract(gross.value, credited)) <= 0
+                }""".formatted(step, seed);
+    }
+
+    @Test
+    void aRelationOverTheWalksTotalIsReadAsOverATotalGivenAsAnInput() {
+        String given = report("gross: Amount, credited: Amount, net: Amount, tax: Amount", """
+                Decimal.compare(Decimal.add(net.value, tax.value),
+                                Decimal.subtract(gross.value, credited.value)) <= 0""");
+        assertEquals(Set.of("credited", "gross", "net", "tax"), related(given), given);
+
+        String walked = report(INPUTS, credited("Decimal.add(acc, n.gross.value)", "0.0m"));
+        assertEquals(THE_FOUR_TERMS, related(walked), walked);
+        assertEquals(Set.of(), notShown(walked), walked);
+    }
+
+    /**
+     * A walk's room turns on no number of the total it adds up, so a relation of the total with
+     * one other number reads the total as well: its rows far out are asked as any are.
+     */
+    @Test
+    void aTotalComparedWithOneOtherNumberIsRead() {
+        String listed = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Decimal.add(acc, n.gross.value), 0.0m,
+                                          existing), c.value) <= 0""");
+        assertEquals(Set.of("List.sum(existing[*].gross)", "c"), related(listed), listed);
+        String mapped = report("m: Map<String, Amount>, c: Amount", """
+                Decimal.compare(Map.fold((acc, k, v) -> Decimal.add(acc, v.value), 0.0m, m),
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum(m[*])", "c"), related(mapped), mapped);
+        // A total worked out once is as bound: its scale is the elements', whatever it comes to.
+        String doubled = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(Decimal.multiply(List.sum(List.map(n -> n.gross.value, existing)),
+                                                 2.0m), c.value) <= 0""");
+        assertEquals(Set.of("List.sum(existing[*].gross)", "c"), related(doubled), doubled);
+    }
+
+    /**
+     * What a step adds of an element may be taken away, or be a product of its fields: the step
+     * works out that product and the sum or difference, and the walk is told with both. A total
+     * of what a closure makes of each element is the same walk from nought.
+     */
+    @Test
+    void aStepTakingAwayOrAddingAProductIsTheSameWalk() {
+        String takenAway = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Decimal.subtract(acc, n.gross.value),
+                                          100.0m, existing), c.value) <= 0""");
+        assertEquals(Set.of(), notShown(takenAway), takenAway);
+        assertTrue(related(takenAway).contains("List.sum(existing[*].gross)"), takenAway);
+        String products = "List.sum({1·price·qty + 0 | lines[*]})";
+        String walked = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(List.fold((acc, l) -> Decimal.add(acc,
+                                              Decimal.multiply(l.price.value, l.qty.value)),
+                                          0.0m, lines), c.value) <= 0""");
+        assertEquals(Set.of(products, "c"), related(walked), walked);
+        String summed = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(List.sum(List.map(l -> Decimal.multiply(l.price.value,
+                                                                        l.qty.value), lines)),
+                                c.value) <= 0""");
+        assertEquals(Set.of(products, "c"), related(summed), summed);
+        // With qty at one the product is price, from nought; with price at one it is qty, from
+        // one. A row is written either way, so the product takes every value of the two together.
+        String bulk = report("lines: List<Bulk>, c: Amount", """
+                Decimal.compare(List.sum(List.map(l -> Decimal.multiply(l.price.value,
+                                                                        l.qty.value), lines)),
+                                c.value) <= 0""");
+        assertEquals(Set.of(products, "c"), related(bulk), bulk);
+    }
+
+    /**
+     * What each element adds may be fields of it added or taken one from another, by the
+     * operator or the library's operation, in a closure or a step, either way round the answer so
+     * far is added to. Each such operation is at the greater of its operands' scales, so the walk
+     * is the same walk as one adding a field, and a product beside a field is at the scale of a
+     * product. A total of {@code price * qty + price} takes what one element with {@code price} at
+     * one comes to, {@code qty + 1}, as the builder of the row writes it. A name the closure gives
+     * its part is read as the part; a closure that works out what it was not handed is not read.
+     */
+    @Test
+    void anElementsPartOfSeveralFieldsIsTheSameWalk() {
+        String inputs = "lines: List<Line>, c: Amount";
+        for (String[] each : List.of(
+                new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
+                        "List.sum(List.map(l -> Decimal.add(l.price.value, l.qty.value), lines))"},
+                new String[] {"List.sum({1·price + -1·qty + 0 | lines[*]})",
+                        "List.sum(List.map(l -> Decimal.subtract(l.price.value, l.qty.value),"
+                                + " lines))"},
+                new String[] {"List.sum({1·price + -1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> Decimal.add(acc, Decimal.subtract(l.price.value,"
+                                + " l.qty.value)), 0.0m, lines)"},
+                new String[] {"List.sum({1·price + -1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> acc + l.price.value - l.qty.value, 0.0m, lines)"},
+                new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> Decimal.add(Decimal.add(acc, l.price.value),"
+                                + " l.qty.value), 0.0m, lines)"},
+                new String[] {"List.sum({1·price + 1·qty + 0 | lines[*]})",
+                        "List.fold((acc, l) -> Decimal.add(Decimal.add(acc, l.price.value),"
+                                + " l.qty.value), 0.0m, lines)"})) {
+            String report = report(inputs, "Decimal.compare(%s, c.value) <= 0".formatted(each[1]));
+            assertEquals(Set.of(each[0], "c"), related(report), () -> each[1] + report);
+        }
+        // Over decimals of either sign, one element with price at one comes to qty + 1, which
+        // takes every value qty is moved by one.
+        String mixed = "List.sum({1·price + 1·price·qty + 0 | free[*]})";
+        for (String total : List.of(
+                "List.fold((acc, l) -> acc + (l.price * l.qty + l.price), 0.0m, free)",
+                "List.sum(List.map(l -> l.price * l.qty + l.price, free))",
+                "List.sum(List.map(l -> l.price * l.qty * 2.0m + l.price * 2.0m, free))")) {
+            String report = report("free: List<Free>, c: Decimal",
+                    "Decimal.compare(%s, c) <= 0".formatted(total));
+            assertEquals(Set.of(mixed, "c"), related(report), () -> total + report);
+        }
+        // A number written out beside the field moves what one element comes to by it, whether it
+        // is a whole number or not; the total is the one of the field at the weight one, however
+        // the field's weight and the number were written beside each other.
+        for (String part : List.of("Decimal.add(l.price, 2.0m)", "Decimal.add(l.price, 1.5m)",
+                "Decimal.add(Decimal.multiply(l.price, 2.0m), 3.0m)")) {
+            String moved = report("free: List<Free>, c: Decimal", """
+                    Decimal.compare(List.sum(List.map(l -> %s, free)), c) <= 0"""
+                    .formatted(part));
+            String named = part.endsWith("2.0m)") ? "List.sum({1·price + 2 | free[*]})"
+                    : "List.sum({1·price + 1.5 | free[*]})";
+            assertEquals(Set.of(named, "c"), related(moved), () -> part + moved);
+        }
+        // At nought or more, price + 1.0 is one or more, and what lies between it and nought is
+        // reached by no list: no row is built there and nothing is said of it. Nothing stops a
+        // row of the rest, so the total is read as the sum of the field and the one is.
+        String pastOne = report(inputs, """
+                Decimal.compare(List.sum(List.map(l -> Decimal.add(l.price.value, 1.0m), lines)),
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum({1·price + 1 | lines[*]})"), related(pastOne), pastOne);
+        // And of a total of products beside a field: what no row is built at is said of by
+        // nothing, and the rest is the sum as it is written.
+        String fromOne = report(inputs, """
+                Decimal.compare(List.sum(List.map(l -> l.price.value * l.qty.value
+                                                       + l.price.value, lines)), c.value) <= 0""");
+        assertEquals(Set.of("List.sum({1·price + 1·price·qty + 0 | lines[*]})"),
+                related(fromOne), fromOne);
+        String named = report(inputs, """
+                Decimal.compare(List.sum(List.map(l -> {
+                        let d = Decimal.subtract(l.price.value, l.qty.value)
+                        d
+                    }, lines)), c.value) <= 0""");
+        assertEquals(Set.of("List.sum({1·price + -1·qty + 0 | lines[*]})", "c"), related(named),
+                named);
+        String notHanded = report(inputs + ", k: Int", """
+                Decimal.compare(List.sum(List.map(l -> {
+                        let unused = k + 1
+                        Decimal.subtract(l.price.value, l.qty.value)
+                    }, lines)), c.value) <= 0""");
+        assertEquals(Set.of(), related(notHanded), notHanded);
+    }
+
+    /**
+     * Two totals of one list, added, are named by the comparison as the one total of what each
+     * element comes to. The operations read the two, which a row holds by the list it is built
+     * with and not as terms of its own, and a row of one element writes what the one total takes.
+     *
+     * <p>Neither total is a number of the row, so what is asked of the walks there is that the
+     * list is one that is built: every element written at no more places than a row is built at,
+     * and so each total. That the builder writes them so is
+     * {@link AListATotalIsTheSumOfIsWrittenAtNoMorePlacesThanARowIsBuiltAtTest}; refused for the
+     * want of the totals among the row's numbers, the walks would leave the comparison unread.
+     */
+    @Test
+    void twoTotalsOfOneListAreReadAsTheOneTotalTheComparisonNames() {
+        String merged = "List.sum({1·price + 1·qty + 0 | lines[*]})";
+        String summed = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(Decimal.add(List.sum(List.map(l -> l.price.value, lines)),
+                                            List.sum(List.map(l -> l.qty.value, lines))),
+                                c.value) <= 0""");
+        assertEquals(Set.of(merged, "c"), related(summed), summed);
+        String walked = report("lines: List<Line>, c: Amount", """
+                Decimal.compare(Decimal.add(
+                        List.fold((acc, l) -> Decimal.add(acc, l.price.value), 0.0m, lines),
+                        List.fold((acc, l) -> Decimal.add(acc, l.qty.value), 0.0m, lines)),
+                    c.value) <= 0""");
+        assertEquals(Set.of(merged, "c"), related(walked), walked);
+    }
+
+    /** A total of what a closure makes of each number of a list written out is told as the
+     *  library adds the answers up: from nought, one after another. */
+    @Test
+    void aTotalOfAClosureOverAListWrittenOutIsToldAsItIsAddedUp() {
+        String report = report("a: Amount, b: Amount, c: Amount", """
+                Decimal.compare(List.sum(List.map(x -> Decimal.add(x, 1.0m),
+                                                  [a.value, b.value])), c.value) <= 0""");
+        assertEquals(Set.of(), notShown(report), report);
+        assertTrue(related(report).containsAll(Set.of("a", "b")), report);
+    }
+
+    /** A walk over a map of decimals adding the product of each value and what another map holds
+     *  under its key, or nought, is a walk of products. */
+    @Test
+    void aWalkJoiningTwoMapsOfDecimalsIsAWalkOfProducts() {
+        String report = report(
+                "qty: Map<String, Decimal>, prices: Map<String, Decimal>, c: Amount", """
+                Decimal.compare(Map.fold((acc, k, q) -> Decimal.add(acc, Decimal.multiply(q,
+                                    Option.withDefault(0.0m, Map.get(k, prices)))), 0.0m, qty),
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum({qty[*] * prices[*] under one key})", "c"), related(report),
+                report);
+    }
+
+    /**
+     * A field of what a walk carrying a record answers is read as that field's own walk. Every
+     * field is worked out at every step, so every field's walk is told: the gross added as a walk
+     * of decimals, the count by one. A field whose step does more than that tells nothing.
+     */
+    @Test
+    void aFieldOfAWalkCarryingARecordIsToldWithEveryFieldsWalk() {
+        String carried = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Totals {
+                                        gross = Decimal.add(acc.gross, n.gross.value),
+                                        count = acc.count + 1 },
+                                    Totals { gross = 0.0m, count = 0 }, existing).gross,
+                                c.value) <= 0""");
+        assertEquals(Set.of("List.sum(existing[*].gross)", "c"), related(carried), carried);
+        String doubling = report("existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, n) -> Totals {
+                                        gross = Decimal.add(acc.gross, n.gross.value),
+                                        count = acc.count * 2 },
+                                    Totals { gross = 0.0m, count = 1 }, existing).gross,
+                                c.value) <= 0""");
+        assertEquals(Set.of(), related(doubling), doubling);
+    }
+
+    /**
+     * A walk is worked out after the list it walks, and a total after the closure that makes what
+     * it adds up: what working those out may stop a run at is no step's, and where it may, the
+     * steps are not every operation a row gets past. Here {@code n + 1} stops where {@code n} is
+     * the greatest {@code Int}, written where the list is made, in the closure making it, in the
+     * list a total of products is taken over, and in the list a walk carrying a record or one
+     * joining two maps walks.
+     */
+    @Test
+    void whatIsWorkedOutToReachTheStepsIsAskedOfTheWalk() {
+        String inputs = "n: Int, xs: List<Amount>, c: Amount";
+        String overTheList = "List.fold((acc, x) -> Decimal.add(acc, x.value), 0.0m, %s)";
+        for (String list : List.of("""
+                {
+                        let unused = n + 1
+                        xs
+                    }""", """
+                List.map(x -> {
+                        let unused = n + 1
+                        x
+                    }, xs)""")) {
+            String report = report(inputs, "Decimal.compare(%s, c.value) <= 0"
+                    .formatted(overTheList.formatted(list)));
+            assertEquals(Set.of(), related(report), () -> list + report);
+        }
+        String products = report("n: Int, lines: List<Line>, c: Amount", """
+                Decimal.compare(List.sum(List.map(l -> Decimal.multiply(l.price.value,
+                                                                        l.qty.value), {
+                        let unused = n + 1
+                        lines
+                    })), c.value) <= 0""");
+        assertEquals(Set.of(), related(products), products);
+        String carried = report("n: Int, existing: List<Note>, c: Amount", """
+                Decimal.compare(List.fold((acc, x) -> Totals {
+                                        gross = Decimal.add(acc.gross, x.gross.value),
+                                        count = acc.count + 1 },
+                                    Totals { gross = 0.0m, count = 0 }, {
+                        let unused = n + 1
+                        existing
+                    }).gross, c.value) <= 0""");
+        assertEquals(Set.of(), related(carried), carried);
+        String joined = report(
+                "n: Int, qty: Map<String, Decimal>, prices: Map<String, Decimal>, c: Amount", """
+                Decimal.compare(Map.fold((acc, k, q) -> Decimal.add(acc, Decimal.multiply(q,
+                                    Option.withDefault(0.0m, Map.get(k, prices)))), 0.0m, {
+                        let unused = n + 1
+                        qty
+                    }), c.value) <= 0""");
+        assertEquals(Set.of(), related(joined), joined);
+    }
+
+    /** A walk a helper works out is worked out where the helper is called. */
+    @Test
+    void aWalkInAHelperIsTheSameWalk() {
+        String walked = report("""
+                let creditedSoFar (existing: List<Note>): Decimal =
+                    List.fold((acc, n) -> Decimal.add(acc, n.gross.value), 0.0m, existing)
+                """, INPUTS, """
+                {
+                    let credited = creditedSoFar(existing)
+                    Decimal.compare(Decimal.add(net.value, tax.value),
+                                    Decimal.subtract(gross.value, credited)) <= 0
+                }""");
+        assertEquals(THE_FOUR_TERMS, related(walked), walked);
+    }
+
+    /** The answer so far on either side of the sum is the same step, and a seed at another
+     *  scale is the same walk. */
+    @Test
+    void theStepIsTheSameWhicheverSideTheAnswerSoFarIsOn() {
+        for (String step : List.of("Decimal.add(n.gross.value, acc)", "acc + n.gross.value")) {
+            for (String seed : List.of("0.0m", "0m")) {
+                String walked = report(INPUTS, credited(step, seed));
+                assertEquals(THE_FOUR_TERMS, related(walked), () -> step + " " + seed + walked);
+            }
+        }
+    }
+
+    /**
+     * A step that works out more than the sum, even what nothing then reads, is worked out on
+     * every step of the walk, and each operation is told with the walk at the scale it is at: a
+     * product by a number written out is at the sum of the two scales, and a sum with a number
+     * written out at the greater. A product by one adds the same number and works out a product
+     * all the same.
+     */
+    @Test
+    void aStepThatWorksOutMoreThanTheSumIsToldWithAllOfIt() {
+        for (String step : List.of(
+                "Decimal.add(acc, Decimal.multiply(n.gross.value, 2.0m))",
+                "Decimal.add(acc, Decimal.multiply(n.gross.value, 1.0m))",
+                "Decimal.add(Decimal.add(acc, 0.0m), n.gross.value)",
+                """
+                {
+                        let unused = Decimal.multiply(n.gross.value, 2.0m)
+                        Decimal.add(acc, n.gross.value)
+                    }""")) {
+            String walked = report(INPUTS, credited(step, "0.0m"));
+            assertEquals(THE_FOUR_TERMS, related(walked), () -> step + walked);
+        }
+    }
+
+    /**
+     * A step that works out what it was not handed tells nothing: {@code k + 1} stops where
+     * {@code k} is the greatest {@code Int}, which no step of the walk says.
+     */
+    @Test
+    void aStepThatWorksOutWhatItWasNotHandedTellsNothing() {
+        String step = """
+                {
+                        let unused = k + 1
+                        Decimal.add(acc, n.gross.value)
+                    }""";
+        String walked = report(INPUTS + ", k: Int", credited(step, "0.0m"));
+        assertEquals(Set.of(), related(walked), walked);
+    }
+
+    /**
+     * A product of the answer so far is at a scale that grows with every step, so the walk tells
+     * no step at the scale it is at. It ends a run only past what the representation holds, which
+     * is no row's run, and the number is the total all the same: the comparison relates it.
+     */
+    @Test
+    void aProductOfTheAnswerSoFarEndsNoRowsRun() {
+        String walked = report(INPUTS, credited(
+                "Decimal.add(Decimal.multiply(acc, 1.0m), n.gross.value)", "0.0m"));
+        assertEquals(THE_FOUR_TERMS, related(walked), walked);
+    }
+
+    /** What is worked out of the walk's answer is told after it, and a row gets past both. */
+    @Test
+    void anOperationOverTheWalksAnswerIsToldAfterTheWalk() {
+        String walked = report(INPUTS, """
+                {
+                    let credited = List.fold((acc, n) -> Decimal.add(acc, n.gross.value), 0.0m,
+                                             existing)
+                    Decimal.compare(Decimal.add(net.value, tax.value),
+                                    Decimal.subtract(gross.value,
+                                                     Decimal.multiply(credited, 2.0m))) <= 0
+                }""");
+        assertEquals(THE_FOUR_TERMS.stream().filter(each -> !each.startsWith("List.sum"))
+                .collect(Collectors.toSet()), related(walked).stream()
+                .filter(each -> !each.startsWith("List.sum")).collect(Collectors.toSet()),
+                walked);
+    }
+}

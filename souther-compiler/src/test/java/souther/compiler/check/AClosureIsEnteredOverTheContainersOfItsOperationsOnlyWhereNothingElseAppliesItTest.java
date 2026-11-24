@@ -2,9 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +38,8 @@ class AClosureIsEnteredOverTheContainersOfItsOperationsOnlyWhereNothingElseAppli
     /** What the closure {@code over} of the behavior's body is entered over, one for each
      *  operation. */
     private static List<Core> enteredOver(String body) {
-        Bodies.CheckedBody checked = Compiler.compiled(HEAD + body, "m").db()
+        Compilation compilation = ACompiledModel.compiles(Compiler.compiled(HEAD + body, "m"));
+        Bodies.CheckedBody checked = compilation.db()
                 .ask(new Bodies.CheckedBehavior("m", "f")).value();
         Core.Block block = firstBlockIn(checked.analysis().core());
         assertFalse(block == null, "the body writes a closure");

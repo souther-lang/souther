@@ -1,8 +1,11 @@
 package souther.compiler.meaning;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,11 +42,12 @@ public final class CountsWrittenOut {
         }
     }
 
-    /** No statement, the counts in it written out being past {@code figure}. */
-    public record PastAFigure(CompositionBudget figure) implements Handed {
+    /** No statement, the counts in it written out being past the figure they were held to,
+     *  {@code stoppedAt}. */
+    public record PastAFigure(Figure.Budget stoppedAt) implements Handed {
 
         public PastAFigure {
-            Objects.requireNonNull(figure, "a writing out stops at some figure");
+            Objects.requireNonNull(stoppedAt, "a writing out stops at some figure");
         }
     }
 
@@ -52,21 +56,32 @@ public final class CountsWrittenOut {
      * a statement enters it, and some of them are asked of one statement again and again. A
      * statement handed as itself is kept as nothing and not as itself, which the entry holding it
      * would keep from ever being let go.
+     *
+     * <p>Kept for each figure the readings of one condition are held to, since what a statement is
+     * written out as, or whether it is written out at all, turns on it, and a compilation held to
+     * one figure is not handed what was kept for another.
      */
-    private static final Map<Proposition, Optional<Handed>> HANDED = new WeakHashMap<>();
+    private static final Map<Proposition, Map<Integer, Optional<Handed>>> HANDED =
+            new WeakHashMap<>();
 
     /** The same, for a reader that reads a count itself wherever it stands outside an element of a
      *  container ({@link #outsideElementsOf}). */
-    private static final Map<Proposition, Optional<Handed>> HANDED_OUTSIDE_ELEMENTS =
-            new WeakHashMap<>();
+    private static final Map<Proposition, Map<Integer, Optional<Handed>>>
+            HANDED_OUTSIDE_ELEMENTS = new WeakHashMap<>();
 
     private long partsLeft = PARTS.maximum();
-    private CompositionBudget stoppedAt;
+    private Figure.Budget stoppedAt;
     /** Whether a count outside every element of a container is left as it is. */
     private boolean leavingCounts;
 
-    private CountsWrittenOut(boolean leavingCounts) {
+    /** Whether each count leaves its statements as they are, which is the count's alone to say
+     *  however many counts hold it, so a count inside many is asked once for all that is written
+     *  out here. */
+    private final Map<Proposition.SoManyHold, Boolean> leavesKept;
+
+    private CountsWrittenOut(boolean leavingCounts, Map<Proposition.SoManyHold, Boolean> kept) {
         this.leavingCounts = leavingCounts;
+        this.leavesKept = kept;
     }
 
     /** What {@code stated} is handed to such a reader as. */
@@ -85,26 +100,69 @@ public final class CountsWrittenOut {
         return of(stated, true, HANDED_OUTSIDE_ELEMENTS);
     }
 
+    /**
+     * Whether writing out {@code stated} as {@link #outsideElementsOf} does leaves it as it is: no
+     * count in it is written out, so what it is handed as is what it says.
+     *
+     * <p>Told by what it is handed as being {@code stated} itself. Writing out hands back each
+     * proposition it changes nothing in, and kept answers hand back the one asked, so a
+     * proposition handed back as another is one something was written out of.
+     */
+    public static boolean writesNothingOutOf(Proposition stated) {
+        return outsideElementsOf(stated) instanceof Written(Proposition written)
+                && written == stated;
+    }
+
     private static Handed of(Proposition stated, boolean leavingCounts,
-                             Map<Proposition, Optional<Handed>> handedBefore) {
+                             Map<Proposition, Map<Integer, Optional<Handed>>> handedBefore) {
+        int readings = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         synchronized (handedBefore) {
-            Optional<Handed> kept = handedBefore.get(stated);
+            Map<Integer, Optional<Handed>> byFigure = handedBefore.get(stated);
+            Optional<Handed> kept = byFigure == null ? null : byFigure.get(readings);
             if (kept != null) {
                 return kept.orElseGet(() -> new Written(stated));
             }
         }
-        CountsWrittenOut writing = new CountsWrittenOut(leavingCounts);
+        CountsWrittenOut writing = new CountsWrittenOut(leavingCounts, new IdentityHashMap<>());
         Proposition written = writing.writtenOut(stated);
         Handed handed = written == null ? new PastAFigure(writing.stoppedAt) : new Written(written);
         synchronized (handedBefore) {
-            handedBefore.putIfAbsent(stated,
+            handedBefore.computeIfAbsent(stated, _ -> new HashMap<>()).putIfAbsent(readings,
                     written == stated ? Optional.empty() : Optional.of(handed));
         }
         return handed;
     }
 
+    /** What a statement came to written out, and how many of the parts the writing may spend it
+     *  spent. */
+    private record Done(Proposition written, long spent) {}
+
+    /** What each statement came to, by whether a count outside an element is left as it is. A
+     *  statement held in several places is written out once: written out again it comes to the
+     *  same and spends the same, which is spent again where it stands. */
+    private final Map<Proposition, Done> done = new IdentityHashMap<>();
+    private final Map<Proposition, Done> doneLeavingCounts = new IdentityHashMap<>();
+
     /** {@code stated} written out, or null where the writing stopped. */
     private Proposition writtenOut(Proposition stated) {
+        Map<Proposition, Done> kept = leavingCounts ? doneLeavingCounts : done;
+        Done known = kept.get(stated);
+        if (known != null) {
+            if (known.spent() > partsLeft) {
+                return stop(PARTS.reached());
+            }
+            partsLeft -= known.spent();
+            return known.written();
+        }
+        long before = partsLeft;
+        Proposition written = writtenOutAfresh(stated);
+        if (written != null) {
+            kept.put(stated, new Done(written, before - partsLeft));
+        }
+        return written;
+    }
+
+    private Proposition writtenOutAfresh(Proposition stated) {
         return switch (stated) {
             case Proposition.SoManyHold counted when leavingCounts && leaves(counted) -> counted;
             case Proposition.SoManyHold counted -> {
@@ -113,10 +171,22 @@ public final class CountsWrittenOut {
                     yield stop(written.stoppedAt());
                 }
                 if (written.parts() > partsLeft) {
-                    yield stop(PARTS);
+                    yield stop(PARTS.reached());
                 }
                 partsLeft -= written.parts();
                 yield writtenOut(written.choices());
+            }
+            // The cases it is written out as are walked by whoever it is handed to, so they are
+            // held to what a reader is handed in all, as the choices of a count are: by the parts
+            // they come to, which is what a reader walks and not how many ways there were.
+            case Proposition.OfTheWays ways -> {
+                Proposition cases = ways.written();
+                long parts = Conclusion.countingTo(PARTS).partsWrittenOut(cases);
+                if (parts > partsLeft) {
+                    yield stop(PARTS.reached());
+                }
+                partsLeft -= parts;
+                yield writtenOut(cases);
             }
             case Proposition.All all -> {
                 List<Proposition> parts = writtenOut(all.parts());
@@ -160,15 +230,23 @@ public final class CountsWrittenOut {
                                 reached.noneBelow().map(_ -> noneBelow), reached.holds());
             }
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
-                 Proposition.LastToHold _, Proposition.Carried _, Proposition.Unread _ -> stated;
+                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.Carried _, Proposition.Unread _ -> stated;
         };
     }
 
     /** Whether no count stands inside an element of a container in the statements of
      *  {@code counted}, outside which a count is left as it is. */
-    private static boolean leaves(Proposition.SoManyHold counted) {
-        return new CountsWrittenOut(true).writtenOut(counted.statements()) == counted.statements();
+    private boolean leaves(Proposition.SoManyHold counted) {
+        Boolean known = leavesKept.get(counted);
+        if (known != null) {
+            return known;
+        }
+        boolean leaves = new CountsWrittenOut(true, leavesKept).writtenOut(counted.statements())
+                == counted.statements();
+        leavesKept.put(counted, leaves);
+        return leaves;
     }
 
     /** {@code stated}, which an element of a container meets, written out: every count in it is
@@ -199,7 +277,7 @@ public final class CountsWrittenOut {
         return changed ? out : parts;
     }
 
-    private Proposition stop(CompositionBudget figure) {
+    private Proposition stop(Figure.Budget figure) {
         stoppedAt = figure;
         return null;
     }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -14,11 +15,13 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -177,7 +180,7 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
     /** The condition the row is composed under, which a report about it would be the subject of. */
     private static OnTheWay.TakenIn onTheWayOver(TermPath at) {
         return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(new TakenConstraint.Affine(
-                LinearForm.atom(new NumericTerm.ValueOf(at)), Rel.GE)));
+                LinearForm.atom(new NumericTerm.ValueOf(at)), Rel.GE)), NamedElements.NONE);
     }
 
     /** A row composed with the plain position fixed, and a condition over {@code at} on the way to
@@ -192,7 +195,7 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
                         quantities(source).ordersOf(fixed.term()).answered(), four))),
                 new Reachability.Reaching(quantities(source).region(), Requirements.NONE,
                         TruthsAsked.NONE, List.of(onTheWayOver(at)), Reachability.Ways.ONE,
-                        List.of()),
+                        List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 
@@ -200,13 +203,9 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
     private static final Map<String, Compilation> COMPILED = new java.util.HashMap<>();
 
     private static synchronized Compilation compiled(String source) {
-        return COMPILED.computeIfAbsent(source, each -> {
-            Compilation made = Compilation.ofSource(each, "Main");
-            // Measured, because the lines a row is composed at are drawn where a behavior is.
-            made.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-            made.answerEverything();
-            return made;
-        });
+        // Measured, because the lines a row is composed at are drawn where a behavior is.
+        return ACompiledModel.compiles(COMPILED.computeIfAbsent(source,
+                each -> ACompiledModel.measured(each, Adequacy.Asked.fullReport())));
     }
 
     private static String module(String source) {

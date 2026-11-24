@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -31,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * each way through it ({@link ADecisionIsDrawnOnWhatARowControlsTest}).
  *
  * <p>And only what the table names. A call to a behavior nothing stands in, or an operation of the
- * language, is no subject a row controls, and a condition over one is as unread as it was.
+ * language, is no subject a row controls. A condition over an operation is unread where it is
+ * read; one over what a called behavior answers is that behavior's to state, and the table takes
+ * neither up.
  */
 class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
 
@@ -213,23 +216,25 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 behavior greet : (name: String, xs: List<Int>) -> Int
                     depends on known
                 let greet (name, xs, known) =
-                    if known(name) && List.contains(0, xs) then 1 else 0
+                    if known(name) && List.allDistinctBy(k -> k, xs) then 1 else 0
                 example greet
-                    | "both" : ("a", [0]) with known = true -> 1
-                    | "unknown" : ("b", [0]) with known = false -> 0
-                    | "no zero" : ("a", [1]) with known = true -> 0
+                    | "both" : ("a", [1]) with known = true -> 1
+                    | "unknown" : ("b", [1]) with known = false -> 0
+                    | "repeated" : ("a", [2, 2]) with known = true -> 0
                 """);
 
-        assertEquals(Set.of("xs"), notReadAt(report),
+        assertEquals(Set.of("xs", "xs[*]"), notReadAt(report),
                 "the containment is unread at the list, and the answer is filed nowhere");
     }
 
     /**
-     * A behavior nothing stands in is not a dependency: a fork on its answer is read through its
-     * body, where the call stands, and comes to the truth of what the call handed it.
+     * A behavior nothing stands in is not a dependency, and its answer is no subject a row
+     * controls: the table does not take the fork on it up. The rule that decides the fork is
+     * written in the behavior called, which states it in its own account, so the fork states no
+     * rule of its own and leaves nothing unread at the position the call was handed.
      */
     @Test
-    void aCallNoRowStandsInIsReadThroughTheBodyItCalls() {
+    void aForkOnTheAnswerOfACallNoRowStandsInIsTheCalledBehaviorsToState() {
         AdequacyReport report = measured("""
                 module probe.d
                 behavior known : (flag: Bool) -> Bool
@@ -245,6 +250,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 """);
 
         assertEquals(Set.of(), notReadAt(report));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy());
     }
 
     /**
@@ -275,9 +281,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
     }
 
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 

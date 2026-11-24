@@ -103,10 +103,11 @@ class ARowSaysWhatAppliedTheBehaviorTest {
                     -> Done { cost = Amount(0) }
             """;
 
-    private static List<RowOutcome> rowsOf(String source) {
+    /** The rows {@code source} ran, whose one refused row says {@code refusal} and nothing else does. */
+    private static List<RowOutcome> rowsOf(String source, String refusal) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of(refusal), compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
@@ -122,7 +123,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
     @Test
     void everyRowThisCompileAppliedNamesTheClassesThisCompileGenerated() {
-        List<RowOutcome> rows = rowsOf(ROWS);
+        List<RowOutcome> rows = rowsOf(ROWS, "E1905");
         List<RowOutcome> applied = rows.stream().filter(row -> row.stage().reached(Stage.INVOKED)).toList();
 
         assertEquals(4, rows.size(), "three rows of a behavior with a body and one without");
@@ -135,7 +136,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
     @Test
     void aRowNothingAppliedSaysNothingApplied() {
-        RowOutcome waiting = rowsOf(ROWS).stream()
+        RowOutcome waiting = rowsOf(ROWS, "E1905").stream()
                 .filter(row -> row.disposition() == Disposition.PENDING)
                 .findFirst().orElseThrow(() -> new AssertionError("the model has a row waiting"));
 
@@ -148,7 +149,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
     /** A row that ran says what it cost, in the unit this compile counts. */
     @Test
     void whatARowCostIsWhatThisCompileCountedOfIt() {
-        RowOutcome held = rowsOf(ROWS).stream()
+        RowOutcome held = rowsOf(ROWS, "E1905").stream()
                 .filter(row -> row.disposition() == Disposition.HELD)
                 .findFirst().orElseThrow(() -> new AssertionError("a row holds in this model"));
 
@@ -167,7 +168,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
      */
     @Test
     void aRowThatAppliedNothingStillSaysWhatItsFixturesSpent() {
-        RowOutcome broke = rowsOf(SPENDS_BEFORE_IT_BREAKS).stream()
+        RowOutcome broke = rowsOf(SPENDS_BEFORE_IT_BREAKS, "E1903").stream()
                 .filter(row -> row.failurePhase() == souther.compiler.observe.FailurePhase.INPUT_FIXTURE)
                 .findFirst().orElseThrow(() -> new AssertionError("the input fixture is the one that broke"));
 
@@ -179,7 +180,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
     @Test
     void anOutcomeCannotSayItAppliedNothingAndReachedApplication() {
-        RowOutcome ran = rowsOf(ROWS).stream()
+        RowOutcome ran = rowsOf(ROWS, "E1905").stream()
                 .filter(row -> row.stage().reached(Stage.INVOKED))
                 .findFirst().orElseThrow();
 

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
@@ -112,9 +113,7 @@ class AnEndTheOrderSuppliesIsNotOneARuleWroteTest {
     }
 
     private static BorderAssessment borderAt(String label) {
-        Compilation compilation = Compilation.ofSource(LENGTH, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(LENGTH, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "example.extent");
         assertNotNull(boundaries, "the model under test compiles");

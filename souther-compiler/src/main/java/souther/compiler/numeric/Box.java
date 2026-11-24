@@ -38,6 +38,12 @@ public record Box<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost) {
         return atMost.get(atom);
     }
 
+    /** The end of {@code atom} a sum weighing it by a weight of sign {@code sign} reads for its
+     *  upper end, or its lower one ({@link Reach#endWeighedBy}): one end, looked up alone. */
+    public ExactCut endWeighedBy(A atom, int sign, boolean upper) {
+        return Reach.readsTheMost(sign, upper) ? mostOf(atom) : leastOf(atom);
+    }
+
     /** Every position this says anything about. */
     public Set<A> positions() {
         Set<A> out = new LinkedHashSet<>(atLeast.keySet());

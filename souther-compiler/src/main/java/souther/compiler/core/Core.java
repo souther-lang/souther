@@ -21,12 +21,18 @@ import souther.compiler.diag.SourcePos;
 import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * The Core IR (ADR-0021): a checked executable expression, which is what every backend emits from.
@@ -58,6 +64,15 @@ import java.util.Optional;
 public sealed interface Core {
 
     SourcePos pos();
+
+    /**
+     * A hash of {@code e} that does not walk it: what kind of node it is and where it stands. Equal
+     * nodes agree on both, so it is a hash for a key that holds a node, which asks it for every
+     * lookup, where the hash a record writes for itself walks the tree under the node each time.
+     */
+    static int hashWithoutWalking(Core e) {
+        return 31 * e.getClass().getName().hashCode() + e.pos().hashCode();
+    }
 
     /** The type the checker decided for this expression. */
     Type type();
@@ -228,7 +243,39 @@ public sealed interface Core {
     record MaterialisedValue(ReachName.Declaration value, MaterialisationSite site, Type type,
                              SourcePos pos) implements Core {}
 
-    record Neg(Core operand, Type type, SourcePos pos) implements Core {}
+    /**
+     * An evaluation that says which copy of its body it stands in.
+     *
+     * <p>What a proof about the way to a place can name: it says an evaluation answered or ended a
+     * run, and a place inside a helper is evaluated once for every call the helper is copied into,
+     * so the place alone is not which evaluation. Every kind that can end a run or narrow what
+     * holds past it is one of these, which is what lets a reader asking for the copy have no
+     * default to fall to — an answer of "as written" for a node that cannot say would be the same
+     * word for two things, one written where it stands and one whose copy is unknown.
+     *
+     * <p>A node no pass wrote in a copy is in none, as {@link ConstructOccurrence#unwritten()}
+     * says: what a pass composes it composes where it stands.
+     */
+    interface InACopy {
+
+        /** Which copy of the body that wrote it this evaluation stands in. */
+        OccurrenceLineage lineage();
+    }
+
+    /**
+     * The negation of {@code operand}, in the copy {@code lineage} names. A negation may stop a
+     * run, and a proof that a run does not get past one has to say which copy it means; it has no
+     * origin of its own to hold, so the copy is all it says.
+     */
+    record Neg(Core operand, Type type, OccurrenceLineage lineage, SourcePos pos)
+            implements Core, InACopy {
+
+        public Neg {
+            if (lineage == null) {
+                throw new IllegalArgumentException("a negation stands in some copy of its body");
+            }
+        }
+    }
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
@@ -474,7 +521,12 @@ public sealed interface Core {
      */
     record Binary(BinOp op, Core left, Core right, BinaryReading reading,
                   Optional<OrderingBasis> ordering, ConstructOccurrence occurrence, Type type,
-                  SourcePos pos) implements Core {
+                  SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return occurrence.lineage();
+        }
 
         /** An operator that orders nothing, or a comparison no source wrote, so with no basis. */
         public Binary(BinOp op, Core left, Core right, BinaryReading reading,
@@ -1069,7 +1121,12 @@ public sealed interface Core {
      * than carried on to an output that would read the two as disagreeing.
      */
     record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence,
-                CallSettlement settlement, Type type, SourcePos pos) implements Core {
+                CallSettlement settlement, Type type, SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return occurrence.lineage();
+        }
 
         public Call {
             // A call is some call of the model, in some copy of the body that wrote it — or one no
@@ -1141,6 +1198,16 @@ public sealed interface Core {
             return occurrence.origin();
         }
 
+        /**
+         * Whether this is a call of a behavior of the model whose answer is a truth the model
+         * states where it is written: the one place a run is recorded at, and the one place a
+         * reading of the rules is sent to, for such a call.
+         */
+        public boolean isAWrittenCallOfABehaviorAnsweringATruth() {
+            return Type.BOOL.equals(type) && occurrence.isWritten()
+                    && fn instanceof Reached reached && reached.denotes() instanceof ValueName.Behavior;
+        }
+
         /** What emitting a call does with a function it is handed. */
         public enum FunctionArgument {
             /** Run as the loop body: no class is made for it, and what it closes over is read from
@@ -1186,9 +1253,10 @@ public sealed interface Core {
         }
 
         /**
-         * The step this call runs where it stands, as the loop it is, or null where it does not: the
+         * The step this call runs where it stands, as the loop body, or null where it does not: the
          * step is handed over as a function, or replaced by {@code Fn.NEVER} because it is never
-         * applied ({@link #functionArgument} says which).
+         * applied ({@link #functionArgument} says which). A fold whose step is handed over as a
+         * function is still the loop ({@link #runsAsALoop}), applying the step to each element.
          *
          * <p>A walk that starts at the head of the list, and a build of a list or a map, run their
          * step as the loop body, reading what it closes over from the frame around it: no class is
@@ -1201,12 +1269,54 @@ public sealed interface Core {
          * @param theWalk the standard library's one loop
          */
         public Block stepRunWhereItStands(TheWalk theWalk) {
-            boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
+            return isWalk(theWalk) ? runsWhereItStands(args.get(0)) : null;
+        }
+
+        /**
+         * Whether an output emits this call as the loop it is, and not as a call of the library's
+         * method. The one answer the emitter and whatever asks which classes an emitted call names
+         * read, so the two do not come to disagree about which form a call is emitted in.
+         *
+         * <p>A fold is the loop wherever its step is applied at all, whether the step is written
+         * where the fold hands it over or reaches it as a value. A build writes into its builder in
+         * the step's own body, so it is the loop only where the step is written there.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean runsAsALoop(TheWalk theWalk) {
+            if (!isWalk(theWalk)) {
+                return false;
+            }
+            if (fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP) {
+                return stepRunWhereItStands(theWalk) != null;
+            }
+            return !omitsFunctionBody(0);
+        }
+
+        /**
+         * Whether the loop this call runs as applies its step as a function value, and not as its
+         * own body: the step is worked out once before the walk, and each element is handed to it
+         * and its answer cast to the type of the accumulator.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean appliesItsStepAsAValue(TheWalk theWalk) {
+            return runsAsALoop(theWalk) && stepRunWhereItStands(theWalk) == null;
+        }
+
+        /**
+         * Whether this call is a walk of a list from its head, or a build of a list or a map: the
+         * calls an output emits as a loop where it can. What the call is, and not whether it is
+         * emitted as that loop ({@link #runsAsALoop}), which turns on how its step is written.
+         *
+         * @param theWalk the standard library's one loop
+         */
+        public boolean isWalk(TheWalk theWalk) {
+            return fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
                     || (fn instanceof Reached reached
                     && theWalk.operation().equals(reached.denotes()) && theWalk.inTheLoopsOrder()
                     && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
                     && from.value() == 0);
-            return walks ? runsWhereItStands(args.get(0)) : null;
         }
     }
 
@@ -1270,7 +1380,14 @@ public sealed interface Core {
      * what each was taken as would stop being true of the call the moment it did.
      */
     record PreservedCall(DeclaredOperation declared, List<Core> args, KeptCallPlace place,
-                         KernelFact settled, Type type, SourcePos pos) implements Core {
+                         KernelFact settled, Type type, SourcePos pos) implements Core, InACopy {
+
+        /** The copy the call stands in, which the place says even where no author wrote the
+         *  application: {@link #occurrence} is nothing then, and the copy is still a copy. */
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.lineage();
+        }
 
         // Not a construct of the source. A call kept for a reader to quote is not always one an
         // author wrote: a library operation used as a value is expanded into a block, and the
@@ -1373,7 +1490,12 @@ public sealed interface Core {
      * the other would put one reader's counting inside the other's identity.
      */
     record If(Core cond, Core then, Core els, ForkPlace place, Type type, SourcePos pos)
-            implements Core {
+            implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public If {
             if (place == null) {
@@ -1413,7 +1535,12 @@ public sealed interface Core {
      * copy is called where supplied rules are looked up, as they do for {@link If}.
      */
     record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
-                         ForkPlace place, Type type, SourcePos pos) implements Core {
+                         ForkPlace place, Type type, SourcePos pos) implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public IfConstructed {
             if (place == null) {
@@ -1528,7 +1655,14 @@ public sealed interface Core {
      * fields are evaluated.
      */
     record Construct(TypeSymbol.AtModule typeName, List<FieldValue> values, Type type,
-                     SourcePos pos) implements Core {}
+                     OccurrenceLineage lineage, SourcePos pos) implements Core, InACopy {
+
+        public Construct {
+            if (lineage == null) {
+                throw new IllegalArgumentException("a construction stands in some copy of its body: "
+                        + typeName);
+            }
+        }}
 
     /**
      * What an arm selects, as the checker decided it.
@@ -1821,7 +1955,12 @@ public sealed interface Core {
      * is called where supplied rules are looked up, as they do for {@link If}.
      */
     record Match(Core scrutinee, List<Case> cases, ForkPlace place, Type type, SourcePos pos)
-            implements Core {
+            implements Core, InACopy {
+
+        @Override
+        public OccurrenceLineage lineage() {
+            return place.occurrence().lineage();
+        }
 
         public Match {
             if (place == null) {
@@ -1980,8 +2119,18 @@ public sealed interface Core {
     }
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
-     * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
-    record Unreachable(String reason, Type type, SourcePos pos) implements Core {
+     * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected.
+     * It says which copy of its body it stands in: the model wrote it once, and a helper holding it
+     * is copied into every call of it. */
+    record Unreachable(String reason, Type type, OccurrenceLineage lineage, SourcePos pos)
+            implements Core, InACopy {
+
+        public Unreachable {
+            if (lineage == null) {
+                throw new IllegalArgumentException("an unreachable stands in some copy of its body: "
+                        + reason);
+            }
+        }
 
         /**
          * The shape this leaves on the stack where its position asks for {@code expected}: what the
@@ -2050,7 +2199,7 @@ public sealed interface Core {
             }
             case Neg n -> {
                 Core operand = atExpr.apply(n.operand());
-                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());
+                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.lineage(), n.pos());
             }
             case FieldAccess fa -> {
                 Core target = atExpr.apply(fa.target());
@@ -2161,7 +2310,7 @@ public sealed interface Core {
             return value == v.value() ? v : new FieldValue(v.field(), value, v.pos());
         });
         return values == nd.values() ? nd
-                : new Construct(nd.typeName(), values, nd.type(), nd.pos());
+                : new Construct(nd.typeName(), values, nd.type(), nd.lineage(), nd.pos());
     }
 
     /** {@code p}'s names read off {@code base} instead. Where {@code base} is a projection the names
@@ -2236,6 +2385,26 @@ public sealed interface Core {
         return atSlots(nd, onExprSlot);
     }
 
+    /** Adds to {@code out} the names {@code e} binds anywhere inside it. */
+    static void bindersIn(Core e, Set<BindingId> out) {
+        switch (e) {
+            case Block block -> block.params().forEach(each -> out.add(each.binding()));
+            case LetIn let -> out.add(let.binder().binding());
+            case IfConstructed attempt -> {
+                if (attempt.binder() != null) {
+                    out.add(attempt.binder().binding());
+                }
+            }
+            case Match match -> match.cases().forEach(each -> {
+                if (each.binding().binder() != null) {
+                    out.add(each.binding().binder().binding());
+                }
+            });
+            default -> { }
+        }
+        forEachChild(e, child -> bindersIn(child, out));
+    }
+
     /**
      * Applies {@code f} to each direct child of {@code e} — the read-only counterpart of
      * {@link #mapChildren}. Every slot is a child whatever kind it is, so a pass that asks what a
@@ -2253,6 +2422,32 @@ public sealed interface Core {
             f.accept(child);
             return child;
         });
+    }
+
+    /**
+     * Applies {@code visit} once to each node reachable from {@code root}, {@code root} included,
+     * in no particular order.
+     *
+     * <p>Nodes are told apart by identity. A value named twice is one node held in two slots, so
+     * the expression is a graph, and a walk through {@link #forEachChild} that recurses meets a
+     * node once per path to it: twice as many for each level that names the one below it twice.
+     * This one is for a question whose answer does not depend on how many times a node is met —
+     * the set of names read, the set of sites reached. A question about where a node stands, how
+     * often it occurs, or what it is reached under needs the walk that keeps that, and asks
+     * {@link #forEachChild} itself. The record of nodes seen lasts one call, so two calls over the
+     * same node each see all of it.
+     */
+    static void forEachDistinctNode(Core root, Consumer<Core> visit) {
+        Set<Core> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<Core> pending = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            Core node = pending.pop();
+            if (seen.add(node)) {
+                visit.accept(node);
+                forEachChild(node, pending::push);
+            }
+        }
     }
 
 }

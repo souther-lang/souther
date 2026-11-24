@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -65,8 +66,8 @@ class EveryComparisonThePlanNumbersIsAnsweredForTest {
         try {
             Compilation compilation = Compilation.ofSource(COMPARISONS, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+            ACompiledModel.compiles(compilation);
+            AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         } finally {
             InvariantChecker.GAVE_UP = null;
         }

@@ -78,10 +78,11 @@ class AnInputIsNamedForALineBesideOnlyWhereTheDeclarationsAreNotShownToRefuseItT
     /** The first line of the family these rows leave standing. */
     private static AnotherLineTheRowsAllow.Stands named(Predicate<Map<NumericTerm, Place>> refused) {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
-        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, true,
-                () -> new StandingAtAPoint.RowsRead(rowsOf(border, ROWS), Set.of(),
-                        StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), WayToTheBorder.UNTOUCHED, refused);
+        AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(List.of(
+                new AnotherLineTheRowsAllow.Reading(border,
+                        () -> new StandingAtAPoint.RowsRead(rowsOf(border, ROWS), Set.of(),
+                                StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
+                        List.of(), WayToTheBorder.UNTOUCHED, refused)), true);
         List<AnotherLineTheRowsAllow.Stands> standing = assertInstanceOf(
                 AnotherLineTheRowsAllow.ByDirection.class, said,
                 () -> "these rows are held against the family: " + said).standing();

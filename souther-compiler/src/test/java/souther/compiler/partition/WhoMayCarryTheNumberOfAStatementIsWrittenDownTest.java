@@ -49,12 +49,11 @@ class WhoMayCarryTheNumberOfAStatementIsWrittenDownTest {
                     "the pair itself, made where a part is read for what it states and carried from"
                             + " there. This is the name everything downstream holds instead of a"
                             + " number, so it is the one place the two stand together"),
-            new Licence("souther.compiler.check.InvariantStatementId.ordinal",
-                    "the same pair for a declaration's clause, which is decomposed twice as a"
-                            + " behavior's is. Two of them and not one, because the number means"
-                            + " which statement of the part its own reading arrived at: the readings"
-                            + " are separate and a number issued by either would be a place in the"
-                            + " other's list"));
+            new Licence("souther.compiler.partition.UndividedByARelation.TiedOnTheWay.Rule.clause",
+                    "which of the clauses a declaration publishes the rule is of, as a place in"
+                            + " that list. The part's name says which rule of a clause it is and"
+                            + " not where the clause stands among the published ones, which is what"
+                            + " the rule is looked up by"));
 
     private static final List<Licence> MAY_MAKE = List.of(
             new Licence("souther.compiler.partition.ClauseStatements.of",
@@ -63,11 +62,11 @@ class WhoMayCarryTheNumberOfAStatementIsWrittenDownTest {
                             + " assigned"));
 
     private static final List<Licence> MAY_MAKE_AN_INVARIANTS = List.of(
-            new Licence("souther.compiler.check.ConjunctStatements.reach",
-                    "the one walk that takes a declaration's conjunct apart into the things it"
-                            + " states, which is where a statement is recognised. Numbered where an"
-                            + " end or a hand-over is written down instead, the number would say"
-                            + " which of the outcomes this was rather than which of the statements"));
+            new Licence("souther.compiler.check.ConjunctStatements.of",
+                    "the one place the statements the walk of a declaration's conjunct arrives at"
+                            + " are numbered, once they are all recognised. Numbered where an end"
+                            + " or a hand-over is written down instead, the number would say which"
+                            + " of the outcomes this was rather than which of the statements"));
 
     /**
      * Only the reading that took a part apart names one of its statements.

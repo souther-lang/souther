@@ -5,6 +5,7 @@ import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -110,6 +111,20 @@ public final class Location implements SaysWhatStandsForIt {
      */
     public static boolean isStep(Type readFrom, String field, DeclarationNewtypes newtypes) {
         return !(field.equals("value") && newtypes.wraps(readFrom));
+    }
+
+    /** The names of {@code p} that are steps ({@link #isStep}): a newtype's own {@code value} is
+     *  none. */
+    static FieldPath stepsOf(Core.FieldProjection p, DeclarationNewtypes newtypes) {
+        List<String> out = new ArrayList<>();
+        Type from = p.base().type();
+        for (Core.FieldProjection.Step each : p.steps().inOrder()) {
+            if (isStep(from, each.field(), newtypes)) {
+                out.add(each.field());
+            }
+            from = each.type();
+        }
+        return FieldPath.of(out);
     }
 
     /**

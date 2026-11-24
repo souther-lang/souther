@@ -53,6 +53,7 @@ import souther.compiler.check.HelperTable;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.ValueDefinitions;
+import souther.compiler.jvm.JvmClassNames;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
@@ -85,6 +86,8 @@ import souther.compiler.meta.ModuleReadback;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
+import souther.compiler.check.ConstructionsShownToHold;
+import souther.compiler.check.DeparturesNoRunTakes;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Expandable;
@@ -711,7 +714,7 @@ public final class Bodies {
             // One world for every behavior of the module, since every rule of every one of them is
             // read in it.
             RuleReadingContext ruleReading = RuleReadingContext.of(reading.value(),
-                    db.ask(new Front.Reading()).value(), db.readings());
+                    db.ask(new Front.Reading()).value(), db.readings(), Front.dayOf(db));
             stated.value().forEach((behavior, rules) ->
                     out.put(behavior, ContractDischarge.of(rules, ruleReading)));
             return Answer.of(Ordered.map(out));
@@ -1993,8 +1996,8 @@ public final class Bodies {
     }
 
     /**
-     * The definitions {@code from} publishes among {@code wanted}, together with every recursive
-     * helper of {@code from} they reach.
+     * What travels with {@code roots}, which are definitions of {@code from} it hands over: each
+     * closed over its own module, and every recursive helper of {@code from} they reach.
      *
      * <p>Closing a body leaves every name of the declaring module in it qualified, and the ones that
      * stay are a recursive helper's, which is a method and stays a call, and a value's, which stays a
@@ -2002,21 +2005,10 @@ public final class Bodies {
      * since one may name another, so does everything it reaches in turn. A mutually-recursive group
      * therefore arrives whole: each member is reached from the others, so following the names
      * collects all of them.
-     */
-    public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from,
-                                                          Collection<PublishedHelper> allowed,
-                                                          Expanding.Of against) {
-        return carriedClosure(from, bodiesOf(from, allowed), against);
-    }
-
-    /**
-     * What travels with {@code roots}, which are definitions of {@code from} it hands over: each
-     * closed over its own module, and every recursive helper of {@code from} they reach.
      *
-     * <p>The one computation of what a reader is given. The reader asks it for the definitions it
-     * holds leave to read ({@link #publishedClosure}); the module that publishes asks it for the
-     * ones it exposes, to hold what it ships to the question of whether another module can run it.
-     * Two computations of one set would agree only until the closing changed.
+     * <p>The one computation of what a reader is given and of what the module that publishes
+     * exposes, to hold what it ships to the question of whether another module can run it. Two
+     * computations of one set would agree only until the closing changed.
      */
     public static Map<String, Hir.FnDef> carriedClosure(Hir.Module from,
                                                         Collection<Hir.FnDef> roots,
@@ -3364,7 +3356,7 @@ public final class Bodies {
                                             Shapes.declarationNewtypes(db),
                                             Shapes.fieldBindings(db),
                                             Shapes.clauseLocations(db)),
-                                    policy, db.readings()),
+                                    policy, db.readings(), Front.dayOf(db)),
                             contracts.present() ? contracts.value() : Map.of(),
                             templates.value())
                     : null;
@@ -3383,11 +3375,13 @@ public final class Bodies {
                 // check: a fold that only grows a list is turned into a build (see GrowingFold).
                 // What the operations of the language hand their closures, read here because here
                 // is where they are still operations. The rewrite below turns a fold that only
-                // grows a collection into a walk over a builder and joins two such walks into one,
-                // after which nothing in the tree says which container an element came from. It
-                // renames no binding, so what is read now is as true of what it answers with.
+                // grows a collection into a walk over a builder, after which nothing in the tree
+                // says which container an element came from. It renames no binding, so what is
+                // read now is as true of what it answers with. Two such walks are not joined
+                // here: every walk the source wrote is a loop of its own for what reads the tree,
+                // and the emitter joins them in the classes that record nothing.
                 return Answer.of(new CheckedBody(
-                        GrowingFold.rewrite(core, scope.value().theWalk()),
+                        GrowingFold.builds(core, scope.value().theWalk()),
                         ElementBindings.of(core,
                                 body.value().provenance(), Shapes.declarationNewtypes(db)),
                         // Who owns the rule each fork decides by, read off the declarations that
@@ -3398,6 +3392,7 @@ public final class Bodies {
                         // are written in it and nowhere else, and a reading without it leaves every
                         // one of them to whatever answer absence is given.
                         DecisionSources.of(
+                                inliner.value().library(),
                                 inliner.value().reachable(),
                                 // Reached as this module reaches its own behavior, which is bare —
                                 // the forks below are looked up by the reference a call carries,
@@ -3464,7 +3459,7 @@ public final class Bodies {
         Map<String, Claims> out = new LinkedHashMap<>();
         // One world for every behavior of the module, since every walk below reads in it.
         RuleReadingContext ruleReading =
-                RuleReadingContext.of(reading.value(), policy, db.readings());
+                RuleReadingContext.of(reading.value(), policy, db.readings(), Front.dayOf(db));
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             Core body = bodies.get(behavior.name());
             // What this compilation worked out about the behavior's boundary, read off the one
@@ -3486,12 +3481,13 @@ public final class Bodies {
                             fn == null ? null : SpecImplementation.align(spec, fn),
                             plan, Adequacy.readingOf(db, read, reading.value()), ruleReading,
                             Adequacy.meaningsOf(
-                                    analysed.get(spec.name()), read,
-                                    () -> Adequacy.readingOf(db, read, reading.value()),
-                                    reading.value()),
+                                    analysed.get(spec.name()), read, reading.value(),
+                                    ruleReading),
                             elements.getOrDefault(spec.name(), ElementBindings.NONE),
                             ValueDefinitions.of(analysed.get(spec.name()),
-                                    Shapes.declarationNewtypes(db)))));
+                                    Shapes.declarationNewtypes(db)),
+                            analysed.get(spec.name()) == null ? DeparturesNoRunTakes.NONE
+                                    : analysed.get(spec.name()).departures())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
@@ -3674,18 +3670,31 @@ public final class Bodies {
             for (CompileException e : reported.errors()) {
                 reports.addAll(Report.of(e));
             }
+            // Whether the classes the module is generated as keep to one class each: a module the
+            // JVM cannot hold is refused here, where what is wrong with it is said, and reaches
+            // neither a measure nor the backend.
+            boolean namesKept = true;
+            try {
+                JvmClassNames.rejectCollisions(lowering.value().settled(),
+                        behavior -> signatures.present() && signatures.value().get(behavior) != null
+                                ? signatures.value().get(behavior).outputType() : null,
+                        Shapes.declarationKinds(db), Shapes.sumCases(db));
+            } catch (CompileException e) {
+                namesKept = false;
+                reports.addAll(Report.of(e));
+            }
             // What a behavior declares about its answer is read by its own key, which owns both the
             // contracts and what reading them found. Asked here so that a module with a clause that
             // cannot be read is a module that does not reach codegen: the reports are that key's and
             // are not repeated, and what is read off them here is whether there was a refusal.
             Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
-                    && contracts.present() && !contracts.hasError()
+                    && namesKept && contracts.present() && !contracts.hasError()
                     && shapes.present() && !shapes.hasError();
             Map<String, EmittedDefinition> definitions = new LinkedHashMap<>();
             reported.emittedDefinitions().forEach((h, definition) ->
                     definitions.put(h, new EmittedDefinition(
-                            GrowingFold.rewrite(definition.body(), scope.value().theWalk()),
+                            GrowingFold.builds(definition.body(), scope.value().theWalk()),
                             definition.parameters(), definition.role())));
             return Answer.of(new ModuleCheck.Of(definitions, sound, reported.stopped(),
                     reported.settledValues().snapshot()),
@@ -4215,6 +4224,30 @@ public final class Bodies {
     }
 
     /**
+     * The constructions of one module's bodies the discharge check proved every clause of, as the
+     * analysis of each body found them ({@link AnalysisBody#shownToHold}): every copy of each,
+     * wherever it was spliced. Nothing where the module's bodies were not checked.
+     */
+    public record ShownToHold(String name) implements Key<ConstructionsShownToHold> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<ConstructionsShownToHold> compute(Db db) {
+            Answer<Elaborated> checked = db.ask(new Checked(name));
+            if (!checked.present()) {
+                return Answer.absent();
+            }
+            Set<ConstructionsShownToHold.Copy> copies = new LinkedHashSet<>();
+            for (AnalysisBody each : checked.value().analysisBodies().values()) {
+                copies.addAll(each.shownToHold().copies());
+            }            return Answer.of(new ConstructionsShownToHold(copies));
+        }
+    }
+
+    /**
      * The result of type-checking a module. Absent when anything in it is wrong: a module that does
      * not check must not reach codegen, and an importer of it is skipped rather than compiled
      * against a broken module.
@@ -4488,8 +4521,8 @@ public final class Bodies {
                 throw new IllegalStateException("`" + name + "` has value methods and no table its"
                         + " declarations are read against");
             }
-            decisions.putAll(DecisionSources.of(against.value().table().reachable(),
-                    Map.of()).byFork());
+            decisions.putAll(DecisionSources.of(against.value().table().library(),
+                    against.value().table().reachable(), Map.of()).byFork());
         }
         // What each body declares cannot arrive, held against what its input's own declarations
         // leave. Judged here rather than beside each body: it reads the signature, which is the
@@ -4524,7 +4557,8 @@ public final class Bodies {
         // places: a module whose bodies came out has arms whatever else did not come out, and
         // an answer carrying no plan is one every reader of it would walk the bodies for.
         CoverageSites.Plan plan =
-                CoverageSites.of(of, read, handed);
+                CoverageSites.of(of, read, handed, Shapes.declarationNewtypes(db),
+                        db.ask(new Front.Library()).value().walk());
         return new Elaborated(of, module.emittedDefinitions(),
                 judged(db, of, analysed, elements, settled, plan), elements,
                 read, handed, analysed, plan, emits);

@@ -2,18 +2,26 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -177,8 +185,11 @@ final class Clauses {
             case ClauseMeaning.Stated it when !everyFieldRead(given, named, it.fieldsRead()) ->
                     new ClausesInOrder.OneClause.Unread(it.ref(),
                             ClausesInOrder.WhyAClauseIsUnread.A_FIELD_LEFT_OUT);
-            case ClauseMeaning.Stated it -> new ClausesInOrder.OneClause.Stated(it.ref(),
-                    it.states().termForClauseReading(), given, it.parts());
+            case ClauseMeaning.Stated it -> {
+                Core term = it.states().termForClauseReading();
+                yield new ClausesInOrder.OneClause.Stated(it.ref(), term, given, it.parts(),
+                        ElementBindings.of(term, ElementProvenance.NONE, source.newtypes()));
+            }
         };
     }
 
@@ -346,13 +357,24 @@ final class Clauses {
      * <p>The identity comes from the split that wrote the parts down and is carried rather than
      * worked out here: which part of a clause a tree is is not something a reader of the tree can
      * answer, and a reader that counted them would be a second walk deciding which parts there are.
+     *
+     * <p>{@code statements} is the number each statement of the part is to have, where the part
+     * was handed with them ({@link ClauseMeaning.Parts.One}); none where it is numbered as it is
+     * read ({@link ConjunctStatements}).
      */
-    record StatedPart(PartId<RuleRef.Invariant> id, ClauseExpr of) {
+    record StatedPart(PartId<RuleRef.Invariant> id, ClauseExpr of,
+                      List<StatementNumber> statements) {
 
         public StatedPart {
-            if (id == null || of == null) {
+            if (id == null || of == null || statements == null) {
                 throw new IllegalArgumentException("a part read here is some rule's part and a form");
             }
+            statements = List.copyOf(statements);
+        }
+
+        /** A part whose statements are numbered as it is read. */
+        StatedPart(PartId<RuleRef.Invariant> id, ClauseExpr of) {
+            this(id, of, List.of());
         }
 
         /** The part as the tree holds it, which is the outermost node its shape was spelled as. */
@@ -394,6 +416,19 @@ final class Clauses {
         return fieldsReadBy(clause, named).reads();
     }
 
+    /**
+     * Whether {@code clause} states exactly comparisons of one sum of the places it reads
+     * ({@link ClauseAffineMeaning}), named as the rules of the value name them.
+     */
+    ClauseAffineMeaning affineMeaning(Core clause, TypeSymbol.AtModule named) {
+        Map<BindingId, String> declared = new HashMap<>();
+        bindingsOf(named).forEach((name, binding) -> declared.put(binding, name));
+        return new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
+                symbols, new HashMap<>(), new ArrayList<>(), new ArrayList<>(), new HashSet<>(),
+                new HashSet<>())
+                .exactly(clause, symbols, source.declarations());
+    }
+
     /** Both answers about what {@code clause} reads, from one walk of it. */
     private FieldsRead fieldsReadBy(Core clause, TypeSymbol.AtModule named) {
         return readsFields.computeIfAbsent(clause, read -> {
@@ -402,7 +437,8 @@ final class Clauses {
             Set<BindingId> bindings = new HashSet<>();
             Set<ClauseRead> reads = new HashSet<>();
             new ReadsOfAClause(declared, source.newtypes().of(named.key()), source.newtypes(),
-                    bindings, reads).walk(read);
+                    symbols, new HashMap<>(), new ArrayList<>(), new ArrayList<>(), bindings, reads)
+                    .readsOf(read);
             Set<String> all = new HashSet<>();
             for (BindingId each : bindings) {
                 String name = declared.get(each);
@@ -437,71 +473,341 @@ final class Clauses {
      *               record's fields are each a place of their own
      */
     private record ReadsOfAClause(Map<BindingId, String> fields, boolean wraps,
-                                  DeclarationNewtypes newtypes,
+                                  DeclarationNewtypes newtypes, Symbols symbols,
+                                  Map<BindingId, Location> aliases,
+                                  List<Lookup> lookups, List<Apart> aparts,
                                   Set<BindingId> bindings, Set<ClauseRead> reads) {
 
         ReadsOfAClause {
             Objects.requireNonNull(fields, "a walk of a clause knows which binding each field is");
             Objects.requireNonNull(newtypes, "a walk of a clause knows which names wear one value");
+            Objects.requireNonNull(aliases, "a walk of a clause knows what a name was given");
+            Objects.requireNonNull(lookups, "a walk of a clause gathers its lookups somewhere");
+            Objects.requireNonNull(aparts, "a walk of a clause gathers its apart calls somewhere");
             Objects.requireNonNull(bindings, "a walk of a clause gathers bindings somewhere");
             Objects.requireNonNull(reads, "a walk of a clause gathers places somewhere");
         }
 
-        void walk(Core e) {
+        /** A lookup in a container that is a place of the value: the lookup, and the container. */
+        private record Lookup(Core lookup, Location container) {}
+
+        /** A call saying no two elements of a container that is a place of the value share what a
+         *  run reads off one: the call, the container, and the run. */
+        private record Apart(Core call, Location container, List<String> run) {}
+
+        /**
+         * Every place of {@code clause} it reads. The containers it looks members up in, and those
+         * it says the elements of are apart, are read once the whole clause has been walked,
+         * because whether a part is one the clause cannot be true without is a question about the
+         * clause around it.
+         */
+        void readsOf(Core clause) {
+            walk(clause);
+            List<EntryHeld.Stated> entries = entriesStated(clause);
+            for (Lookup each : lookups) {
+                if (WhatAClauseNeeds.aMemberFound(clause, each.lookup())) {
+                    bindings.add(each.container().root());
+                    reads.add(new ClauseRead(keyOf(each.container()),
+                            ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
+                            memberLookedUp(each.lookup(), entries)));
+                } else {
+                    read(each.container(), ClauseRead.Kind.A_LOOKED_UP_MEMBER, RuleKey.THE_VALUE);
+                }
+            }
+            for (Apart each : aparts) {
+                read(each.container(), WhatAClauseNeeds.elementsApart(clause, each.call())
+                        ? ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART
+                        : ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(each.run()));
+            }
+        }
+
+        /**
+         * Each entry a statement of {@code clause} asks a map for, statement by statement as a
+         * declaration's rules are read ({@link ConjunctStatements}): a conjunction asks one entry
+         * per conjunct, and the bindings crossed are followed as every reader of a rule follows
+         * them.
+         */
+        private List<EntryHeld.Stated> entriesStated(Core clause) {
+            List<EntryHeld.Stated> out = new ArrayList<>();
+            for (ConjunctStatements.Stated each
+                    : ConjunctStatements.statedBy(ClauseExpr.of(clause, true))) {
+                Map<BindingId, Core> given = new HashMap<>();
+                each.crossed().forEach(crossed -> entering(given, crossed.binding()));
+                EntryHeld.Stated entry = entryStated(each.said(), given, newtypes);
+                if (entry != null) {
+                    out.add(entry);
+                }
+            }
+            return out;
+        }
+
+        private void walk(Core e) {
+            if (Core.withoutStanding(e) instanceof Core.LetIn let && let.binder().binding() != null) {
+                Location given = locationOf(let.value());
+                if (given != null) {
+                    aliases.put(let.binder().binding(), given);
+                    walk(let.body());
+                    return;
+                }
+            }
             Location at = locationOf(e);
             if (at != null) {
                 read(at, ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE);
                 return;
             }
             Core.PreservedCall call = e instanceof Core.PreservedCall preserved ? preserved : null;
-            ElementsApart.Stated apart = call == null ? null : ElementsApart.stated(call, newtypes);
-            Location container = apart == null ? null : locationOf(apart.container());
+            // As written: whether the clause wants it or its denial is the need's to say. And only
+            // where it answers for every value: one that may stop works out more of each element
+            // than the run, and whether it stops turns on that.
+            ElementsApart.Stated apart = ElementsApart.stated(e, true, newtypes);
+            Location container = apart == null || !apart.answersEverywhere() ? null
+                    : locationOf(apart.container());
             if (container != null) {
-                read(container, ClauseRead.Kind.EACH_ELEMENTS_RUN, new RuleKey(apart.run()));
+                aparts.add(new Apart(e, container, apart.run()));
                 return;
             }
             if (e instanceof Core.Read r) {
                 bindings.add(r.binding());
             }
             Core counted = call == null ? null : countedArgument(call);
+            Core looked = entryLookedUp(e);
             Core.forEachChild(e, child -> {
                 if (child == counted) {
                     read(locationOf(child), ClauseRead.Kind.HOW_MANY_IT_HOLDS, RuleKey.THE_VALUE);
+                } else if (child == looked) {
+                    lookups.add(new Lookup(e, locationOf(child)));
                 } else {
                     walk(child);
                 }
             });
         }
 
+        /** The container {@code e} looks a member up in or asks the membership of, where that is a
+         *  place of the value; null otherwise. */
+        private Core entryLookedUp(Core e) {
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            AnOperationApplied.Searched searched = applied == null ? null : applied.searches();
+            return searched != null && locationOf(searched.container()) != null
+                    ? searched.container() : null;
+        }
+
         private void read(Location at, ClauseRead.Kind kind, RuleKey run) {
             bindings.add(at.root());
+            reads.add(new ClauseRead(keyOf(at), kind, run));
+        }
+
+        /**
+         * The member {@code lookup} looks for, where what it looks for is a place of the value:
+         * a key of a map for a lookup in one, an element otherwise, and for a key the numbers
+         * the statements in {@code entries} say the value under it is to be one of where they
+         * are of this lookup's key and container.
+         */
+        private Optional<ClauseRead.Member> memberLookedUp(Core lookup,
+                                                           List<EntryHeld.Stated> entries) {
+            AnOperationApplied applied = AnOperationApplied.of(lookup);
+            AnOperationApplied.Searched searched = applied == null ? null : applied.searches();
+            Operand<RuleKey> member = searched == null ? null : operandOf(searched.member());
+            if (member == null) {
+                return Optional.empty();
+            }
+            boolean asAKey = searched.aKey();
+            ValueAsked valueIn = null;
+            Location container = asAKey ? locationOf(searched.container()) : null;
+            for (EntryHeld.Stated entry : entries) {
+                if (container != null && entry.valueIn() != null
+                        && member.equals(operandOf(entry.key()))
+                        && container.equals(locationOf(entry.container()))) {
+                    valueIn = valueIn == null ? entry.valueIn() : valueIn.meet(entry.valueIn());
+                }
+            }
+            return Optional.of(new ClauseRead.Member(member, asAKey, Optional.ofNullable(valueIn)));
+        }
+
+        /**
+         * What {@code e} is: the place of the value it stands at, or the value the source wrote —
+         * or null where it is neither, which a rule cannot ask a container to hold.
+         */
+        private Operand<RuleKey> operandOf(Core e) {
+            Location at = locationOf(e);
+            if (at != null) {
+                return new Operand.At<>(keyOf(at));
+            }
+            Value written = WrittenMember.of(e, symbols);
+            return written == null ? null : new Operand.Written<>(written);
+        }
+
+        /** What the rules of the value call the place {@code at}. */
+        private RuleKey keyOf(Location at) {
             List<String> steps = new ArrayList<>();
             if (!wraps) {
                 steps.add(fields.get(at.root()));
             }
             steps.addAll(at.path());
-            reads.add(new ClauseRead(new RuleKey(steps), kind, run));
+            return new RuleKey(steps);
+        }
+
+        /**
+         * The clause as the comparisons of one sum it comes to exactly, or {@link
+         * ClauseAffineMeaning#UNREAD} where any part of it is something else.
+         *
+         * <p>Every part is accounted for: a conjunction of comparisons whose sides are whole numbers
+         * read as arithmetic over places of the value. What a connective, a denial and a binding
+         * make of the clause is {@link ClauseExpr}'s, what a comparison states is
+         * {@link StatedComparison}'s and what a side comes to is {@link AffineForms}', so a shape
+         * those learn to read is read here as well. A part that is a choice, a call nothing says
+         * is arithmetic or a product of two places is no comparison of that kind, and the clause
+         * holds back more than the others say.
+         */
+        ClauseAffineMeaning exactly(Core clause, Symbols symbols, DeclarationAccess declarations) {
+            AffineForms.Reading<RuleKey, Map<BindingId, Core>> places =
+                    placesOfTheValue(symbols, declarations);
+            List<ClauseAffineMeaning.Comparison> conjuncts = new ArrayList<>();
+            if (!conjunctsOf(ClauseExpr.of(clause, true), Map.of(), places, conjuncts)
+                    || conjuncts.isEmpty()) {
+                return ClauseAffineMeaning.UNREAD;
+            }
+            return ClauseAffineMeaning.ofComparisons(conjuncts);
+        }
+
+        /** Whether every part of {@code shape} that holds with it is a comparison, added to
+         *  {@code out}; the parts of a choice hold with it only one at a time, so it is none. */
+        private boolean conjunctsOf(ClauseExpr shape, Map<BindingId, Core> held,
+                                    AffineForms.Reading<RuleKey, Map<BindingId, Core>> places,
+                                    List<ClauseAffineMeaning.Comparison> out) {
+            return switch (shape) {
+                case ClauseExpr.Joined joined -> joined.how() == ConditionJoin.BOTH
+                        && conjunctsOf(joined.left(), held, places, out)
+                        && conjunctsOf(joined.right(), held, places, out);
+                case ClauseExpr.Scoped scoped -> conjunctsOf(scoped.body(),
+                        places.inside(scoped.binding(), held), places, out);
+                case ClauseExpr.Leaf leaf -> comparison(leaf, held, places, out);
+            };
+        }
+
+        private boolean comparison(ClauseExpr.Leaf leaf, Map<BindingId, Core> held,
+                                   AffineForms.Reading<RuleKey, Map<BindingId, Core>> places,
+                                   List<ClauseAffineMeaning.Comparison> out) {
+            StatedComparison stated = StatedComparison.of(leaf);
+            if (stated == null || Core.withoutStanding(stated.left()).type() != Type.INT
+                    || Core.withoutStanding(stated.right()).type() != Type.INT) {
+                return false;
+            }
+            LinearForm<RuleKey> left = AffineForms.of(stated.left(), held, places);
+            LinearForm<RuleKey> right = AffineForms.of(stated.right(), held, places);
+            LinearForm<RuleKey> between = left == null || right == null ? null
+                    : left.minus(right).orNull();
+            if (between == null || between.coefs().isEmpty() || !between.constant().isWhole()
+                    || !between.coefs().values().stream().allMatch(ExactRatio::isWhole)) {
+                return false;
+            }
+            ClauseAffineMeaning.Comparison said = canonical(between, stated.relationUnder(true));
+            if (said == null) {
+                return false;
+            }
+            out.add(said);
+            return true;
+        }
+
+        /**
+         * A whole number of the value is a place of it, and a name is the value it was given.
+         *
+         * <p>The answers {@link AffineForms} asks of its caller and nothing it can work out itself:
+         * a place of the value is an atom, and a name that is no field of it stands for what a
+         * binding of the clause gave it.
+         */
+        private AffineForms.Reading<RuleKey, Map<BindingId, Core>> placesOfTheValue(
+                Symbols symbols, DeclarationAccess declarations) {
+            return new AffineForms.Reading<>() {
+
+                @Override
+                public Symbols symbols() {
+                    return symbols;
+                }
+
+                @Override
+                public DeclarationAccess declarations() {
+                    return declarations;
+                }
+
+                @Override
+                public LinearForm<RuleKey> leafOf(Core e, Map<BindingId, Core> at) {
+                    Core bare = Core.withoutStanding(e);
+                    Location place = bare.type() == Type.INT ? locationOf(bare) : null;
+                    return place == null ? null : LinearForm.atom(keyOf(place));
+                }
+
+                @Override
+                public Map<BindingId, Core> inside(Core.LetIn li, Map<BindingId, Core> at) {
+                    if (li.binder().binding() == null) {
+                        return at;
+                    }
+                    Map<BindingId, Core> inner = new HashMap<>(at);
+                    inner.put(li.binder().binding(), li.value());
+                    return inner;
+                }
+
+                @Override
+                public ValueStanding.ReadThrough<Map<BindingId, Core>> readThrough(
+                        Core.Read read, Map<BindingId, Core> at) {
+                    Core value = at.get(read.binding());
+                    return value == null ? null : new ValueStanding.ReadThrough<>(value, at);
+                }
+
+                @Override
+                public List<ValueStanding.ReadThrough<Map<BindingId, Core>>> alternativesOf(
+                        Core.Read read, Map<BindingId, Core> at) {
+                    return null;
+                }
+
+                @Override
+                public boolean readsThrough(Core.FieldAccess fa, Map<BindingId, Core> at) {
+                    return locationOf(fa.target()) == null
+                            && !Location.isStep(fa.target().type(), fa.field(), newtypes);
+                }
+            };
+        }
+
+        /**
+         * The comparison {@code form rel 0} with the first place by name weighing one, so that
+         * {@code 100 <= a + b} and {@code 2 * a + 2 * b >= 200} are the one comparison
+         * {@code a + b - 100 >= 0}. Null where the exact arithmetic cannot hold it.
+         */
+        private static ClauseAffineMeaning.Comparison canonical(LinearForm<RuleKey> form, Rel rel) {
+            RuleKey first = form.coefs().keySet().stream()
+                    .min(Comparator.comparing(key -> String.join(".", key.steps()))).orElseThrow();
+            ExactRatio weight = form.coefs().get(first);
+            LinearForm<RuleKey> scaled = form.dividedBy(weight.abs()).orNull();
+            if (scaled == null) {
+                return null;
+            }
+            return weight.signum() < 0
+                    ? new ClauseAffineMeaning.Comparison(scaled.negate(), turnedAround(rel))
+                    : new ClauseAffineMeaning.Comparison(scaled, rel);
+        }
+
+        /** The relation that holds of the negation of a value where {@code rel} holds of it. */
+        private static Rel turnedAround(Rel rel) {
+            return switch (rel) {
+                case GE -> Rel.LE;
+                case GT -> Rel.LT;
+                case LE -> Rel.GE;
+                case LT -> Rel.GT;
+                case EQ, NE -> rel;
+            };
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */
         private Location locationOf(Core e) {
             return Location.of(e, newtypes,
-                    binding -> fields.containsKey(binding) ? Location.of(binding) : null,
+                    binding -> fields.containsKey(binding) ? Location.of(binding)
+                            : aliases.get(binding),
                     this::stepsOf);
         }
 
         /** The names of {@code p} that are steps: a newtype's own {@code value} is none
          *  ({@link Location#isStep}). */
         private FieldPath stepsOf(Core.FieldProjection p) {
-            List<String> out = new ArrayList<>();
-            Type from = p.base().type();
-            for (Core.FieldProjection.Step each : p.steps().inOrder()) {
-                if (Location.isStep(from, each.field(), newtypes)) {
-                    out.add(each.field());
-                }
-                from = each.type();
-            }
-            return FieldPath.of(out);
+            return Location.stepsOf(p, newtypes);
         }
 
         /** The argument of {@code call} it counts the elements of, where that is a place of the
@@ -520,11 +826,41 @@ final class Clauses {
         }
     }
 
-    /** {@code e} with each binding {@code given} names replaced by the value it was given. */
+    /**
+     * What a binding crossed on the way to a statement gives its name: the value it binds, with
+     * the names given before it already spent.
+     */
+    static void entering(Map<BindingId, Core> given, Core.LetIn binding) {
+        given.put(binding.binder().binding(), substituted(binding.value(), given));
+    }
+
+    /**
+     * The entry {@code said} asks a map for, in the places of the value, or null where it asks
+     * nothing of the kind: the one way a statement is read as one, for the reader that files it
+     * under its rule ({@link InvariantStatements}) and the one that publishes the member it
+     * needs ({@link ClauseRead.Member}).
+     *
+     * @param given what the bindings crossed to reach the statement give their names
+     */
+    static EntryHeld.Stated entryStated(ClauseExpr.Part said, Map<BindingId, Core> given,
+                                        DeclarationNewtypes newtypes) {
+        return said.positive()
+                ? EntryHeld.read(substituted(said.of(), given), core -> core, newtypes) : null;
+    }
+
+    /**
+     * {@code e} with each binding {@code given} names replaced by the value it was given, except
+     * where the name stands for that value narrowed. A name an arm gives the scrutinee narrowed to
+     * one of its cases is of that case, and the scrutinee is of another named type, the whole
+     * union: put in the name's place it would be an operand of another type than the one the
+     * clause was written over, so the name is left standing, as one whose value is not known here.
+     * A value whose type only says less of its elements, such as an empty list, is the value the
+     * name has.
+     */
     static Core substituted(Core e, Map<BindingId, Core> given) {
         if (e instanceof Core.Read r) {
             Core value = given.get(r.binding());
-            return value != null ? value : r;
+            return (value != null && !isNarrowedFrom(r.type(), value.type())) ? value : r;
         }
         return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be
@@ -533,6 +869,14 @@ final class Clauses {
                 // value stands as belongs to the value, and not to this slot.
                 name -> Core.withoutStanding(substituted(name, given)) instanceof Core.Read r
                         ? r : name);
+    }
+
+    /** Whether a name of type {@code named} stands for a value of type {@code value} narrowed to
+     *  one of its cases: the value of a union, or of one named type where the name is of
+     *  another. */
+    private static boolean isNarrowedFrom(Type named, Type value) {
+        return !named.equals(value) && (value instanceof Type.Union
+                || (value instanceof Type.Ref && named instanceof Type.Ref));
     }
 
 }

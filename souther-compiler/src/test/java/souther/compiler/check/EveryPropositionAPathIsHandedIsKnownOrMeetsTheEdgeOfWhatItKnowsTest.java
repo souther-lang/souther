@@ -2,6 +2,10 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.DefaultStdlib;
+import souther.compiler.meaning.StringsLanguage;
+
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
@@ -13,12 +17,17 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WaysSamples;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
+import souther.compiler.query.ReadAs;
+import souther.compiler.semantics.StringContainment;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -114,8 +123,12 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
         });
     }
 
+    /** A reading of terms that states no rules, which is all a proposition written out here asks. */
+    private static final Terms TERMS = RuleReadings.termsOfNoClauseFiled(
+            Symbols.none(DefaultStdlib.get()), ReadAs.THE_COMPILATION_DOES);
+
     private static List<WhyNotTaken> notTaken(Proposition stated, boolean positive) {
-        return MeaningAssumptions.assumed(stated, positive, Known.top(), null,
+        return MeaningAssumptions.assumed(stated, positive, Known.top(), TERMS,
                 MeaningAssumptions.InputPlaces.NONE, null).notTaken();
     }
 
@@ -143,17 +156,28 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                 CasesLeft.of(Refinement.of(new Case.Presence(true))), true));
         out.put("a value being there",
                 new Proposition.Present(new DecisionSubject.AnInput(optional), true));
+        out.put("a string in a language", new Proposition.InTheStrings(
+                new Proposition.InTheStrings.Strings.AtAPosition(TermPath.of("s")),
+                new StringsLanguage(PatternMeaning.text("ab")), true));
         out.put("two values being one", new Proposition.SameValue(
                 new DecisionSubject.AnInput(TermPath.of("n")),
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
+        out.put("a value being the one written", new Proposition.SameValue(
+                new DecisionSubject.AnInput(TermPath.of("s")),
+                new Operand.Written<>(Value.text("USD")), true));
+        out.put("one string inside another", new Proposition.StringInside(
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("n"))),
+                new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("s"))),
+                StringContainment.ANYWHERE, true));
         out.put("the last of its value", new Proposition.LastToHold(
                 new DecisionSubject.AnInput(TermPath.of("xs")),
                 new DecisionSubject.AnInput(TermPath.of("xs").element()), true));
         out.put("where an operation answers", new Proposition.WhereItAnswers(truth, above));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
+        out.put("the cases of the ways of keeping", WaysSamples.over(truth));
         out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
-                .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
+                .sorted(Comparator.comparing(Proposition::spelledOut)).toList(), List.of(1, 1),
                 List.of(1)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));

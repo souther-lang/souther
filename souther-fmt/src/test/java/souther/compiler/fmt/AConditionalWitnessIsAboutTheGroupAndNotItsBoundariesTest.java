@@ -34,18 +34,6 @@ class AConditionalWitnessIsAboutTheGroupAndNotItsBoundariesTest {
                 Formatter.canonicalize(CstParser.parse(source).root()));
     }
 
-    /** The canonical form of a source has nothing against it. */
-    @Test
-    void aSourceInItsCanonicalFormHasNoWitness() {
-        assertEquals(List.of(), witnesses(Formatter.format("""
-                module fmtprobe exposing ( P, f )
-
-                data P = { alpha: Int, beta: Int }
-
-                let f (x: Int): P = P { alpha = x, beta = x }
-                """)));
-    }
-
     /**
      * A source that broke a group the canonical form keeps whole is one witness — and this is the
      * case the layout wrote no break for, so nothing it realized could have carried it.

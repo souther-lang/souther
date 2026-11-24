@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -75,7 +77,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
             """;
 
     private static List<Generator.GeneratedRow> rowsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
@@ -84,7 +86,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("use");
         RuleReadingContext context =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(sigs.get("use"), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning axes =
@@ -98,7 +100,8 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get("use"), rules);
             axes = ThresholdFixtures.withThresholds(axes, domain.quantities(rules), guards.thresholds(),
-                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                    RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES,
+                            TestDay.TODAY),
                     guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         }
@@ -113,7 +116,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
     @Test
     void aRowForAClassUnderAWrappingCaseCarriesThatClassesValue() {
         for (Generator.GeneratedRow row : rowsOf(WRAPPED)) {
-            if (!row.labels().equals(List.of("x@Special=10 < x"))) {
+            if (!row.labels().equals(List.of("x@Special: 10 < x at x@Special"))) {
                 continue;
             }
             // The value the class above the line asks for, and not the one the `Special` class of

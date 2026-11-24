@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 import souther.compiler.report.AdequacyReport;
@@ -64,8 +65,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(UNRESOLVED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1504", "E2105"), compilation);
     }
 
     private static JsonNode behaviorOf(AdequacyReport report, String name) {
@@ -268,7 +268,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
     @Test
     void theLineSaysWhichOfTheWaysItHasNoNumber() {
         String text = AdequacyReport.of(measured())
-                .human(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertEquals("not measured (this behavior's signature could not be read)",
                 signatureLineOf(text, "issue"),
                 () -> "a name in its own declaration resolved to nothing:\n" + text);

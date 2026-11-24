@@ -1,11 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.TestDay;
 import souther.compiler.WhatTheRowsReached;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Membership;
@@ -73,7 +75,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private PartitionClass classOf(String type, String id) {
         return PartitionClasses.of(Type.ref(named(type)), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of()).stream()
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                TestDay.TODAY), java.util.Set.of()).stream()
                 .filter(each -> each.id().equals(id)).findFirst().orElseThrow();
     }
 
@@ -160,15 +163,13 @@ class ANameGoesBackOnTheWayItCameOffTest {
      */
     @Test
     void aRowIsWrittenUnderTheNameAndReadBackThroughIt() {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODULE, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
         assertEquals(List.of("Approved", "Rejected"), evidence.axes().get(0).classes());
         String rows = GeneratedRows.of(compilation, "demo", "run",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(rows.contains("DecisionN(Approved { id = 0 })"), rows);
         assertTrue(rows.contains("DecisionN(Rejected)"), rows);
     }
@@ -177,12 +178,10 @@ class ANameGoesBackOnTheWayItCameOffTest {
      *  show. */
     @Test
     void aRowAnAuthorWroteIsCountedAtTheClassItIsIn() {
-        Compilation compilation = Compilation.ofSource(MODULE + """
+        Compilation compilation = ACompiledModel.measured(MODULE + """
                 example run
                     | (DecisionN(Approved { id = 1 })) -> Ok
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
@@ -201,7 +200,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private List<String> written(PartitionClass each) {
         return Partitions.standingFor(each.representatives(), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of())
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                java.util.Set.of())
                 .values().stream()
                 .map(FixtureTemplate::text).toList();
     }

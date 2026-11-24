@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.diag.Primary;
 
@@ -76,7 +77,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        Located.diagnosticsOf(c.diagnostics());
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         assertEquals(Map.of(), c.classes(),
                 "there is no bytecode for a type nobody could name");
@@ -95,6 +96,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1023"), c);
         List<Diagnostic> found = Located.diagnosticsOf(c.diagnostics()).get(new SourceId("a.sou"));
 
         assertEquals(1, found.size(),
@@ -231,7 +233,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        Located.diagnosticsOf(c.diagnostics());
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         assertEquals(Map.of(), c.classes(),
                 "there is no bytecode for a composition nobody could resolve");
@@ -307,6 +309,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1502"), c);
 
         assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get(new SourceId("a.sou")),
                 "the reserved module name is x's mistake, not this one's");

@@ -33,6 +33,13 @@ final class RowFailures {
         if (cause instanceof StackOverflowError) {
             return new StackExhaustedException(what + " overflowed the stack");
         }
+        // A run short of the platform's room is the evaluation stopping too: the value exists and
+        // a platform with more room writes it. Passed on as it is, to be said where it arrives.
+        // Matched by name: the applied code runs under its own loader.
+        if (cause instanceof RuntimeException shortage
+                && "souther.runtime.OutOfRoom".equals(shortage.getClass().getName())) {
+            return shortage;
+        }
         return new FixtureException(what + " did not produce a value: "
                 + (cause == null ? failure : cause.getMessage()));
     }

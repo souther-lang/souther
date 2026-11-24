@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.observe.RowIdentity;
 
 import java.time.Duration;
@@ -61,6 +62,9 @@ public interface Deadline {
         /** A {@code fake} table, built. */
         record Table(String target, SourcePos pos) implements Work {}
 
+        /** A value a module declares, built as the module builds it. {@code target} is the value. */
+        record Value(String target, SourcePos pos) implements Work {}
+
         /** A {@code with} written on a row. */
         record With(String target, SourcePos pos) implements Work {}
     }
@@ -93,7 +97,20 @@ public interface Deadline {
          */
         record Overran<T>(Runnable abandon) implements Outcome<T> {}
 
-        /** It ended by throwing, and this is what came out. */
-        record Threw<T>(Throwable cause) implements Outcome<T> {}
+        /**
+         * It ended by throwing, and this is what came out.
+         *
+         * <p>Where that is a generated class failing to link there is no outcome of the work to
+         * hand over: it is this compiler's output failing, and it is raised as such here, where
+         * every reader of an outcome receives it, and not left for each to classify. What a
+         * supplied implementation ended with arrives as an {@code InvocationFailure}, which is
+         * attributed already and is not looked under ({@link GeneratedLinkage.Attributed}).
+         */
+        record Threw<T>(Throwable cause) implements Outcome<T> {
+
+            public Threw {
+                GeneratedLinkage.rejectDefect(cause);
+            }
+        }
     }
 }

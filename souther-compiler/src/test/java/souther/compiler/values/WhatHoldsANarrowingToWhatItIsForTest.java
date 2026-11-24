@@ -90,16 +90,14 @@ class WhatHoldsANarrowingToWhatItIsForTest {
      * And it is refused where the search is past what it looks through, which is what makes the
      * round the only argument that answers.
      *
-     * <p>The same four blocks beside enough others to put every assignment past what is looked
-     * through. Nothing is stated between the two lots, so what the added blocks change is how much
-     * there is to search and nothing about what the rules leave.
-     *
-     * <p>Asserted with the relation that stands beside it, because "refused" on its own does not
-     * say that the search was out of reach: the same blocks with {@code p1} left a value to spare
-     * are satisfiable, and what comes back is that this reduction did not settle it.
+     * <p>The same four blocks beside enough others to put every assignment over all of them past
+     * what is looked through. Nothing is stated between the two lots, so they are relations of
+     * their own and what the added blocks change is nothing: the round refuses the four whatever
+     * is beside them, and the four with {@code p1} left a value to spare stand beside them as
+     * they do alone.
      */
     @Test
-    void andItIsRefusedWhereTheSearchIsPastWhatItLooksThrough() {
+    void andItIsRefusedWhateverIsBesideItThatNothingJoinsToIt() {
         Apartness<String> across = Apartness.of("p0", "p2").and(Apartness.of("p0", "p3"))
                 .and(Apartness.of("p1", "p2")).and(Apartness.of("p1", "p3"));
         Apartness<String> padded = across;
@@ -114,10 +112,12 @@ class WhatHoldsANarrowingToWhatItIsForTest {
 
         assertEquals(Set.of(new RelationalLack.NoValueLeftForIt<>(block("p0"))),
                 lacksOf(padded.reduce(holdingElseMany(refused))).claimed());
-        assertInstanceOf(Apartness.Reduction.NotKnown.class,
+        assertInstanceOf(Apartness.Reduction.Standing.class,
                 padded.reduce(holdingElseMany(standing)),
-                "and at this size nothing else answers, so a relation the round leaves alone is"
-                        + " one this did not settle");
+                "and the blocks beside it, which nothing joins to it, are no part of what is"
+                        + " looked through: the relation answers as it does without them");
+        assertInstanceOf(Apartness.Reduction.Standing.class,
+                across.reduce(holdingElseMany(standing)));
     }
 
     /**

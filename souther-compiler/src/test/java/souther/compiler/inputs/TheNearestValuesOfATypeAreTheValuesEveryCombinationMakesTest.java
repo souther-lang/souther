@@ -34,12 +34,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @Nightly
 class TheNearestValuesOfATypeAreTheValuesEveryCombinationMakesTest {
 
-    /** The types a steady order is asked over ({@code ASteadyOrderTellsApartWhateverEqualityTellsApartTest},
-     *  {@code ReasonsComeOutInASteadyOrderWhicheverWayTheyWereMetTest}). */
+    /**
+     * The types a steady order is asked over ({@code ASteadyOrderTellsApartWhateverEqualityTellsApartTest},
+     * {@code ReasonsComeOutInASteadyOrderWhicheverWayTheyWereMetTest}), but {@link ReportedReason.Stop}.
+     *
+     * <p>Stop's constructor refuses a null and nothing else, so there is no value that only some
+     * combination of its components takes, and every combination of them is the product of what
+     * they are offered. {@code ReportedReasonStopRefusesANullAndNothingElseTest} holds that on every
+     * run.
+     */
     private static final List<Class<?>> ASKED = List.of(BlockReason.RuleReadingStopped.class,
             RuleReasons.Said.class, RuleSite.class, WrittenOwner.class, SourceConstructOrigin.class,
             QuotedFrom.class, SourceProvenance.class, StoppedReading.class,
-            ReportedReason.Stop.class, ClassOfAPosition.class, Figure.class);
+            ClassOfAPosition.class, Figure.class);
 
     @Test
     void everyValueOfAComponentAnyCombinationTakesIsInSomeValueTheNearestMake() {

@@ -1,14 +1,19 @@
 package souther.compiler.report;
 
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.Weakening;
 import souther.compiler.publish.WeakeningVocabulary;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Where one thing this report says leaves the person reading it.
@@ -51,15 +56,26 @@ public sealed interface ReaderDisposition {
      *
      * <p><b>Not an instruction to measure again.</b> No option of this compiler sets the figures it
      * stops at, so a reader told to allow more has nothing to allow it with. What a reader can do is
-     * in the model, and there is something to say of it only where the entry is a point: a row
-     * written at it settles it, and so does a rule leaving no value there.
+     * in the model, and there is something to say of it only where the entry is a point or a
+     * rewrite: a row written at a point settles it, and so does a rule leaving no value there; a
+     * row that tells a rewrite apart settles that, and nothing proves there is none past the figure.
      *
-     * @param figures            what stopped it, as it carried them, never empty
-     * @param aRowThereSettlesIt whether the entry is about one point, which a row written at it or
-     *                           a rule refusing it answers whatever stopped the search
+     * @param figures    what stopped it, as it carried them, never empty
+     * @param settledBy  what a reader writes that answers the entry whatever stopped the search
      */
-    record StoppedAtAFigure(Subject subject, List<Figure> figures, boolean aRowThereSettlesIt)
+    record StoppedAtAFigure(Subject subject, List<Figure> figures, SettledBy settledBy)
             implements ReaderDisposition {
+
+        /** What answers an entry a figure stopped. */
+        public enum SettledBy {
+            /** Nothing a reader writes is named for it. */
+            NOTHING_NAMED,
+            /** A row written at the point, or a rule leaving no value there. */
+            A_ROW_OR_A_RULE_AT_THE_POINT,
+            /** A row that tells the rewrite apart from the body. */
+            A_ROW_THAT_TELLS_THE_REWRITE_APART
+        }
+
 
         public StoppedAtAFigure {
             figures = List.copyOf(figures);
@@ -75,7 +91,8 @@ public sealed interface ReaderDisposition {
     /**
      * What a measure went without, in the word this document has for it.
      *
-     * <p>For everything a weakening names that is neither a rule nor a fork nor an arm: a module
+     * <p>For everything a weakening names that is neither a rule nor a fork nor an arm, nor rows
+     * whose case could not be read ({@link WriteTheCaseOutIn}): a module
      * whose bodies were not made, a behavior whose boundary nothing worked out, a source nothing
      * was observed from. There is no rule to send a reader to at any of them, and an arm that said
      * there was would be naming a thing the fact never carried.
@@ -92,6 +109,27 @@ public sealed interface ReaderDisposition {
      */
     record LookAtWhyNothingWasMeasured(Subject subject, NotMeasuredReason why)
             implements ReaderDisposition {}
+
+    /**
+     * The rows whose case could not be read, which is what to write differently.
+     *
+     * <p>An operation and not a judgement: a row naming its case where it writes the value is read,
+     * and the case it covers is then counted. A row writing a helper's answer at an input is no
+     * worse a row for that; it is that nothing here can say which case it is, while a case is
+     * left that only it may cover.
+     *
+     * @param unread which rows, never empty, in the order they were read
+     */
+    record WriteTheCaseOutIn(Subject subject, Set<RowRef> unread) implements ReaderDisposition {
+
+        public WriteTheCaseOutIn {
+            unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
+            if (unread.isEmpty()) {
+                throw new IllegalArgumentException("a row is what a reader is sent to, so there is"
+                        + " one to name");
+            }
+        }
+    }
 
     /** The point, and what did or did not show that a row can be written at it. */
     record LookAtWhatShowedNoRow(Subject subject) implements ReaderDisposition {}
@@ -158,12 +196,16 @@ public sealed interface ReaderDisposition {
         // figure is raised; the figures it reached are said beside it by whoever writes the line.
         if (!figures.isEmpty() && unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
             return new StoppedAtAFigure(subject, figures, switch (subject) {
-                case Subject.AtAPoint _ -> true;
+                case Subject.AtAPoint _ -> StoppedAtAFigure.SettledBy.A_ROW_OR_A_RULE_AT_THE_POINT;
                 case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                      Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                      Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
                      Subject.OfAnAxisMeasure _, Subject.AtARule _, Subject.AtAFork _,
-                     Subject.AtAnArm _ -> false;
+                     Subject.AtAnArm _, Subject.OfAReplacement _ ->
+                         unanswered instanceof AdequacyUncertainty.ByWeakening(
+                             Weakening.RewriteUndecided _)
+                             ? StoppedAtAFigure.SettledBy.A_ROW_THAT_TELLS_THE_REWRITE_APART
+                             : StoppedAtAFigure.SettledBy.NOTHING_NAMED;
             });
         }
         return switch (unanswered) {
@@ -177,6 +219,12 @@ public sealed interface ReaderDisposition {
             // answer, and it is at the behavior that states it.
             case AdequacyUncertainty.EveryRowReachesAnUnreachable _ ->
                     new LookAtWhatShowedNoRow(subject);
+            // A case no row is counted at while rows went unread: the rows are what a reader goes
+            // to, and they are the fact's own.
+            case AdequacyUncertainty.ByWeakening(Weakening.InputCasesUnreadable it) ->
+                    new WriteTheCaseOutIn(subject, it.unread());
+            case AdequacyUncertainty.ByWeakening(Weakening.OutputCasesUnreadable it) ->
+                    new WriteTheCaseOutIn(subject, it.unread());
             case AdequacyUncertainty.ByWeakening it -> switch (subject) {
                 case Subject.AtARule _ -> new LookAtTheRule(subject);
                 case Subject.AtAFork _ -> new LookAtTheFork(subject);
@@ -188,7 +236,7 @@ public sealed interface ReaderDisposition {
                 case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                      Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                      Subject.AtAnInput _, Subject.AtABorder _, Subject.AtAPoint _,
-                     Subject.OfAMeasure _, Subject.OfAnAxisMeasure _ ->
+                     Subject.OfAMeasure _, Subject.OfAnAxisMeasure _, Subject.OfAReplacement _ ->
                         new LookAtWhatTheMeasureWentWithout(subject, wordOf(it));
             };
         };

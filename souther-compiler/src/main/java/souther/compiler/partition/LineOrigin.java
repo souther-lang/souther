@@ -9,9 +9,12 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
@@ -55,6 +58,15 @@ import java.util.Optional;
  * guard says nothing about the other.
  */
 public sealed interface LineOrigin extends RuleEvidenceOrigin {
+
+    /**
+     * Whether the line only selects a case of the definition a library writes an operation in. It
+     * parts the values as any line does, and no comparison of the author's is there for a row to
+     * be owed at its points.
+     */
+    default boolean onlySelectsACase() {
+        return false;
+    }
 
     /**
      * A clause of a {@code data}'s invariant, as the clause it is.
@@ -158,6 +170,11 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
             }
         }
 
+        @Override
+        public boolean onlySelectsACase() {
+            return authored instanceof AuthoredPointMapping.SelectsACase;
+        }
+
         /**
          * Whether which way the comparison comes out is which side of this line a row is on.
          *
@@ -241,15 +258,23 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          *              run through that one is a run through the rule. What arrives at the rule is
          *              what has to hold for a run to get there, and this is whether that is all
          *              getting there takes
+         * @param writtenAgainst the number this reading's comparison was written against, where one
+         *              side is a number the same on every run and the other is not: the bound of a
+         *              table as the table holds it, before the quantity it is held against was
+         *              weighed and divided into the level the line is cut at
+         * @param heldIn the data that number is read out of, where it is read out of data: two
+         *              calls of one helper given two tables read two lines, however alike the
+         *              bounds
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
                            List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn,
-                           CanonicalSelection<WhatMayStopARun> stopsBefore) {
+                           CanonicalSelection<WhatMayStopARun> stopsBefore,
+                           Optional<ExactRatio> writtenAgainst, Optional<BoundHeldIn> heldIn) {
 
             public Read {
                 if (rule == null || states == null || anchor == null || metOn == null
-                        || stopsBefore == null) {
+                        || stopsBefore == null || writtenAgainst == null || heldIn == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");
@@ -490,8 +515,7 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                     PublishedSentence.AroundAHandle.alone(handle);
             // The declarations that took the end in, said the way the line itself says them. The
             // handle underneath is the bound's, which is what this origin cites.
-            case NarrowedOrigin n -> new PublishedSentence.AroundAHandle(
-                    "", handle, n.authoredLine().narrowing());
+            case NarrowedOrigin n -> n.authoredLine().around(handle);
         };
     }
 
@@ -573,8 +597,16 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * has no name, what a reader is pointed at is worked out when a sentence is written, from the
      * question the handle names ({@link souther.compiler.check.RuleReportAnchor}).
      */
+    default SearchMessage toldWithoutAPlace() {
+        return authoredLine().toldWithoutAPlace();
+    }
+
+    /**
+     * The same in the catalog's base language, for a text no reader's language changes: an
+     * exception's message, and a field of a document a consumer matches on.
+     */
     default String saidWithoutAPlace() {
-        return authoredLine().saidWithoutAPlace();
+        return Messages.render(toldWithoutAPlace(), Messages.BASE_LANGUAGE);
     }
 
     /**

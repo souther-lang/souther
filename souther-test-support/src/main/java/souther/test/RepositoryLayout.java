@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -82,9 +83,16 @@ public final class RepositoryLayout {
      * repository root, and run by an editor from somewhere else all get the same answer. Walking up
      * also reads no more of the repository than the path it is standing on.
      */
-    public static RepositoryLayout ofWorkingDirectory() {
-        return of(Path.of(""));
+    public static synchronized RepositoryLayout ofWorkingDirectory() {
+        if (ofTheWorkingDirectory == null) {
+            ofTheWorkingDirectory = of(Path.of(""));
+        }
+        return ofTheWorkingDirectory;
     }
+
+    /** The one reading of the working directory's repository, so what a layout holds once is held
+     *  once for every check of a fork that asks. A layout made by {@link #of} is its own. */
+    private static RepositoryLayout ofTheWorkingDirectory;
 
     /**
      * The repository {@code start} is in, for a caller that already knows where it is standing.
@@ -237,42 +245,6 @@ public final class RepositoryLayout {
         }
         throw new IllegalStateException("a pom states no " + name + " and inherits none: Maven could"
                 + " not build it");
-    }
-
-    /**
-     * The text of every element the root pom's profile {@code id} holds at {@code path}, a step a
-     * child element's name, in document order.
-     *
-     * <p>For a check holding what a profile says to what the repository is. Refused where the root
-     * pom has no such profile, so a profile renamed out from under a check stops the check. Nothing
-     * at {@code path} is an answer, the empty one, and a check expecting something there fails on
-     * it as on any other wrong answer.
-     */
-    public List<String> rootProfileTexts(String id, String... path) {
-        Element project = parse(root.resolve("pom.xml")).getDocumentElement();
-        List<Element> at = new ArrayList<>();
-        for (Element profiles : childElements(project, "profiles")) {
-            for (Element profile : childElements(profiles, "profile")) {
-                if (childText(profile, "id").equals(id)) {
-                    at.add(profile);
-                }
-            }
-        }
-        if (at.size() != 1) {
-            throw new IllegalArgumentException("the root pom has " + at.size() + " profiles called " + id);
-        }
-        for (String step : path) {
-            List<Element> next = new ArrayList<>();
-            for (Element each : at) {
-                next.addAll(childElements(each, step));
-            }
-            at = next;
-        }
-        List<String> out = new ArrayList<>();
-        for (Element each : at) {
-            out.add(each.getTextContent().trim());
-        }
-        return List.copyOf(out);
     }
 
     /**
@@ -485,8 +457,19 @@ public final class RepositoryLayout {
      * <p>What the checks that hold a rule over the compiler itself read. Held as one answer because
      * six of them had worked it out for themselves, and a rule about where something may be written
      * says nothing about a module its scan did not reach.
+     *
+     * <p>Walked once per layout, because the repository does not move while a run happens.
      */
-    public List<Path> mainJavaSources() {
+    public synchronized List<Path> mainJavaSources() {
+        if (mainJava == null) {
+            mainJava = walkTheMainJavaSources();
+        }
+        return mainJava;
+    }
+
+    private List<Path> mainJava;
+
+    private List<Path> walkTheMainJavaSources() {
         List<Path> out = new ArrayList<>();
         for (Path tree : mainJavaTrees()) {
             try (Stream<Path> walk = Files.walk(tree)) {
@@ -634,8 +617,17 @@ public final class RepositoryLayout {
      * <p>Sorted and held rather than streamed: the walk's handles are closed before this returns,
      * so a caller cannot leak one, and a parameterized test over the result names its cases in the
      * same order on every machine.
+     *
+     * <p>Walked once per suffix and layout: the files a suffix names are the same answer each time
+     * it is asked, and only the files are held, so what a check makes of them stays its own.
      */
     public List<Path> filesUnderSourceTrees(String suffix) {
+        return walkedBySuffix.computeIfAbsent(suffix, this::walkTheSourceTrees);
+    }
+
+    private final Map<String, List<Path>> walkedBySuffix = new ConcurrentHashMap<>();
+
+    private List<Path> walkTheSourceTrees(String suffix) {
         List<Path> out = new ArrayList<>();
         for (Path tree : sourceTrees) {
             try (Stream<Path> walk = Files.walk(tree)) {

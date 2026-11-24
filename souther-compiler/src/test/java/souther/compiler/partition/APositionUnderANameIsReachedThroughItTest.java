@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -74,10 +75,7 @@ class APositionUnderANameIsReachedThroughItTest {
             """;
 
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 
     /** The lines that behavior's positions met, whosever the row at each point is. */
@@ -123,7 +121,7 @@ class APositionUnderANameIsReachedThroughItTest {
     @Test
     void aRowOfferedForThePositionIsWrittenUnderTheName() {
         String rows = GeneratedRows.of(measured(FLAGS), "demo", "wrapped",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
         assertTrue(rows.contains("(SlotN(Slot { flag = false }))"), rows);
     }
@@ -146,7 +144,7 @@ class APositionUnderANameIsReachedThroughItTest {
         assertTrue(lines(compilation, "wrapped").size() >= 4);
 
         String rows = GeneratedRows.of(compilation, "demo", "wrapped",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
         assertTrue(rows.contains("(PairN(Pair { low = N(9), high = N(10) }))"), rows);
     }
 }

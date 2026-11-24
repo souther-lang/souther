@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -59,14 +60,14 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
         String guard = "List.any(x -> x > 0, xs)";
         assertFalse(hitAt(MODEL, guard, "([1, 0])", "0"),
                 "the first element holds, and the second is never compared");
-        assertTrue(hitAt(MODEL, guard, "([-1, 0])", "0"),
+        assertTrue(hitAnswering(MODEL, guard, "([-1, 0])", "Low", "0"),
                 "the first fails, so the second is compared");
     }
 
     @Test
     void anOperationStoppingAtAFailingAnswerComparesNothingAfterIt() {
         String guard = "List.all(x -> x > 0, xs)";
-        assertFalse(hitAt(MODEL, guard, "([0, 1])", "1"),
+        assertFalse(hitAnswering(MODEL, guard, "([0, 1])", "Low", "1"),
                 "the first element fails, and the second is never compared");
         assertTrue(hitAt(MODEL, guard, "([2, 1])", "1"),
                 "the first holds, so the second is compared");
@@ -82,7 +83,7 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
         for (String guard : List.of("List.any(x -> 100 / x >= 1, xs)",
                 "List.all(x -> 100 / x >= 1, xs)",
                 "List.length(List.filter(x -> 100 / x >= 1, xs)) >= 1")) {
-            assertFalse(hitAt(MODEL, guard, "([0, 100])", "100"), guard);
+            assertFalse(hitAtAfterAnAbort(MODEL, guard, "([0, 100])", "100"), guard);
         }
     }
 
@@ -120,7 +121,7 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
                         + " second list is compared");
         assertFalse(hitAt(NESTED, guard, "([[1], [0]])", "0"),
                 "the first list holds, and the second is never compared");
-        assertTrue(hitAt(NESTED, guard, "([[-1], [0]])", "0"),
+        assertTrue(hitAnswering(NESTED, guard, "([[-1], [0]])", "Low", "0"),
                 "the first list holds nowhere, so the second is compared");
     }
 
@@ -214,7 +215,8 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
                 behavior pick : (xs: List<Int>, n: Int) -> Low | High
                 let pick (xs, n) = if GUARD then High else Low
                 """;
-        assertTrue(hitAt(model, "List.any(y -> n > 0, [" + many + "])", "([1], 0)", "0"),
+        assertTrue(hitAnswering(model, "List.any(y -> n > 0, [" + many + "])", "([1], 0)", "Low",
+                        "0"),
                 "n is compared on the first application, and the row stands at 0");
     }
 
@@ -270,14 +272,32 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
         return readingAt(model, guard, row, against).path("hit").asBoolean();
     }
 
+    /** The same, of a row whose answer is {@code answer}, for the guard that does not hold on it. */
+    private static boolean hitAnswering(String model, String guard, String row, String answer,
+                                        String against) {
+        return readingAt(model, guard, row, answer, against, List.of()).path("hit").asBoolean();
+    }
+
+    /** The same, of a row the program aborts on, which is told so and is no answer. */
+    private static boolean hitAtAfterAnAbort(String model, String guard, String row,
+                                             String against) {
+        return readingAt(model, guard, row, "High", against, List.of("E1905")).path("hit")
+                .asBoolean();
+    }
+
     /** The reading at {@code against} of the guard's line, as the one row {@code row} met it. */
     private static JsonNode readingAt(String model, String guard, String row, String against) {
+        return readingAt(model, guard, row, "High", against, List.of());
+    }
+
+    private static JsonNode readingAt(String model, String guard, String row, String answer,
+                                      String against, List<String> errors) {
         Map<String, JsonNode> readings = new LinkedHashMap<>();
         JsonNode report = reportOfSource(model.replace("GUARD", guard) + """
 
                 example pick
-                    | "the row" : %s -> High
-                """.formatted(row));
+                    | "the row" : %s -> %s
+                """.formatted(row, answer), errors);
         collect(report, readings);
         JsonNode reading = readings.get(against);
         assertTrue(reading != null, () -> "a line has a point at " + against + ": " + readings);
@@ -294,9 +314,16 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
     }
 
     private static JsonNode reportOfSource(String source) {
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+    }
+
+    /** The report of a model refused with exactly {@code errors}; one that compiles says none. */
+    private static JsonNode reportOfSource(String source, List<String> errors) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(errors, compilation);
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

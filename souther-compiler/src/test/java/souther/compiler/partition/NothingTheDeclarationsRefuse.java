@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.TestDay;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.regex.PatternPlan;
@@ -30,6 +31,6 @@ final class NothingTheDeclarationsRefuse {
         }
         // No sum whose cases share a spread, which is what an input of plain positions observed.
         return new WitnessSearch(AdmittedValues.of(sets, NameReach.NONE),
-                PatternPlan.Budget.OF_A_WITNESS::meter);
+                PatternPlan.Budget.OF_A_WITNESS::meter, TestDay.TODAY);
     }
 }

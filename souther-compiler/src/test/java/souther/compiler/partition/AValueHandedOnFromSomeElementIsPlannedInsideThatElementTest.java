@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
@@ -19,6 +20,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
+import souther.compiler.values.Operand;
 
 import java.util.List;
 import java.util.Map;
@@ -75,7 +77,7 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                     LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("n"))), Rel.GE));
 
     private static ContentsAsked asked(RowDemand.OfACondition demand) {
-        return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand)));
+        return ContentsAsked.of(List.of(new OnTheWay.TakenIn(WHERE, demand, NamedElements.NONE)));
     }
 
     private static RowDemand.WithinIt keyedInTheShelf(TermPath value) {
@@ -174,7 +176,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                 ? new RowDemand.Exists(ITEMS, only(inside), HOLDING, Optional.empty())
                 : new RowDemand.ForAll(ITEMS, only(inside), HOLDING, Optional.empty()));
         ContentsAsked.Asked one = asked.asked().getFirst();
-        assertEquals(value, one.value(), () -> "the one thing asked: " + asked);
+        assertEquals(new Operand.At<>(value), one.value(),
+                () -> "the one thing asked: " + asked);
         return one.standsWhereMet();
     }
 
@@ -258,7 +261,7 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
                 TermPath.of(List.of("items", "filed").get(parameter)),
                 ScopedDeclarations.wrapsOf(symbols), symbols, ScopedDeclarations.kindsOf(symbols),
                 ScopedDeclarations.sumsOf(symbols), Set.of(), Requirements.NONE, contents,
-                howMany);
+                howMany, _ -> false);
     }
 
     private record Read(List<Type> types, Symbols symbols) {}
@@ -267,7 +270,8 @@ class AValueHandedOnFromSomeElementIsPlannedInsideThatElementTest {
     private static final Read READ = read();
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

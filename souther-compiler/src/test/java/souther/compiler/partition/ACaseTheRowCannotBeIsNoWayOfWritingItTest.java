@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -21,6 +22,7 @@ import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -97,7 +99,7 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
         Axis fixed = axisAt("n");
         Count at = Count.of(4);
         SearchRegion region = domain().quantities(rules()).region();
-        if (ABOVE_TEN instanceof TakenConstraint.Affine(var form, var rel)) {
+        if (ABOVE_TEN instanceof TakenConstraint.Affine(var form, var rel, var _)) {
             region = region.assuming(form, rel).taken();
         }
         return Generator.probeFixing(subject(), "n = " + at,
@@ -108,17 +110,17 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
                         List.of(new OnTheWay.TakenIn(new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "m", new ConditionOccurrence(
                                         "b", ConditionOccurrence.Reading.DIVIDING, 0)),
-                                new RowDemand.Relational(ABOVE_TEN))), Reachability.Ways.ONE,
-                        List.of()),
+                                new RowDemand.Relational(ABOVE_TEN), NamedElements.NONE)),
+                        Reachability.Ways.ONE,
+                        List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 
-    private static final Compilation COMPILATION = compiled();
+    private static final Compilation COMPILATION = ACompiledModel.compiles(measured());
 
-    private static Compilation compiled() {
+    private static Compilation measured() {
         Compilation made = Compilation.ofSource(SPREAD, "Main");
         made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
         return made;
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import souther.compiler.observe.ArmObservation;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
@@ -183,8 +184,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
                          Behavior behavior) {
 
         static Model of(String source, String name) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.answered(source);
             String module = compilation.modules().get(0);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");

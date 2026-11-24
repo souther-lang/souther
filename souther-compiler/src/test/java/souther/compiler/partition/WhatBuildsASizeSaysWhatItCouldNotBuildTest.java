@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -33,7 +34,8 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
             RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final RuleReadingContext READING =
-            RuleReadingContext.unshared(NONE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            RuleReadingContext.unshared(NONE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                    TestDay.TODAY);
 
     /** The position of this type as the builder is asked about it: what it is, and what the rules
      *  every name it wears carries say of it. */

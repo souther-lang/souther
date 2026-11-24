@@ -1,0 +1,388 @@
+package souther.compiler.inputs;
+
+import souther.compiler.inputs.WhatARelationLeavesUndivided.Operations;
+import souther.compiler.inputs.WhatARelationLeavesUndivided.Term;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+
+import java.math.BigInteger;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
+/**
+ * Whether the rows of a relation are computed, asked in one place.
+ *
+ * <p>A row is computed where the program that holds the relation gets to the end of working it
+ * out, and the relation says only the form: the terms weighed, and a constant. What the program
+ * does beyond that is what a reading of the comparison told ({@link Operations}), in one of three
+ * states, and every question here is answered by the state and by nothing else.
+ *
+ * <ul>
+ * <li>{@link WhatARelationLeavesUndivided.Told#EVERY}: every operation that can stop a run is
+ * told, so a row is computed where each of them holds at it, in the program's own order and signs,
+ * and the sizes of the form's addends say nothing of it.
+ * <li>{@link WhatARelationLeavesUndivided.Told#SOME}: the reading met something that can stop a
+ * run and told of no operation for it. The told operations still say where a row cannot be; no
+ * row is shown computed, because what is not told may stop it.
+ * <li>{@link WhatARelationLeavesUndivided.Told#NOTHING_SAID}: no reading of the program was made
+ * (a product, a whole and its part, a difference, a relation derived from a comparison), and the
+ * caller takes the program to add the form up and nothing else. Then the sizes of the addends say
+ * it: a row adding up addends whose positive ones together and negative ones together are no
+ * further from nought than the greatest value is computed in whatever order and with whichever
+ * sign, since every sum along the way lies between the two and so does the sum turned round.
+ * </ul>
+ *
+ * <p>The sizes are never asked of a program that is read: {@code a + 3 >= b} stops at an
+ * {@code a} whose addends are small. They are asked of the form only through
+ * {@link #computesAsTheFormIsAdded}, whose name is the assumption, and which answers nothing for
+ * a program that was read.
+ *
+ * @param greatest   the greatest value of the type, or null where it has none
+ * @param operations what the rows of the relation work out
+ * @param held       the terms a row is asked of two others while they stand still, each at the
+ *                   value it is held at, by its key ({@link Term#key}); none where the row names
+ *                   every term
+ */
+record RowsComputed(BigInteger greatest, Operations operations, Map<Object, ExactRatio> held) {
+
+    /** A type with no greatest value: every row is computed. */
+    static final RowsComputed ENDLESS = new RowsComputed(null, Operations.NONE, Map.of());
+
+    RowsComputed {
+        held = Map.copyOf(held);
+    }
+
+    static RowsComputed upTo(BigInteger greatest) {
+        return greatest == null ? ENDLESS : new RowsComputed(greatest, Operations.NONE, Map.of());
+    }
+
+    /** The same, over a relation whose rows work out {@code operations}, with the numbers they
+     *  are over that no term names held at the values they stand at ({@link Operations}). */
+    RowsComputed withOperations(Operations operations) {
+        Map<Object, ExactRatio> together = new LinkedHashMap<>(operations.standing());
+        together.putAll(held);
+        return new RowsComputed(greatest, operations, together);
+    }
+
+    /** The same, for rows in which the terms called by the keys of {@code standing} stand at
+     *  their values, which a row of the two others does not name. */
+    RowsComputed withTheRestAt(Map<Object, ExactRatio> standing) {
+        Map<Object, ExactRatio> together = new LinkedHashMap<>(held);
+        together.putAll(standing);
+        return new RowsComputed(greatest, operations, together);
+    }
+
+    /** Whether it stops at a size, so that a row can fail to be computed. */
+    boolean stopsAtASize() {
+        return greatest != null;
+    }
+
+    /**
+     * Whether every operation that can stop a run is told, so that a row is computed where each
+     * holds at it — at the values numbers no term names are held at, where there are any. It
+     * answers whether a row is shown computed, and no more: that no row is computed elsewhere is
+     * said only of {@link WhatARelationLeavesUndivided.Told#EVERY}, which {@link RowsOfTheTwo}
+     * asks.
+     */
+    boolean tellsEveryOperation() {
+        return operations.exactAtTheHeldValues();
+    }
+
+    /**
+     * Whether no row can fail to be computed: the type holds no greatest value, and nothing the
+     * program does can stop a row either. A type with no greatest value says only that no size
+     * stops a run; a number built into a type with an invariant, or an operation told, still can.
+     */
+    boolean nothingStopsARow() {
+        return greatest == null && !mayStopARow();
+    }
+
+    /**
+     * Whether every row with each of {@code terms} at a value of its run is computed: what the
+     * program works out keeps inside the sizes of the form's addends
+     * ({@link Operations#theSizesAreRowsComputed}), and those addends, at the ends of the runs,
+     * keep inside the size the sizes stop at ({@link Operations#sizesStopAt}). Asked of the runs,
+     * so of every row in them at once; false where a run has no end on a side and the sizes stop
+     * somewhere.
+     */
+    <P> boolean computesEveryRowWithin(List<Term<P>> terms, ExactRatio constant) {
+        if (!operations.theSizesAreRowsComputed(terms, constant)) {
+            return false;
+        }
+        BigInteger limit = operations.sizesStopAt(greatest);
+        if (limit == null) {
+            return true;
+        }
+        // The most the positive addends come to together and the least the negative ones do, each
+        // term at whichever end of its run puts it furthest out.
+        ExactRatio up = constant.signum() > 0 ? constant : ExactRatio.ZERO;
+        ExactRatio down = constant.signum() < 0 ? constant : ExactRatio.ZERO;
+        for (Term<P> each : terms) {
+            ExactRatio low = numberAt(each.holds().min());
+            ExactRatio high = numberAt(each.holds().max());
+            ExactRatio atLow = low == null ? null : each.weight().times(low).orNull();
+            ExactRatio atHigh = high == null ? null : each.weight().times(high).orNull();
+            if (atLow == null || atHigh == null) {
+                return false;
+            }
+            ExactRatio most = atLow.compareTo(atHigh) >= 0 ? atLow : atHigh;
+            ExactRatio least = atLow.compareTo(atHigh) >= 0 ? atHigh : atLow;
+            up = most.signum() > 0 ? up.plus(most).orNull() : up;
+            down = least.signum() < 0 ? down.plus(least).orNull() : down;
+            if (up == null || down == null) {
+                return false;
+            }
+        }
+        ExactRatio size = ExactRatio.of(limit);
+        return up.compareTo(size) <= 0 && down.negated().compareTo(size) <= 0;
+    }
+
+    /** The number {@code end} is at, or null where there is no end or it is no number. */
+    private static ExactRatio numberAt(Endpoint end) {
+        return (end != null && end.at() instanceof Count count) ? count.exactly() : null;
+    }
+
+
+    /**
+     * Whether one row is computed, the row being the {@code addends} of the form at it and the
+     * {@code values} of the terms by key.
+     */
+    boolean rowIsComputed(Supplier<ExactRatio[]> addends,
+                          Supplier<Map<Object, ExactRatio>> values) {
+        return switch (operations.told()) {
+            case EVERY, EVERY_AT_HELD_VALUES -> computedAt(values);
+            case SOME -> false;
+            case NOTHING_SAID -> computes(addends.get());
+        };
+    }
+
+    /**
+     * Whether every operation told holds at a row whose terms stand at {@code values}, each by its
+     * key, and the rest at where they are held; false where the operations are not all told, or
+     * where one of them reads a term neither names.
+     */
+    boolean computedAt(Supplier<Map<Object, ExactRatio>> values) {
+        if (!tellsEveryOperation()) {
+            return false;
+        }
+        Map<Object, ExactRatio> standing = new LinkedHashMap<>(held);
+        standing.putAll(values.get());
+        withTheNumbersAProductIsMadeOf(standing, operations);
+        return operations.sums().stream().allMatch(sum -> sum.holdsAt(standing));
+    }
+
+    /**
+     * Whether some whole value of the term called {@code other}, from {@code least} to
+     * {@code greatest} (an end null where there is none), completes every operation in a row where
+     * the term called {@code asked} stands at {@code value}. Each operation is a condition on
+     * {@code other} alone once {@code asked} stands, a sum of the two between its ends, so the
+     * values that satisfy it are a run, and the values that satisfy all of them are where those
+     * runs meet.
+     *
+     * <p>False where that is not worked out and nothing is shown: not every operation is told, or
+     * one reads a term that is none of the two and is not held still. Whether the term called
+     * {@code other} takes a value, and goes with the value of the other, is the caller's to have
+     * shown.
+     */
+    boolean aWholeValueCompletes(Object asked, ExactRatio value, Object other, BigInteger least,
+                                 BigInteger greatest) {
+        if (!tellsEveryOperation()) {
+            return false;
+        }
+        BigInteger from = least;
+        BigInteger to = greatest;
+        for (WhatARelationLeavesUndivided.IntSum each : operations.sums()) {
+            ExactRatio rest = each.constant();
+            ExactRatio weight = ExactRatio.ZERO;
+            for (Map.Entry<Object, ExactRatio> read : each.coefs().entrySet()) {
+                Object key = read.getKey();
+                if (key.equals(other)) {
+                    weight = read.getValue();
+                    continue;
+                }
+                ExactRatio standing = key.equals(asked) ? value : held.get(key);
+                rest = standing == null || rest == null ? null
+                        : standing.times(read.getValue()).flatMap(rest::plus).orNull();
+            }
+            ExactRatio low = rest == null ? null
+                    : ExactRatio.of(each.least()).plus(rest.negated()).orNull();
+            ExactRatio high = rest == null ? null
+                    : ExactRatio.of(each.greatest()).plus(rest.negated()).orNull();
+            if (low == null || high == null) {
+                return false;
+            }
+            if (weight.isZero()) {
+                if (low.signum() > 0 || high.signum() < 0) {
+                    return false;
+                }
+                continue;
+            }
+            ExactRatio first = low.dividedBy(weight).orNull();
+            ExactRatio last = high.dividedBy(weight).orNull();
+            if (first == null || last == null) {
+                return false;
+            }
+            boolean upward = weight.signum() > 0;
+            BigInteger lower = (upward ? first : last).ceiling().orNull();
+            BigInteger upper = (upward ? last : first).floor().orNull();
+            if (lower == null || upper == null) {
+                return false;
+            }
+            from = from == null || lower.compareTo(from) > 0 ? lower : from;
+            to = to == null || upper.compareTo(to) < 0 ? upper : to;
+        }
+        return from == null || to == null || from.compareTo(to) <= 0;
+    }
+
+    /**
+     * The values a row stands at, with those of the numbers a product of two forms is made of put
+     * beside it, and those of the products the operations are over that no side names.
+     *
+     * <p>A product at a value is held there by one number alone standing at it and the number of
+     * the other form standing where that form is one ({@link NumericTerm.ProductOf#atAValue}),
+     * which is the row the product is reached by. An operation the run works out over the numbers
+     * the comparison was written over — {@code g - g * r}, and the {@code g * r} before it — is
+     * then over values that row holds, and holds or not at those.
+     */
+    private static void withTheNumbersAProductIsMadeOf(Map<Object, ExactRatio> standing,
+                                                       Operations operations) {
+        for (Object key : List.copyOf(standing.keySet())) {
+            if (key instanceof NumericTerm.ProductOf product
+                    && product.atAValue() instanceof NumericTerm.ProductOf.AtAValue way) {
+                ExactRatio alone = standing.get(key).dividedBy(way.scale()).orNull();
+                if (alone != null) {
+                    standing.putIfAbsent(way.carrier(), alone);
+                    standing.putIfAbsent(way.fixed(), way.at());
+                }
+            }
+        }
+        boolean more = true;
+        while (more) {
+            more = false;
+            for (WhatARelationLeavesUndivided.IntSum each : operations.sums()) {
+                for (Object atom : each.coefs().keySet()) {
+                    if (atom instanceof NumericTerm.ProductOf product && !standing.containsKey(atom)) {
+                        ExactRatio made = madeOf(product, standing);
+                        if (made != null) {
+                            standing.put(atom, made);
+                            more = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** What {@code product} comes to when every number of its two forms stands at a value, or
+     *  null where one does not or the exact arithmetic cannot hold it. */
+    private static ExactRatio madeOf(NumericTerm.ProductOf product, Map<Object, ExactRatio> at) {
+        ExactRatio made = ExactRatio.ONE;
+        for (LinearForm<NumericTerm> form : product.factors()) {
+            ExactRatio worth = form.constant();
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+                ExactRatio value = at.get(each.getKey());
+                worth = value == null ? null
+                        : value.times(each.getValue()).flatMap(worth::plus).orNull();
+                if (worth == null) {
+                    return null;
+                }
+            }
+            made = made.times(worth).orNull();
+            if (made == null) {
+                return null;
+            }
+        }
+        return made;
+    }
+
+    /**
+     * Whether rows of the farthest {@code sizes} are computed: where every operation is told, if
+     * each is a multiple of a sum of the form ({@link Operations#multipleOfTheForm}) and the
+     * sizes taken that many times keep inside the type, since such a sum lies between the
+     * positive addends and the negative ones together.
+     */
+    <P> boolean farthestRowsAreComputed(List<Term<P>> terms, ExactRatio constant,
+                                        ExactRatio... sizes) {
+        return switch (operations.told()) {
+            // A sum over a held number is no multiple of the form's own sum.
+            case SOME, EVERY_AT_HELD_VALUES -> false;
+            case NOTHING_SAID -> computes(sizes);
+            case EVERY -> {
+                ExactRatio multiple = operations.multipleOfTheForm(terms, constant);
+                yield multiple != null && computes(timesEach(sizes, multiple));
+            }
+        };
+    }
+
+    /**
+     * Whether the sizes of the form's addends may be let go of, to ask whether the relation holds
+     * in one row and fails in another: true where the program is taken to add the form, or every
+     * operation told is a multiple of a sum of it, and never where something untold may stop a
+     * row.
+     */
+    <P> boolean theSizesMayBeLetGo(List<Term<P>> terms, ExactRatio constant) {
+        return switch (operations.told()) {
+            case NOTHING_SAID -> true;
+            case SOME, EVERY_AT_HELD_VALUES -> false;
+            case EVERY -> operations.multipleOfTheForm(terms, constant) != null;
+        };
+    }
+
+    /**
+     * Whether a relation of two terms compared with each other and nothing added is computed
+     * whatever the terms are: true only where nothing can stop a run — no operation is told
+     * where every one is, or the program is taken to add the form.
+     */
+    boolean mayStopARow() {
+        return operations.canStopARow();
+    }
+
+    /**
+     * Whether a row adding up {@code addends} is computed, for a program taken to add the form
+     * up and nothing else. For a program a reading was made of, nothing is answered: the sizes
+     * are not what stops it.
+     */
+    boolean computesAsTheFormIsAdded(ExactRatio... addends) {
+        return operations.told() == WhatARelationLeavesUndivided.Told.NOTHING_SAID
+                && computes(addends);
+    }
+
+    private static ExactRatio[] timesEach(ExactRatio[] sizes, ExactRatio multiple) {
+        ExactRatio[] over = new ExactRatio[sizes.length];
+        for (int i = 0; i < sizes.length; i++) {
+            over[i] = sizes[i] == null ? null : sizes[i].times(multiple).orNull();
+        }
+        return over;
+    }
+
+    /** Whether the positive addends together and the negative ones together are within the
+     *  greatest; an addend that is no number is no row. */
+    private boolean computes(ExactRatio... addends) {
+        for (ExactRatio each : addends) {
+            if (each == null) {
+                return false;
+            }
+        }
+        if (greatest == null) {
+            return true;
+        }
+        ExactRatio up = ExactRatio.ZERO;
+        ExactRatio down = ExactRatio.ZERO;
+        for (ExactRatio each : addends) {
+            if (up == null || down == null) {
+                return false;
+            }
+            if (each.signum() > 0) {
+                up = up.plus(each).orNull();
+            } else {
+                down = down.plus(each).orNull();
+            }
+        }
+        return up != null && down != null && up.compareTo(ExactRatio.of(greatest)) <= 0
+                && down.negated().compareTo(ExactRatio.of(greatest)) <= 0;
+    }
+}

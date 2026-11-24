@@ -2,6 +2,7 @@ package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.KeptCalls;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.diag.Diagnostic;
@@ -448,7 +449,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         Core.Construct held = (Core.Construct) standing.value();
         Core copied = Core.mapAll(standing,
                 child -> child == held ? new Core.Construct(held.typeName(), held.values(),
-                        held.type(), held.pos()) : child,
+                        held.type(), held.lineage(), held.pos()) : child,
                 name -> name);
         Core.Widen still = assertInstanceOf(Core.Widen.class, copied,
                 "a rewrite of what a Widen holds keeps it standing");
@@ -525,11 +526,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
             return checked;
         }
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test was checked");

@@ -106,7 +106,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
 
     @Test
     void whereTheRowStopsIsSaidOfTheRow() {
-        List<RowOutcome> rows = rows(DECLARED + BREAKS_IT);
+        List<RowOutcome> rows = rows("E1928", DECLARED + BREAKS_IT);
 
         assertEquals(1, rows.size());
         RowOutcome row = rows.get(0);
@@ -212,7 +212,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     /** Where such a row stops is where any row held to the declaration stops. */
     @Test
     void whereACaseOnlyRowStopsIsSaidOfTheRow() {
-        List<RowOutcome> rows = rows(CARRIES_FIELDS + """
+        List<RowOutcome> rows = rows("E1928", CARRIES_FIELDS + """
                 example findTodo
                     | "nothing is found for zero" : (Id(0)) -> NotFound
                 """);
@@ -352,7 +352,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aRowReachingSuchATableDoesNotRunAgainstIt() {
-        List<RowOutcome> rows = rows(DEPENDS + """
+        List<RowOutcome> rows = rows("E1929", DEPENDS + """
 
                 fake lookup
                     | (Id(1)) -> Found { id = Id(2) }
@@ -388,7 +388,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aFakeAnsweringWithACaseThatCarriesFieldsNamesNoValue() {
-        List<String> codes = codesOf(Compilation.ofSource("""
+        List<String> codes = codesOf(List.of("E1023"), Compilation.ofSource("""
                 module example.order
 
                 data Id = Int
@@ -421,7 +421,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     /** The same table with the value written, which the declaration then rules out. */
     @Test
     void aFakeAnsweringWithSuchACaseWrittenOutIsHeld() {
-        List<String> codes = codesOf(Compilation.ofSource("""
+        List<String> codes = codesOf(List.of("E1929"), Compilation.ofSource("""
                 module example.order
 
                 data Id = Int
@@ -499,7 +499,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aStandInForABorrowedDependencyIsHeldToTheDeclaringModulesClause() {
-        List<String> codes = codesOf(Compilation.ofSources(List.of("""
+        List<String> codes = codesOf(List.of("E1929"), Compilation.ofSources(List.of("""
                 module up exposing ( Id, Found, lookup )
 
                 data Id = Int
@@ -537,7 +537,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      *  and not about the boundary it was written across. */
     @Test
     void aStandInThatKeepsTheBorrowedClauseIsAdmitted() {
-        List<String> codes = codesOf(Compilation.ofSources(List.of("""
+        List<String> codes = codesOf(List.of(), Compilation.ofSources(List.of("""
                 module up exposing ( Id, Found, lookup )
 
                 data Id = Int
@@ -578,7 +578,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aRefusedTableIsNotComparedWithTheRowsRecordedForTheBehavior() {
-        List<String> codes = codesOf(Compilation.ofSource("""
+        List<String> codes = codesOf(List.of("E1929"), Compilation.ofSource("""
                 module example.clash
 
                 data Id = Int
@@ -627,17 +627,18 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     }
 
     /** The codes a multi-source compile says, in the order they were said. */
-    private static List<String> codesOf(Compilation c) {
-        c.answerEverything();
+    private static List<String> codesOf(List<String> refusal, Compilation compilation) {
+        Compilation c = ACompiledModel.refusedWith(refusal, compilation);
         List<String> codes = new ArrayList<>();
         c.diagnostics().values().stream().flatMap(List::stream)
                 .forEach(d -> codes.add(d.diagnostic().code()));
         return codes;
     }
 
-    private static List<RowOutcome> rows(String model) {
+    /** The rows of a model the compiler refuses with {@code refusal}, as they were recorded. */
+    private static List<RowOutcome> rows(String refusal, String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of(refusal), compilation);
         return compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), compilation.modules().get(0),
                         compilation.sourceIds().get(0)))

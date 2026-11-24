@@ -3,10 +3,12 @@ package souther.exact;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.function.BinaryOperator;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -75,6 +77,87 @@ class AnOperationInLongsHandsBackWhatItDoesAtAnyWidthTest {
         assertEquals(BigInteger.valueOf(power + 3).multiply(BigInteger.valueOf(power + 5)),
                 sum.denominator());
         assertEquals(BigInteger.TWO, sum.numerator());
+    }
+
+    /** Two magnitudes ordered in longs stand as the order at any width stands them; a caller counting
+     *  the brackets is handed the order at any width, so the long route is asked for here directly. */
+    @Test
+    void anOrderIsWhatItIsAtAnyWidth() {
+        List<String> differ = new ArrayList<>();
+        int takenInLongs = 0;
+        int goneWide = 0;
+        for (ExactParts a : nearOperands()) {
+            for (ExactParts b : nearOperands()) {
+                if (a.isZero() || b.isZero()) {
+                    continue;
+                }
+                int narrow = ExactArithmetic.magnitudesInLongs(a, b);
+                if (narrow == ExactArithmetic.UNDECIDED) {
+                    goneWide++;
+                    continue;
+                }
+                takenInLongs++;
+                int wide = ExactOrder.magnitudes(a, b);
+                if (narrow != wide) {
+                    differ.add(a + " against " + b + ": " + narrow + " != " + wide);
+                }
+            }
+        }
+        if (takenInLongs == 0 || goneWide == 0) {
+            differ.add("in longs " + takenInLongs + ", at any width " + goneWide);
+        }
+        assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
+    }
+
+    /** A value rounded to a scale in longs is the whole number the rounding at any width comes to, at
+     *  every policy, and refused as it refuses where no rounding was named. */
+    @Test
+    void aRoundingIsWhatItIsAtAnyWidth() {
+        List<String> differ = new ArrayList<>();
+        int takenInLongs = 0;
+        int goneWide = 0;
+        for (ExactParts of : nearOperands()) {
+            for (int scale : new int[] {-20, -3, -1, 0, 1, 2, 5, 30}) {
+                for (RoundingMode towards : RoundingMode.values()) {
+                    String narrow = outcome(() -> ExactRounding.roundedInLongs(of, scale, towards));
+                    if (narrow.equals("null")) {
+                        goneWide++;
+                        continue;
+                    }
+                    takenInLongs++;
+                    String wide = outcome(() -> ExactRounding.roundedTimesTenTo(of, scale, towards,
+                            _ -> { }));
+                    if (!narrow.equals(wide)) {
+                        differ.add(of + " at " + scale + " " + towards + ": " + narrow + " != " + wide);
+                    }
+                }
+            }
+        }
+        if (takenInLongs == 0 || goneWide == 0) {
+            differ.add("in longs " + takenInLongs + ", at any width " + goneWide);
+        }
+        assertEquals(List.of(), differ.subList(0, Math.min(differ.size(), 5)));
+    }
+
+    /** The operands in canonical form, which is what the order and the rounding are handed, whose
+     *  exponents stand within a few dozen of nought — which the two settle at any width without
+     *  refining far. */
+    private static List<ExactParts> nearOperands() {
+        List<ExactParts> out = new ArrayList<>();
+        for (ExactParts each : OPERANDS) {
+            if (each.twos() > -64 && each.twos() < 64 && each.fives() > -64 && each.fives() < 64) {
+                out.add(ExactArithmetic.canonical(each));
+            }
+        }
+        return out;
+    }
+
+    private static String outcome(Supplier<Object> asked) {
+        try {
+            return String.valueOf(asked.get());
+        } catch (RuntimeException refused) {
+            return refused.getClass().getSimpleName() + ": " + refused.getMessage();
+        }
     }
 
     /** Which is why neither route asks after one: no parts have a nought below the line. */

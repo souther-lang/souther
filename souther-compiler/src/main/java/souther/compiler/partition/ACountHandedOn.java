@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
+import souther.compiler.values.Operand;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,10 +81,15 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
      */
     private static boolean composed(RowDemand.WithinIt within) {
         return switch (within.asked()) {
-            case RowDemand.SameAs _, RowDemand.KeyedAs _ -> within.some();
-            case RowDemand.DifferentFrom _, RowDemand.NotKeyedAs _ -> !within.some();
-            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
-                 RowDemand.WithinIt _ -> false;
+            case RowDemand.SameAs(Operand.At<TermPath> _),
+                 RowDemand.KeyedAs(Operand.At<TermPath> _) -> within.some();
+            case RowDemand.DifferentFrom(Operand.At<TermPath> _),
+                 RowDemand.NotKeyedAs(Operand.At<TermPath> _) -> !within.some();
+            // A value written is the same for every element, so no element is told apart from
+            // another by it: there is no first so many to hold it and rest to fail it.
+            case RowDemand.SameAs _, RowDemand.KeyedAs _, RowDemand.DifferentFrom _,
+                 RowDemand.NotKeyedAs _, RowDemand.Relational _, RowDemand.ATruth _,
+                 RowDemand.InCases _, RowDemand.WithinIt _ -> false;
         };
     }
 
@@ -94,10 +100,10 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
      */
     List<String> fieldsToTheValue() {
         TermPath value = switch (meeting.asked()) {
-            case RowDemand.SameAs(TermPath at) -> at;
-            case RowDemand.DifferentFrom(TermPath at) -> at;
-            case RowDemand.KeyedAs(TermPath at) -> at;
-            case RowDemand.NotKeyedAs(TermPath at) -> at;
+            case RowDemand.SameAs(Operand<TermPath> target) -> positionOf(target);
+            case RowDemand.DifferentFrom(Operand<TermPath> target) -> positionOf(target);
+            case RowDemand.KeyedAs(Operand<TermPath> target) -> positionOf(target);
+            case RowDemand.NotKeyedAs(Operand<TermPath> target) -> positionOf(target);
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                  RowDemand.WithinIt _ -> throw new IllegalStateException(
                     "a demand handed on is one a container is written for: " + meeting);
@@ -117,13 +123,20 @@ record ACountHandedOn(TermPath counted, RowDemand.WithinIt meeting) {
         return out;
     }
 
+    /** The position a demand handed on is about: only one at a position is handed on
+     *  ({@link #composed}). */
+    private static TermPath positionOf(Operand<TermPath> target) {
+        return target.place().orElseThrow(() -> new IllegalStateException(
+                "a demand handed on is of a value at a position: " + target));
+    }
+
     /** What the other container is asked about an element not meeting the statement. */
     RowDemand.WithinIt denied() {
         RowDemand.OfAnElement asked = switch (meeting.asked()) {
-            case RowDemand.SameAs(TermPath value) -> new RowDemand.DifferentFrom(value);
-            case RowDemand.DifferentFrom(TermPath value) -> new RowDemand.SameAs(value);
-            case RowDemand.KeyedAs(TermPath value) -> new RowDemand.NotKeyedAs(value);
-            case RowDemand.NotKeyedAs(TermPath value) -> new RowDemand.KeyedAs(value);
+            case RowDemand.SameAs(Operand<TermPath> value) -> new RowDemand.DifferentFrom(value);
+            case RowDemand.DifferentFrom(Operand<TermPath> value) -> new RowDemand.SameAs(value);
+            case RowDemand.KeyedAs(Operand<TermPath> value) -> new RowDemand.NotKeyedAs(value);
+            case RowDemand.NotKeyedAs(Operand<TermPath> value) -> new RowDemand.KeyedAs(value);
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
                  RowDemand.WithinIt _ -> throw new IllegalStateException(
                     "a demand handed on is one a container is written for: " + meeting);

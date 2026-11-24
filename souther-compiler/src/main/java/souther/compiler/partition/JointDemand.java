@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 
-import java.util.Set;
+import java.util.SequencedSet;
 
 /**
  * Something the rules state exactly, about several of a row's numbers at once.
@@ -25,6 +25,10 @@ public interface JointDemand {
      * Every number of the row this is about.
      *
      * <p>Which is how a reader finds the ones it bears on, and the whole of what a reader asks it.
+     * Walked in {@link souther.compiler.inputs.NumericTerms#inOrder}'s order, and not in the order
+     * a form held its terms: a search that takes a cut's numbers as this hands them over would
+     * otherwise place two equal cuts at two places. A sequenced set because the order is the
+     * answer; copying it into a {@code Set.copyOf} gives the order up.
      */
-    Set<NumericTerm> terms();
+    SequencedSet<NumericTerm> terms();
 }

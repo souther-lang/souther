@@ -105,7 +105,7 @@ public record InputTruth(TermPath at, boolean held) {
      */
     public static TermPath positionOf(Core e, InputReads reads, DeclarationNewtypes newtypes) {
         return Core.withoutStanding(e).type() == Type.Prim.BOOL
-                && reads.pathOf(e, newtypes) instanceof PathResolution.At(TermPath at)
+                && reads.pathOf(e, newtypes) instanceof ValuesAt.At(TermPath at)
                 ? at : null;
     }
 

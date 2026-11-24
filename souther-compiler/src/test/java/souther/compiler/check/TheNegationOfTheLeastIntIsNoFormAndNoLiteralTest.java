@@ -12,6 +12,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 
 import java.util.List;
@@ -39,7 +40,7 @@ class TheNegationOfTheLeastIntIsNoFormAndNoLiteralTest {
     }
 
     private static Core negated(Core operand) {
-        return new Core.Neg(operand, Type.INT, SOMEWHERE);
+        return new Core.Neg(operand, Type.INT, OccurrenceLineage.ORIGINAL, SOMEWHERE);
     }
 
     @Test

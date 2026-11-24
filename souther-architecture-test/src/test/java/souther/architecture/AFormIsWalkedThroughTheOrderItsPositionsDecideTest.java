@@ -55,11 +55,38 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
      * which it is — that, or a walk whose answer has the order in it and has to move.
      */
     private static final Map<String, String> READ_AND_SETTLED = Map.of(
-            "souther/compiler/numeric/AffineReduction#sidedBy"
-                    + "(Lsouther/compiler/numeric/AffineConstraint$Disequality;"
-                    + "Lsouther/compiler/numeric/FormReach;)Ljava/util/List;",
-            "what it hands back holds at most one half-space, and which one is settled by which"
-                    + " side of the value the sum is proved to lie rather than by any walk");
+            "souther/compiler/numeric/AffineReduction#settleOnOneSum"
+                    + "(Ljava/util/List;Lsouther/compiler/numeric/FormReach;"
+                    + "Ljava/util/function/Function;Ljava/util/Map;Ljava/util/List;)Z",
+            "the form's coefficients go to FormReach#of, which takes them in the one order the"
+                    + " positions decide, and what comes back is by hole: which half-space a hole"
+                    + " comes to is settled by which side of its value the sum is proved to lie",
+            "souther/compiler/numeric/ExactRatio#sum(Ljava/util/Collection;)"
+                    + "Lsouther/compiler/numeric/ExactAnswer;",
+            "the terms are met by scale and no partial sum is formed, so the order they arrive in"
+                    + " is not in what it answers",
+            "souther/compiler/numeric/Reach#summedWhole"
+                    + "(Ljava/lang/Iterable;Lsouther/compiler/numeric/ExactRatio;"
+                    + "Lsouther/compiler/numeric/Reach$Ends;Z)Lsouther/compiler/numeric/ExactCut;",
+            "the terms go into a list that is summed as one sum, which meets them by scale and"
+                    + " holds no partial sum, so the order they came in reaches nothing the sum"
+                    + " answers",
+            "souther/compiler/numeric/FormReach#highestKept"
+                    + "(Lsouther/compiler/numeric/AffineConstraint;ILjava/util/Map;)"
+                    + "Lsouther/compiler/numeric/ExactCut;",
+            "the coefficients arrive in the one order the positions decide, which FormReach#ofKept"
+                    + " takes them in, and what comes back is the lowest of what every premise"
+                    + " leaves: a premise's sum is exact, so the order its terms were added in"
+                    + " reaches it only where a partial sum could not be held, and there it is"
+                    + " answered by FormReach#fromTheEndsWithout in the order the positions decide",
+            "souther/compiler/numeric/FormReach#tightenedBy"
+                    + "(Lsouther/compiler/numeric/ExactCut;Lsouther/compiler/numeric/ExactCut;"
+                    + "Lsouther/compiler/numeric/RoundWork$Candidates;"
+                    + "Ljava/util/List;Ljava/util/Map;Lsouther/compiler/numeric/ExactRatio;)"
+                    + "Lsouther/compiler/numeric/ExactCut;",
+            "every caller hands the coefficients over in the one order the positions decide, and"
+                    + " they go no further than FormReach#fromTheEndsWithout, which takes them in"
+                    + " that order; what comes back is the lowest of what every premise leaves");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 

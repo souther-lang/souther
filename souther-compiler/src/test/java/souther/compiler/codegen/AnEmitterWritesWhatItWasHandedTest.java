@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -64,7 +64,8 @@ class AnEmitterWritesWhatItWasHandedTest {
             data Stage = Prospecting | Negotiation | Won
             """;
 
-    private final Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+    private final Compilation compilation = ACompiledModel.compiles(
+            Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY));
     private final Hir.Module module =
             compilation.db().ask(new Names.Resolved("m")).value();
     /** The world an emitter reads against, which is the derived one. */
@@ -208,7 +209,7 @@ class AnEmitterWritesWhatItWasHandedTest {
         }
         return new CodecGen(new CodegenContext("m", symbols, said, forms,
                 NewtypeInners.asWritten(symbols), symbols.library().kernelSignatures(),
-                caseToSums, Map.of(), module.published(), Map.of(), SourceLayouts.NONE,
+                caseToSums, Map.of(), module.published(), Map.of(), TextsOfModules.NONE,
                 new QuotedFrom.TextItCannotName(), new LinkageReader("m", Map.of(), _ -> null, Map.of())));
     }
 

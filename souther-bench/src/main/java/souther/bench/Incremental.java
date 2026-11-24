@@ -3,6 +3,8 @@ package souther.bench;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -135,7 +137,10 @@ final class Incremental {
         for (int i = 0; i < corpus.sources().size(); i++) {
             byId.put("f" + i, corpus.sources().get(i));
         }
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        // One day for every edit, so that what an edit costs is the edit and never a new day.
+        LocalDate day = LocalDate.now(ZoneId.systemDefault());
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(day);
         compilation.diagnostics();
 
         List<String> ids = List.copyOf(byId.keySet());
@@ -144,26 +149,26 @@ final class Incremental {
 
         List<Edit> edits = new ArrayList<>();
         edits.add(new Edit("re-ask", _ -> {
-            compilation.update(byId, Set.of());
+            compilation.update(byId, Set.of(), day);
             compilation.diagnostics();
         }));
         edits.add(new Edit("comment", round ->
-                apply(compilation, byId, imported,
+                apply(compilation, day, byId, imported,
                         byId.get(imported) + "\n// round " + round + "\n")));
         edits.add(new Edit("definition in an imported module", round ->
-                apply(compilation, byId, imported, added(byId.get(imported), round))));
+                apply(compilation, day, byId, imported, added(byId.get(imported), round))));
         edits.add(new Edit("definition in a leaf", round ->
-                apply(compilation, byId, leaf, added(byId.get(leaf), round))));
+                apply(compilation, day, byId, leaf, added(byId.get(leaf), round))));
 
         String stating = sourceWriting(byId, STATED_RULE);
         if (stating != null) {
             edits.add(new Edit("a rule of a relation its callers read", round ->
-                    apply(compilation, byId, stating, restated(byId.get(stating), round))));
+                    apply(compilation, day, byId, stating, restated(byId.get(stating), round))));
         }
         String choosing = sourceWriting(byId, STATED_CHOICE);
         if (choosing != null) {
             edits.add(new Edit("a rule stating alternatives", round ->
-                    apply(compilation, byId, choosing, rechosen(byId.get(choosing), round))));
+                    apply(compilation, day, byId, choosing, rechosen(byId.get(choosing), round))));
         }
         return new Edits(compilation, edits);
     }
@@ -218,11 +223,11 @@ final class Incremental {
                 + "let benchAdded" + round + " (x) = x\n";
     }
 
-    private static void apply(Compilation compilation, Map<String, String> byId, String id,
-                              String text) {
+    private static void apply(Compilation compilation, LocalDate day, Map<String, String> byId,
+                              String id, String text) {
         Map<String, String> now = new LinkedHashMap<>(byId);
         now.put(id, text);
-        compilation.update(now, Set.of());
+        compilation.update(now, Set.of(), day);
         compilation.diagnostics();
     }
 }

@@ -2,9 +2,9 @@ package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ReadingPolicy;
@@ -61,7 +61,8 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
             AsACompilationAllows.admittedValues(), AsACompilationAllows.whatARuleLeaves());
-    private static final RuleReadingContext READING = RuleReadingContext.unshared(RULES, POLICY);
+    private static final RuleReadingContext READING =
+            RuleReadingContext.unshared(RULES, POLICY, TestDay.TODAY);
     private static final TermPath AT = TermPath.of("t");
 
     private static final NumericTerm.CodePointClassCount NOT_WHITESPACE =
@@ -96,7 +97,7 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
         }
 
         private Demands holding(NumericTerm term, NumericSet set) {
-            RealizationTarget.OfANumber target = RealizationTarget.of(term);
+            RealizationTarget.OfANumber target = RealizationTarget.ofATakenIn(term);
             asked.put(target, AskedAt.theClass(set, Carrier.WHOLE));
             measured.put(target, TermOrdersFixtures.at(term, Type.STRING, SYMBOLS).answered());
             return this;
@@ -483,11 +484,9 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
      * The numbers tried are walked between the ends the demand and the rules leave together. A
      * demand open at both ends beside a region leaving fewer numbers than are tried is otherwise
      * walked from nought to the end of the window looking for one more: the most a long holds for
-     * a sum, the most an int holds for a length. Held to the region, what is said is where it is,
-     * and at once.
+     * a sum, the most an int holds for a length. Held to the region, what is said is where it is.
      */
     @Test
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void theNumbersTriedAreThoseTheRulesLeave() {
         long far = 1_000_000_000_000L;
         TermRealizations.Realization.Stopped stopped = assertInstanceOf(

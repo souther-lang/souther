@@ -2,6 +2,7 @@ package souther.compiler.program;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Prepared;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Acceptance;
@@ -120,7 +121,8 @@ class EveryRowWrittenIsARowThatCrossesTest {
 
     /** What the sources write, read off the module as the compiler prepared it. */
     private static int written(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         Acceptance.of(compilation);
         Db db = compilation.db();
         int rows = 0;

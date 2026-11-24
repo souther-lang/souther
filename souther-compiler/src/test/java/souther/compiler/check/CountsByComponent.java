@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.TypeSymbol;
 
@@ -37,14 +38,15 @@ final class CountsByComponent implements TypeCardinality.Counts {
     /** What {@code declarations} and everything they reach come to. */
     static TypeCardinality.Cardinalities of(List<Hir.Def> declarations, RuleReadingSource source,
                                             ReadingPolicy policy) {
-        return of(declarations, RuleReadingContext.unshared(source, policy), true);
+        return of(declarations, RuleReadingContext.unshared(source, policy, TestDay.TODAY), true);
     }
 
     /** The same, with what somebody has already made of each declaration borrowed from
      *  {@code machines}. */
     static TypeCardinality.Cardinalities of(List<Hir.Def> declarations, RuleReadingSource source,
                                             ReadingPolicy policy, DeclarationReadings machines) {
-        return of(declarations, RuleReadingContext.of(source, policy, machines), true);
+        return of(declarations, RuleReadingContext.of(source, policy, machines, TestDay.TODAY),
+                true);
     }
 
     /**
@@ -57,7 +59,7 @@ final class CountsByComponent implements TypeCardinality.Counts {
     static TypeCardinality.Cardinalities openingEveryName(List<Hir.Def> declarations,
                                                           RuleReadingSource source,
                                                           ReadingPolicy policy) {
-        return of(declarations, RuleReadingContext.unshared(source, policy), false);
+        return of(declarations, RuleReadingContext.unshared(source, policy, TestDay.TODAY), false);
     }
 
     private static TypeCardinality.Cardinalities of(List<Hir.Def> declarations,

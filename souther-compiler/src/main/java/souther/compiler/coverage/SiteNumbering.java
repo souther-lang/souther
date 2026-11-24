@@ -1,5 +1,7 @@
 package souther.compiler.coverage;
 
+import souther.compiler.collect.HeldOnce;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,6 +27,27 @@ import java.util.Set;
  * it out to the other family.
  */
 public final class SiteNumbering {
+
+    /**
+     * What runs saw, each held once for every run that saw the same ({@link #align}).
+     *
+     * <p>The rows of a search go the same ways through the same places, and what a run is kept as
+     * is read back here for every row; most of what one run read back, another already had.
+     */
+    private static final HeldOnce<SeenConditionOutcome> WAYS_SEEN = new HeldOnce<>(14);
+    private static final HeldOnce<SeenVisit> VISITS_SEEN = new HeldOnce<>(14);
+    private static final HeldOnce<SeenComparison> COMPARISONS_SEEN = new HeldOnce<>(14);
+
+    /**
+     * The numberings made, each held once while it is held at all.
+     *
+     * <p>A numbering is derived again whenever the store asks, and every place a run was seen at
+     * carries one: what is held above was made under whichever numbering came first, and every
+     * reader holds the place it is handed against its own. Two equal numberings are equal only by
+     * every place and every body they hold, so held as one they are told equal by being one, and
+     * the walk of both is made once, where the second is made.
+     */
+    private static final HeldOnce<NumberingIdentity> NUMBERINGS = new HeldOnce<>(10);
 
     private final NumberingIdentity identity;
 
@@ -76,6 +99,15 @@ public final class SiteNumbering {
         return new ConditionOutcomeSite(identity, raw);
     }
 
+    /** The walk {@code raw} addresses, refused where this numbering issued it to anything else. */
+    public WalkProbe walk(int raw) {
+        if (!(at(raw) instanceof SiteAddress.Walk)) {
+            throw new IllegalArgumentException(
+                    raw + " was issued for " + at(raw) + ", which is not a walk");
+        }
+        return new WalkProbe(identity, raw);
+    }
+
     /**
      * {@code seen}, read as places of this numbering.
      *
@@ -102,13 +134,32 @@ public final class SiteNumbering {
         }
         Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         for (RecordedConditionOutcome way : seen.outcomes()) {
-            ways.add(new SeenConditionOutcome(outcome(way.at()), way.held()));
+            ways.add(WAYS_SEEN.held(new SeenConditionOutcome(outcome(way.at()), way.held())));
         }
         Set<SeenVisit> visits = new LinkedHashSet<>();
         for (RecordedVisit visit : seen.visits()) {
-            visits.add(new SeenVisit(outcome(visit.at()), visit.nth(), visit.held()));
+            visits.add(VISITS_SEEN.held(new SeenVisit(outcome(visit.at()), visit.nth(),
+                    visit.held())));
         }
-        return new AlignedObservation(identity, arms, ways, visits);
+        Set<WalkProbe> walks = new LinkedHashSet<>();
+        for (int raw : seen.walks()) {
+            walks.add(walk(raw));
+        }
+        Set<WalkProbe> walksOn = new LinkedHashSet<>();
+        for (int raw : seen.walksOn()) {
+            walksOn.add(walk(raw));
+        }
+        Set<SeenComparison> compared = new LinkedHashSet<>();
+        for (RecordedComparison sides : seen.compared()) {
+            compared.add(COMPARISONS_SEEN.held(new SeenComparison(outcome(sides.at()),
+                    sides.nth(), sides.left(), sides.right())));
+        }
+        Set<ConditionOutcomeSite> pastTheKept = new LinkedHashSet<>();
+        for (int raw : seen.pastTheKept()) {
+            pastTheKept.add(outcome(raw));
+        }
+        return new AlignedObservation(identity, arms, ways, visits, walks, walksOn, compared,
+                pastTheKept);
     }
 
     private SiteAddress at(int raw) {
@@ -180,7 +231,8 @@ public final class SiteNumbering {
          *  What holds two builds of one module together is this being a value — the same places
          *  under the same numbers over the same executable. */
         SiteNumbering finish(String module, Map<String, ExecutableIdentity> executable) {
-            return new SiteNumbering(new NumberingIdentity(module, executable, byNumber));
+            return new SiteNumbering(
+                    NUMBERINGS.held(new NumberingIdentity(module, executable, byNumber)));
         }
 
     }

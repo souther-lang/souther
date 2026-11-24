@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -40,7 +41,7 @@ class AValueEveryWayOutNamesIsBuiltAtTheForkTest {
 
     /** How many of the comparisons `over` writes stand in the body the backend emits from. */
     private static int comparisonsOfTheValue(String tail) {
-        Compilation compiled = Compiler.compiled(HEAD + tail, "m");
+        Compilation compiled = ACompiledModel.compiles(Compiler.compiled(HEAD + tail, "m"));
         assertEquals("{0=[]}", String.valueOf(compiled.diagnostics()),
                 "the source this counts over was refused");
         Hir.Expr body = compiled.db()

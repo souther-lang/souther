@@ -500,11 +500,11 @@ public final class Sites {
             case BINARY -> db.ask(new WhereAConditionIsWritten(
                     new WrittenCondition.Construct(origin)));
             case CALL -> appliedAt(db, origin);
-            // The kinds a reading of a rule never decides about. A fork, a comprehension and a
-            // collection literal are constructs a body writes, and a rule read off one is read off
-            // the comparison inside it rather than off the construct.
-            case IF, GUARD, COMPREHENSION, MATCH, COLLECTION_LITERAL, NOT_WRITTEN ->
-                    Answer.absent();
+            // A fork, where the module that wrote it filed it: a rule is read off the comparison
+            // inside one, and a count of a line's cases names the fork whose choosing made them.
+            case IF, GUARD, COMPREHENSION, MATCH -> db.ask(new WhereAForkIsWritten(origin));
+            // A collection literal is written and is nothing a reader is sent to.
+            case COLLECTION_LITERAL, NOT_WRITTEN -> Answer.absent();
         };
     }
 
@@ -666,7 +666,8 @@ public final class Sites {
     private static Answer<Citation> metIn(Db db, String module, ConditionOccurrence condition) {
         Answer<Map<ConditionOccurrence, Citation>> met = db.ask(switch (condition.reading()) {
             case DIVIDING -> new Adequacy.ConditionsMet(module, condition.behavior());
-            case DECIDING -> new Adequacy.ConditionsDecidedMet(module, condition.behavior());
+            case DECIDING, GETTING_PAST ->
+                    new Adequacy.ConditionsDecidedMet(module, condition.behavior());
         });
         if (!met.present()) {
             return Answer.absent();

@@ -1,6 +1,7 @@
 package souther.compiler.fmt;
 
 import souther.compiler.cst.CstParser;
+import souther.compiler.cst.SourceSpace;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
@@ -438,7 +439,7 @@ final class Witnesses {
         }
         int at = had.get(i + 1).start();
         int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
-        return source.substring(lineStart, at).isBlank() ? lineStart : null;
+        return SourceSpace.isBlank(source.substring(lineStart, at)) ? lineStart : null;
     }
 
     /**
@@ -473,7 +474,7 @@ final class Witnesses {
             return null;   // carried somewhere else, so this is not the line it is written on
         }
         int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
-        return source.substring(lineStart, at).isBlank() ? lineStart : null;
+        return SourceSpace.isBlank(source.substring(lineStart, at)) ? lineStart : null;
     }
 
     /**
@@ -763,7 +764,7 @@ final class Witnesses {
      */
     private static int lastStandingIn(String text) {
         for (int i = text.length() - 1; i >= 0; i--) {
-            if (!Character.isWhitespace(text.charAt(i))) {
+            if (!SourceSpace.is(text.charAt(i))) {
                 return i;
             }
         }
@@ -780,13 +781,13 @@ final class Witnesses {
      */
     private static boolean opensItsLine(String text, SyntaxToken comment) {
         int lineStart = text.lastIndexOf('\n', Math.max(0, comment.start() - 1)) + 1;
-        return text.substring(lineStart, comment.start()).isBlank();
+        return SourceSpace.isBlank(text.substring(lineStart, comment.start()));
     }
 
     /** What stands between a comment and the code before it, back to the line it starts on. */
     private static String before(String text, SyntaxToken comment) {
         int from = comment.start();
-        while (from > 0 && Character.isWhitespace(text.charAt(from - 1))) {
+        while (from > 0 && SourceSpace.is(text.charAt(from - 1))) {
             from--;
         }
         return text.substring(from, comment.start());
@@ -795,7 +796,7 @@ final class Witnesses {
     /** What stands between a comment and whatever is written after it. */
     private static String after(String text, SyntaxToken comment) {
         int to = comment.end();
-        while (to < text.length() && Character.isWhitespace(text.charAt(to))) {
+        while (to < text.length() && SourceSpace.is(text.charAt(to))) {
             to++;
         }
         return text.substring(comment.end(), to);
@@ -1153,7 +1154,7 @@ final class Witnesses {
     /** How many lines a text ends with, counted from its last code. */
     private static int trailingNewlines(String text) {
         int n = 0;
-        for (int i = text.length() - 1; i >= 0 && Character.isWhitespace(text.charAt(i)); i--) {
+        for (int i = text.length() - 1; i >= 0 && SourceSpace.is(text.charAt(i)); i--) {
             if (text.charAt(i) == '\n') {
                 n++;
             }
@@ -1259,7 +1260,7 @@ final class Witnesses {
         String[] lines = source.substring(from, to).split("\n", -1);
         int blank = 0;
         for (int i = 1; i + 1 < lines.length; i++) {
-            if (!lines[i].isBlank()) {
+            if (!SourceSpace.isBlank(lines[i])) {
                 break;   // what opens the second item's block: its own line, or a comment it carries
             }
             blank++;
@@ -1363,7 +1364,7 @@ final class Witnesses {
     private static String lineAfter(String text, Newline n) {
         int from = n.offset() + 1;
         int to = text.indexOf('\n', from);
-        return text.substring(from, to < 0 ? text.length() : to).stripLeading();
+        return SourceSpace.stripLeading(text.substring(from, to < 0 ? text.length() : to));
     }
 
     /**
@@ -1391,7 +1392,7 @@ final class Witnesses {
             return null;
         }
         int lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-        String before = source.substring(lineStart, start).strip();
+        String before = SourceSpace.strip(source.substring(lineStart, start));
         if (!before.isEmpty() && !canonicalLine.startsWith(before)) {
             return null;   // the source ran on into this line rather than opening one for it
         }

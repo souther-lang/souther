@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -59,10 +61,10 @@ class ARecordIsComposedOnceHoweverOftenASearchAsksForItTest {
         long before = RevisionKnowledge.timesDone(Partitions.ARecordComposed.class);
         List<FixtureTemplate> first = Partitions.representativesOf(payment,
                 RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                        compilation.db().readings()), null, Set.of()).values();
+                        compilation.db().readings(), TestDay.TODAY), null, Set.of()).values();
         List<FixtureTemplate> second = Partitions.representativesOf(payment,
                 RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                        compilation.db().readings()), null, Set.of()).values();
+                        compilation.db().readings(), TestDay.TODAY), null, Set.of()).values();
 
         assertFalse(first.isEmpty(), "a payment has values to stand for it");
         assertEquals(first, second, "and the same ones from either reading");
@@ -84,17 +86,17 @@ class ARecordIsComposedOnceHoweverOftenASearchAsksForItTest {
 
         long before = RevisionKnowledge.timesDone(Partitions.ARecordComposed.class);
         Partitions.representativesOf(payment,
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), null, Set.of());
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                null, Set.of());
         Partitions.representativesOf(payment,
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), null, Set.of());
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
+                null, Set.of());
 
         assertEquals(2, RevisionKnowledge.timesDone(Partitions.ARecordComposed.class) - before);
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(A_RECORD_CASE, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(A_RECORD_CASE);
     }
 
     private static RuleReadingSource rulesOf(Compilation compilation) {

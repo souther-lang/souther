@@ -1,7 +1,7 @@
 package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.Compiler;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
@@ -48,7 +48,7 @@ class AValueNamedTwiceIsBuiltOnceTest {
 
     /** How many nodes the body the backend emits from holds. */
     private static int nodesIn(int links, boolean twice) {
-        Compilation compiled = Compiler.compiled(chain(links, twice), "m");
+        Compilation compiled = ACompiledModel.answered(chain(links, twice));
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
                 .value().value().definition().writtenBody();

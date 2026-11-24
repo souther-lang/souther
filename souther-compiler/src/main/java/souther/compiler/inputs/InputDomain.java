@@ -12,6 +12,7 @@ import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.Shape;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DeclaredCoordinates;
+import souther.compiler.check.ElementGuarantee;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
@@ -24,6 +25,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Today;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
@@ -139,6 +141,9 @@ public final class InputDomain {
      * {@link RuleRoot}. */
     private final List<RuleRoot> roots;
     private final ReadingPolicy policy;
+    /** The day the values this reading proposes are chosen near, kept so that a world put back
+     *  together from this one chooses them on the same day ({@link RuleReadingContext#today}). */
+    private final Today today;
     /** Where a name written at one position stands, wherever that is not the position of the same
      * name one step down. Made by the walk that made the positions, so that what a name reaches and
      * what the reading produced are one answer. */
@@ -202,7 +207,7 @@ public final class InputDomain {
 
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
-                        NameReach reach,
+                        Today today, NameReach reach,
                         List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
                         DeclarationReadings machines,
@@ -222,6 +227,7 @@ public final class InputDomain {
         // and a reader asking how the names in it are read gets the policy it was read under
         // whatever the walk found.
         this.policy = Objects.requireNonNull(policy, "a reading is made under a policy");
+        this.today = Objects.requireNonNull(today, "a reading is made on a day");
         this.reach = Objects.requireNonNull(reach, "a reading says what its names reach");
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
@@ -251,6 +257,7 @@ public final class InputDomain {
                 && parameters.equals(that.parameters)
                 && roots.equals(that.roots)
                 && java.util.Objects.equals(policy, that.policy)
+                && today.equals(that.today)
                 && reach.equals(that.reach)
                 && placed.equals(that.placed)
                 && dependencies.equals(that.dependencies);
@@ -260,7 +267,7 @@ public final class InputDomain {
     public int hashCode() {
         int known = hash;
         if (known == 0) {
-            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed,
+            known = Objects.hash(positions, read, parameters, roots, policy, today, reach, placed,
                     dependencies);
             hash = known;
         }
@@ -379,7 +386,8 @@ public final class InputDomain {
         // was not: it holds the parameters it was given, the policy it was read under and the names
         // it reached. Answered with a value standing for no reading at all, an input nobody could
         // read would be the same value as an input there was nothing to read.
-        return new InputDomain(settled, read, parameters, roots, reading.policy(), observed.reach(),
+        return new InputDomain(settled, read, parameters, roots, reading.policy(),
+                reading.today(), observed.reach(),
                 account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
                 dependencies);
     }
@@ -488,6 +496,11 @@ public final class InputDomain {
     /** How the names in it are read, which is the policy this reading was made under. */
     public ReadingPolicy policy() {
         return policy;
+    }
+
+    /** The day this reading was made on. */
+    public Today today() {
+        return today;
     }
 
     /** Where this reading borrowed what had already been made of the declarations it read, for a
@@ -745,7 +758,7 @@ public final class InputDomain {
      * whose order is the row's, and not a set or a map, whose order is the type's.
      */
     public boolean holdsItsElementsInTheOrderWritten(TermPath path, RuleReadingSource source) {
-        return typeAt(path, source) instanceof Type.ListOf;
+        return isAList(path, source);
     }
 
     /**
@@ -753,7 +766,36 @@ public final class InputDomain {
      * or the keys of a map, each of which holds a value once.
      */
     public boolean holdsAnElementOverAgain(TermPath path, RuleReadingSource source) {
-        return typeAt(path, source) instanceof Type.ListOf;
+        return isAList(path, source);
+    }
+
+    /**
+     * Whether what stands at {@code path} holds each of its elements once and in no order: a set,
+     * under whatever names it wears. A map holds a key once, and is not asked this.
+     */
+    public boolean holdsEachElementOnce(TermPath path, RuleReadingSource source) {
+        return shapeAt(path, source) instanceof Shape.Sequence(Shape.Sequence.Kind kind, var _)
+                && kind == Shape.Sequence.Kind.SET;
+    }
+
+    /** What one entry of the container at {@code path} holds: its element, and the key a map
+     *  files it under. */
+    public List<TermPath> entryOf(TermPath path, RuleReadingSource source) {
+        return shapeAt(path, source) instanceof Shape.Mapping
+                ? List.of(path.element(), path.key()) : List.of(path.element());
+    }
+
+    /** Whether what stands at {@code path} is a list, under whatever names it wears. */
+    private boolean isAList(TermPath path, RuleReadingSource source) {
+        return shapeAt(path, source) instanceof Shape.Sequence(Shape.Sequence.Kind kind, var _)
+                && kind == Shape.Sequence.Kind.LIST;
+    }
+
+    /** The shape of what stands at {@code path}, or null where nothing is read there. */
+    private Shape shapeAt(TermPath path, RuleReadingSource source) {
+        Type type = typeAt(path, source);
+        return type == null ? null : TypeView.shapeOf(type, source.inners(), source.symbols(),
+                source.kinds(), source.sums());
     }
 
     /**
@@ -853,7 +895,7 @@ public final class InputDomain {
         // The world this reading was made in, put back together from what it kept: the same rules
         // under the same budget, borrowing what this reading's own walk made.
         RuleReadingContext world =
-                source == null ? null : RuleReadingContext.of(source, policy, machines);
+                source == null ? null : RuleReadingContext.of(source, policy, machines, today);
         Map<TermPath, OpenedRules> byRoot = new LinkedHashMap<>();
         for (RuleRoot root : roots) {
             // The first reading under a path stands, for the same reason the first reading of a
@@ -875,7 +917,7 @@ public final class InputDomain {
         // The same world, handed on whole. What a quantity reaches below is a declaration this
         // reading already reached, so it is read from the same rules under the same budget.
         return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
-                path -> typeAt(path, source), world);
+                path -> typeAt(path, source), world, new TotalsOfTheInput(this, source));
     }
 
     /**
@@ -943,7 +985,7 @@ public final class InputDomain {
         return new ReadPosition(read.path(), read.view(), read.bounds(),
                 read.nothingExists(), read.projection(),
                 read.declared(), read.reading(), read.obligations(), read.admitted(),
-                read.rulesWithoutALine(), read.endsLeftOpen(),
+                read.orderedRegion(), read.rulesWithoutALine(), read.endsLeftOpen(),
                 read.unansweredQuestions(),
                 left, read.structure());
     }
@@ -1013,14 +1055,15 @@ public final class InputDomain {
             return enumerating || demands(seed.address().root(), seed.address().key());
         }
 
-        /** Whether a path the naming reaches is at, under or above the place {@code key} calls. */
+        /** Whether a path the naming reaches is at, under or above the place {@code key} calls,
+         *  narrowings to cases aside ({@link TermPath#bearsOn}). */
         private boolean demands(TermPath root, RuleKey key) {
             TermPath place = root;
             for (String step : key.steps()) {
                 place = place.then(step);
             }
             for (TermPath each : demanded) {
-                if (each.isAtOrUnder(place) || place.isAtOrUnder(each)) {
+                if (each.bearsOn(place)) {
                     return true;
                 }
             }
@@ -1255,7 +1298,8 @@ public final class InputDomain {
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Blocked _ -> { }
             case StructuralInspection.Continuation.Elements elements ->
-                    inside(List.of(new Held(path.element(), elements.element())), path, ancestry,
+                    inside(List.of(new Held(path.element(), elements.element(),
+                                    placed.guaranteedOfEveryElementAt(path))), path, ancestry,
                             reading, counted, placed, found, roots, handoffs, observed, account,
                             reach, stopped);
             // The keys first, which is the order a map is written in: a row writes each entry as
@@ -1407,18 +1451,28 @@ public final class InputDomain {
         }
         List<TermPath.Step> steps = new ArrayList<>(sum.steps());
         steps.addAll(below);
-        return new TermPath(sum.head(), steps);
+        return TermPath.of(sum.head(), steps);
     }
 
     /** The container an element opened at {@code element} is an element of: the path without the
      *  step into it. */
     private static TermPath containerOf(TermPath element) {
-        return new TermPath(element.head(),
-                element.steps().subList(0, element.steps().size() - 1));
+        return element.prefix(element.steps().size() - 1);
     }
 
-    /** One position inside a container: where it is, and what stands there. */
-    private record Held(TermPath at, Type type) {}
+    /**
+     * One position inside a container: where it is, what stands there, and what the container
+     * states of every element it holds.
+     *
+     * @param inherited what the rules of the value the container is in say of each element, which
+     *                  is empty for a part that is no element of a sequence
+     */
+    private record Held(TermPath at, Type type, List<ElementGuarantee> inherited) {
+
+        Held(TermPath at, Type type) {
+            this(at, type, List.of());
+        }
+    }
 
     /**
      * The positions inside the container at {@code container}, opened.
@@ -1453,12 +1507,15 @@ public final class InputDomain {
         if (!stopped) {
             handoffs.passesTo(placed.root(), container, entered.stream().map(Held::at).toList());
         }
-        // Nothing crosses into what a container holds: what a clause of the value out here says is
+        // No clause crosses into what a container holds: what a clause of the value out here says is
         // written about the container, and what it holds is a value with a declaration of its own.
+        // What does arrive is what such a clause states of every element, which is a fact about each
+        // of them and is read as a rule of the element it holds of.
         for (int i = 0; i < entered.size(); i++) {
             takeTheRulesOver(placed.root(), container, entered.get(i).at(), entered.get(i).type(),
                     ancestry, reading, counted, found, roots, Set.of(), handoffs, observed, null,
-                    new RootOpening.Inside(placed.root(), container), account, ons.get(i));
+                    new RootOpening.Inside(placed.root(), container), account, ons.get(i),
+                    entered.get(i).inherited());
         }
     }
 
@@ -1542,7 +1599,8 @@ public final class InputDomain {
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
                                          PlacedRules.Reaching crossing, RootOpening opening,
-                                         Gathered account, Reach reach) {
+                                         Gathered account, Reach reach,
+                                         List<ElementGuarantee> inherited) {
         roots.add(new RuleRoot(opened, type, opening));
         // Said where a reading is actually opened, so that a case recorded as opened is one there
         // is somewhere to ask about. Said where the branch was chosen instead, a descent that turns
@@ -1554,7 +1612,7 @@ public final class InputDomain {
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
         }
-        PlacedRules rules = PlacedRules.of(opened, type, reading, crossing);
+        PlacedRules rules = PlacedRules.of(opened, type, reading, crossing, inherited);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
         account.from(rules, reach);
@@ -1607,7 +1665,7 @@ public final class InputDomain {
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), ancestry,
                 reading, counted, found, roots, deeper, handoffs, observed, crossing, opening,
-                account, reach);
+                account, reach, List.of());
     }
 
     /**
@@ -1704,7 +1762,7 @@ public final class InputDomain {
                 admitted, source, noLine, nothingExists, type);
         return new ReadPosition(path, view, bounds, nothingExists,
                 placed.projection(path), declared, reading,
-                ObligationDomain.of(reading, declared), admitted,
+                ObligationDomain.of(reading, declared), admitted, placed.orderedRegionAt(path),
                 withoutALine,
                 // And which of those rules the reading of ends is still owed an end of. The
                 // finding above says what became of the rule here; this says the reading did not
@@ -1797,7 +1855,7 @@ public final class InputDomain {
      * every position has before the one only some do.
      */
     private static List<NumberAt.OfWhatNumber> numbersOf(ValueName.Stdlib taken) {
-        NumberAt.OfWhatNumber own = new NumberAt.OfWhatNumber.OfItsOwnValue();
+        NumberAt.OfWhatNumber own = NumberAt.OfWhatNumber.OWN_VALUE;
         return taken == null ? List.of(own)
                 : List.of(own, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(taken,
                         TakenArguments.NONE, ValueTransformation.NONE));
@@ -1850,6 +1908,8 @@ public final class InputDomain {
                             type, source.inners());
             case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     NumericTerm.CodePointValueSum.of(path, type, source.inners());
+            case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                    NumericTerm.CodePointAt.of(path, point.index(), type, source.inners());
             // No clause of a declaration states how often a value occurs among the elements
             // beside it, so none is read at a position here.
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> throw new IllegalStateException(
@@ -1866,6 +1926,10 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
                     throw new IllegalStateException("a clause of a declaration was read as a rule"
                             + " about " + extreme.spelledAt(path.toString()));
+            // Nor which step of a coarser order the value falls in.
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                    throw new IllegalStateException("a clause of a declaration was read as a rule"
+                            + " about " + units.operation() + "(" + path + ")");
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1886,7 +1950,8 @@ public final class InputDomain {
         NarrowedBounds projected = switch (term) {
             case NumericTerm.ValueOf _ -> placed.at(path);
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                 NumericTerm.CodePointValueSum _ -> NarrowedBounds.NOTHING;
+                 NumericTerm.CodePointValueSum _, NumericTerm.CodePointAt _,
+                 NumericTerm.WholeUnitsOf _ -> NarrowedBounds.NOTHING;
         };
         return new PositionBounds(term,
                 // Two questions of one pair of readings, and they do not have one answer. What the
@@ -1900,7 +1965,7 @@ public final class InputDomain {
                 // Where the number actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a number whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, kind));
+                placed.leftAt(path, kind), placed.runsLeftAt(path, kind));
     }
 
     /**
@@ -1935,11 +2000,26 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
+                 NumberAt.OfWhatNumber.OfTheCodePointAt _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _,
                  NumberAt.OfWhatNumber.OfTheOccurrencesOfAKey _ -> Carrier.WHOLE;
-            // One of the values standing there, so on their order.
-            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
+            // The steps a value falls in are counted on the order the operation answers, which is
+            // the term's own orders to say (TermOrders.answered) and not a classification of the
+            // kind: a date counts days where the date-time it falls on counts seconds.
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf steps -> throw new IllegalStateException(
+                    "the steps " + steps.operation() + " counts are counted on the order it"
+                            + " answers on, which a clause of a declaration does not name");
+            // One of the values standing there, so on their order; one of their steps, on the
+            // order the steps are counted on.
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> {
+                if (extreme.through() != null) {
+                    throw new IllegalStateException("the end of the steps "
+                            + extreme.through() + " counts is counted on the order it answers on,"
+                            + " which a clause of a declaration does not name");
+                }
+                yield carried;
+            }
         };
     }
 
@@ -2034,6 +2114,25 @@ public final class InputDomain {
                 }
                 yield summed;
             }
+            case NumberAt.OfWhatNumber.OfTheCodePointAt point -> {
+                NumericTerm.CodePointAt one = NumericTerm.CodePointAt.of(path, point.index(),
+                        type, source.inners());
+                if (one == null) {
+                    throw new IllegalStateException("a code point of `" + path + "` was asked"
+                            + " for, and what stands there is no string");
+                }
+                yield one;
+            }
+            case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units -> {
+                NumericTerm.WholeUnitsOf steps = NumericTerm.WholeUnitsOf.of(
+                        (ValueName.Stdlib) units.operation(), path, type, source.inners(),
+                        source.declarations());
+                if (steps == null) {
+                    throw new IllegalStateException("the steps " + units.operation() + " counts of `"
+                            + path + "` were asked for, and what stands there is not what it counts");
+                }
+                yield steps;
+            }
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> {
                 List<TermPath> holding = path.containersHoldingIt();
                 NumericTerm.Multiplicity multiplicity = holding.isEmpty() ? null
@@ -2044,12 +2143,7 @@ public final class InputDomain {
                 }
                 yield multiplicity;
             }
-            case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer kept -> {
-                if (kept.keptBy() != null) {
-                    throw new IllegalStateException("a clause of a declaration was read as a rule"
-                            + " about how often the value at " + path + " occurs among those kept"
-                            + " by " + kept.keptBy());
-                }
+            case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ -> {
                 NumericTerm.OccurrencesOfItsValue occurrences = NumericTerm.OccurrencesOfItsValue.of(
                         RunSource.overEveryOccurrenceAt(path) instanceof
                                 RunSource.FlattenedOccurrences flat ? flat : null);
@@ -2063,8 +2157,12 @@ public final class InputDomain {
                     throw new IllegalStateException("how often the value at " + path + " equals "
                             + asked.key() + " was asked for by name, and no declaration names it");
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
-                NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(
-                        path, extremeOf.key(), extremeOf.extreme());
+                NumericTerm.WholeUnitsOf steps = extremeOf.through() == null ? null
+                        : NumericTerm.WholeUnitsOf.of((ValueName.Stdlib) extremeOf.through(), path,
+                                type, source.inners(), source.declarations());
+                NumericTerm.ExtremeOfItsKey extreme = extremeOf.through() != null && steps == null
+                        ? null : NumericTerm.ExtremeOfItsKey.ofTheValueAt(path, extremeOf.key(),
+                                extremeOf.extreme(), steps);
                 if (extreme == null) {
                     throw new IllegalStateException(extremeOf.spelledAt(path.toString())
                             + " was asked for, and nothing holds `" + path + "` as an element");
@@ -2131,10 +2229,13 @@ public final class InputDomain {
             // a classification can have been stopped by more than one — a clause read a branch at a
             // time is stopped by whatever stopped each branch — so they are asked as the several
             // questions they are rather than one of them standing for the rest.
+            // And one for each call the arithmetic stopped at for it: two calls that stop one rule
+            // at one place are two things to look at.
             each.at().why().forEach(why ->
-                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
-                            ModelOccurrences.NONE,
-                            FilingCoordinate.at(path), why)));
+                    each.sentTo(why).forEach(sentTo ->
+                            found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
+                                    ModelOccurrences.NONE, FilingCoordinate.at(path), sentTo,
+                                    why))));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.Exact.of(each.cited(),
@@ -2188,6 +2289,7 @@ public final class InputDomain {
             // or the other, and it is only the line that nothing came of.
             out.add(new RuleCitation.Named(each.part().rule()),
                     filedAt(path, each.at(), type, source),
+                    each.sentTo(),
                     each.why());
         }
         // And the rules whose end here a choice in them left open. Beside the walk's own findings

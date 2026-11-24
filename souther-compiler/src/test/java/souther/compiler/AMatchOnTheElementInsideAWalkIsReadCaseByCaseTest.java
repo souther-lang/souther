@@ -11,11 +11,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -213,9 +212,15 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
         assertEquals(withoutWhere(counted), withoutWhere(report));
     }
 
-    /** A report with where each part stands left out: the two spellings differ in length. */
+    /**
+     * A report with where each part stands left out, the two spellings differing in length, and
+     * with what is said of how the position is read left out: a {@code match} on the element
+     * reads which case it is, which a count does not, though every arm answers alike.
+     */
     private static String withoutWhere(String report) {
-        return report.replaceAll("\\d+:\\d+", "");
+        return report.replaceAll("\\d+:\\d+", "").lines()
+                .filter(line -> !line.contains("reads it without telling them apart"))
+                .collect(Collectors.joining("\n"));
     }
 
     /** An arm that is no form of the case's fields leaves the walk a rule nothing read. */
@@ -225,7 +230,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                 match d with
                         | A { amount } -> amount * amount
                         | B { amount } -> amount"""));
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("List.sum({"), report);
     }
 
@@ -411,8 +416,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                     then Many else Few
                 """);
         String report = report(compiled);
-        assertTrue(report.contains("when cap@Some then 1 when cap@None then 0 | lines[*]"),
-                report);
+        assertTrue(report.contains("#lines [present lines[*].cap]"), report);
         assertFalse(unreadBeyondReach(report), report);
         String rows = rowsOf(compiled);
         assertTrue(RowsOfABlock.at(rows, "([Line { cap = 0 }])").fills()
@@ -454,7 +458,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
 
     private static String rowsOf(Compilation compilation) {
         return GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 
     private static String report(String model) {
@@ -463,36 +467,37 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
 
     /**
      * Whether something is left unread for more than that the gross is related to a total not
-     * shown to reach every value of it, which is all a total read to the end leaves the gross.
+     * shown to reach every value of it, which is all a total read to the end leaves the gross,
+     * and that a run may stop where nothing says ({@link UnreadBesideItsStops}).
      */
     private static boolean unreadBeyondReach(String report) {
-        return report.lines().anyMatch(line -> line.contains("not read")
-                && !line.contains("not shown to reach every value here"));
+        return report.lines().anyMatch(line -> NotRead.isOne(line)
+                && !line.contains("not shown to reach every value here")
+                && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
     }
 
     private static String report(Compilation compilation) {
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** Each model measured once for the class: some are asked for their report and for their
-     *  rows. The rows ask what they read of the measurement; the rest is asked where a report is
-     *  made. */
+    /** A model measured for its full report, held to compile. Some tests ask it for its report
+     *  and for its rows. */
     private static Compilation compiled(String model) {
-        return MEASURED.computeIfAbsent(model, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
+        return SHARED.compiles(model, () -> {
+            Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             return compilation;
         });
     }
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 }

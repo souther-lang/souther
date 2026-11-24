@@ -101,9 +101,20 @@ public final class BoundaryDerivation {
         return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
     }
 
+    /** What a behavior the build measures none of the lines of comes to: it was not asked, and
+     *  nothing was gone without ({@link Adequacy.Choice}). */
+    static Measure<List<BorderAssessment>> notAsked() {
+        return new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED);
+    }
+
     /** What the measure came to, from what it found and whether its reading ran out. The one place
-     *  the states are chosen between. */
+     *  the states are chosen between.
+     *
+     *  <p>{@code weightsNotDecided} is what the weights of the computations these lines cut went
+     *  without. The borders of a computation cut at several places are not held against the lines
+     *  beside them, so what the weights are short of is said here and nowhere on a border. */
     public static Measure<List<BorderAssessment>> of(List<BorderAssessment> at,
+                                                         WeakeningSet weightsNotDecided,
                                                          MeasureClosure.OfTheBorder closure,
                                                          souther.compiler.inputs.EmptyInput
                                                                  inputIsEmpty) {
@@ -117,10 +128,14 @@ public final class BoundaryDerivation {
         // A switch over the three, for the reason the partition beside it is one.
         return switch (closure) {
             case MeasureClosure.OfTheBorder.Closed closed -> {
-                if (at.isEmpty()) {
+                // No line drawn is a settled answer only where the weights went without nothing:
+                // a computation is owed its weights whether or not a border of it was drawn, and a
+                // not-applicable measure has nowhere to say what they went without.
+                if (at.isEmpty() && weightsNotDecided.isEmpty()) {
                     yield new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
                 }
-                WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at);
+                WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at)
+                        .union(weightsNotDecided);
                 yield beside.isEmpty() ? new Measurement.Complete<>(List.copyOf(at))
                         : new Measurement.Partial<>(List.copyOf(at), beside);
             }
@@ -131,8 +146,9 @@ public final class BoundaryDerivation {
                 // What it went without: the reading of the body, and whatever the readings that
                 // were made found beside it. Those are theirs to name and are not about the body.
                 WeakeningSet without = WeakeningSet.of(
-                        new Weakening.BodyNotInEvaluation(unread.behavior()))
-                        .union(PartitionDerivation.weakening(unread.besides()));
+                        Weakening.ofABodyNotRead(unread.behavior(), unread.why()))
+                        .union(PartitionDerivation.weakening(unread.besides()))
+                        .union(weightsNotDecided);
                 yield at.isEmpty()
                         ? new Measurement.FailedToMeasure<>(
                                 BodyWasNotRead.BODY_WAS_NOT_READ, without)
@@ -140,7 +156,8 @@ public final class BoundaryDerivation {
                                 whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
             }
             case MeasureClosure.OfTheBorder.Open open -> {
-                WeakeningSet by = PartitionDerivation.weakening(open.by());
+                WeakeningSet by = PartitionDerivation.weakening(open.by())
+                        .union(weightsNotDecided);
                 yield at.isEmpty()
                         ? new Measurement.FailedToMeasure<>(
                                 TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)

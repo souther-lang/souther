@@ -1,0 +1,207 @@
+package souther.compiler.query;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ACompiledModel;
+import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
+import souther.compiler.partition.AComparisonRead;
+import souther.compiler.types.ValueName;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The helper a function applied outside it calls on each element is known from the walk of the
+ * body alone: asking for it asks no line where it decides, reads no line against the rows and
+ * searches for no row, which is where what a measurement costs is spent.
+ */
+class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
+
+    private static final String MODULE = "demo";
+
+    /** Billing's due dates, with one row. */
+    private static final String SHAPED_AS_BILLING = """
+            module demo exposing (g, Calendar, Rule)
+            import List ( map, find, rangeInclusive )
+            data Rule = Preceding | Following
+            data Calendar = { holidays: Set<Date>, aSunday: Date, rule: Rule }
+            let weekday (c: Calendar, d: Date): Int =
+                Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
+            let isBusinessDay (c: Calendar, d: Date): Bool =
+                weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
+            let firstBusinessDay (c: Calendar, from: Date, step: Int): Date =
+                rangeInclusive(0, 1)
+                    |> map(n -> Date.addDays(n * step, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            let onABusinessDay (c: Calendar, nominal: Date): Date =
+                match c.rule with
+                    | Preceding -> firstBusinessDay(c, nominal, 0 - 1)
+                    | Following -> firstBusinessDay(c, nominal, 1)
+            let dueDate (c: Calendar, nominal: Date): Date = onABusinessDay(c, nominal)
+            behavior g : (c: Calendar, nominal: Date) -> Date
+            let g (c, nominal) = dueDate(c, nominal)
+
+            example g
+                | "a Friday stays" :
+                    (Calendar { holidays = Set.fromList([ Date("2026-08-11") ]),
+                                aSunday = Date("2026-01-04"), rule = Following },
+                     Date("2026-08-07")) -> Date("2026-08-07")
+            """;
+
+    /** The search and its comparison in one helper called once: its own applications. */
+    private static final String SEARCHED_INSIDE_THE_HELPER = """
+            module demo exposing (g)
+            import List ( find, rangeInclusive )
+            let first (x: Int): Int =
+                rangeInclusive(0, 10) |> find(t -> t * 3 > x) |> Option.withDefault(0)
+            behavior g : (x: Int) -> Bool
+            let g (x) = first(x) > 3
+
+            example g
+                | "one row" : (5) -> false
+            """;
+
+    private static List<HelpersReadOnApplicationsAroundThem.Told> told(Compilation compilation) {
+        List<HelpersReadOnApplicationsAroundThem.Told> told = compilation.db()
+                .ask(new HelpersReadOnApplicationsAroundThem(MODULE, "g")).value();
+        assertTrue(told != null, "the lines of g were read");
+        return told;
+    }
+
+    /** That nothing asked where a line decides, read the lines against the rows, or searched. */
+    private static void measuredNothing(Compilation compilation) {
+        compilation.db().everyAnswer().keySet().forEach(key -> assertFalse(
+                key instanceof Adequacy.Dividing || key instanceof Adequacy.Divided
+                        || key instanceof Adequacy.Readings
+                        || key instanceof Adequacy.BoundarySearch,
+                "nothing past the walk of the body was asked: " + key));
+    }
+
+    @Test
+    void theHelperIsNamedWithEveryHelperCallingItAndNothingIsSearched() {
+        Compilation compilation = ACompiledModel.measured(SHAPED_AS_BILLING,
+                Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<HelpersReadOnApplicationsAroundThem.Told> told = told(compilation);
+        assertEquals(1, told.size(), told::toString);
+        HelpersReadOnApplicationsAroundThem.Told one = told.getFirst();
+        assertEquals(new ValueName.Helper(MODULE, "isBusinessDay"), one.named().helper());
+        assertEquals(List.of(new ValueName.Helper(MODULE, "firstBusinessDay"),
+                new ValueName.Helper(MODULE, "onABusinessDay"),
+                new ValueName.Helper(MODULE, "dueDate")), one.calledInside());
+        assertTrue(one.applicationsAtMost() > 1, one::toString);
+        measuredNothing(compilation);
+    }
+
+    @Test
+    void aFunctionAppliedInsideTheHelperNamesNothing() {
+        Compilation compilation = ACompiledModel.measured(SEARCHED_INSIDE_THE_HELPER,
+                Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), told(compilation));
+        assertEquals(List.of(), HelpersReadOnApplicationsAroundThem.toldOf(compilation, null,
+                null));
+        measuredNothing(compilation);
+    }
+
+    /** What an author is told before the measurement: the helper once, with each behavior that
+     *  reads it and how often, however few times that is. */
+    @Test
+    void theHelperIsToldOfOnceWithEveryBehaviorReadingIt() {
+        Compilation compilation = ACompiledModel.measured(TWO_BEHAVIORS,
+                Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<HelpersReadOnApplicationsAroundThem.Said> said =
+                HelpersReadOnApplicationsAroundThem.toldOf(compilation, null, null);
+        assertEquals(1, said.size(), said::toString);
+        assertEquals(new ValueName.Helper(MODULE, "isBusinessDay"), said.getFirst().helper());
+        assertEquals(List.of("g", "h"),
+                List.copyOf(said.getFirst().applicationsAtMost().keySet()));
+        measuredNothing(compilation);
+    }
+
+    /** A behavior the author did not select is asked nothing, where its comparisons stand
+     *  included. */
+    @Test
+    void aBehaviorNotSelectedIsAskedNothing() {
+        Compilation compilation = ACompiledModel.measured(TWO_BEHAVIORS,
+                Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<HelpersReadOnApplicationsAroundThem.Said> said =
+                HelpersReadOnApplicationsAroundThem.toldOf(compilation, MODULE, "h");
+        assertEquals(1, said.size(), said::toString);
+        assertEquals(List.of("h"), List.copyOf(said.getFirst().applicationsAtMost().keySet()));
+        compilation.db().everyAnswer().keySet().forEach(key -> assertFalse(
+                (key instanceof Adequacy.ComparisonsRead read && !read.behavior().equals("h"))
+                        || (key instanceof HelpersReadOnApplicationsAroundThem told
+                        && !told.behavior().equals("h")),
+                "asked of a behavior not selected: " + key));
+    }
+
+    /** Where {@code ok}'s comparison stands in the body of {@code model}, as the walk met it:
+     *  each copy of it, with what the walk said of the applications around it. */
+    private static List<AComparisonRead> okMetIn(String model) {
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<AComparisonRead> met = compilation.db()
+                .ask(new Adequacy.ComparisonsRead(MODULE, "g")).value();
+        assertTrue(met != null, "where g's comparisons stand");
+        return met.stream().filter(each -> AHelperReadOnApplicationsAroundIt.writtenIn(each.copy())
+                .map(helper -> helper.name().equals("ok")).orElse(false)).toList();
+    }
+
+    /** A comparison nothing reads on the way to the answer is no line the measurement draws, and
+     *  the walk alone does not meet it either: both are told so by the one policy. */
+    @Test
+    void aComparisonNothingReadsIsNotMet() {
+        assertEquals(List.of(), okMetIn("""
+                module demo exposing (g)
+                import List ( any )
+                let ok (x: Int, t: Int): Bool = x > t
+                behavior g : (x: Int) -> Bool
+                let g (x) = {
+                    let unread = any(t -> ok(x, t), [1, 2, 3])
+                    x > 0
+                }
+
+                example g
+                    | "one row" : (5) -> true
+                """));
+    }
+
+    /** A comparison inside a closure no run applies stands on no application: none is counted,
+     *  and the helper is told of nowhere. */
+    @Test
+    void aComparisonInAClosureAppliedToNothingStandsOnNone() {
+        String model = """
+                module demo exposing (g)
+                import List ( any, rangeInclusive )
+                let ok (x: Int, t: Int): Bool = x > t
+                behavior g : (x: Int) -> Bool
+                let g (x) = any(t -> ok(x, t), rangeInclusive(1, 0)) || x > 0
+
+                example g
+                    | "one row" : (5) -> true
+                """;
+        List<AComparisonRead> met = okMetIn(model);
+        assertFalse(met.isEmpty(), "ok's comparison stands in g");
+        met.forEach(each -> assertTrue(each.on() instanceof AComparisonRead.AppliedOn.OnNone,
+                each::toString));
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), HelpersReadOnApplicationsAroundThem.toldOf(compilation, null,
+                null));
+    }
+
+    /** Billing's due dates, read by two behaviors. */
+    private static final String TWO_BEHAVIORS = SHAPED_AS_BILLING.replace("exposing (g,",
+            "exposing (g, h,") + """
+
+            behavior h : (c: Calendar, nominal: Date) -> Date
+            let h (c, nominal) = onABusinessDay(c, nominal)
+            """;
+}

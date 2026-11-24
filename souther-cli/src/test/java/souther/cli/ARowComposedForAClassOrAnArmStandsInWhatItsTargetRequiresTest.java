@@ -85,7 +85,7 @@ class ARowComposedForAClassOrAnArmStandsInWhatItsTargetRequiresTest {
     void whatACandidateFillsIsSettledByRunningItAndTheRowSaysWhatItStoodIn() {
         String block = generated(UNREACHED);
 
-        assertTrue(block.contains("// fills s=Found"),
+        assertTrue(block.contains("// fills Found at s"),
                 () -> "the class of the position the candidate lands in is filled by it: " + block);
         assertTrue(block.contains("// fills case Found"),
                 () -> "and so is the arm the run went through: " + block);
@@ -130,6 +130,6 @@ class ARowComposedForAClassOrAnArmStandsInWhatItsTargetRequiresTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return GeneratedRows.of(compilation, compilation.modules().get(0), "decides",
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
     }
 }

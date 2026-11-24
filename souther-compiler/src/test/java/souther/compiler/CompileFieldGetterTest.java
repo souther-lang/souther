@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.NameMessage.NothingSaysWhatThisFunctionTakes;
 
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,7 +65,7 @@ class CompileFieldGetterTest {
         // a getter names no parameter type, so where no position gives one there is none to read
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compile(NEWTYPE.formatted(".value")));
-        assertTrue(e.getMessage().contains("Nothing says what this function takes"), e.getMessage());
+        assertInstanceOf(NothingSaysWhatThisFunctionTakes.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test

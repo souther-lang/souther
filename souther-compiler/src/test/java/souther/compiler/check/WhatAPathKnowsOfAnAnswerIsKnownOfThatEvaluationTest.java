@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -44,7 +45,8 @@ class WhatAPathKnowsOfAnAnswerIsKnownOfThatEvaluationTest {
     /** How many arms of {@code charge} are proven to be reached by nothing, written as
      *  {@code body}. */
     private static long provenIn(String body) {
-        Compilation c = Compilation.ofSource(MODEL.replace("BODY", body), "d");
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofSource(MODEL.replace("BODY", body), "d"));
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("d")).value();
         assertTrue(byBehavior != null && byBehavior.containsKey("charge"),

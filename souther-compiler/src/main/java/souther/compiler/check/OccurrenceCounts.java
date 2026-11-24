@@ -4,6 +4,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 import java.util.Map;
@@ -102,7 +103,8 @@ public final class OccurrenceCounts {
         }
         LinearForm<FactSubject> from = LinearForm.atomMinusConstant(counted, ExactRatio.of(count));
         return !seeded.numbers()
-                .assume(from, against, Map.of(counted, Granularity.DISCRETE))
+                .assume(from, against,
+                        Map.of(counted, NumberSpace.spacedOnly(Granularity.DISCRETE)))
                 .isBottom();
     }
 }

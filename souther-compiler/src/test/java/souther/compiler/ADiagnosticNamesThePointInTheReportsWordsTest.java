@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Localizable;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -126,7 +127,7 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
             if ("E1916".equals(d.code()) && d.notes().stream()
                     .anyMatch(note -> note.said()
                             instanceof ExampleMessage.TheLineAsReadAt(var _, var asks)
-                            && asks.equals("= " + value))) {
+                            && asks.equals(Localizable.of("reading.at", value)))) {
                 found.add(d);
             }
         }
@@ -139,7 +140,7 @@ class ADiagnosticNamesThePointInTheReportsWordsTest {
     private static List<Diagnostic> warnings() {
         Compilation compilation = Compilation.ofSource(MODULE, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<Diagnostic> out = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
             if (!found.report().isError()) {

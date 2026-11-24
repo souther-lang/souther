@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
@@ -98,7 +99,6 @@ class ASpaceTooLargeToWalkAsksForNothingInItTest {
                                 Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

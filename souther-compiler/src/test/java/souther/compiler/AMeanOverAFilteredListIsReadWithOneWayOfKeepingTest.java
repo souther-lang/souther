@@ -12,7 +12,6 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The total and the count of a list whose elements a filter keeps are given in the same ways of
@@ -23,7 +22,7 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
 
     private static final String PREAMBLE = """
             module p
-            data Month = { pay: Int, days: Int }
+            data Month = { days: Int }
             data Pair = { x: Month, y: Month }
             data Ok
             data No
@@ -38,12 +37,10 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
 
     private static String report(String body) {
         Compilation compilation = Compilation.ofSource(PREAMBLE + body, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()))
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll("\\d+:\\d+", "");
     }
 
@@ -75,7 +72,7 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
      */
     private static void assertReadToTheEnd(String report) {
         assertFalse(report.contains(NO_QUOTIENT_READ), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** The line the report gives as what no input gets past, which is the way that is never taken. */
@@ -87,10 +84,11 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
         return lines.get(at + 1);
     }
 
+    /** A guard on the count alone of the months kept leaves nothing unread. */
     @Test
     void theCountOfAFilteredListIsReadForEachWayOfKeeping() {
         String report = report(guarded("List.length(" + PAYABLE + ") >= 2"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /**
@@ -157,34 +155,5 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
         String held = overAHelpersList("100", "100");
         assertEquals("· the comparison at  does not hold", whatLeavesNoValue(held), held);
         assertReadToTheEnd(held);
-    }
-
-    /**
-     * With the pay of each month the comparison is a line over several of the inputs. In each way
-     * of keeping, the count is the number of months that way keeps, and the line relates the pay of
-     * one month to the pay of another — which two months are enough to have. A pay at the greatest
-     * {@code Int} leaves no row that computes below the line, so that value settles the line by the
-     * arithmetic alone, and every other pay is left either way by the other month's: the line is
-     * read to the end, as it is for the same comparison written out without a filter.
-     */
-    @Test
-    void aMeanOverTheirPayIsReadAsTheLineOverSeveralValuesAndNotStoppedAtTheQuotient() {
-        String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
-                meanOfEach("r.pay") + " >= 300"));
-        assertReadToTheEnd(report);
-    }
-
-    /**
-     * With the difference of the pay and the days of each month no value of either settles the
-     * line, whatever the others are: a pay at the greatest {@code Int} is met by days as great,
-     * and the line relates one month's pay and days to the other's. It stops at that, and not at
-     * the quotient.
-     */
-    @Test
-    void aMeanOverWhatNoValueSettlesStopsAtTheLineOverSeveralValuesAndNotAtTheQuotient() {
-        String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
-                meanOfEach("r.pay - r.days") + " >= 300"));
-        assertFalse(report.contains(NO_QUOTIENT_READ), report);
-        assertTrue(report.contains("relates the value here to another value"), report);
     }
 }

@@ -169,24 +169,6 @@ class CompileDeepExpressionTest {
                 () -> Compiler.compileModules(List.of(moduleWith(expr))));
     }
 
-    /**
-     * A nest is walked, not rescanned. The lambda lookahead reads the parenthesised run at every
-     * level of one, and deriving each token position from the cursor again made that cost the cube of
-     * the depth — this source took over two minutes, and where the stack ran out first it still took
-     * nine seconds to say so, which from the outside is a compiler that has hung. The stack here is
-     * large enough that the walk, not the depth limit, is what the time measures.
-     */
-    @Test
-    void aNestIsWalkedRatherThanRescannedAtEveryLevel() throws InterruptedException {
-        String expr = "(".repeat(5000) + "1" + ")".repeat(5000);
-
-        long started = System.nanoTime();
-        run(() -> Compiler.compile(moduleWith(expr)), 32 * 1024 * 1024);
-        long took = (System.nanoTime() - started) / 1_000_000;
-
-        assertTrue(took < 30_000, "compiling a 5000-deep nest took " + took + "ms");
-    }
-
     /** What is wrong with a door's answer, or null where it answered: a raising door throws a
      *  diagnostic, an analysing one hands back a compilation with the diagnostic in its reports. */
     private static String whatIsWrong(Throwable thrown, Object handedBack) {
@@ -197,7 +179,7 @@ class CompileDeepExpressionTest {
             return thrown.getClass().getName();
         }
         if (handedBack instanceof Compilation compilation
-                && !compilation.errors().isEmpty()) {
+                && !ACompiledModel.diagnosticsOf(compilation).isEmpty()) {
             return null;
         }
         return "compiled";

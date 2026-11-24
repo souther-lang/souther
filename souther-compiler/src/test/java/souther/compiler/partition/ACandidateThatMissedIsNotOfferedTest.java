@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -23,6 +24,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +86,7 @@ class ACandidateThatMissedIsNotOfferedTest {
      *  any place at all and answer. */
     private static Generator.ObservedRun missed(Model model) {
         return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
-                ANSWERED);
+                ANSWERED, Optional.empty());
     }
 
     /**
@@ -116,7 +118,7 @@ class ACandidateThatMissedIsNotOfferedTest {
 
         FillResult filled =
                 fill(model, _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everything),
-                        ANSWERED));
+                        ANSWERED, Optional.empty()));
 
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
@@ -187,7 +189,7 @@ class ACandidateThatMissedIsNotOfferedTest {
         List<ControlClaim> out = new ArrayList<>();
         for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup()).groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
+                CellSelection selection = GenerationFixtures.firstWay(group, index);
                 if (selection != null) {
                     out.addAll(selection.claims());
                 }
@@ -212,7 +214,7 @@ class ACandidateThatMissedIsNotOfferedTest {
         }
 
         static Model of(String source, String behavior) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
+            Compilation compilation = ACompiledModel.answered(source);
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

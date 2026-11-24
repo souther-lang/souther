@@ -12,7 +12,6 @@ import souther.compiler.report.GeneratedRows;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -85,16 +84,12 @@ class AnExcludedPointIsSaidWithoutNamingWhatProvedItTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static String block(Compilation compilation) {
@@ -102,6 +97,6 @@ class AnExcludedPointIsSaidWithoutNamingWhatProvedItTest {
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.sets")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
     }
 }

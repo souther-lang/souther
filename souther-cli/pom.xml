@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.4.1</version>
+        <version>0.4.2-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-cli</artifactId>
@@ -50,6 +50,14 @@
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- The helper a test goes through to ask that a model compiles before it reads a report. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-compiler</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <!-- Test scope, and not part of what this jar bundles. `souther init` writes a build plugin
@@ -95,7 +103,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.1</version>
                 <configuration>
                     <systemPropertyVariables>
                         <souther.jar>${project.build.directory}/souther.jar</souther.jar>

@@ -99,7 +99,8 @@ public final class ExecutableInvariants {
             }
             invariants.add(new ValueShape.Invariant(clause.name(), condition,
                     projected.map(projections -> projections.of(governed.id()))
-                            .orElseGet(ConstraintProjection::none)));
+                            .orElseGet(ConstraintProjection::none),
+                    governed.id().declaredOn(), governed.id().ordinal()));
         }
         return new ValueShape(data.declares(), fields, invariants);
     }

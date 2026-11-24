@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceLayouts;
+import souther.compiler.report.InEnglish;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +58,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryFindingHasAGenerationDispositionTest {
 
-    /** Two boundary gaps a strategy composes a row for, and an arm no strategy reaches. */
+    /** Two boundary gaps a strategy composes a row for, and a rule that only a row past the
+     *  boundaries takes. */
     private static final String POLICY = """
             module example.policy
 
@@ -85,10 +87,7 @@ class EveryFindingHasAGenerationDispositionTest {
             """;
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /**
@@ -101,8 +100,7 @@ class EveryFindingHasAGenerationDispositionTest {
      */
     private static List<Adequacy.Finding> findings(Compilation compilation, String module,
                                                    String behavior) {
-        List<Adequacy.Finding> found =
-                compilation.db().ask(new Adequacy.Findings(module)).value();
+        List<Adequacy.Finding> found = Adequacy.accountOf(compilation.db(), module);
         assertNotNull(found, "the model under test compiles");
         return found.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
     }
@@ -238,8 +236,8 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * A line the first reading composes nothing at is searched at the next.
      *
-     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to three
-     * characters or more, so the reading of the line at {@code held} cannot stand a row at length 1
+     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to one
+     * character or three, so the reading of the line at {@code held} cannot stand a row at length 2
      * — and a line one reading composes nothing at is not a line nothing composes a row for
      * (issue #1076). Stopping at the first reading, the module's own declaration was reported as
      * work nobody could do while the row was two behaviors further down.
@@ -366,12 +364,13 @@ class EveryFindingHasAGenerationDispositionTest {
             assertEquals(2, java.util.Set.copyOf(each.readings()).size(),
                     "and they are two readings, which is what a walk of them has to see");
         }
-        // Both points of the line, each searched at both positions. The line and the run beside it
-        // are two rows to write and neither is composable here, so each of them is answered from
-        // both readings rather than from whichever the walk reached first.
+        // The line, searched at both positions. No string of two characters is one character or
+        // three, so the row on the line is composable at neither, and is answered from both
+        // readings rather than from whichever the walk reached first. The run beside it is
+        // searched at both as well, in its own words.
         assertEquals(List.of(
-                        List.of("String.length(x.a) = 1", "String.length(x.b) = 1"),
-                        List.of("1 < String.length(x.a)", "1 < String.length(x.b)")),
+                        List.of("String.length(x.a) = 2", "String.length(x.b) = 2"),
+                        List.of("2 < String.length(x.a) <= 3", "2 < String.length(x.b) <= 3")),
                 coverage.stream()
                         .map(each -> each.attempted().stream()
                                 .map(souther.compiler.partition.Generator
@@ -386,11 +385,11 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.twice
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data Both = { a: Code, b: Code }
-                invariant fixedA = String.matches("[a-z][a-z][a-z]+", a.value)
-                invariant fixedB = String.matches("[a-z][a-z][a-z]+", b.value)
+                invariant fixedA = String.matches("x|xxx", a.value)
+                invariant fixedB = String.matches("x|xxx", b.value)
 
             data Ok
 
@@ -401,9 +400,9 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * Two lines one clause drew are searched apart.
      *
-     * <p>A clause with both ends draws two lines — {@code >= 1 && <= 3} is one at each — and they
+     * <p>A clause with both ends draws two lines — {@code >= 2 && <= 3} is one at each — and they
      * are two debts, not one thing with two sides (issue #1062). So which reading composes the row
-     * for one of them says nothing about the other: {@code Narrow} takes three letters or more,
+     * for one of them says nothing about the other: {@code Narrow} takes one letter or three,
      * which refuses the value at the bottom of {@code Code}'s range and takes the one at the top.
      * Resolved per clause, a line would be handed to an author as a single piece of work whose two
      * ends are owed at different positions.
@@ -449,7 +448,7 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.either
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data A = { c: Code }
             data B = { c: Code }
@@ -468,10 +467,10 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.ends
 
             data Code = String
-                invariant sized = String.length(value) >= 1 && String.length(value) <= 3
+                invariant sized = String.length(value) >= 2 && String.length(value) <= 3
 
             data Narrow = { c: Code }
-                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+                invariant fixed = String.matches("x|xxx", c.value)
 
             data Wide = { c: Code }
 
@@ -498,7 +497,7 @@ class EveryFindingHasAGenerationDispositionTest {
         Compilation compilation = compiled(NARROWED);
 
         String block = GeneratedRows.of(compilation, "example.narrowed", "held",
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
 
         assertTrue(block.contains("in `held`"),
                 "what the reading this asked about came to, named as its own: " + block);
@@ -517,10 +516,10 @@ class EveryFindingHasAGenerationDispositionTest {
             module example.held
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data Narrow = { c: Code }
-                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+                invariant fixed = String.matches("x|xxx", c.value)
 
             data Wide = { c: Code }
 
@@ -537,21 +536,21 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * One line, at a position one behavior can hold a row at and the other cannot.
      *
-     * <p>Both readings owe a row at {@code String.length(value) = 1} — the line cuts inside what
-     * either position admits — and only one of them can hold one: {@code Narrow} takes three
-     * letters or more, so every one-character value composed at {@code held} is refused where it is
+     * <p>Both readings owe a row at {@code String.length(value) = 2} — the line cuts inside what
+     * either position admits — and only one of them can hold one: {@code Narrow} takes one letter
+     * or three, so every two-character value composed at {@code held} is refused where it is
      * constructed, and the plain field at {@code anywhere} takes it.
      */
     private static final String NARROWED = """
             module example.narrowed
 
             data Code = String
-                invariant nonempty = String.length(value) >= 1
+                invariant nonempty = String.length(value) >= 2
 
             data Wide = { c: Code }
 
             data Narrow = { c: Code }
-                invariant fixed = String.matches("[a-z][a-z][a-z]+", c.value)
+                invariant fixed = String.matches("x|xxx", c.value)
 
             data Ok
 
@@ -879,23 +878,27 @@ class EveryFindingHasAGenerationDispositionTest {
     void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
         assertEquals("a row is steered into an arm by the decisions that hold on the way there, and"
                         + " the fork this arm is of is one nothing could name a position for",
-                GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED.told()));
         assertEquals("the ways into this arm run past what one reading of the body holds at once,"
                         + " so the reading stopped short of it rather than saying what steers a row"
                         + " there",
-                GenerationOutcome.NotSupported.Reason.MORE_WAYS_IN_THAN_THE_READING_HOLDS.said());
+                InEnglish.said(GenerationOutcome.NotSupported.Reason
+                        .MORE_WAYS_IN_THAN_THE_READING_HOLDS.told()));
         // Nothing about the rows composed: one of them may answer with the case once it runs, so
         // what is missing is a search aimed at the case and not a row that reaches it.
         assertEquals("rows here are composed for what the input positions divide into and not for"
                         + " the case they answer with, so which of them answers with it is what"
                         + " their runs say",
-                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.told()));
         // A case whose parameter no axis was derived at has its cases in the declaration and in no
         // partition, so what is missing is a derivation and not the classes. Said as there being
         // none, the sentence is about the model again — the thing the other two stopped doing.
         assertEquals("no axis was derived at the position this case belongs to, so no classes were"
                         + " derived there to compose a row from",
-                GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.said());
+                InEnglish.said(
+                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.told()));
     }
 
     @Test
@@ -922,9 +925,10 @@ class EveryFindingHasAGenerationDispositionTest {
                         Map.of("pick", new Adequacy.Filling(stopped(why),
                                 atTheEdges(alsoAtTheEdges),
                                 Adequacy.Generated.RowsForRules.NOTHING,
-                                List.of())), null)),
+                                Adequacy.Generated.RowsForCases.NOTHING,
+                                List.of(), List.of())), null)),
                 Map.of(), SourceRendering.namedByIdentity(SourceLayouts.NONE),
-                compiled(KIND).db()).text();
+                compiled(KIND).db()).textInEnglish();
     }
 
     /** A run asked for nothing that came to a reason about itself, which is what a stopped
@@ -952,7 +956,7 @@ class EveryFindingHasAGenerationDispositionTest {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return souther.compiler.partition.MeasuredInput.of("pick",
                 InputDomain.of(List.of(), reading,
                         TypeCardinality.Counts.workedOutIn(reading),
@@ -998,13 +1002,13 @@ class EveryFindingHasAGenerationDispositionTest {
 
     @Test
     void anArmNoStrategyReachesIsNamedInTheBlock() {
-        Compilation compilation = compiled(POLICY);
+        Compilation compilation = compiled(IN_A_BLOCK);
         String block = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
-                                "example.policy")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                                "example.block")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
 
-        assertTrue(block.contains("`then`"),
+        assertTrue(block.contains("nothing offers a row for `case Off`"),
                 "the arm nothing offers a row for is named: " + block);
     }
 }

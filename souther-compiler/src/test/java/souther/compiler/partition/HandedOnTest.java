@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -83,7 +85,7 @@ class HandedOnTest {
     @Test
     void aRefusedValueHandsOnNothing() {
         assertInstanceOf(HandedOn.Came.Refused.class,
-                handedOn(new Generator.CandidateCheck.Built.Refused("no"),
+                handedOn(Generator.CandidateCheck.Built.Refused.inItsOwnWords("no"),
                         Map.of(LEVEL, FixtureTemplate.integer(1))));
     }
 
@@ -92,7 +94,8 @@ class HandedOnTest {
         return HandedOn.of(built, () -> written,
                 new ContentsAsked.ToHandOn(Set.of(LEVEL), Set.of(), Set.of()),
                 BehaviorInputs.of(READ),
-                RuleReadingContext.unshared(READ.rules(), ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(READ.rules(), ReadAs.THE_COMPILATION_DOES,
+                        TestDay.TODAY));
     }
 
     private static Map<TermPath, String> texts(HandedOn.Came came) {
@@ -105,7 +108,7 @@ class HandedOnTest {
     }
 
     private static InputReading read() {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
+        Compilation compilation = ACompiledModel.answered(MODULE);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

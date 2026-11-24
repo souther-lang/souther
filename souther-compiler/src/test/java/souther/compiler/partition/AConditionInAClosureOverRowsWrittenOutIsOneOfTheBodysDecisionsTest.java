@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -93,10 +94,10 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
             }
             """;
 
-    private static final List<String> BELOW = List.of("pay/x < 100");
-    private static final List<String> BETWEEN = List.of("pay/100 <= x < 200");
-    private static final List<String> FROM_BOTH = List.of("pay/100 <= x");
-    private static final List<String> ABOVE = List.of("pay/200 <= x");
+    private static final List<String> BELOW = List.of("pay: x < 100");
+    private static final List<String> BETWEEN = List.of("pay: 100 <= x < 200");
+    private static final List<String> FROM_BOTH = List.of("pay: 100 <= x");
+    private static final List<String> ABOVE = List.of("pay: 200 <= x");
 
     @Test
     void someRowMeetingTellsApartWhereTheFirstLineIs() {
@@ -159,8 +160,8 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
     @Test
     void aCopyOfTheComparisonElsewhereIsNotReadByTheStatementOfAnother() {
         assertEquals(new BodyDistinction.Unread(List.of(
-                                List.of("paid.amount/0 <= x < 100"),
-                                List.of("paid.amount/100 <= x < 200", "paid.amount/200 <= x")),
+                                List.of("paid.amount: 0 <= x < 100"),
+                                List.of("paid.amount: 100 <= x < 200", "paid.amount: 200 <= x")),
                         true),
                 toldApart("besideAnotherCopyOfTheComparison").get("paid.amount"));
     }
@@ -168,8 +169,8 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
     /** The step of a fold that keeps one side is a fork on the comparison, decided on each row. */
     @Test
     void aFoldKeepingOneSideTellsApartByEachLine() {
-        assertEquals(new BodyDistinction.Drawn(List.of(List.of("paid.amount/0 <= x < 100"),
-                        List.of("paid.amount/100 <= x < 200"), List.of("paid.amount/200 <= x"))),
+        assertEquals(new BodyDistinction.Drawn(List.of(List.of("paid.amount: 0 <= x < 100"),
+                        List.of("paid.amount: 100 <= x < 200"), List.of("paid.amount: 200 <= x"))),
                 toldApart("byFold").get("paid.amount"));
     }
 
@@ -189,10 +190,7 @@ class AConditionInAClosureOverRowsWrittenOutIsOneOfTheBodysDecisionsTest {
 
     private static Map<String, PartitionEvidence> measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return compilation.db().ask(new Adequacy.Coverage("kept")).value();
     }
 }

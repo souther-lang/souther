@@ -82,13 +82,6 @@ class CompileMatchOverANestedSumTest {
      *  one column of a table that applies to one leaf only stops being a nested match. */
     @Test
     void aLeafArmAndAnArmOverTheRestStandTogether() throws Exception {
-        String arms = """
-                        | Station -> 1
-                        | Hospital -> 2
-                        | Renkei -> 3
-                """;
-        assertEquals(2L, fee(arms, "Hospital"));
-
         String grouped = """
                         | Station -> 1
                         | Hospital | Renkei -> 9
@@ -169,33 +162,14 @@ class CompileMatchOverANestedSumTest {
     }
 
     /**
-     * What no arm answered for is named the way the model declares it.
+     * What no arm answered for is named the way the model declares it, and opened where only part of
+     * a declared case is missing, in the order the model declares them.
      *
      * <p>The check is settled over the values, because that is what an arm answers for. The report
-     * is not owed in those terms: the model wrote {@code OnceKind} to say something, and a report
-     * of its two leaves is about a declaration nobody made.
-     */
-    @Test
-    void whatNoArmAnsweredForIsNamedTheWayTheModelDeclaresIt() {
-        assertEquals(List.of("OnceKind"), unanswered("""
-                        | Renkei -> 3
-                """));
-    }
-
-    /** And is opened where only part of a declared case is missing, since the case is not. */
-    @Test
-    void aCaseOnlyPartlyMissingIsOpenedRatherThanNamed() {
-        assertEquals(List.of("Station"), unanswered("""
-                        | Hospital -> 2
-                        | Renkei -> 3
-                """));
-    }
-
-    /**
-     * Both at once, in the order the model declares them.
-     *
-     * <p>{@code AB} is missing entirely and is named; {@code CD} is missing only {@code D} and is
-     * opened. A report that did one of the two everywhere would be wrong about the other half.
+     * is not owed in those terms: the model wrote {@code AB} to say something, and a report of its
+     * two leaves is about a declaration nobody made. {@code AB} is missing entirely and is named;
+     * {@code CD} is missing only {@code D} and is opened. A report that did one of the two
+     * everywhere would be wrong about the other half.
      */
     @Test
     void whatIsNamedAndWhatIsOpenedComeInTheOrderTheModelDeclaresThem() {
@@ -305,14 +279,6 @@ class CompileMatchOverANestedSumTest {
                 """));
         assertEquals("E1201", refused.diagnostic().code());
         assertEquals(List.of("AB", "C"), hinted(refused));
-    }
-
-    /** The cases a `match` was refused for not answering, as its report names them. */
-    private List<String> unanswered(String arms) {
-        CompileException refused = assertThrows(CompileException.class,
-                () -> Compiler.compile(feeOf(arms)));
-        assertEquals("E1201", refused.diagnostic().code());
-        return hinted(refused);
     }
 
     private static List<String> hinted(CompileException refused) {

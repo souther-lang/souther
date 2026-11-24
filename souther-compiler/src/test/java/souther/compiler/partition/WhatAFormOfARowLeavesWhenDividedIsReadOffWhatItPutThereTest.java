@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -19,6 +20,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.ReadAs;
@@ -118,7 +120,7 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
     /** {@code floorMod(x, 11) + z == 7}: a number of the input beside the remainder. */
     private static final Proposition SEVEN_WITH_A_NUMBER = new Proposition.Compared(
             new Relation.Affine(new LinearForm<>(ExactRatio.of(-7), Map.of(
-                    new Quantity.RemainderOfADividend(
+                    Quantity.RemainderOfADividend.ofTheInput(
                             ValueName.Stdlib.operation("Int", "floorMod"),
                             new LinearForm<>(ExactRatio.ZERO,
                                     Map.of(new NumericTerm.ValueOf(X), ExactRatio.ONE)),
@@ -154,7 +156,7 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
 
     /** {@code weight * x + y + constant}, by eleven. */
     private static Quantity.RemainderOfADividend remainder(long onX, long onY, long constant) {
-        return new Quantity.RemainderOfADividend(ValueName.Stdlib.operation("Int", "floorMod"),
+        return Quantity.RemainderOfADividend.ofTheInput(ValueName.Stdlib.operation("Int", "floorMod"),
                 new LinearForm<>(ExactRatio.of(constant), Map.of(
                         new NumericTerm.ValueOf(X), ExactRatio.of(onX),
                         new NumericTerm.ValueOf(Y), ExactRatio.of(onY))),
@@ -182,7 +184,7 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
     /** A reading of an input taking two whole numbers, {@code x} and {@code y}. */
     private static Quantities quantities() {
         RuleReadingContext reading =
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(
                 List.of(new InputDomain.Parameter("x", null, Type.INT),
                         new InputDomain.Parameter("y", null, Type.INT),
@@ -194,6 +196,11 @@ class WhatAFormOfARowLeavesWhenDividedIsReadOffWhatItPutThereTest {
     private static BorderQuantity.Observation row(Map<TermPath, ObservationAtPoint> wrote) {
         Map<TermPath, ObservationAtPoint> at = new LinkedHashMap<>(wrote);
         return new AnObservationOfAForm() {
+
+            @Override
+            public Place fixedAt(NumericTerm term) {
+                return null;
+            }
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

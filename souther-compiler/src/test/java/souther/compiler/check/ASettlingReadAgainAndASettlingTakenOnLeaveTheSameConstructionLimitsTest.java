@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -13,7 +14,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.test.ClosedWorldContract;
 import souther.test.Nightly;
-import souther.test.ReadsTheRepositorysModels;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -51,7 +51,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 @ClosedWorldContract
 @Nightly
-@ReadsTheRepositorysModels
 class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
 
     /**
@@ -70,7 +69,8 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
         int deep = 0;
         for (Record record : recordsRead()) {
             RuleReadingContext reading =
-                    RuleReadingContext.of(record.source(), record.policy(), record.lent());
+                    RuleReadingContext.of(record.source(), record.policy(), record.lent(),
+                            TestDay.TODAY);
             FieldDomains base = FieldDomains.of(record.declared(), reading);
             List<RuleKey> coordinates = coordinatesOf(base, record.fields());
             for (Map<RuleKey, Count> settling : settlings(base, coordinates)) {
@@ -210,9 +210,10 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
      *  under them. */
     private static List<Record> recordsRead() {
         List<Record> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            Compilation compilation = model.answered();
             ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
-            DeclarationReadings lent = RepositoryModels.knownTo(compilation);
+            DeclarationReadings lent = RepositoryModels.knownTo(model);
             for (String module : compilation.modules()) {
                 RuleReadingSource source = RuleReadings.of(compilation, module);
                 Set<TypeSymbol> seen = new LinkedHashSet<>();

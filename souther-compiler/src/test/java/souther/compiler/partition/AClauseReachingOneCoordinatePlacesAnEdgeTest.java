@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -148,55 +149,45 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             example onMoved | (Moved { n = Count(9) }) -> Ok { size = 9 }
             """;
 
-    /** A record stating a bound on a number of its own places the edge a newtype over that number
-     *  would have placed, and names itself. */
-    @Test
-    void aRecordsBoundOnItsOwnNumberPlacesAnEdge() {
-        String report = report(MODEL);
-
-        assertTrue(report.contains("  Tally\n      ! no row is at the ON point n = 1 (invariant Tally #1)"), report);
+    /**
+     * The line a behavior draws at a place, and the clause that drew it. Read off the evidence the
+     * report is a projection of: what a document prints for a line is made elsewhere, and a test
+     * reading the sentence is held to how it is worded as much as to what it says.
+     */
+    private static void assertLine(Map<String, BorderAssessment> lines, String key, String drawnBy) {
+        BorderAssessment line = lines.get(key);
+        assertTrue(line != null, key + " is a line of the model: " + lines.keySet());
+        assertEquals(drawnBy, line.origin().saidWithoutAPlace(), key);
     }
 
     /**
-     * And a bound on how much one of its fields holds.
+     * A record stating a bound on a number of its own places the edge a newtype over that number
+     * would have placed, and names itself; so does a bound on how much one of its fields holds, and
+     * both ends of a record's own bound do — so that this is read as the rules being met and not as a
+     * floor being special.
      *
-     * <p>The coordinate is the length and not the list, so the line is named by the length: the rule
-     * counts the field rather than saying what the field is.
+     * <p>The coordinate of a length is the length and not the list, so the line is named by the
+     * length: the rule counts the field rather than saying what the field is.
      */
     @Test
-    void aRecordsBoundOnALengthOfItsOwnPlacesAnEdge() {
-        String report = report(MODEL);
+    void aRecordsBoundOnItsOwnNumberOrLengthPlacesAnEdge() {
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains(
-                "point List.length(xs) = 1 (invariant Bag #1)"), report);
-    }
-
-    /** Both ends, so that this is read as the rules being met and not as a floor being special. */
-    @Test
-    void bothEndsOfARecordsOwnBoundAreEdges() {
-        String report = report(MODEL);
-
-        assertTrue(report.contains("  Both\n      ! no row is at the ON point n = 1 (invariant Both #1)"), report);
-        assertTrue(report.contains("      ! no row is at the ON point n = 10 (invariant Both #2)"), report);
+        assertLine(lines, "onTally/v.n = 1", "invariant Tally #1");
+        assertLine(lines, "onBag/List.length(v.xs) = 1", "invariant Bag #1");
+        assertLine(lines, "onBoth/v.n = 1", "invariant Both #1");
+        assertLine(lines, "onBoth/v.n = 10", "invariant Both #2");
     }
 
     /** A clause governing the position from the declaration it sits inside reaches it, and names
-     *  that declaration rather than the value it was reached through. */
+     *  that declaration rather than the value it was reached through; and the outer record's own
+     *  clause owns the line where it is the tighter of the two. */
     @Test
-    void aClauseOnTheRecordAPositionSitsInsideReachesIt() {
-        String report = report(MODEL);
+    void aClauseOnTheRecordAPositionSitsInsideReachesItUnlessTheOuterIsTighter() {
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains(
-                "  Inner\n      ! no row is at the ON point n = 1 (invariant Inner #1)"), report);
-    }
-
-    /** And the outer record's own clause where it is the tighter of the two. */
-    @Test
-    void anOuterClauseThatIsTighterOwnsTheLine() {
-        String report = report(MODEL);
-
-        assertTrue(report.contains(
-                "no row is at the ON point inner.n = 5 (invariant Tight #1)"), report);
+        assertLine(lines, "onOuter/v.inner.n = 1", "invariant Inner #1");
+        assertLine(lines, "onTight/v.inner.n = 5", "invariant Tight #1");
     }
 
     /**
@@ -228,23 +219,23 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onWrapped : (v: Wrapped) -> Ok
                 constructs Ok
-            let onWrapped (v) = Ok { size = v.n }
+            let onWrapped (v) = Ok { size = v.value.n }
 
             behavior onNonEmpty : (v: NonEmptyBag) -> Ok
                 constructs Ok
-            let onNonEmpty (v) = Ok { size = List.length(v.xs) }
+            let onNonEmpty (v) = Ok { size = List.length(v.value.xs) }
 
             behavior onHeld : (v: Held) -> Ok
                 constructs Ok
-            let onHeld (v) = Ok { size = v.w.n }
+            let onHeld (v) = Ok { size = v.w.value.n }
 
             behavior onHeldBag : (v: HeldBag) -> Ok
                 constructs Ok
-            let onHeldBag (v) = Ok { size = List.length(v.b.xs) }
+            let onHeldBag (v) = Ok { size = List.length(v.b.value.xs) }
 
             behavior onStacked : (v: Stacked) -> Ok
                 constructs Ok
-            let onStacked (v) = Ok { size = v.w.n }
+            let onStacked (v) = Ok { size = v.w.value.value.n }
             """;
 
     /**
@@ -364,10 +355,12 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aRangeNarrowedByAnotherPositionsBoundIsNotAnEdge() {
-        String report = report(MODEL);
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains("no row is at the ON point b = 10 (invariant R #2)"), report);
-        assertFalse(report.contains("point onR/v.a"), report);
+        assertLine(lines, "onR/v.b = 10", "invariant R #2");
+        assertEquals(List.of(), lines.keySet().stream()
+                .filter(key -> key.matches("onR/v\\.a = -?[0-9]+")).toList(),
+                "`a` has no line at a number, only the one relating it to `b`");
     }
 
     /**
@@ -380,38 +373,31 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aRangeNarrowedThroughAnotherPositionsTypeIsNotAnEdgeEither() {
-        String report = report(MODEL);
+        Map<String, BorderAssessment> lines = linesOf(MODEL, "demo");
 
-        assertTrue(report.contains("no row is at the ON point value = 10 (invariant B #1)"), report);
-        assertFalse(report.contains("point onUnder/v.a"), report);
-    }
-
-    /** The rules written on newtypes are measured as they were. A repair that moved these rather
-     *  than adding to them would read as this issue being fixed. */
-    @Test
-    void theSameRulesOnNewtypesAreMeasuredAsBefore() {
-        String report = report(ON_NEWTYPES);
-
-        assertTrue(report.contains(
-                "no row is at the ON point String.length(value) = 1 (invariant Name #1)"), report);
-        assertTrue(report.contains(
-                "no row is at the ON point List.length(value) = 1 (invariant Cart #1)"), report);
-        assertTrue(report.contains("no row is at the ON point value = 1 (invariant Count #1)"), report);
+        assertLine(lines, "onUnder/v.b = 10", "invariant B #1");
+        assertEquals(List.of(), lines.keySet().stream()
+                .filter(key -> key.matches("onUnder/v\\.a = -?[0-9]+")).toList(),
+                "`a` has no line at a number, only the one relating it to `b`");
     }
 
     /**
-     * A record clause tighter than the type's own owns the line rather than narrowing it.
+     * The rules written on newtypes are measured as they were. A repair that moved these rather
+     * than adding to them would read as this issue being fixed.
      *
-     * <p>`Moved`'s clause bounds one coordinate against a constant, so it places an edge of its own,
-     * and 5 is where the two intersect. Reported as `Count` narrowed within `Moved` it named the rule
+     * <p>And a record clause tighter than the type's own owns the line rather than narrowing it:
+     * `Moved`'s clause bounds one coordinate against a constant, so it places an edge of its own, and
+     * 5 is where the two intersect. Reported as `Count` narrowed within `Moved` it named the rule
      * that did not put the edge where it is.
      */
     @Test
-    void aTighterRecordClauseOwnsTheLineRatherThanNarrowingIt() {
-        String report = report(ON_NEWTYPES);
+    void theSameRulesOnNewtypesAreMeasuredAsBeforeAndATighterRecordClauseOwnsItsLine() {
+        Map<String, BorderAssessment> lines = linesOf(ON_NEWTYPES, "newtypes");
 
-        assertTrue(report.contains("no row is at the ON point n = 5 (invariant Moved #1)"), report);
-        assertFalse(report.contains("within Moved"), report);
+        assertLine(lines, "onName/String.length(v) = 1", "invariant Name #1");
+        assertLine(lines, "onCart/List.length(c) = 1", "invariant Cart #1");
+        assertLine(lines, "onHop/v.n = 1", "invariant Count #1");
+        assertLine(lines, "onMoved/v.n = 5", "invariant Moved #1");
     }
 
     /**
@@ -560,8 +546,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      */
     @Test
     void aFloorPastWhatTheElementHasIsRefusedWhicheverWayItIsWritten() {
-        Compilation compilation = Compilation.ofSource(BEYOND, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1013", "E1013"),
+                Compilation.ofSource(BEYOND, "Main"));
 
         assertEquals(List.of("E1013", "E1013"), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
@@ -584,9 +570,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     @Test
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
-        Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(UNMEETABLE, Adequacy.Asked.fullReport());
         Adequacy.readingsOf(compilation.db(), "unmeetable")
                 .forEach((behavior, read) -> read
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
@@ -632,7 +617,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onWrapped : (v: Wrapped) -> Ok
                 constructs Ok
-            let onWrapped (v) = Ok { size = v.a.value }
+            let onWrapped (v) = Ok { size = v.value.a.value }
 
             behavior onBare : (v: Base) -> Ok
                 constructs Ok
@@ -640,7 +625,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onHeld : (v: Held) -> Ok
                 constructs Ok
-            let onHeld (v) = Ok { size = v.w.a.value }
+            let onHeld (v) = Ok { size = v.w.value.a.value }
             """;
 
     /**
@@ -721,15 +706,15 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onOuter : (v: Outer) -> Ok
                 constructs Ok
-            let onOuter (v) = Ok { size = v.a.value }
+            let onOuter (v) = Ok { size = v.value.value.a.value }
 
             behavior onBoth : (v: Both) -> Ok
                 constructs Ok
-            let onBoth (v) = Ok { size = v.n.value }
+            let onBoth (v) = Ok { size = v.value.value.n.value }
 
             behavior onIdle : (v: Idle) -> Ok
                 constructs Ok
-            let onIdle (v) = Ok { size = v.a.value }
+            let onIdle (v) = Ok { size = v.value.value.value.a.value }
             """;
 
     /**
@@ -803,7 +788,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     @Test
     void aLengthOverSomethingUninhabitedIsNotProvenByTheRange() {
         souther.compiler.query.ItemAssessment.Owed line =
-                onPoint(linesOf(UNINHABITED, "uninhabited"), "onLoopyR/List.length(v.xs) = 1");
+                onPoint(linesOf(UNINHABITED, "uninhabited", List.of("E1013")),
+                        "onLoopyR/List.length(v.xs) = 1");
 
         assertFalse(line.writabilityEvidence().known(),
                 "nothing inhabits `Loop`, so nothing holds a list of one");
@@ -835,9 +821,15 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
     /** Every line one module draws, by the behavior and label it is reported under. */
     private static Map<String, BorderAssessment> linesOf(String source, String module) {
+        return linesOf(source, module, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static Map<String, BorderAssessment> linesOf(String source, String module,
+            List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(refusals, compilation);
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Adequacy.readingsOf(compilation.db(), module)
                 .forEach((behavior, read) -> read
@@ -846,10 +838,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     }
 
     private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**
@@ -860,9 +850,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * worded as much as to what it says.
      */
     private static List<String> notReadIn(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior))
                 .flatMap(each -> each.partition().notRead().stream())

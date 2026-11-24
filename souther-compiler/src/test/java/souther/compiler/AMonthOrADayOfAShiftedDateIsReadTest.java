@@ -13,7 +13,6 @@ import souther.compiler.report.GeneratedRows;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,27 +37,32 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
     /** Each source measured once for the class: the tests here only read what a measurement
      *  says, and some ask the same source different things. */
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    private static Compilation measuredOn(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
+        compilation.measure(Adequacy.Asked.fullReport());
+        return compilation;
+    }
 
     private static Compilation compiled(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        return SHARED.compiles(source, () -> measuredOn(source));
+    }
+
+    private static Compilation refused(List<String> codes, String source) {
+        return SHARED.refusedWith(codes, source, () -> measuredOn(source));
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static int partOf(String part, LocalDate date) {
@@ -167,7 +171,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
                 assertEquals(0, compilation.errors().size(), where);
                 assertFalse(report.contains("no row is at"), where);
-                assertFalse(report.contains("not read"), where);
+                assertFalse(NotRead.in(report), where);
                 assertEquals(verdicts(itself), verdicts(report), where);
             }
         }
@@ -191,8 +195,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
     /**
      * The rows offered for a month of a moved date are dates whose moved date is in the month of
-     * each point: the day before the first of March for the line itself, and the day before the
-     * last of January for the month below it.
+     * each point: the day before the first of March for the line itself, and the last of January
+     * for the month below it — in the year the rows are written in.
      */
     @Test
     void theRowsOfferedAreDatesWhoseMovedDateIsInTheMonthOfEachPoint() {
@@ -205,10 +209,12 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db())
-                .text();
+                .textInEnglish();
 
-        assertTrue(offered.contains("Date(\"2000-02-29\")"), offered);
-        assertTrue(offered.contains("Date(\"2000-01-31\")"), offered);
+        int year = TestDay.DATE.getYear();
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 3, 1).minusDays(1) + "\")"),
+                offered);
+        assertTrue(offered.contains("Date(\"" + LocalDate.of(year, 1, 31) + "\")"), offered);
     }
 
     /** The day before the first of March is the twenty-ninth of February in a leap year. */
@@ -269,7 +275,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
     void anAgeFromTheDayBeforeABirthdayIsReadAsAnAgeFromTheBirthday() {
         String moved = report(compiled(AGE.formatted("", "", "Date.addDays(0 - 1, birthday)",
                 THE_ISSUES_ROWS)));
-        String itself = report(compiled(AGE.formatted("", "", "birthday", THE_ISSUES_ROWS)));
+        String itself = report(refused(List.of("E1905"),
+                AGE.formatted("", "", "birthday", THE_ISSUES_ROWS)));
 
         assertFalse(moved.contains("written in a form this compiler does not read"), moved);
         assertFalse(moved.contains("what it says about the values here is not worked out"),
@@ -301,7 +308,8 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
     void theRowsEitherSideOfTheAgeTheMoveDecidesAreItsAnswers() {
         Compilation moved = compiled(AGE.formatted("", "", "Date.addDays(0 - 1, birthday)",
                 THE_ISSUES_ROWS));
-        Compilation itself = compiled(AGE.formatted("", "", "birthday", THE_ISSUES_ROWS));
+        Compilation itself = refused(List.of("E1905"),
+                AGE.formatted("", "", "birthday", THE_ISSUES_ROWS));
 
         assertEquals(0, moved.errors().size(), report(moved));
         assertEquals(1, itself.errors().size(), report(itself));
@@ -318,7 +326,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
         String report = report(compiled(AGE.formatted(", lag: Int", ", lag",
                 "Date.addDays(0 - lag, birthday)", "")));
 
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("measurement: complete"), report);
         assertFalse(report.contains("Date.month((birthday"), report);
     }

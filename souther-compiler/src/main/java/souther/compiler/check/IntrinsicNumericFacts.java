@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.ScalarValues;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultBound;
@@ -78,8 +79,9 @@ final class IntrinsicNumericFacts {
      * the same peeling the atom's own name was made through, so that what is stated here is stated
      * about the atom it is filed against and not about a neighbour of it.
      */
-    static List<NumericConstraint> ofSize(ValueName size, Core container, FactSubject atom,
-                                          Denotations at, Terms terms) {
+    static List<NumericConstraint> ofSize(ValueName size, AnOperationApplied applied,
+                                          FactSubject atom, Denotations at, Terms terms,
+                                          Term named) {
         List<NumericConstraint> out = new ArrayList<>();
         // What the measure itself states of what it answers, which is that a count is at or above
         // nought. Read off the operation's rows and not written here: it is the same proposition as
@@ -89,71 +91,146 @@ final class IntrinsicNumericFacts {
         // A construction's result is no smaller than each source the rule names for it. A rule may
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
-        for (Core added : DischargeRules.noSmallerThan(container)) {
-            standing(atom, added, Rel.GE, at, terms, out);
+        for (Core added : DischargeRules.noSmallerThan(applied)) {
+            standing(atom, added, partOf(named, applied, added), Rel.GE, at, terms, out);
         }
-        if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
-            DischargeRules.Source built = DischargeRules.builtFrom(call);
+        if (applied != null) {
+            DischargeRules.Source built = DischargeRules.builtFrom(applied);
             Rel rel = built == null ? null : relationOf(built.size());
             if (rel != null) {
-                standing(atom, built.container(), rel, at, terms, out);
+                standing(atom, built.container(), partOf(named, applied, built.container()), rel,
+                        at, terms, out);
             }
         }
         // And exactly as many as the law of the operation that answered it says, where it says a
         // number of the arguments this names: `a ++ b` holds as many as both halves together, which
         // no number of bounds on it against either half says.
-        LinearForm<FactSubject> lawSays =
-                LawOverAtoms.sizeOf(AnOperationApplied.of(container), at, terms);
-        if (lawSays != null && LinearForm.atom(atom).minus(lawSays)
-                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
-            out.add(new NumericConstraint(held.value(), Rel.EQ));
-        }
+        out.addAll(ofTheSizeLaw(applied, atom, at, terms, named));
         // And as many as it was written out with, where it was, which is what a size of it read
-        // as a number is and so what the atom a law names it by is.
-        OptionalLong written = terms.writtenCount(container, at);
+        // as a number is and so what the atom a law names it by is. Read off the term the atom is
+        // named by: how it was reached says nothing of how many it holds.
+        OptionalLong written = writtenWith(named);
         if (written.isPresent()) {
             out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
                     ExactRatio.of(written.getAsLong())), Rel.EQ));
+        } else if (named != null) {
+            // A list that is one of several written out holds no more than the most of them, and
+            // which one it is is the path's to say.
+            OptionalLong most = Terms.mostWritten(named);
+            if (most.isPresent()) {
+                out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
+                        ExactRatio.of(most.getAsLong())), Rel.LE));
+            }
         }
         return out;
     }
 
     /**
+     * What the size law of the operation {@code applied} says of the size {@code atom} of its
+     * answer, where it says it as one number of its arguments.
+     */
+    static List<NumericConstraint> ofTheSizeLaw(AnOperationApplied applied, FactSubject atom,
+                                                Denotations at, Terms terms, Term call) {
+        LawOverAtoms.Sized lawSays = LawOverAtoms.sizeOf(applied, at, terms, call);
+        return lawSays == null ? List.of() : lawSays.carriedBy(atom);
+    }
+
+    /**
      * How many {@code container} holds, where the laws of the operation that answered it say so by
      * what it was handed: whether it holds anything, and how many case by case — or null where no
-     * operation answered it, no law says either, or a part of each is one this side has no name
+     * operation answered it, no law says either, or no part of either is one this side has a name
      * for ({@link LawOverAtoms}).
      *
-     * <p>Each law whole or not at all. One says when the answer holds something and, by the same
-     * statement, when it holds nothing, so a part of it left out would answer the second wrong.
+     * <p>Each law whole, with a part this side has no name for held as one that settles nothing.
+     * One says when the answer holds something and, by the same statement, when it holds nothing,
+     * so a part of it left out would answer the second wrong.
      */
-    static Derivation heldWhereItsLawsSay(Core container, Denotations at, Terms terms) {
-        AnOperationApplied applied = AnOperationApplied.of(container);
+    static Derivation heldWhereItsLawsSay(Core container, FactSubject atom, Denotations at,
+                                          Terms terms, Term call) {
+        return heldWhereItsLawsSay(AnOperationApplied.of(container), atom, at, terms, call);
+    }
+
+    /** The same, of an application of an operation however it was found, and of the call named by
+     *  {@code call} where it is one ({@link LawOverAtoms}). */
+    static Derivation heldWhereItsLawsSay(AnOperationApplied applied, FactSubject atom,
+                                          Denotations at, Terms terms, Term call) {
         Derivation.HoldsSomethingWhere.Holding holds =
-                LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms);
-        Derivation held = holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
-        // And how many case by case, where the law says it so: a size in cases is no relation the
-        // atom carries whatever the path, since which case holds is the path's.
-        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms);
-        if (held == null || sized == null) {
-            return held != null ? held : sized;
+                LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms, call);
+        List<Derivation> recipes = new ArrayList<>();
+        if (holds != null) {
+            recipes.add(new Derivation.HoldsSomethingWhere(holds));
         }
-        return new Derivation.Each(List.of(held, sized));
+        // And how many case by case, where the law says it so: a size in cases is no relation the
+        // atom carries whatever the path, since which case holds is the path's. Two cases of a
+        // value held once are the path's too, and are what the count settles where it is settled.
+        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms, call);
+        if (sized != null) {
+            recipes.add(sized);
+        }
+        LawOverAtoms.Sized byTheValue = LawOverAtoms.sizeOf(applied, at, terms, call);
+        List<ConditionalConstraint> settled =
+                byTheValue == null ? List.of() : byTheValue.guaranteedOf(atom);
+        if (!settled.isEmpty()) {
+            recipes.add(new Derivation.GuaranteedWhere(settled));
+        }
+        return switch (recipes.size()) {
+            case 0 -> null;
+            case 1 -> recipes.getFirst();
+            default -> new Derivation.Each(recipes);
+        };
     }
 
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can
      * name. A container nothing names is one nothing is stated about, which leaves the size bounded
      * by what else is known of it rather than by half a rule. */
-    private static void standing(FactSubject atom, Core source, Rel rel,
+    private static void standing(FactSubject atom, Core source, Term part, Rel rel,
                                  Denotations at, Terms terms, List<NumericConstraint> out) {
         // Counted the way the source is counted, which is not the way the answer is where a
         // construction answers a container of another kind: a map made of a list holds no more
         // than the list's length.
         ValueName counting = NumericMeasures.takenOf(source.type(), terms.newtypeInners());
-        FactSubject there = counting == null ? null : terms.sizeAtomFor(counting, source, at);
+        // Named by the part of the answer's own term it is, where the answer is named by one: the
+        // expression is only what the part is and how it was built.
+        FactSubject there = counting == null ? null
+                : part != null ? terms.sizeAtomOf(counting, part, source, at)
+                : terms.sizeAtomFor(counting, source, at);
         if (there != null && !there.equals(atom)) {
             out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }
+    }
+
+    /** How many {@code written} was written out with: a text as many as its code points, a list as
+     *  many as its elements, or empty where the term is neither. */
+    private static OptionalLong writtenWith(Term written) {
+        return switch (written.shape()) {
+            case STRING -> OptionalLong.of(ScalarValues.count((String) written.carried()));
+            case LIST -> OptionalLong.of(written.parts().size());
+            case EMPTY_LIST -> OptionalLong.of(0);
+            default -> OptionalLong.empty();
+        };
+    }
+
+    /** What the measure {@code size} states of whatever it counts: that a count is at or above
+     *  nought. */
+    static List<NumericConstraint> ofAnythingCounted(ValueName size, FactSubject atom) {
+        List<NumericConstraint> out = new ArrayList<>();
+        bounding(DischargeRules.boundsOn(size, ConstantArguments.none()), atom, NO_ARGUMENTS, out);
+        return out;
+    }
+
+    /** The part of the term {@code named} that {@code argument} of {@code applied} stands at, or
+     *  null where the answer is not named as a call of that operation. */
+    private static Term partOf(Term named, AnOperationApplied applied, Core argument) {
+        if (named == null || applied == null
+                || !applied.operation().equals(named.calledOperation())) {
+            return null;
+        }
+        for (int at = 0; at < applied.args().size() && at < named.parts().size(); at++) {
+            if (applied.args().get(at) == argument) {
+                return named.parts().get(at);
+            }
+        }
+        return null;
     }
 
     /** How a size is stated of the two, or null where there is nothing to state: a construction of
@@ -174,14 +251,18 @@ final class IntrinsicNumericFacts {
      * answer, and what they are read as is the naming's answer — a name given a constant is that
      * constant, here as everywhere.
      */
-    static List<NumericConstraint> ofCall(Core.PreservedCall call, FactSubject atom, Denotations at,
-                                          Terms terms) {
+    static Carried ofCall(Core.PreservedCall call, FactSubject atom, Denotations at, Terms terms) {
         List<NumericConstraint> out = new ArrayList<>();
-        bounding(DischargeRules.boundsOn(call, arg -> constantOf(arg, at, terms)), atom,
-                ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
+        DischargeRules.BoundRows rows =
+                DischargeRules.boundRowsOn(call, arg -> constantOf(arg, at, terms));
+        bounding(rows.holding(), atom, ref -> terms.affineOf(CallArguments.of(ref, call), at), out);
         shifted(call, atom, at, terms, out);
-        return out;
+        return new Carried(out, whereTheArgumentsAre(rows.heldBack(), call, atom, at, terms));
     }
+
+    /** What a call's answer carries whatever its arguments are, and what it carries where its
+     * arguments stand a way the call does not settle. */
+    record Carried(List<NumericConstraint> always, List<ConditionalConstraint> where) {}
 
     /**
      * The rows as what they say about {@code atom}, keeping the relation to the argument each names.
@@ -199,17 +280,72 @@ final class IntrinsicNumericFacts {
                                          LinearForm<FactSubject>> against,
                                  List<NumericConstraint> out) {
         for (ResultBound<DeclaredArgument> bound : rows) {
-            ExactRatio offset =
-                    ExactRatio.of(bound.offset());
-            LinearForm<FactSubject> stands = bound.against() == null
-                    ? LinearForm.constant(offset)
-                    : addTo(against.apply(bound.against()), offset);
-            // A bound whose form no ratio holds is a bound not stated.
-            if (stands != null && LinearForm.atom(atom).minus(stands)
-                    instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
-                out.add(new NumericConstraint(held.value(), bound.rel()));
+            NumericConstraint stated = stating(bound, atom, against);
+            if (stated != null) {
+                out.add(stated);
             }
         }
+    }
+
+    /** What {@code bound} says of {@code atom}, or null where its form is one no ratio holds, which
+     * is a bound not stated. */
+    private static NumericConstraint stating(ResultBound<DeclaredArgument> bound, FactSubject atom,
+                                             Function<DeclaredArgument,
+                                                     LinearForm<FactSubject>> against) {
+        ExactRatio offset =
+                ExactRatio.of(bound.offset());
+        LinearForm<FactSubject> stands = bound.against() == null
+                ? LinearForm.constant(offset)
+                : addTo(against.apply(bound.against()), offset);
+        return stands != null && LinearForm.atom(atom).minus(stands)
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held
+                ? new NumericConstraint(held.value(), bound.rel()) : null;
+    }
+
+    /**
+     * What the answer of {@code call} carries where the arguments stand a way the call does not
+     * settle: a remainder by a divisor above nought is not negative and is below the divisor.
+     *
+     * <p>The rows the call's arguments do not meet as constants, each with its condition as a
+     * relation of the argument it names. Whether it holds is not the call's to say — a divisor that
+     * is no constant is above nought on the path that guarded it and not on another — so each is
+     * filed beside what it would state ({@link ConditionalConstraint}) and taken in by a reading
+     * that has the condition.
+     */
+    private static List<ConditionalConstraint> whereTheArgumentsAre(
+            List<ResultBound<DeclaredArgument>> heldBack, Core.PreservedCall call, FactSubject atom,
+            Denotations at, Terms terms) {
+        List<ConditionalConstraint> out = new ArrayList<>();
+        for (ResultBound<DeclaredArgument> bound : heldBack) {
+            NumericConstraint premise = premiseOf(bound.provided(), call, at, terms);
+            NumericConstraint stated = stating(bound, atom,
+                    ref -> terms.affineOf(CallArguments.of(ref, call), at));
+            // A condition naming no value was settled by the constants the rows were told apart
+            // with: a row held back for one is a condition that does not hold, and recorded it
+            // would make every call with a written divisor a value computed for nothing.
+            if (premise != null && stated != null && !premise.atoms().isEmpty()) {
+                out.add(new ConditionalConstraint(premise, stated));
+            }
+        }
+        return out;
+    }
+
+    /** The relation of the argument {@code provided} asks about, or null where the argument has no
+     * form to state it of. */
+    private static NumericConstraint premiseOf(ResultBound.Provided<DeclaredArgument> provided,
+                                               Core.PreservedCall call, Denotations at, Terms terms) {
+        return switch (provided) {
+            case ResultBound.Provided.Always<DeclaredArgument> _ -> null;
+            case ResultBound.Provided.ArgumentStands<DeclaredArgument> stands ->
+                    relationOfArgument(stands.argument(), stands.rel(), call, at, terms);
+        };
+    }
+
+    private static NumericConstraint relationOfArgument(DeclaredArgument argument, Rel rel,
+                                                        Core.PreservedCall call, Denotations at,
+                                                        Terms terms) {
+        LinearForm<FactSubject> form = terms.affineOf(CallArguments.of(argument, call), at);
+        return form == null ? null : new NumericConstraint(form, rel);
     }
 
     /**

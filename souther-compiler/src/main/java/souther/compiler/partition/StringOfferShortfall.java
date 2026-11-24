@@ -4,9 +4,12 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.regex.PatternPlan;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * What did not reach the values offered at a position, and what stopped each of them.
@@ -47,7 +50,32 @@ public record StringOfferShortfall(List<NotOffered> these) {
         return these.isEmpty();
     }
 
-    /** This and {@code those} together, which is what a caller holding two readings has. */
+    /**
+     * The first refusal by a limit that kept something from the offer, and the allowance it was
+     * refused under — or nothing where what is missing was kept out by something else, such as a
+     * rule that was not read.
+     */
+    Optional<PatternPlan.Refused> refusedBy() {
+        for (NotOffered each : these) {
+            switch (each.why()) {
+                case Why.TooCostly it -> {
+                    return Optional.of(Partitions.refusedAsAWitness(it.stopped()));
+                }
+                case Why.PatternTooCostly it -> {
+                    return Optional.of(Partitions.PatternForAWitness.refusedAt(it.stopped()));
+                }
+                default -> { }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * This and {@code those} together, which is what a caller holding two readings has.
+     *
+     * <p>Each thing once, in the order it was met: two readings that were short of the same thing
+     * are short of one thing, and said twice it is a second fact where there is one.
+     */
     StringOfferShortfall and(StringOfferShortfall those) {
         if (those.isEmpty()) {
             return this;
@@ -55,9 +83,9 @@ public record StringOfferShortfall(List<NotOffered> these) {
         if (isEmpty()) {
             return those;
         }
-        List<NotOffered> out = new ArrayList<>(these);
+        Set<NotOffered> out = new LinkedHashSet<>(these);
         out.addAll(those.these());
-        return new StringOfferShortfall(out);
+        return new StringOfferShortfall(List.copyOf(out));
     }
 
     /**

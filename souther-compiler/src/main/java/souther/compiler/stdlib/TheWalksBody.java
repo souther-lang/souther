@@ -104,7 +104,8 @@ final class TheWalksBody {
         if (accumulator < 0 || handed < 0) {
             throw notAWalk(operation, "its step is not handed what it carries and the element");
         }
-        return new TheWalk(operation, step, seed, container, index, accumulator, handed, get);
+        return new TheWalk(operation, step, seed, container, index, accumulator, handed, get,
+                ARGUMENTS);
     }
 
     /** Which of {@code params} {@code e} reads, or -1 where it reads none of them. */

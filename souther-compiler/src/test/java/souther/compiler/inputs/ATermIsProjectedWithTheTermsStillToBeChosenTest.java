@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -46,19 +48,19 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
     private static final String MODEL = """
             module g
 
-            data Pair = { first: Date, second: Date }
-            data Chain = { a: Date, b: Date, c: Date }
+            data TwoDates = { first: Date, second: Date }
+            data ThreeDates = { a: Date, b: Date, c: Date }
             data Stamp = { d: Date }
             data SideA = { ...Stamp, u: Int }
             data SideB = { ...Stamp, v: Int }
             data Side = SideA | SideB
-            data Dated = { side: Side, m: Date }
+            data Placed = { side: Side, m: Date }
 
             data Ok
 
-            behavior dated : (x: Dated) -> Ok
-            behavior pair : (p: Pair) -> Ok
-            behavior chain : (c: Chain) -> Ok
+            behavior dated : (x: Placed) -> Ok
+            behavior pair : (p: TwoDates) -> Ok
+            behavior chain : (c: ThreeDates) -> Ok
             """;
 
     @Test
@@ -127,6 +129,23 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
                 contradicting.projectionOf(second));
     }
 
+    /**
+     * A run shown whole is of rows, and a row holds every term where it can be: the earlier year
+     * is a year, so the later is taken from the first year the calendar has and seventy on, and
+     * not from the calendar's first, which no row with the earlier a year has.
+     */
+    @Test
+    void aRunShownWholeIsOfRowsThatHoldTheOtherTermWhereItCanBe() {
+        NumericTerm first = year("pair", "p.first");
+        NumericTerm second = year("pair", "p.second");
+        SearchRegion region = apart(region("pair"), second, first, 70);
+
+        NumericDomain.Bounds run = region.wholeRunOf((NumericTerm.FromOnePosition) second);
+
+        assertNotNull(run, "the later year takes every year from seventy on");
+        assertEquals(floorOf(within(region.projectionOf(first))) + 70, floorOf(run));
+    }
+
     /** {@code later - earlier >= years}, taken in as a condition of a way is. */
     private static SearchRegion apart(SearchRegion region, NumericTerm later, NumericTerm earlier,
                                       long years) {
@@ -168,21 +187,26 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
         return reading(behavior).quantities(rules()).region();
     }
 
+    /** {@link #MODEL} compiled once, which every test here only reads. */
+    private static final class Compiled {
+        static final Compilation MODEL = ACompiledModel.compiles(Compilation.ofSources(
+                List.of(ATermIsProjectedWithTheTermsStillToBeChosenTest.MODEL),
+                souther.compiler.meta.ModulePath.EMPTY));
+    }
+
     private static RuleReadingSource rules() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = Compiled.MODEL;
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static InputDomain reading(String behavior) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = Compiled.MODEL;
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading =
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(sigs.get(behavior), reading,
                 TypeCardinality.Counts.workedOutIn(reading),
                 souther.compiler.carrier.Membership.none());

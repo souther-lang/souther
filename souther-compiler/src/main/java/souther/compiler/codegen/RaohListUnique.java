@@ -19,6 +19,7 @@ import java.lang.constant.MethodTypeDesc;
 import static souther.compiler.codegen.Descriptors.CD_ArrayList;
 import static souther.compiler.codegen.Descriptors.CD_Iterator;
 import static souther.compiler.codegen.Descriptors.CD_List;
+import static souther.compiler.codegen.Descriptors.CD_ListDecoder;
 import static souther.compiler.codegen.Descriptors.CD_Map;
 import static souther.compiler.codegen.Descriptors.CD_RDecoder;
 import static souther.compiler.codegen.Descriptors.CD_RPath;
@@ -40,6 +41,7 @@ import static souther.compiler.codegen.Descriptors.MTD_mapOfOne;
 import static souther.compiler.codegen.Descriptors.MTD_next;
 import static souther.compiler.codegen.Descriptors.MTD_toString;
 import static souther.compiler.codegen.Descriptors.MTD_void;
+import static souther.compiler.codegen.Descriptors.MTD_wrappingInit;
 
 /**
  * {@link BoundaryConstraint.Unique}, as the issue Raoh's {@code ListDecoder.unique()} reports for
@@ -86,14 +88,23 @@ final class RaohListUnique {
     private RaohListUnique() {}
 
     /**
-     * Chains the check onto the decoder on the stack, which answers the list the model declares,
-     * leaving the decoder that fails where an element repeats.
+     * Chains the check onto the {@code ListDecoder} on the stack, which answers the list the model
+     * declares, leaving a {@code ListDecoder} that fails where an element repeats.
+     *
+     * <p>{@code flatMapWithPath} answers a plain {@code Decoder}, and the constraints declared after
+     * a uniqueness are chained on a {@code ListDecoder}, so the result is wrapped back into one. The
+     * wrapper only forwards {@code decode}, so what the chain decides and the order it decides it in
+     * are what they were.
      */
     static void emit(CodeBuilder code, ClassDesc decoderClass) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, decoderClass, HELPER, MTD_invariantFailure);
         code.invokedynamic(Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_invariantFailure));
         code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+        code.new_(CD_ListDecoder);
+        code.dup_x1();
+        code.swap();
+        code.invokespecial(CD_ListDecoder, "<init>", MTD_wrappingInit);
     }
 
     /**

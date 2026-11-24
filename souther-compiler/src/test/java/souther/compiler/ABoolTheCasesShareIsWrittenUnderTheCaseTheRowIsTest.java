@@ -8,10 +8,8 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,7 +44,7 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
     @Test
     void aRowThroughTheTruthIsComposed() {
         Compilation c = measured();
-        String human = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        String human = AdequacyReport.of(c).humanInEnglish(SourceRendering.namedByIdentity(c.texts()));
         assertFalse(human.contains("nothing said which of them the value under it is"), human);
     }
 
@@ -56,17 +54,13 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
         Compilation c = measured();
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(c.db(), OfferingRequest.overTheModule("probe.truth")),
-                Map.of(), SourceRendering.namedByIdentity(c.texts()), c.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(c.texts()), c.db()).textInEnglish();
         assertTrue(block.contains("urgent = true, amount = 51"),
                 () -> "a row at the line is written with the truth the way asks:\n" + block);
     }
 
     private static Compilation measured() {
-        Compilation c = Measured.ONCE;
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().said()).toList(),
-                "the model is measured");
-        return c;
+        return Measured.ONCE;
     }
 
     /** The model measured once: both questions here read the one measurement. */
@@ -77,8 +71,7 @@ class ABoolTheCasesShareIsWrittenUnderTheCaseTheRowIsTest {
         private static Compilation measure() {
             Compilation c = Compilation.ofSource(MODEL, "Main");
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
-            return c;
+            return ACompiledModel.compiles(c);
         }
     }
 }

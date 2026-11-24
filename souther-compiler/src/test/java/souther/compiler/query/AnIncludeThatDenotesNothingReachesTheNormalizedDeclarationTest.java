@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Normalized;
 import souther.compiler.types.TypeKey;
@@ -10,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,9 +44,7 @@ class AnIncludeThatDenotesNothingReachesTheNormalizedDeclarationTest {
         Compilation compilation = Compilation.ofSource(SPREADING_NOTHING, "Main");
         // Asked after the questions are, because what a compilation says is read off the reports its
         // answers carry: asked of a store nothing has been asked of, every source is silent.
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(),
-                "this source is supposed to name something nothing declares");
+        ACompiledModel.refusedWith(List.of("E1023"), compilation);
 
         Answer<Normalized.Def> normalized =
                 compilation.db().ask(new Shapes.NormalizedDef(new TypeKey("demo", "Item")));

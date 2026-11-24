@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.TypeViews;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
@@ -15,11 +16,13 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * What a behavior takes: what its inputs are called, what they are declared to be, and what those
@@ -166,28 +169,132 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * the way a written row is or the classes they land in are two readings rather than one.
      */
     WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
-        return occurrencesAt(inputs, path, new HashMap<>());
-    }
-
-    /**
-     * The same, reading what each type is out of {@code views} and adding to it.
-     *
-     * <p>For a caller walking one row to many positions. Every walk starts at a parameter's type
-     * and passes the same few types on the way down, and what a type is — its names and the fields
-     * it lays out — is a fact about the declarations this was read against and not about the walk.
-     * Worked out again at every step of every walk, it is most of what reading a row costs.
-     */
-    WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path,
-                                               Map<Type, TypeView> views) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
             return WalkResult.couldNotWalk();
         }
-        return switch (standingAt(inputs.get(at), at, path, views)) {
+        return switch (standingAt(inputs.get(at), at, path)) {
             case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
                     .map(each -> new Occurrence(each.at(), each.value())).toList());
             case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
         };
+    }
+
+    /**
+     * Whether {@code inputs} read as {@code expected} at every one of its positions at once.
+     *
+     * <p>Once, and not once for each position: a position inside a container is read at an
+     * element, and two positions under one element are read at the same one. Each position is
+     * asked for the values it has that come to what is expected, and the answer is yes where one
+     * of each can be chosen that {@link ElementsTaken#agreesWith agree} — which is the reading of
+     * the row a caller's one call makes, and which asking position by position cannot tell from
+     * two calls. A position the walk cannot take, because the value is not the case the path
+     * narrows to or is not what the declarations say stands there, has no value and the answer
+     * is no.
+     *
+     * <p>Read the way a written row is ({@link #occurrencesAt}), so a newtype, a map, and a
+     * narrowing to a case are what the walk says they are and not a second reading of them.
+     *
+     * <p>Whether a value is the expected one is {@code same}'s to say, which is where the language
+     * says what two values being the same is: this reads where a value stands and does not
+     * compare what it is.
+     *
+     * <p>The readings that are left are exactly the ones every other position has a reading to
+     * agree with ({@link #agreeingReadingsRemain}), which is the whole of the question and not
+     * a search for it: positions under containers are positions under a tree, so two positions
+     * agreeing pair by pair agree together.
+     *
+     * @param inputs   one value for each parameter, of which only those {@code expected} is
+     *                 read at need be read
+     * @param expected the value each position is to read as; a position may be named twice, and
+     *                 is then read as both
+     * @param same     whether a value found at a position of this type is the one expected
+     */
+    public boolean readAtEachPositionAs(List<ObservedValue> inputs, List<ExpectedAt> expected,
+                                        SameValue same) {
+        List<List<ElementsTaken>> candidates = new ArrayList<>();
+        for (ExpectedAt each : expected) {
+            int parameter = indexOf(each.at());
+            if (parameter < 0 || parameter >= inputs.size()) {
+                return false;
+            }
+            switch (observedAt(inputs.get(parameter), each.at())) {
+                case WalkResult.Reached(List<ObservedAt> found) -> {
+                    List<ElementsTaken> readings = found.stream()
+                            .filter(one -> same.at(one.value(), each.value(), one.type()))
+                            .map(ObservedAt::at).toList();
+                    if (readings.isEmpty()) {
+                        return false;
+                    }
+                    candidates.add(readings);
+                }
+                case WalkResult.CouldNotWalk<List<ObservedAt>> _ -> {
+                    return false;
+                }
+            }
+        }
+        return agreeingReadingsRemain(candidates);
+    }
+
+    /** Whether a value found at a position of a type is the value expected there. */
+    @FunctionalInterface
+    public interface SameValue {
+        boolean at(ObservedValue found, ObservedValue expected, Type type);
+    }
+
+    /** A value a position is to read as. */
+    public record ExpectedAt(TermPath at, ObservedValue value) {}
+
+    /**
+     * Whether every position keeps a reading that some reading of each other position agrees with,
+     * once the readings with none are taken away and that is asked again of what is left.
+     *
+     * <p>That is the whole of the question and not a way into it. A reading is a choice of an
+     * element at each container a position is under, and the containers a position is under
+     * are a chain from the outermost in: the positions of an input are chains in one tree of
+     * containers. A set of relations over such chains is one that agreeing pair by pair settles
+     * together (Beeri, Fagin, Maier and Yannakakis, "On the desirability of acyclic database
+     * schemes"), so what survives is a reading of the whole and what does not leaves none. Nothing
+     * is tried that has to be undone, and nothing is bounded: the work is that of comparing the
+     * readings of each pair, as often as a pass takes one away.
+     *
+     * <p>Positions that share no container agree whatever they are read as, which is why they
+     * are not a product of their readings here.
+     */
+    private static boolean agreeingReadingsRemain(List<List<ElementsTaken>> candidates) {
+        List<List<ElementsTaken>> left = new ArrayList<>();
+        candidates.forEach(each -> left.add(new ArrayList<>(each)));
+        boolean taken;
+        do {
+            taken = false;
+            for (int position = 0; position < left.size(); position++) {
+                List<ElementsTaken> kept = new ArrayList<>();
+                for (ElementsTaken reading : left.get(position)) {
+                    if (everyOtherPositionHasOneAgreeingWith(left, position, reading)) {
+                        kept.add(reading);
+                    }
+                }
+                if (kept.isEmpty()) {
+                    return false;
+                }
+                if (kept.size() != left.get(position).size()) {
+                    left.set(position, kept);
+                    taken = true;
+                }
+            }
+        } while (taken);
+        return true;
+    }
+
+    private static boolean everyOtherPositionHasOneAgreeingWith(List<List<ElementsTaken>> left,
+                                                               int position,
+                                                               ElementsTaken reading) {
+        for (int other = 0; other < left.size(); other++) {
+            if (other != position && left.get(other).stream().noneMatch(reading::agreesWith)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -218,17 +325,109 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         if (at < 0) {
             return WalkResult.couldNotWalk();
         }
-        return switch (standingAt(value, at, path, new HashMap<>())) {
+        return switch (standingAt(value, at, path)) {
             case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
                     .map(each -> new ObservedAt(each.value(), each.type(), each.at())).toList());
             case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
         };
     }
 
+    /**
+     * What a rewrite makes of the value a walk arrives at.
+     *
+     * <p>Handed the value as the position wears it with the names it wears taken off, and the type
+     * and view of the position; answers values of the same kind, which the walk puts the names back
+     * on. A value that is already written under the names, such as one listed at the position's own
+     * type ({@link ValuesOfAnElement}), is not one to answer: the names would be on it twice.
+     */
+    @FunctionalInterface
+    interface Rewrite {
+        Stream<ObservedValue> of(ObservedValue here, Type type, TypeView view);
+    }
+
+    /**
+     * Every value {@code value}, a value of {@code type}, comes to with what stands at the end of
+     * {@code steps} rewritten by {@code how}, one for each rewrite of each place the steps lead
+     * to.
+     *
+     * <p>The relation {@link #observedAt} reads, taken the other way and by the same rules: every
+     * step is {@link Standing#step}'s, so names are taken off where the type declares them, a
+     * field is reached by what the reading exposes there and an element is any one of those the
+     * container holds, and what the value held besides stays as it was.
+     *
+     * <p>Lazy, so that a caller asking for the first rewrite that serves does not pay for the rest.
+     * Empty where the steps cannot be taken in the way a read of them could: a step this walk does
+     * not rewrite through (a map's key, a refinement), a value that is not the construction the
+     * type says, or one an observation could not read.
+     *
+     * @param views what each type is, as {@link #cachedViews} keeps it for a caller that walks
+     *              many values of the same few types
+     */
+    Stream<ObservedValue> rewritingBelow(ObservedValue value, Type type,
+                                         List<TermPath.Step> steps, Rewrite how,
+                                         Function<Type, TypeView> views) {
+        return new Standing(value, type, NOT_A_PARAMETER, ElementsTaken.NONE)
+                .rewriting(steps, 0, views, how);
+    }
+
+    /** Where a value stands that is read from a value and a type and not from a parameter: the
+     *  walks that start from one say nothing of where they arrived, so this is never read. */
+    private static final TermPath NOT_A_PARAMETER = TermPath.of("value");
+
+    /** What a type is under these declarations, worked out once for each type asked of it by any
+     *  walk of any reading made from them ({@link TypeViews}). */
+    Function<Type, TypeView> cachedViews() {
+        return type -> rules.views().of(type, this::view);
+    }
+
+    /**
+     * The value at the fields {@code names} below {@code value}, a value of {@code type}, as the
+     * position wears it with its names taken off — or null where the walk cannot be made.
+     */
+    ObservedValue readingAt(ObservedValue value, Type type, List<String> names,
+                            Function<Type, TypeView> views) {
+        Standing standing = new Standing(value, type, NOT_A_PARAMETER, ElementsTaken.NONE);
+        for (String name : names) {
+            List<Standing> below = new ArrayList<>();
+            if (!standing.step(new TermPath.Step.Field(name), views, below)
+                    || below.size() != 1) {
+                return null;
+            }
+            standing = below.getFirst();
+        }
+        if (standing.value().unread() != null) {
+            return null;
+        }
+        return ObservedValue.wearing(views.apply(standing.type()).wrappers(), standing.value());
+    }
+
+    /**
+     * What a value at the end of {@code steps} below a value of {@code type} is declared as, or
+     * null where the reading does not expose a step or a rewrite does not go through it.
+     *
+     * <p>What {@link #rewritingBelow} would arrive at, asked without a value: the types the steps
+     * of {@link Standing#step} land on, less the containers a rewrite does not rebuild. A caller
+     * that offers a rewrite asks this, so that what it offers is what the rewrite does.
+     */
+    Type typeRead(Type type, List<TermPath.Step> steps, Function<Type, TypeView> views) {
+        Type standing = type;
+        for (TermPath.Step step : steps) {
+            standing = Standing.rewritableTypeAfter(step, standing, views);
+            if (standing == null) {
+                return null;
+            }
+        }
+        return standing;
+    }
+
+    /** What the declarations make of a value of {@code type}. */
+    TypeView viewOf(Type type) {
+        return view(type);
+    }
+
     /** What stands at {@code path}, walked down from {@code value} at the {@code at}-th input. */
-    private WalkResult<List<Standing>> standingAt(ObservedValue value, int at, TermPath path,
-                                                  Map<Type, TypeView> views) {
-        Function<Type, TypeView> viewOf = type -> views.computeIfAbsent(type, this::view);
+    private WalkResult<List<Standing>> standingAt(ObservedValue value, int at, TermPath path) {
+        Function<Type, TypeView> viewOf = cachedViews();
         List<Standing> standing = List.of(new Standing(value, types.get(at),
                 TermPath.of(path.head()), ElementsTaken.NONE));
         for (TermPath.Step step : path.steps()) {
@@ -374,6 +573,115 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                             ElementsTaken at) {
 
         /**
+         * What a value is declared as after {@code step} from a value of {@code type}, or null
+         * where a rewrite cannot go through the step: the steps of {@link #typeAfter} less the
+         * ones {@link #rewriting} does not rebuild.
+         */
+        static Type rewritableTypeAfter(TermPath.Step step, Type type,
+                                        Function<Type, TypeView> viewOf) {
+            // The one place that says which containers a rewrite goes through, and the rewrite
+            // below rebuilds each of them: a list or set around its elements, a map around its
+            // values with the keys kept.
+            return step instanceof TermPath.Step.Element
+                    && !(viewOf.apply(type).shape() instanceof Shape.Container)
+                    ? null : typeAfter(step, type, viewOf);
+        }
+
+        /**
+         * What a value is declared as after {@code step} from a value of {@code type}, or null
+         * where the reading exposes no such step: the type {@link #step} lands on, without a
+         * value.
+         */
+        static Type typeAfter(TermPath.Step step, Type type, Function<Type, TypeView> viewOf) {
+            TypeView view = viewOf.apply(type);
+            return switch (step) {
+                case TermPath.Step.Field named -> ReadableFields.at(view.shape(), named.name());
+                case TermPath.Step.Element _ -> view.shape() instanceof Shape.Container container
+                        ? container.element() : null;
+                case TermPath.Step.Key _, TermPath.Step.Refine _ -> null;
+            };
+        }
+
+        /**
+         * Every value this comes to with what stands at the end of {@code steps} (from
+         * {@code from}) rewritten by {@code how}, the rest of what it held kept.
+         *
+         * <p>Each step is taken by {@link #step}, so a name a position wears, a field a type
+         * exposes and an element a container holds are met as a read of the same row meets them;
+         * what is added here is putting the parent back together around what came back. Lazy, and
+         * empty where {@link #step} cannot take a step or the step is not one a rewrite goes
+         * through.
+         */
+        Stream<ObservedValue> rewriting(List<TermPath.Step> steps, int from,
+                                        Function<Type, TypeView> viewOf, Rewrite how) {
+            if (value.unread() != null) {
+                return Stream.empty();
+            }
+            TypeView view = viewOf.apply(type);
+            ObservedValue here = ObservedValue.wearing(view.wrappers(), value);
+            if (here == null || here.unread() != null) {
+                return Stream.empty();
+            }
+            if (from == steps.size()) {
+                return how.of(here, type, view)
+                        .map(each -> ObservedValue.wrapped(view.wrappers(), each));
+            }
+            TermPath.Step taken = steps.get(from);
+            List<Standing> below = new ArrayList<>();
+            if (!step(taken, viewOf, below)) {
+                return Stream.empty();
+            }
+            return switch (taken) {
+                case TermPath.Step.Field named -> {
+                    if (!(here instanceof ObservedValue.Constructed made) || below.size() != 1) {
+                        yield Stream.empty();
+                    }
+                    yield below.getFirst().rewriting(steps, from + 1, viewOf, how).map(each -> {
+                        Map<String, ObservedValue> fields = new LinkedHashMap<>(made.fields());
+                        fields.put(named.name(), each);
+                        return ObservedValue.wrapped(view.wrappers(),
+                                new ObservedValue.Constructed(made.type(), fields));
+                    });
+                }
+                case TermPath.Step.Element _ -> {
+                    // Only where the type is a container this rebuilds, as the types are asked.
+                    if (rewritableTypeAfter(taken, type, viewOf) == null) {
+                        yield Stream.empty();
+                    }
+                    yield switch (here) {
+                        case ObservedValue.Sequence written
+                                when below.size() == written.elements().size() ->
+                                IntStream.range(0, below.size()).boxed().flatMap(one ->
+                                        below.get(one).rewriting(steps, from + 1, viewOf, how)
+                                                .map(each -> {
+                                                    List<ObservedValue> held =
+                                                            new ArrayList<>(written.elements());
+                                                    held.set(one, each);
+                                                    return ObservedValue.wrapped(view.wrappers(),
+                                                            new ObservedValue.Sequence(held));
+                                                }));
+                        // An entry's value is what is rewritten and its key stays, so the map
+                        // comes back with the same keys in the same places.
+                        case ObservedValue.Mapping written
+                                when below.size() == written.entries().size() ->
+                                IntStream.range(0, below.size()).boxed().flatMap(one ->
+                                        below.get(one).rewriting(steps, from + 1, viewOf, how)
+                                                .map(each -> {
+                                                    List<ObservedValue.Entry> held =
+                                                            new ArrayList<>(written.entries());
+                                                    held.set(one, new ObservedValue.Entry(
+                                                            held.get(one).key(), each));
+                                                    return ObservedValue.wrapped(view.wrappers(),
+                                                            new ObservedValue.Mapping(held));
+                                                }));
+                        default -> Stream.empty();
+                    };
+                }
+                case TermPath.Step.Key _, TermPath.Step.Refine _ -> Stream.empty();
+            };
+        }
+
+        /**
          * Takes {@code step}, adding what stands below. False where this type and value cannot take
          * it.
          *
@@ -404,7 +712,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // something the model states. The name is admitted by what every value of the
                 // position carries, and then the case is where it is taken from.
                 case TermPath.Step.Field named -> {
-                    Type next = ReadableFields.at(view.shape(), named.name());
+                    Type next = typeAfter(named, type, viewOf);
                     if (next == null || !(here instanceof ObservedValue.Constructed made)) {
                         return false;
                     }
@@ -430,9 +738,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     // Keyed by the container. Two positions that took an element of it took the
                     // same one or they are not one reading of the row.
                     TermPath inside = reached.element();
+                    Type element = typeAfter(step, type, viewOf);
                     for (int i = 0; i < held.size(); i++) {
-                        out.add(new Standing(held.get(i), container.element(), inside,
-                                at.and(reached, i)));
+                        out.add(new Standing(held.get(i), element, inside, at.and(reached, i)));
                     }
                 }
                 // Every key the row wrote, each taken at the entry it keys — the same entry the

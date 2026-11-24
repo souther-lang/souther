@@ -46,8 +46,7 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
         compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf(target)));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1923", "E1923"), compilation);
     }
 
     /** Two rows of one behavior, in one source. */

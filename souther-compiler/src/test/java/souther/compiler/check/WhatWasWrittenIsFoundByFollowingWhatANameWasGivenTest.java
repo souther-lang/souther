@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -9,6 +10,7 @@ import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -16,7 +18,6 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
 
@@ -49,7 +50,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     private final PathEngine engine = new PathEngine(
             RuleReadingContext.unshared(
                     RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get())),
-                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                    souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
             Terms.Of.THE_DISCHARGE_TREE);
 
     @Test
@@ -90,7 +91,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
      * given the scrutinee, and following what a name was given is the whole of the rule. */
     @Test
     void anArmOpeningWrittenTextOpensThatText() {
-        Core written = new Core.Construct(FOUND, List.of(), Type.ref(FOUND), POS);
+        Core written = new Core.Construct(FOUND, List.of(), Type.ref(FOUND),
+                OccurrenceLineage.ORIGINAL, POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
@@ -121,7 +123,6 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     /** A name given itself is a chain with no end, and following it is still an answer. Nothing the
      * walk records is one, but the following is written to end whatever it is handed. */
     @Test
-    @Timeout(5)
     void aNameGivenItselfIsFollowedToNothing() {
         Core.Binder a = CoreBinders.of(binders.binder("a", POS));
         Core.Binder b = CoreBinders.of(binders.binder("b", POS));

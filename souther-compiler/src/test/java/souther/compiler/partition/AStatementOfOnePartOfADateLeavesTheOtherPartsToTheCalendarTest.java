@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -173,44 +174,206 @@ class AStatementOfOnePartOfADateLeavesTheOtherPartsToTheCalendarTest {
 
     /** A move defined only at dates in the early years takes no date in the years asked. */
     @Test
-    void aMoveThatIsNotDefinedWhereTheYearsAreAskedChoosesNone() {
+    void aMoveDefinedAtFewerDatesPutsTheDateInAYearItIsDefinedAtEveryDayOf() {
         var early = new DateTranslation(0, LocalDate.MIN.toEpochDay(),
                 LocalDate.of(1990, 1, 1).toEpochDay());
         var year = statement(0, Rel.GE, year(0, 1, early));
 
-        assertNull(YearsAWayAllows.choose(List.of(year), A_MONTH_AND_A_DAY));
+        int[] chosen = YearsAWayAllows.choose(List.of(year), A_MONTH_AND_A_DAY);
+        assertNotNull(chosen);
+        assertTrue(chosen[0] >= 0 && chosen[0] <= 1989, String.valueOf(chosen[0]));
+    }
+
+    /** A date held from 1990 on is put in no year before it, whatever the statement allows. */
+    @Test
+    void aDateHeldBetweenEndsIsPutInNoYearOutsideThem() {
+        var from1990 = new DateTranslation(0, LocalDate.of(1990, 1, 1).toEpochDay(),
+                LocalDate.MAX.toEpochDay());
+        var held = List.of(List.of(
+                new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH, from1990),
+                new DatesThatStandInEveryYear.Part(TakenAs.DatePart.DAY, from1990)));
+
+        assertNull(YearsAWayAllows.choose(
+                List.of(statement(1989, Rel.GE, year(0, -1, from1990))), held));
+        assertEquals(1990, YearsAWayAllows.choose(
+                List.of(statement(1990, Rel.GE, year(0, -1, from1990))), held)[0]);
+    }
+
+    /** A move that takes the first of January 2000 five hundred days past the calendar's end,
+     *  defined at the dates up to about then. */
+    private static final DateTranslation FAR = DateTranslation.none().thenAddDays(
+            LocalDate.MAX.toEpochDay() - LocalDate.of(2000, 1, 1).toEpochDay() + 500);
+
+    /**
+     * A move is read at the dates it is defined at, however far it moves: the months a date
+     * moved that far stands at in the years between are the months it stands at moved by as much
+     * less the whole cycles, which take a month and a day to the same month and day.
+     */
+    @Test
+    void aMoveFarAcrossTheCalendarIsReadAtTheDatesItIsDefinedAt() {
+        var far = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH, FAR);
+        var near = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH,
+                DateTranslation.none().thenAddDays(
+                        Math.floorMod(FAR.offsetDays(), DatePartsLeft.DAYS_OF_A_CYCLE)));
+
+        List<List<DatesThatStandInEveryYear.Origin>> kinds =
+                DatesThatStandInEveryYear.byTheYearsOf(List.of(far), List.of());
+        assertNotNull(kinds);
+        assertEquals(DatesThatStandInEveryYear.byTheYearsOf(List.of(near), List.of()).getFirst(),
+                kinds.getFirst());
+    }
+
+    /** And a year is chosen at the dates such a move is defined at: the months and days it gives
+     *  there are every month and every day. */
+    @Test
+    void aYearIsChosenAtTheDatesAFarMoveIsDefinedAt() {
+        var dates = new DateTranslation(0, FAR.first(), FAR.last());
+        var held = List.of(List.of(new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH, FAR),
+                new DatesThatStandInEveryYear.Part(TakenAs.DatePart.DAY, FAR)));
+
+        int[] chosen = YearsAWayAllows.choose(
+                List.of(statement(-1000, Rel.GE, year(0, 1, dates))), held);
+        assertNotNull(chosen);
+        assertTrue(chosen[0] >= 1000 && chosen[0] <= 1998, String.valueOf(chosen[0]));
+    }
+
+    /**
+     * Every month and day told of a kind of year is a date: in the year the kind is told of, some
+     * date the moves are all defined at has that month and day, every year shift puts it in the
+     * year, and the parts come to what is told. Whether the year shifts move far back or far on,
+     * whether the parts move otherwise than the year, and where the dates are a few days at an
+     * end of the calendar.
+     */
+    @Test
+    void everyMonthAndDayToldOfAKindOfYearIsADateOfThatYear() {
+        var month = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH, NOT_MOVED);
+        var day = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.DAY, NOT_MOVED);
+        var farBack = DateTranslation.none().thenAddDays(
+                LocalDate.MIN.toEpochDay() - LocalDate.of(2000, 1, 1).toEpochDay() + 500);
+        var monthLater = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH,
+                DateTranslation.none().thenAddDays(40));
+        long first = LocalDate.MIN.toEpochDay();
+        long last = LocalDate.MAX.toEpochDay();
+
+        everyOriginIsADate(List.of(month), List.of(farBack));
+        everyOriginIsADate(List.of(month), List.of(FAR));
+        everyOriginIsADate(List.of(monthLater), List.of(DateTranslation.none().thenAddDays(-1)));
+        everyOriginIsADate(List.of(day), List.of(new DateTranslation(0, first, first + 9)));
+        everyOriginIsADate(List.of(day), List.of(new DateTranslation(0, last - 9, last)));
+    }
+
+    private static void everyOriginIsADate(List<DatesThatStandInEveryYear.Part> parts,
+                                           List<DateTranslation> shifts) {
+        List<List<DatesThatStandInEveryYear.Origin>> kinds =
+                DatesThatStandInEveryYear.byTheYearsOf(parts, shifts);
+        if (kinds == null) {
+            return;
+        }
+        // The years the kinds are of: the first and last the dates are put in, and one between.
+        DateTranslation all = shifts.getFirst();
+        for (DateTranslation each : shifts) {
+            all = all.definedOnlyWhere(each);
+        }
+        for (DatesThatStandInEveryYear.Part part : parts) {
+            all = all.definedOnlyWhere(part.moved());
+        }
+        int firstYear = all.firstMoved().getYear();
+        int lastYear = all.lastMoved().getYear();
+        List<Integer> years = lastYear - firstYear >= 2 ? List.of(firstYear + 1, firstYear, lastYear)
+                : firstYear == lastYear ? List.of(firstYear) : List.of(firstYear, lastYear);
+        assertEquals(years.size(), kinds.size(), shifts.toString());
+        for (int kind = 0; kind < kinds.size(); kind++) {
+            for (DatesThatStandInEveryYear.Origin origin : kinds.get(kind)) {
+                assertTrue(aDateOf(origin, years.get(kind), parts, shifts),
+                        () -> origin + " is no date of its year, of " + shifts);
+            }
+        }
+    }
+
+    /** Whether some date the moves are defined at has {@code origin}'s month and day, every
+     *  shift putting it in {@code year}, and the parts coming to what {@code origin} tells. */
+    private static boolean aDateOf(DatesThatStandInEveryYear.Origin origin, int year,
+                                   List<DatesThatStandInEveryYear.Part> parts,
+                                   List<DateTranslation> shifts) {
+        long move = shifts.getFirst().offsetDays();
+        long from = Math.max(LocalDate.MIN.toEpochDay(), LocalDate.of(year, 1, 1).toEpochDay() - move);
+        long to = Math.min(LocalDate.MAX.toEpochDay(), LocalDate.of(year, 12, 31).toEpochDay() - move);
+        for (long at = from; at <= to; at++) {
+            long day = at;
+            LocalDate date = LocalDate.ofEpochDay(day);
+            if (date.getMonthValue() != origin.month() || date.getDayOfMonth() != origin.day()
+                    || !shifts.stream().allMatch(each -> each.definedAt(day) && LocalDate.ofEpochDay(
+                            day + each.offsetDays()).getYear() == year)
+                    || !parts.stream().allMatch(each -> each.moved().definedAt(day))) {
+                continue;
+            }
+            List<ExactRatio> taken = parts.stream().map(each -> ExactRatio.of(each.of(
+                    LocalDate.ofEpochDay(day + each.moved().offsetDays())))).toList();
+            if (taken.equals(origin.parts())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The days a month has in every year alike: the thirty-first of January is one, the
      *  twenty-ninth of February is not. */
     @Test
     void everyDayThatEveryYearHasIsADateThatStandsInEveryYear() {
-        assertEquals(365, DatesThatStandInEveryYear.of(List.of(), List.of()).size());
+        assertEquals(365, DatesThatStandInEveryYear.byTheYearsOf(List.of(), List.of()).getFirst()
+                .size());
     }
 
     /** A date moved a day back is in the year before it on the first of January only, so that
      *  month and day is not the same in the year asked of the moved date. */
     @Test
     void aDateAShiftTakesToAnotherYearInSomeYearsIsNotTheSameInEveryYear() {
-        int withNoShift = DatesThatStandInEveryYear.of(List.of(), List.of()).size();
-        int shiftedBack = DatesThatStandInEveryYear.of(List.of(),
-                List.of(DateTranslation.none().thenAddDays(-1))).size();
+        int withNoShift = DatesThatStandInEveryYear.byTheYearsOf(List.of(), List.of())
+                .getFirst().size();
+        int shiftedBack = DatesThatStandInEveryYear.byTheYearsOf(List.of(),
+                List.of(DateTranslation.none().thenAddDays(-1))).getFirst().size();
         assertEquals(withNoShift - 1, shiftedBack);
     }
 
     /**
      * The twenty-eighth of December, moved four days on, is the first of January in every year
-     * of the cycle and a date past the calendar in its last, so it is not a month and day at
-     * which the date stands in every year. The twenty-seventh of December is.
+     * of the cycle and a date past the calendar in its last. So it is one in the years between,
+     * and the last year is a kind of its own: its last date the move is defined at is the
+     * twenty-seventh, moved to the thirty-first, and no date of it moves to the first of a month
+     * after the first of December's.
      */
     @Test
-    void aMonthAndDayThatAMoveTakesPastTheCalendarsEndIsNotTheSameInEveryYear() {
+    void aMonthAndDayThatAMoveTakesPastTheCalendarsEndIsNotOneOfItsLastYear() {
+        var month = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH,
+                DateTranslation.none().thenAddDays(4));
         var day = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.DAY,
                 DateTranslation.none().thenAddDays(4));
-        List<DatesThatStandInEveryYear.Origin> origins =
-                DatesThatStandInEveryYear.of(List.of(day), List.of());
+        List<List<DatesThatStandInEveryYear.Origin>> kinds =
+                DatesThatStandInEveryYear.byTheYearsOf(List.of(month, day), List.of());
 
-        assertTrue(origins.stream().anyMatch(each -> each.month() == 12 && each.day() == 27));
-        assertFalse(origins.stream().anyMatch(each -> each.month() == 12 && each.day() == 28));
+        assertTrue(kinds.getFirst().stream().anyMatch(each -> each.month() == 12
+                && each.day() == 28));
+        List<List<ExactRatio>> last = kinds.getLast().stream()
+                .map(DatesThatStandInEveryYear.Origin::parts).toList();
+        assertTrue(last.contains(List.of(ExactRatio.of(12), ExactRatio.of(31))), last.toString());
+        assertFalse(last.contains(List.of(ExactRatio.of(1), ExactRatio.of(1))), last.toString());
+    }
+
+    /**
+     * From the first of January 1900, the date a day back is in 1899 at the thirty-first of
+     * December alone: the year of 1899 is a kind of its own, and the day it gives is thirty-one.
+     */
+    @Test
+    void aYearAtTheEndOfTheDatesADateMayBeHoldsWhatItsDatesGive() {
+        var from1900 = new DateTranslation(0, LocalDate.of(1900, 1, 1).toEpochDay(),
+                LocalDate.MAX.toEpochDay());
+        var back = DateTranslation.none().thenAddDays(-1).definedOnlyWhere(from1900);
+        var day = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.DAY, back);
+        List<List<DatesThatStandInEveryYear.Origin>> kinds =
+                DatesThatStandInEveryYear.byTheYearsOf(List.of(day), List.of(back));
+
+        assertEquals(3, kinds.size());
+        assertEquals(List.of(List.of(ExactRatio.of(31))),
+                kinds.get(1).stream().map(DatesThatStandInEveryYear.Origin::parts).toList());
     }
 }

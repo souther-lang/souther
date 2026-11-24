@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleKey;
+import souther.compiler.meaning.Spelling;
 import souther.compiler.numeric.CanonicalOrder;
 
 import java.util.Comparator;
@@ -39,6 +40,12 @@ import java.util.Objects;
  * and stays in the constraints, where it goes on relating what it relates and is never asked about.
  */
 sealed interface InputAtom {
+
+    /** What this is written as, held as the pieces it is put together from: the text
+     *  {@code toString} writes, with a term held as its own spelling ({@link NumericTerm#spelling}). */
+    default Spelling spelling() {
+        return Spelling.of(toString());
+    }
 
     /**
      * A subject this input has a term for, which is what a caller asks about.
@@ -128,8 +135,26 @@ sealed interface InputAtom {
             return path.isTheValueItself() ? root : root + "." + path;
         }
 
+        /** The spelling, worked out on the first asking: the order a walk takes these in compares
+         *  them by it, so it is asked once for every comparison a sort makes. */
+        private Spelling spelled;
+
+        @Override
+        public Spelling spelling() {
+            Spelling had = spelled;
+            if (had == null) {
+                had = Spelling.of(spell());
+                spelled = had;
+            }
+            return had;
+        }
+
         @Override
         public String toString() {
+            return spelling().toString();
+        }
+
+        private String spell() {
             String at = place();
             return switch (kind) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> at;
@@ -144,6 +169,10 @@ sealed interface InputAtom {
                         "#(" + count.counted() + ")(" + count.through().writtenAround(at) + ")";
                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                         "List.sum(String.codePoints(" + at + "))";
+                case NumberAt.OfWhatNumber.OfTheCodePointAt point ->
+                        "List.get(" + point.index() + ", String.codePoints(" + at + "))";
+                case NumberAt.OfWhatNumber.OfTheWholeUnitsOf units ->
+                        units.operation() + "(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsOccurrencesInEveryContainer _ ->
                         "occurrences(" + at + ")";
@@ -175,8 +204,13 @@ sealed interface InputAtom {
         }
 
         @Override
+        public Spelling spelling() {
+            return Spelling.of(root + ":", term.spelling());
+        }
+
+        @Override
         public String toString() {
-            return root + ":" + term;
+            return spelling().toString();
         }
     }
 
@@ -224,6 +258,6 @@ sealed interface InputAtom {
      */
     static CanonicalOrder<InputAtom> inOneOrder() {
         return Comparator.<InputAtom, Integer>comparing(atom -> atom instanceof Named ? 0 : 1)
-                .thenComparing(String::valueOf)::compare;
+                .thenComparing(InputAtom::spelling)::compare;
     }
 }

@@ -62,25 +62,29 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
      * line: the cases the list holds are what says it was read.
      */
     private static String states(String places, String rows) {
-        Compilation compilation = Compilation.ofSource(PLACED.formatted(places, rows), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(PLACED.formatted(places, rows));
         List<String> out = WhatTheComparisonsState.of(compilation, "f");
         assertEquals(1, out.size(), () -> "one comparison is written: " + out);
         return out.getFirst();
     }
 
+    /**
+     * The report of {@code source}, without the line naming the operations that stop a run only
+     * past what the representation holds: a flatMap whose step is a map and a list written out are
+     * one list, and only the flatMap is an operation that builds a list.
+     */
     private static String measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
+                .lines().filter(line -> !line.contains("a run stops only where"))
+                .reduce("", (all, line) -> all + line + "\n");
     }
 
     private static List<String> notRead(String report) {
-        return report.lines().filter(line -> line.contains("not read")
+        return report.lines().filter(line -> NotRead.isOne(line)
                 || line.contains("not accounted for")).toList();
     }
 

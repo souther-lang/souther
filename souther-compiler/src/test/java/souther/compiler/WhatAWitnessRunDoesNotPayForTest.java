@@ -51,8 +51,8 @@ class WhatAWitnessRunDoesNotPayForTest {
     void nothingIsInstrumentedAndNoRowRunsASecondTime() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
-        String report = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        ACompiledModel.compiles(compilation);
+        String report = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(report.contains("border"), "the whole of a witness run was asked for: " + report);
         assertFalse(compilation.db().isComputed(
@@ -68,8 +68,8 @@ class WhatAWitnessRunDoesNotPayForTest {
     void theLevelThatPaysForThemAsksForThem() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        ACompiledModel.compiles(compilation);
+        AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         assertTrue(compilation.db().isComputed(
                 new Output.Evaluated("example.trip", ArmObservation.RECORD)));

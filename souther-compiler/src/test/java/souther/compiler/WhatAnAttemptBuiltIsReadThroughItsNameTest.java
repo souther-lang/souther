@@ -62,10 +62,7 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static PartitionEvidence evidence(String source, String behavior) {
@@ -92,7 +89,7 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
         for (String source : List.of(THRESHOLD, THRESHOLD_UNDER_A_GUARD)) {
             PartitionEvidence size = evidence(source, "size");
 
-            assertEquals(List.of("x/x <= 10", "x/10 < x"), axis(size, "x").classes(), source);
+            assertEquals(List.of("x: x <= 10", "x: 10 < x"), axis(size, "x").classes(), source);
             assertEquals(List.of(), size.notRead(), () -> "the comparison is a line: " + source);
         }
     }
@@ -104,7 +101,7 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
         String block = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("demo")),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+                compilation.db()).textInEnglish();
 
         assertTrue(block.contains("x <= 10") && block.contains("(10)"), block);
         assertTrue(block.contains("10 < x") && block.contains("(11)"), block);

@@ -63,11 +63,11 @@ final class ElementsWrittenAlike {
      * it has no such demand, or where no way is one an element meets.
      */
     static Choices of(Reachability.Reaching reaching) {
-        if (reaching.boundedOnTheWay().stream()
+        if (reaching.composing().stream()
                 .allMatch(cut -> RowDemand.writtenAlikeAsItStands(cut.demand()))) {
             return Choices.NONE;
         }
-        return switch (OneOfEach.walk(reaching.boundedOnTheWay(), new OneElement(reaching),
+        return switch (OneOfEach.walk(reaching.composing(), new OneElement(reaching),
                 CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)) {
             case OneOfEach.Walked.Closed<OnTheWay.TakenIn, OnTheWay.TakenIn> _ -> Choices.NONE;
@@ -92,7 +92,7 @@ final class ElementsWrittenAlike {
                     };
                     out.add(new Alike(new Reachability.Reaching(reaching.region(),
                             reaching.requirements(), reaching.truths(), asked, reaching.ways(),
-                            reaching.declined()), leftBy));
+                            reaching.declined(), reaching.narrowedBy()), leftBy));
                 }
                 yield new Choices(out, stoppedBy);
             }
@@ -126,7 +126,7 @@ final class ElementsWrittenAlike {
                         out.add(List.of(new OnTheWay.TakenIn(entry.anchor(),
                                 new RowDemand.Exists(container,
                                         RowDemand.AnElementMeets.only(way), holdingOne,
-                                        Optional.empty()))));
+                                        Optional.empty()), entry.named())));
                     }
                 }
                 case RowDemand.ForAll(var container, var meets, var holdingNone, var _) -> {
@@ -134,12 +134,12 @@ final class ElementsWrittenAlike {
                         out.add(List.of(new OnTheWay.TakenIn(entry.anchor(),
                                 new RowDemand.ForAll(container,
                                         RowDemand.AnElementMeets.only(way), holdingNone,
-                                        Optional.empty()))));
+                                        Optional.empty()), entry.named())));
                     }
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
-                        throw new IllegalStateException(
+                     RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _,
+                     RowDemand.ForTheRun _ -> throw new IllegalStateException(
                         "a demand of one way is written as it stands: " + entry);
             }
             return out;
@@ -169,7 +169,8 @@ final class ElementsWrittenAlike {
                     asked = every.ofEachElement().theWay();
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> {
+                     RowDemand.OnARemainder _, RowDemand.OneValueAtBoth _,
+                     RowDemand.ForTheRun _ -> {
                     return new Step.Held<>(so);
                 }
             }

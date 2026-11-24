@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RepairShortfall;
@@ -45,12 +46,10 @@ class WhereARowStopsGoesWithItToTheOfferTest {
             """;
 
     /** The row about the class the guard refuses, which stops there. */
-    private static final String STOPS = "amount=x <= 0";
+    private static final String STOPS = "amount: x <= 0 at amount";
 
     private static FillResult filled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), "example.settle");
         assertNotNull(all, "the model under test compiles");

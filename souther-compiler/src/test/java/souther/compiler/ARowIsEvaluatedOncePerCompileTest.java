@@ -49,7 +49,7 @@ class ARowIsEvaluatedOncePerCompileTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.withJvmExampleDeadlines(recording(given));
         compilation.measure(measure);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return given;
     }
 
@@ -104,7 +104,7 @@ class ARowIsEvaluatedOncePerCompileTest {
     void measuringStillReadsTheArmsTheRowsTook() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         Adequacy.Of measured = compilation.adequacy("example.once");
 

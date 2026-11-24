@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
@@ -83,7 +84,7 @@ class APlanAsksAMapForWhatIsAskedOfEachPartTest {
         ConstructionPlan.Result result = ConstructionPlan.of(read.declared(), TermPath.of("u"),
                 ScopedDeclarations.wrapsOf(symbols), symbols, ScopedDeclarations.kindsOf(symbols),
                 ScopedDeclarations.sumsOf(symbols), decided, Requirements.NONE,
-                ConstructionPlan.ContentsComposed.NONE, ANY);
+                ConstructionPlan.ContentsComposed.NONE, ANY, _ -> false);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, result,
                 () -> "a plan is made: " + result).plan();
     }
@@ -91,7 +92,8 @@ class APlanAsksAMapForWhatIsAskedOfEachPartTest {
     private record Read(Type declared, Symbols symbols) {}
 
     private static Read readOf() {
-        Compilation compilation = Compilation.ofSources(List.of(DEEP_VALUES), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(DEEP_VALUES), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

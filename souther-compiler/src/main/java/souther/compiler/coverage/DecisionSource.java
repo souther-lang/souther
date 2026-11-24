@@ -43,9 +43,18 @@ public sealed interface DecisionSource {
      * <p>As the reference that reaches it, which is what a call carries. Rendered, two modules that
      * write one declaration differently would own the same fork under two names, and the summaries
      * a fork is read against are looked up by this.
+     *
+     * <p>{@code byTheirVerdict} says whether the fork's truth is nothing but what those rules
+     * answered, as {@code if keep(x)} is the answer of {@code keep}. Resting on a rule and being
+     * settled by it are different: {@code Set.contains(key(x), seen)} rests on {@code key}, which
+     * only projects, and the fork is settled by what the declaration has gathered in {@code seen}.
+     * The first is a decision the caller wrote; the second is the declaration's own condition with
+     * a rule feeding it, and a row owed for it is owed for how the declaration happens to be
+     * written.
      */
     record Supplied(souther.compiler.types.ReachName.Declaration declaration,
-                    java.util.List<String> parameters) implements DecisionSource {
+                    java.util.List<String> parameters,
+                    boolean byTheirVerdict) implements DecisionSource {
 
         public Supplied {
             parameters = java.util.List.copyOf(parameters);

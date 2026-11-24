@@ -134,9 +134,8 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
      */
     @Test
     void twoClausesOfOneModuleOutOfSightAreSaidOnce() {
-        Compilation c = Compilation.ofSources(List.of(CONSTRUCTING),
-                ModulePath.of(Compiler.compile(DECLARING_TWO)));
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(Compilation.ofSources(List.of(CONSTRUCTING),
+                ModulePath.of(Compiler.compile(DECLARING_TWO))));
         Diagnostic d = theWarning(c);
 
         assertEquals(1, d.secondary().size(),
@@ -194,15 +193,12 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
 
     private static Compilation offThePath() {
         Map<String, ClassFileImage> path = Compiler.compile(DECLARING);
-        Compilation c = Compilation.ofSources(List.of(CONSTRUCTING), ModulePath.of(path));
-        c.answerEverything();
-        return c;
+        return ACompiledModel.compiles(Compilation.ofSources(List.of(CONSTRUCTING), ModulePath.of(path)));
     }
 
     private static Compilation inOneCompile() {
-        Compilation c = Compilation.ofSources(List.of(IN_ONE_COMPILE), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return ACompiledModel.refusedWith(List.of("E1611"),
+                Compilation.ofSources(List.of(IN_ONE_COMPILE), ModulePath.EMPTY));
     }
 
     private static Diagnostic theWarning(Compilation c) {

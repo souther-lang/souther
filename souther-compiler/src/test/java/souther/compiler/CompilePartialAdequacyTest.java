@@ -5,6 +5,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.execute.jvm.JvmExampleDeadlines;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -24,7 +25,6 @@ import souther.compiler.report.GeneratedRows;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -157,10 +157,16 @@ class CompilePartialAdequacyTest {
                 """.formatted(groups) + tail;
     }
 
-    /** Compiles are shared between the cases that read the same model, keyed by the budget as well as
-     * the source: the two are what a compile here is, and a model read under one of them says nothing
-     * about what it would say under the other. */
-    private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
+    /** Compiles are shared between the cases that read the same model, keyed by what makes the
+     * compile here: the source, the work that does not come back and what is asked. A model read
+     * under one of them says nothing about what it would say under another. */
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
+    @AfterAll
+    static void released() {
+        SHARED.release();
+    }
 
     /** A model that comes back, on the default budget — including {@link #budgetSpent}, which walks
      * four thousand nodes and is the reason a short budget cannot be set for the whole suite. */
@@ -169,24 +175,7 @@ class CompilePartialAdequacyTest {
     }
 
     private static Compilation warned(String source) {
-        return warned(source, null);
-    }
-
-    private static Compilation warned(String source, Duration budget) {
-        return compiled("warn:", source, budget, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-    }
-
-    private static Compilation compiled(String what, String source, Duration budget,
-                                        Adequacy.Asked asked) {
-        return COMPILED.computeIfAbsent(what + budget + ":" + source, _ -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            if (budget != null) {
-                compilation.withExampleBudget(budget);
-            }
-            compilation.measure(asked);
-            compilation.answerEverything();
-            return compilation;
-        });
+        return measured("warn:", source, null, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
     }
 
     /** Measured, with {@code overrun} the work this model does not get back from — for a model
@@ -213,16 +202,20 @@ class CompilePartialAdequacyTest {
      * not come back, and a model that loops plus a clock short enough to catch it also reports the
      * rows that were supposed to finish as rows that did not, on any host loaded enough to make it
      * so.
+     *
+     * <p>A row that does not come back is an example whose evaluation gives no answer (E1923), so
+     * a model with work that overruns is refused with it, once for each such row, and a model that
+     * comes back compiles.
      */
     private static Compilation measured(String key, String source, JvmExampleDeadlines overrun,
                                         Adequacy.Asked asked) {
-        return COMPILED.computeIfAbsent(key + ":" + source, _ -> {
+        List<String> refused = overrun == null ? List.of() : List.of("E1923");
+        return SHARED.refusedWith(refused, key + ":" + source, () -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
             if (overrun != null) {
                 compilation.withJvmExampleDeadlines(overrun);
             }
             compilation.measure(asked);
-            compilation.answerEverything();
             return compilation;
         });
     }
@@ -347,7 +340,7 @@ class CompilePartialAdequacyTest {
         String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
                                 "example.budget")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
@@ -442,10 +435,11 @@ class CompilePartialAdequacyTest {
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
-        // Both of them `cancel`'s: the row that did not finish — said as which row, since a
-        // behavior may have more than one that did not — and the position of its guard whose value
-        // that row was the only one to write.
-        assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
+        // `cancel`'s, and one: the row that did not finish — said as which row, since a behavior
+        // may have more than one that did not. The position of its guard whose value that row was
+        // the only one to write is open by that stop and is not a second reason, because the row
+        // never had a value there that could not be read.
+        assertEquals(List.of("cancel/0/#1"),
                 whole.modules().get(0).incompleteness().written().stream()
                         .map(gap -> gap.fact().subject()).toList());
 
@@ -499,11 +493,10 @@ class CompilePartialAdequacyTest {
             """);
 
     private static Compilation split() {
-        return COMPILED.computeIfAbsent("split", _ -> {
+        return SHARED.refusedWith(List.of("E1906"), "split", () -> {
             Compilation compilation = Compilation.ofSources(SPLIT,
                     souther.compiler.meta.ModulePath.EMPTY);
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
             return compilation;
         });
     }
@@ -546,7 +539,7 @@ class CompilePartialAdequacyTest {
         String written = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
                                 "example.split")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish();
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);
         assertTrue(written.contains("generation stopped"),
@@ -582,7 +575,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aSignatureLineUnderPartialDoesNotAssert() {
-        String human = AdequacyReport.of(split()).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = AdequacyReport.of(split()).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertTrue(human.contains("undecided whether a row expects `Refused`"), human);
         assertFalse(human.contains("· no row expects"), human);
@@ -620,7 +613,7 @@ class CompilePartialAdequacyTest {
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED, why.get(0).fact().code());
         assertEquals(Optional.of("take"), why.get(0).fact().behavior(),
                 "a position is inside one behavior");
-        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertTrue(human.contains("the observation at"), human);
     }
 
@@ -667,7 +660,7 @@ class CompilePartialAdequacyTest {
     void theHumanReportNamesTheArmsNobodyCouldDecideUnderPartial() {
         String human = AdequacyReport.of(measured("loop", TIMES_OUT,
                         DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go"))))
-                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertTrue(human.contains("branch      0/2"), () -> "the counts are printed: " + human);
         assertEquals(2, human.lines()
@@ -710,7 +703,7 @@ class CompilePartialAdequacyTest {
         assertEquals(4, partition.pairs().total());
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()),
                 "the one row could not be placed at either position");
-        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        String human = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(human.contains("uncovered of the rows that were read"),
                 () -> "the count is over the rows that came back, and the line says so: " + human);
     }
@@ -790,7 +783,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void anArmARowWentThroughIsToldFromOneNobodyCouldDecide() {
-        String human = AdequacyReport.of(oneRowOfTwoStops()).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String human = AdequacyReport.of(oneRowOfTwoStops()).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertTrue(human.contains("branch      1/2"),
                 () -> "one of the two arms was gone through: " + human);
@@ -858,7 +851,7 @@ class CompilePartialAdequacyTest {
                 () -> "the arm of the behavior every row of was read: " + refused);
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
                 () -> "and one gap settles the verdict, whatever is undecided beside it: "
-                        + report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+                        + report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     /** The points a row is owed at against a line, which is what a value names. */

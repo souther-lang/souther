@@ -1,10 +1,21 @@
 package souther.compiler.check;
 
+import souther.compiler.abort.GetsPast;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BiPredicate;
+import java.util.function.Supplier;
 
 /**
  * What an occurrence stands as, once every step with one successor has been taken: a name the
@@ -116,9 +127,27 @@ public final class ValueStanding {
          * unless the environment can say less: two environments in which the name stands for the
          * one thing, read the one way, give it one answer, and a reader keyed on each environment
          * would work that answer out again in every one of them.
+         *
+         * <p>What is answered under one key is shared by every read that gives it: the value the name
+         * stands for, and whatever else the reader needs of the environment to read that value, are
+         * the same under it. A key that only tells bindings apart is too wide where an environment
+         * can give one binding two meanings.
          */
         default Object standingOf(Core.Read read, E at) {
             return at;
+        }
+
+        /**
+         * That a name or a field was read at {@code place}, in {@code at}, and is about to be read
+         * through.
+         *
+         * <p>Told by the walk that follows names and takes fields off what was written, which is the
+         * one place either is done, and told before what it stands for is known: where the name is
+         * one of several values, or the field of a value written down, the place read is what says
+         * whose it was. For an environment that is asked what a value was made of; nothing
+         * otherwise.
+         */
+        default void noticed(Core place, E at) {
         }
 
         /**
@@ -131,6 +160,40 @@ public final class ValueStanding {
          * holds over the parts of a member as well as over the member.
          */
         N oneAtATime();
+
+        /**
+         * What the value a name was given comes to as the answer to {@code question}, which is
+         * {@code fresh} unless this holds an answer it may give in place of working it out again.
+         *
+         * <p>Asked of the answers the value is read with, before it is read, by the walks that
+         * follow a name ({@link AffineForms}, {@link FoldedValue}), and by nothing else. What an
+         * override may keep is the answer and nothing the walk did to reach it: the names it read
+         * and what it told of what it passed are not replayed, so only a reading that does not
+         * consume them keeps. The answer is then a function of {@code value}, of {@code at} as the
+         * very environment, of these answers' own policy and of whatever state the override
+         * guards. The name is not among them, which only decides whether to go round, and that is
+         * decided before this is asked.
+         */
+        default <T> T answerOfAName(NameQuestion question, Core value, E at, Supplier<T> fresh) {
+            return fresh.get();
+        }
+    }
+
+    /** What is asked of the value a name was given: the form it reads as, or the constant it
+     *  folds to. Answers of one are not answers of the other. */
+    public enum NameQuestion {
+        FORM, FOLD
+    }
+
+    /** Whether {@link Names#answerOfAName} is asked at all. A test turns it off to hold the
+     *  answers kept to the ones worked out again. */
+    static boolean KEEPING_NAMES = true;
+
+    /** What {@code fresh} comes to for {@code question} of {@code value} read in {@code at},
+     *  taken from {@code names} where it holds the answer. */
+    static <E, N extends Names<E, N>, T> T answered(N names, NameQuestion question, Core value,
+                                                    E at, Supplier<T> fresh) {
+        return KEEPING_NAMES ? names.answerOfAName(question, value, at, fresh) : fresh.get();
     }
 
     /**
@@ -210,6 +273,7 @@ public final class ValueStanding {
      * for itself is a second account of which names may be followed.
      */
     public static <E, N extends Names<E, N>> Named<E, N> named(Core.Read r, E at, N names) {
+        names.noticed(r, at);
         ReadThrough<E> through = names.readThrough(r, at);
         if (through != null) {
             return through.value() == r ? null
@@ -258,6 +322,7 @@ public final class ValueStanding {
             // A name with nothing written to stand against leaves the whole projection standing,
             // as it leaves every access above it standing when they are written out.
             case Core.FieldProjection p -> {
+                names.noticed(p, at);
                 List<Standing<E, N>> reached = of(p.base(), at, names, following);
                 // Asked before the names are written out: a base standing at no construction has
                 // nothing written against its first name, and the names are as many as the chain
@@ -323,10 +388,15 @@ public final class ValueStanding {
     static <E, N extends Names<E, N>> List<Standing<E, N>> eliminated(
             Core e, E at, N names, BindingWalk<?> following) {
         return switch (Core.withoutStanding(e)) {
-            case Core.FieldAccess fa -> given(of(fa.target(), at, names, following), fa.field());
+            case Core.FieldAccess fa -> {
+                names.noticed(fa, at);
+                yield given(of(fa.target(), at, names, following), fa.field());
+            }
             // Its last name against what the names before it reach.
-            case Core.FieldProjection p -> given(of(p.target(), at, names, following),
-                    p.steps().last().field());
+            case Core.FieldProjection p -> {
+                names.noticed(p, at);
+                yield given(of(p.target(), at, names, following), p.steps().last().field());
+            }
             case Core.TupleGet get -> {
                 List<Standing<E, N>> out = new ArrayList<>();
                 for (Standing<E, N> tuple : of(get.tuple(), at, names, following)) {
@@ -342,6 +412,168 @@ public final class ValueStanding {
             }
             default -> null;
         };
+    }
+
+    /**
+     * Whether making the construction a field access is read off, and working out its parts other
+     * than the field it reads, end no run: both are done all the same, and one that ends a run is
+     * an operation the reading of the field does not tell of. False where nothing written stands
+     * against the access, which has no construction to ask.
+     *
+     * <p><b>Which construction is a question of values, and whether working it out ends a run is
+     * a question of evaluation.</b> The first is answered by following the target as far as one
+     * value goes, and that walk steps over what a run works out on the way: the initializer of a
+     * {@code let}, the arguments of a call, the parts of a construction beside the one taken.
+     * Asked of the value it ends at, the second would not see them. So it is asked of the target as
+     * it is written ({@code endsNoneWhenWorkedOut}), which has them all.
+     */
+    static <E, N extends Names<E, N>> boolean theConstructionAndItsRestEndNone(
+            Core.FieldAccess fa, E at, N names, BindingWalk<?> following,
+            BiPredicate<Core.Construct, Core> makingEndsNone, BehaviorAnswers answers) {
+        Set<Core> read = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Standing<E, N> target : of(fa.target(), at, names, following)) {
+            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
+                return false;
+            }
+            Core given = ConstructionProjection.given(nd, fa.field());
+            if (given != null) {
+                read.add(Core.withoutStanding(given));
+                Set<Core> theFieldTells = Collections.newSetFromMap(new IdentityHashMap<>());
+                worksOut(given, target, theFieldTells);
+                read.addAll(theFieldTells);
+                // A part that names only what the field names is worked out where the field's
+                // reading tells of it, and adds nothing to what a run works out.
+                for (Core.FieldValue each : nd.values()) {
+                    Set<Core> worksOut = Collections.newSetFromMap(new IdentityHashMap<>());
+                    worksOut(each.value(), target, worksOut);
+                    if (theFieldTells.containsAll(worksOut)) {
+                        read.add(Core.withoutStanding(each.value()));
+                    }
+                }
+            }
+        }
+        return endsNoneWhenWorkedOut(new Standing<>(fa.target(), at, names), read,
+                new Asked(makingEndsNone, answers), following);
+    }
+
+    /** What a construction met on the way is asked of, and what the behaviors called answer. */
+    private record Asked(BiPredicate<Core.Construct, Core> making, BehaviorAnswers answers) {}
+
+    /**
+     * What reading {@code value}, where {@code from} stands, works out of its own: the expression
+     * itself where it is no name, and the values the names it reads stand for, as the names they
+     * read in turn do — what the reading of a name tells of where the name is read.
+     */
+    private static <E, N extends Names<E, N>> void worksOut(Core value, Standing<E, N> from,
+                                                            Set<Core> out) {
+        if (!(Core.withoutStanding(value) instanceof Core.Read)) {
+            out.add(Core.withoutStanding(value));
+        }
+        followedFrom(value, from, out);
+    }
+
+    private static <E, N extends Names<E, N>> void followedFrom(Core e, Standing<E, N> from,
+                                                                Set<Core> out) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.Read read
+                && named(read, from.at(), from.names()) instanceof Named.One<E, N>(var one)
+                && out.add(Core.withoutStanding(one.value()))) {
+            followedFrom(one.value(), one, out);
+        }
+        Core.forEachChild(node, child -> followedFrom(child, from, out));
+    }
+
+    /**
+     * Whether working out {@code written} ends no run, apart from the expressions in
+     * {@code apart}, which the reading of the field tells of itself.
+     *
+     * <p>A name is worked out where it was bound, so it is followed to the expression it was given
+     * as that expression is written, and one that stands for several is followed into each of
+     * them. A name the environment says nothing of is one this cannot judge. A call or a choice
+     * the environment enters is what {@link Evaluated} says it works out and then the part it
+     * enters; a {@code let} is its value and its body; a construction ends none where
+     * {@code asked} says so of it over the one value it wraps, and its parts are worked out all
+     * the same; anything else ends none where a run of a row gets past it ({@link ARowsRun}).
+     *
+     * <p>Where the environment does not say which part of a node is entered, every part of it is
+     * asked. That may refuse a run that never works one of them out, and never accepts one that
+     * does: the answer is no more than the nodes written under {@code written} allow.
+     */
+    private static <E, N extends Names<E, N>> boolean endsNoneWhenWorkedOut(
+            Standing<E, N> written, Set<Core> apart, Asked asked, BindingWalk<?> following) {
+        Core e = Core.withoutStanding(written.value());
+        if (apart.contains(e)) {
+            return true;
+        }
+        if (e instanceof Core.Read r) {
+            Named<E, N> led = named(r, written.at(), written.names());
+            if (led == null || !following.enter(r.binding())) {
+                return false;
+            }
+            boolean ends = switch (led) {
+                case Named.One<E, N>(Standing<E, N> one) ->
+                        endsNoneWhenWorkedOut(one, apart, asked, following);
+                case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream()
+                        .allMatch(one -> endsNoneWhenWorkedOut(one, apart, asked,
+                                following));
+            };
+            following.leave(r.binding());
+            return ends;
+        }
+        Standing<E, N> taken = taken(e, written.at(), written.names());
+        if (taken != null) {
+            for (Evaluated.Step step : Evaluated.inOrder(e)) {
+                if (!endsNoneWhenWorkedOut(new Standing<>(step.expression(), written.at(),
+                        written.names()), apart, asked, following)) {
+                    return false;
+                }
+            }
+            return endsNoneWhenWorkedOut(taken, apart, asked, following);
+        }
+        if (e instanceof Core.LetIn let) {
+            return endsNoneWhenWorkedOut(new Standing<>(let.value(), written.at(),
+                    written.names()), apart, asked, following)
+                    && endsNoneWhenWorkedOut(new Standing<>(let.body(),
+                    written.names().inside(let, written.at()), written.names()), apart,
+                    asked, following);
+        }
+        boolean itself = e instanceof Core.Construct nd
+                ? asked.making().test(nd, wrappedBy(nd, written, following))
+                : ARowsRun.completionOf(e, asked.answers()) instanceof GetsPast.Always;
+        if (!itself) {
+            return false;
+        }
+        boolean[] under = {true};
+        Core.forEachChild(e, child -> under[0] = under[0] && endsNoneWhenWorkedOut(
+                new Standing<>(child, written.at(), written.names()), apart, asked,
+                following));
+        return under[0];
+    }
+
+    /**
+     * The one value {@code construction} wraps, as far as names lead to it, or null where it wraps
+     * more than one. Only names are followed: what a run works out for the field on the way is
+     * worked out by the walk that asks this, which visits the field itself.
+     */
+    private static <E, N extends Names<E, N>> Core wrappedBy(Core.Construct construction,
+                                                             Standing<E, N> written,
+                                                             BindingWalk<?> following) {
+        if (construction.values().size() != 1) {
+            return null;
+        }
+        Standing<E, N> here = new Standing<>(construction.values().getFirst().value(),
+                written.at(), written.names());
+        List<Core.Read> entered = new ArrayList<>();
+        while (Core.withoutStanding(here.value()) instanceof Core.Read r
+                && named(r, here.at(), here.names()) instanceof Named.One<E, N>(
+                        Standing<E, N> one)
+                && following.enter(r.binding())) {
+            entered.add(r);
+            here = one;
+        }
+        Core value = Core.withoutStanding(here.value());
+        entered.forEach(each -> following.leave(each.binding()));
+        return value;
     }
 
     /**
@@ -377,6 +609,70 @@ public final class ValueStanding {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether {@code e}, read in {@code at}, is made of what was written and of nothing a run is
+     * handed: every name it reads is one the environment denotes a value for, and so on down, or
+     * one a closure inside it binds.
+     *
+     * <p>What such a value comes to is the same on every run, whether or not this works out what.
+     * {@link FoldedValue} says the other half, what it comes to, for the operators it knows; a
+     * quantifier over a list written in the body is as much a constant and no fold of it exists.
+     *
+     * <p>False wherever a name stands for something of its own — a parameter, a position of the
+     * input, an element an operation handed out that nothing written stands against — which is what
+     * a value can vary with. The same question the plan of a run asks of the tree that runs
+     * ({@code CoverageSites}' closed values), read here in the environment a reading of the input
+     * follows its names in.
+     */
+    public static <E, N extends Names<E, N>> boolean madeOfWhatIsWritten(Core e, E at, N names) {
+        return writtenWhole(e, at, names, new IdentityHashMap<>());
+    }
+
+    /**
+     * {@code e} read in {@code at}, with what each name came to held in {@code done} by what it
+     * stands for where it is read, as {@link FoldedValue} holds it: a name read more than once is
+     * walked once, so a chain of names each read twice costs a walk per link and not two to the
+     * power of its length. A name is put down as not written whole while it is walked, so one that
+     * reaches itself answers rather than going round.
+     */
+    private static <E, N extends Names<E, N>> boolean writtenWhole(
+            Core e, E at, N names, Map<Object, Map<BindingId, Boolean>> done) {
+        Set<BindingId> bound = new HashSet<>();
+        Core.bindersIn(e, bound);
+        return writtenUnder(e, at, names, bound, done);
+    }
+
+    private static <E, N extends Names<E, N>> boolean writtenUnder(
+            Core asPlaced, E at, N names, Set<BindingId> bound,
+            Map<Object, Map<BindingId, Boolean>> done) {
+        Core e = Core.withoutStanding(asPlaced);
+        if (e instanceof Core.Read read) {
+            if (bound.contains(read.binding())) {
+                return true;
+            }
+            Map<BindingId, Boolean> here = done.computeIfAbsent(names.standingOf(read, at),
+                    _ -> new HashMap<>());
+            Boolean already = here.get(read.binding());
+            if (already != null) {
+                return already;
+            }
+            here.put(read.binding(), false);
+            boolean whole = switch (named(read, at, names)) {
+                case null -> false;
+                case Named.One<E, N>(Standing<E, N> one) ->
+                        writtenWhole(one.value(), one.at(), one.names(), done);
+                case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream().allMatch(
+                        one -> writtenWhole(one.value(), one.at(), one.names(), done));
+            };
+            here.put(read.binding(), whole);
+            return whole;
+        }
+        boolean[] whole = {true};
+        Core.forEachChild(e, child -> whole[0] = whole[0]
+                && writtenUnder(child, at, names, bound, done));
+        return whole[0];
     }
 
     /**

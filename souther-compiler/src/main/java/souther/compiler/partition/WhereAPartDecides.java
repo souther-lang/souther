@@ -1,10 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.Localizable;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesHeldTo;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
@@ -12,8 +13,8 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * One of the lines a statement of several relations draws, read in one case of where the statement
@@ -33,12 +34,39 @@ import java.util.stream.Collectors;
  *                crossing it turns the statement round. Over the relations the statement holds,
  *                every one of them a relation over the input's own numbers — so a row's values say
  *                whether it holds
+ * @param workedOut how far {@code decides} was shown to be a case the line decides in, as the line
+ *                  read in it says ({@link CasesWorkedOut})
  */
-public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
+public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWorkedOut workedOut) {
 
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
         Objects.requireNonNull(decides, "a line decides somewhere, or nowhere");
+        Objects.requireNonNull(workedOut, "a case is worked out or not");
+    }
+
+    /** {@code decides}, a case the line was shown to decide in. */
+    public WhereAPartDecides(PlaceOfALine part, Proposition decides) {
+        this(part, decides, CasesWorkedOut.SHOWN);
+    }
+
+    /**
+     * The parts of {@code decides} no conjunction or alternative is made of, each once, in the
+     * order they are met: what a row is asked part by part where whether it is in the case is
+     * asked of what each part comes to ({@link TheCaseALineDecidesIn#possibilityAt}), and what each is
+     * read to ask of a row once for the comparison.
+     */
+    static List<Proposition> atomsOf(Proposition decides) {
+        Set<Proposition> out = new LinkedHashSet<>();
+        StatementReading.<Boolean>over((each, again) -> {
+            switch (each) {
+                case Proposition.All _, Proposition.Any _ -> each.eachPart(again);
+                case Proposition.Always _ -> { }
+                default -> out.add(each);
+            }
+            return true;
+        }).read(decides);
+        return List.copyOf(out);
     }
 
     /**
@@ -55,7 +83,10 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * and what the values of the point do not say. The relations beside them are said by the
      * values a search composes against; written out here as well, a reader is shown how the
      * statement was taken apart — a part read once held and once failing where one of them is
-     * enough — and not anything a row has to do.
+     * enough — and not anything a row has to do. Two lines of a comparison that this leaves
+     * saying the same words under different points are told apart by their place among them, and
+     * not by these cases ({@code WhereTheReadingsDiffer}): how a statement is taken apart into
+     * cases differs between two spellings of one line.
      *
      * <p>What every row in the case is, read through the whole of it ({@link CasesHeldTo}): a case
      * said as one of several things is where each of them holds, and what they all hold a value
@@ -66,23 +97,56 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      */
     public String said(List<TermPath> readAt) {
         List<String> said = new ArrayList<>();
-        CasesHeldTo.of(decides).forEach((at, held) -> {
-            switch (held) {
-                case CasesHeldTo.Held.OneOf(var cases) -> {
-                    if (readAt.stream().noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
-                        said.add(at + " is " + spelled(cases));
-                    }
-                }
-                case CasesHeldTo.Held.NoneOf(var cases) -> said.add(at + " is not "
-                        + spelled(cases));
-                case CasesHeldTo.Held.ATruth(var holds) -> said.add(at + " is " + holds);
-            }
-        });
+        for (CaseSaid each : casesSaid(readAt)) {
+            said.add(each.at() + (each.is() ? " is " : " is not ") + String.join(" or ", each.values()));
+        }
         return said.isEmpty() ? null : String.join(" and ", said);
     }
 
-    private static String spelled(CasesLeft cases) {
-        return cases.atoms().stream().map(Refinement::spelled).collect(Collectors.joining(" or "));
+    /**
+     * The same cases as a phrase of the catalog's, for a diagnostic told in the reader's language:
+     * the words joining the cases are a sentence's, and the cases are what the model writes.
+     */
+    public Localizable phrase(List<TermPath> readAt) {
+        Localizable said = null;
+        for (CaseSaid each : casesSaid(readAt)) {
+            Object values = each.values().getFirst();
+            for (String next : each.values().subList(1, each.values().size())) {
+                values = Localizable.of("reading.or", values, next);
+            }
+            Localizable one = Localizable.of(each.is() ? "reading.is" : "reading.is.not",
+                    each.at(), values);
+            said = said == null ? one : Localizable.of("reading.and", said, one);
+        }
+        return said;
+    }
+
+    /** One case the line decides in: a position, whether it is or is not one of the values, and
+     *  the values as the model writes them. */
+    private record CaseSaid(String at, boolean is, List<String> values) {}
+
+    /** The cases {@link #said} and {@link #phrase} say, read once for both. */
+    private List<CaseSaid> casesSaid(List<TermPath> readAt) {
+        List<CaseSaid> said = new ArrayList<>();
+        CasesHeldTo.of(decides).forEach((at, held) -> {
+            switch (held) {
+                case CasesHeldTo.Held.OneOf(var cases) -> {
+                    if (!at.admits(cases) || readAt.stream()
+                            .noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
+                        said.add(new CaseSaid(at.toString(), true, spelled(cases)));
+                    }
+                }
+                case CasesHeldTo.Held.NoneOf(var cases) ->
+                        said.add(new CaseSaid(at.toString(), false, spelled(cases)));
+                case CasesHeldTo.Held.ATruth(var holds) ->
+                        said.add(new CaseSaid(at.toString(), true, List.of(String.valueOf(holds))));
+            }
+        });
+        return said;
+    }
+
+    private static List<String> spelled(CasesLeft cases) {
+        return cases.atoms().stream().map(Refinement::spelled).toList();
     }
 
     /** Whether a row is somewhere the line decides, or what kept that from being read. */
@@ -112,19 +176,33 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
     /**
      * This, put to rows: each relation it is over, as the quantity a row is read at.
      *
-     * @param quantities the reading of the input, which says which order each number is on
+     * @param subject the input the rows are of, whose reading says which order each number is on
      */
-    AskedOfRows askedOfRows(String behavior, Quantities quantities) {
-        return new AskedOfRows(AStatementAtARow.of(decides, behavior, quantities));
+    AskedOfRows askedOfRows(String behavior, MeasuredInput subject) {
+        return new AskedOfRows(subject.putToRows(decides, behavior),
+                subject.putToRowsAtSomeElement(decides, behavior), workedOut);
     }
 
     /** Where a line decides, ready to be asked of rows. */
     static final class AskedOfRows {
 
         private final AStatementAtARow decides;
+        /** The same, asked at some element of a list of whole numbers it weighs, where it weighs
+         *  one: what a row is asked then. */
+        private final Optional<ACaseAskedAtSomeElement> atSomeElement;
+        /** What a row holding the case is where the line decides: told so where the case was shown
+         *  to be one ({@link #workedOut}), and what it is not told otherwise, the same at every row
+         *  and so made once. */
+        private final AtARow holding;
 
-        private AskedOfRows(AStatementAtARow decides) {
+        AskedOfRows(AStatementAtARow decides, Optional<ACaseAskedAtSomeElement> atSomeElement,
+                    CasesWorkedOut workedOut) {
             this.decides = decides;
+            this.atSomeElement = atSomeElement;
+            this.holding = switch (workedOut) {
+                case CasesWorkedOut.Shown _ -> AtARow.DECIDES;
+                case CasesWorkedOut.Stopped stopped -> new AtARow.CouldNotTell(Set.of(stopped.gap()));
+            };
         }
 
         /** Reads {@code row} the way {@link #at} does, for the walk that finds which containers a
@@ -137,11 +215,14 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
          * Whether {@code row} is somewhere the line decides, read off its own numbers.
          *
          * <p>A relation over a position the row wrote nothing at holds of no value there, so the
-         * row is not somewhere it holds.
+         * row is not somewhere it holds. A row holding the condition cases nobody worked out were
+         * said as may be in one the line decides nothing in, so it is not told to be where the line
+         * decides; one failing it is in none of them.
          */
         AtARow at(BorderQuantity.Observation row) {
-            return switch (decides.at(row)) {
-                case AStatementAtARow.Answer.Holds _ -> AtARow.DECIDES;
+            return switch (atSomeElement.map(asked -> asked.at(row)).orElseGet(() ->
+                    decides.at(row))) {
+                case AStatementAtARow.Answer.Holds _ -> holding;
                 case AStatementAtARow.Answer.Fails _ -> AtARow.DECIDES_NOTHING;
                 case AStatementAtARow.Answer.CouldNotTell(var why) -> new AtARow.CouldNotTell(why);
             };

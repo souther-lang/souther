@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -107,7 +108,7 @@ class WhatIsPublishedTellsADeclarationNothingDeclaresFromOneItCouldNotReadTest {
 
     @Test
     void aDeclarationWhoseModuleCouldNotBeReadLeavesTheRulesOfAValueShort() {
-        Compilation c = compiled(PRICES_THAT_CANNOT_BE_READ);
+        Compilation c = compiled(List.of("E1022"), PRICES_THAT_CANNOT_BE_READ);
 
         assertAll(
                 () -> assertFalse(rulesFor(c, "shop.cart", AMOUNT).everyRuleReached(),
@@ -118,7 +119,7 @@ class WhatIsPublishedTellsADeclarationNothingDeclaresFromOneItCouldNotReadTest {
 
     @Test
     void andOneNothingDeclaresLeavesNothingToBeShortOf() {
-        Compilation c = compiled(PRICES_THAT_CANNOT_BE_READ);
+        Compilation c = compiled(List.of("E1022"), PRICES_THAT_CANNOT_BE_READ);
 
         assertTrue(rulesFor(c, "shop.cart", NOBODY).everyRuleReached(),
                 "nothing declares it, so there is no rule of it that failed to arrive");
@@ -135,7 +136,7 @@ class WhatIsPublishedTellsADeclarationNothingDeclaresFromOneItCouldNotReadTest {
      */
     @Test
     void andSoDoesOneWhoseModulesImportsFormARing() {
-        Compilation c = compiled(PRICES_IN_A_RING, CART_IN_A_RING);
+        Compilation c = compiled(List.of("E1501"), PRICES_IN_A_RING, CART_IN_A_RING);
 
         assertFalse(rulesFor(c, "shop.till", AMOUNT).everyRuleReached(),
                 "the module writes the rule and the ring is why it did not arrive, so a value of it"
@@ -145,7 +146,7 @@ class WhatIsPublishedTellsADeclarationNothingDeclaresFromOneItCouldNotReadTest {
     /** And the same declaration in a module that reads is neither, which is the control. */
     @Test
     void andTheSameDeclarationInAModuleThatReadsIsNeither() {
-        Compilation c = compiled(PRICES);
+        Compilation c = compiled(List.of(), PRICES);
         PublishedRules read = rulesFor(c, "shop.cart", AMOUNT);
 
         assertAll(
@@ -161,17 +162,18 @@ class WhatIsPublishedTellsADeclarationNothingDeclaresFromOneItCouldNotReadTest {
     }
 
     /** The workspace, with {@code prices} written as the module that declares {@code Amount}. */
-    private static Compilation compiled(String prices) {
-        return compiled(prices, CART);
+    private static Compilation compiled(List<String> refused, String prices) {
+        return compiled(refused, prices, CART);
     }
 
     /** The same, with the module that imports it written too, and a third outside whatever those
-     *  two do to each other. */
-    private static Compilation compiled(String prices, String cart) {
+     *  two do to each other. The workspace is refused with exactly {@code refused}. */
+    private static Compilation compiled(List<String> refused, String prices, String cart) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
         byId.put("cart.sou", cart);
         byId.put("till.sou", TILL);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(refused,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 }

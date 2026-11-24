@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.HashSet;
@@ -51,7 +52,8 @@ class APlanAddressesTheBodiesItWasMadeFromAndNotEqualOnesTest {
 
     /** The numbering of this module's bodies as one compile checked them. */
     private static CoverageSites.Plan planOfItsOwnCompile() {
-        Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY));
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(MODULE)).value();
         assertNotNull(checked, "the model under test compiles");
         return checked.plan();

@@ -3,18 +3,20 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
-import java.time.Duration;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -60,22 +62,109 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     private static final Proposition SOME_OF_FOUR = Proposition.all(List.of(
             Proposition.any(List.of(A, B)), Proposition.any(List.of(C, D))));
 
-    private static final CasesOfALineAsked.Found IN_NONE =
-            new CasesOfALineAsked.Found(List.of(), Set.of());
+    /**
+     * What asking found as these tests compare it: the cases shown to divide rows, and every
+     * figure the others stopped at. Where the cases nobody worked out are is asked of its own
+     * ({@link #theCasesNobodyWorkedOutAreWhereTheCaseAskedHolds}).
+     */
+    private record Seen(List<DecidingCase> decidesIn, Set<Figure.Budget> notWorkedOut) {
 
-    /** Asks, answering each condition by {@code crossed} and keeping what was asked. */
-    private record Asking(Predicate<Proposition> crossed, List<Proposition> asked) {
-
-        Asking(Predicate<Proposition> crossed) {
-            this(crossed, new ArrayList<>());
+        Seen {
+            decidesIn = DecidingCase.eachByItsOwnCondition(decidesIn);
+            notWorkedOut = Set.copyOf(notWorkedOut);
         }
 
-        CasesOfALineAsked.Found of(DecidingCase.Cases cases) {
+        static Seen of(CasesOfALineAsked.Found found) {
+            return new Seen(found.decidesIn(), found.notWorkedOut());
+        }
+    }
+
+    private static final Seen IN_NONE = new Seen(List.of(), Set.of());
+
+    /** Asks, answering each condition by {@code crossing} and keeping what was asked. */
+    private record Asking(Function<Proposition, CasesOfALineAsked.Crossing> crossing,
+                          List<Proposition> asked) {
+
+        /** Each condition {@code crossed} holds of may be crossed, and the others hold rows on
+         *  one side alone. */
+        Asking(Predicate<Proposition> crossed) {
+            this(condition -> crossed.test(condition) ? CasesOfALineAsked.Crossing.MAY_CROSS
+                    : CasesOfALineAsked.Crossing.CANNOT_CROSS, new ArrayList<>());
+        }
+
+        Seen of(DecidingCase.Cases cases) {
+            return Seen.of(found(cases));
+        }
+
+        CasesOfALineAsked.Found found(DecidingCase.Cases cases) {
             return CasesOfALineAsked.casesOf(new DecidingCase(SAID, cases), condition -> {
                 asked.add(condition);
-                return crossed.test(condition);
+                return crossing.apply(condition);
             });
         }
+    }
+
+    /** {@code noRows} are shown to hold no row, and the rest may be crossed. */
+    private static Asking noRowsIn(Set<Proposition> noRows) {
+        return new Asking(condition -> noRows.contains(condition)
+                ? CasesOfALineAsked.Crossing.NO_ROWS : CasesOfALineAsked.Crossing.MAY_CROSS,
+                new ArrayList<>());
+    }
+
+    /**
+     * A prefix no row is in leaves none in any case past it: nothing past it is asked, nor said
+     * as not worked out, and the cases past the other prefixes are asked as they were.
+     */
+    @Test
+    void aPrefixNoRowIsInIsNotWalkedPast() {
+        Asking asking = noRowsIn(Set.of(A));
+
+        Seen found = asking.of(FOUR);
+        assertEquals(List.of(new DecidingCase(SAID, FOUR)), found.decidesIn(),
+                "the cases of b divide and those of a hold no row: the four as said");
+        assertEquals(Set.of(), found.notWorkedOut(), "a case no row is in is worked out");
+        assertEquals(List.of(SOME_OF_FOUR, A, B, both(B, C), both(B, D)), asking.asked(),
+                "nothing past a");
+    }
+
+    /**
+     * Every case with a row in it dividing rows makes the case what it was said as, though one it
+     * stands for holds no row: that one adds no row to where the case holds, so the rows of the
+     * case are the rows of the ones the line decides in.
+     */
+    @Test
+    void aCaseNoRowIsInLeavesTheCaseWhatItWasSaidAs() {
+        Seen found =noRowsIn(Set.of(both(A, D))).of(FOUR);
+
+        assertEquals(List.of(new DecidingCase(SAID, FOUR)), found.decidesIn(),
+                "the four as said, the one with no row among them");
+        assertEquals(Set.of(), found.notWorkedOut());
+    }
+
+    /**
+     * A case whose rows are on one side of the line keeps the case from being what it was said
+     * as, where every other case with a row divides and one holds none: its rows would be counted
+     * at the line, which turns nothing between them.
+     */
+    @Test
+    void aCaseOnOneSideBesideOneNoRowIsInLeavesTheOthersEachByItself() {
+        Seen found =new Asking(condition -> condition.equals(both(A, D))
+                ? CasesOfALineAsked.Crossing.NO_ROWS : condition.equals(both(B, C))
+                ? CasesOfALineAsked.Crossing.CANNOT_CROSS : CasesOfALineAsked.Crossing.MAY_CROSS,
+                new ArrayList<>()).of(FOUR);
+
+        assertEquals(List.of(DecidingCase.alone(both(A, C)), DecidingCase.alone(both(B, D))),
+                found.decidesIn(), "the two that divide, each by itself");
+    }
+
+    /** Where some one of the cases holding is shown to hold no row, none does, and that one
+     *  question settles all of them as it does where no row is on one side. */
+    @Test
+    void whereSomeOneHoldingHoldsNoRowNoneIsAsked() {
+        Asking asking = noRowsIn(Set.of(SOME_OF_FOUR));
+
+        assertEquals(IN_NONE, asking.of(FOUR));
+        assertEquals(List.of(SOME_OF_FOUR), asking.asked());
     }
 
     /**
@@ -118,7 +207,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking asking = new Asking(each ->
                 Set.of(SOME_OF_FOUR, A, B, both(A, C), both(B, D)).contains(each));
 
-        CasesOfALineAsked.Found found = asking.of(FOUR);
+        Seen found = asking.of(FOUR);
         assertEquals(List.of(DecidingCase.alone(both(A, C)), DecidingCase.alone(both(B, D))),
                 found.decidesIn(), "a with c and b with d, and neither of the other two");
         assertEquals(Set.of(), found.notWorkedOut());
@@ -132,7 +221,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void whereEveryCaseDividesRowsTheCaseIsKeptAsItWasSaid() {
-        assertEquals(new CasesOfALineAsked.Found(List.of(new DecidingCase(SAID, FOUR)), Set.of()),
+        assertEquals(new Seen(List.of(new DecidingCase(SAID, FOUR)), Set.of()),
                 new Asking(_ -> true).of(FOUR));
     }
 
@@ -170,14 +259,14 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         }
         Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
 
-        CasesOfALineAsked.Found found = asking.of(new DecidingCase.Cases.Together(factors));
+        Seen found =asking.of(new DecidingCase.Cases.Together(factors));
 
         assertEquals(1 << (choices - held), found.decidesIn().size(),
                 "a case for each way of choosing the three left open");
         assertEquals(Set.of(), found.notWorkedOut());
-        assertEquals(24, asking.asked().size(),
-                "some one holding, the three held, each of the three they settle both ways, and"
-                        + " the tree of the three left open");
+        assertEquals(22, asking.asked().size(),
+                "some one holding, the three held asked once together before the choices, each of"
+                        + " the three they settle both ways, and the tree of the three left open");
     }
 
     /** The parts {@code condition} is the conjunction of. */
@@ -202,7 +291,6 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 new DecidingCase.Cases.EachOf(List.of(one(yes[2]), one(yes[2].denied()))),
                 one(yes[2]));
 
-        Set<Proposition> every = new LinkedHashSet<>();
         Set<Proposition> expected = new LinkedHashSet<>();
         for (int mask = 0; mask < 8; mask++) {
             List<Proposition> chosen = new ArrayList<>();
@@ -211,15 +299,16 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 chosen.add((mask >> at & 1) == 0 ? yes[at] : yes[at].denied());
             }
             Proposition all = Proposition.all(chosen);
-            every.add(all);
             if (consistent(all)) {
                 expected.add(all);
             }
         }
+        Set<Proposition> every = new LinkedHashSet<>(expected);
+        every.add(new Proposition.Always(false));
         DecidingCase.Cases together = new DecidingCase.Cases.Together(written);
 
         Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
-        CasesOfALineAsked.Found found = asking.of(together);
+        Seen found =asking.of(together);
 
         assertEquals(expected, found.decidesIn().stream()
                 .map(DecidingCase::condition).collect(Collectors.toSet()),
@@ -228,11 +317,44 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         assertEquals(Set.of(), found.notWorkedOut());
 
         CasesOfALineAsked.Atoms<Proposition> atoms =
-                CasesOfALineAsked.atomsOf(new DecidingCase(SAID, together), condition -> condition);
+                CasesOfALineAsked.atomsOf(new DecidingCase(SAID, together), condition -> condition,
+                        _ -> true);
+        assertEquals(8, atoms.each().size(),
+                "asked of every case, none given up, whichever order they are chosen in");
         assertEquals(every, atoms.each().stream().map(CasesOfALineAsked.Atom::condition)
                 .collect(Collectors.toSet()),
-                "asked of every case, none given up, whichever order they are chosen in");
+                "each as what its choices leave of it: one whose choices deny each other holds"
+                        + " nowhere");
         assertEquals(Set.of(), atoms.notWorkedOut());
+    }
+
+    /**
+     * A case is asked as what its choices leave of it: a condition every case holds is asked of
+     * each case with what the case chose put in it. {@code a} and {@code b} coming out alike,
+     * held by every way of choosing each of them: once {@code a} is chosen it is {@code b}, once
+     * {@code b} is chosen too it is nothing more, and with {@code b} failing it is nowhere. Asked
+     * as it was written, it would be beside every case in full, which is as long as the statement
+     * it came from.
+     */
+    @Test
+    void aCaseIsAskedAsWhatItsChoicesLeaveOfIt() {
+        Proposition alike = Proposition.any(List.of(both(A, B),
+                both(A.denied(), B.denied())));
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(List.of(one(alike),
+                new DecidingCase.Cases.EachOf(List.of(one(A), one(A.denied()))),
+                new DecidingCase.Cases.EachOf(List.of(one(B), one(B.denied())))));
+        Asking asking = new Asking(WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest::consistent);
+
+        Seen found =asking.of(cases);
+
+        Proposition nowhere = new Proposition.Always(false);
+        Proposition neither = both(A.denied(), B.denied());
+        assertEquals(List.of(cases.holdingInSome(TAKEN_APART).orElseThrow(), alike,
+                        both(A, B), both(A, B), nowhere, neither, nowhere, neither),
+                asking.asked(), "the condition every case holds, and then each case as its"
+                        + " choices leave it");
+        assertEquals(List.of(DecidingCase.alone(both(A, B)), DecidingCase.alone(neither)),
+                found.decidesIn(), "the two cases it holds in, each as what it chose");
     }
 
     /**
@@ -263,8 +385,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking beside = new Asking(_ -> true);
         Asking asGroup = new Asking(_ -> true);
 
-        CasesOfALineAsked.Found written = beside.of(new DecidingCase.Cases.Together(flat));
-        CasesOfALineAsked.Found nested = asGroup.of(new DecidingCase.Cases.Together(grouped));
+        Seen written = beside.of(new DecidingCase.Cases.Together(flat));
+        Seen nested = asGroup.of(new DecidingCase.Cases.Together(grouped));
 
         assertEquals(Set.of(), written.notWorkedOut(), "written beside the choices");
         assertEquals(Set.of(), nested.notWorkedOut(), "written as a group of their own");
@@ -284,11 +406,11 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         DecidingCase.Cases cases = new DecidingCase.Cases.EachOf(List.of(
                 new DecidingCase.Cases.Together(List.of(one(x), one(y))), one(z)));
 
-        CasesOfALineAsked.Found found = new Asking(_ -> true).of(cases);
+        Seen found =new Asking(_ -> true).of(cases);
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(new DecidingCase(SAID, cases)), Set.of()),
+        assertEquals(new Seen(List.of(new DecidingCase(SAID, cases)), Set.of()),
                 found, "every case divides rows, and they are the two that were said");
-        CasesOfALineAsked.Found withoutZ = new Asking(each -> !partsOf(each).contains(z)).of(cases);
+        Seen withoutZ =new Asking(each -> !partsOf(each).contains(z)).of(cases);
         assertEquals(List.of(DecidingCase.alone(both(x, y))), withoutZ.decidesIn(),
                 "x and y together, which z being refuted does not take away");
     }
@@ -297,20 +419,29 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      * Where the steps run out, the cases kept are among the ones that hold and the figure the
      * asking stopped at is said: a case not reached is not taken for one that does not hold.
      *
-     * <p>Eight choices of two parts each, so that the walk is longer than it is allowed to be
-     * though every way of choosing is a case that can be taken apart.
+     * <p>As many choices of two as make as many ways as are taken apart, each alternative a truth
+     * of its own and one every case holds written again after it, so that the walk is longer than
+     * it is allowed to be though every way of choosing is a case that can be taken apart.
      */
     @Test
     void whereTheStepsRunOutWhatWasNotReachedIsSaidAndNotTakenForAnswered() {
-        int choices = 8;
+        int choices = Integer.numberOfTrailingZeros(Integer.highestOneBit(TAKEN_APART));
+        int prefixes = (1 << (choices + 1)) - 2;
+        int writtenAgain = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum() / prefixes;
         Proposition common = truth("u");
         List<DecidingCase.Cases> factors = new ArrayList<>();
         Set<Proposition> holding = new LinkedHashSet<>();
         for (int at = 0; at < choices; at++) {
             Proposition yes = truth("c" + at);
+            List<DecidingCase.Cases> taken = new ArrayList<>(List.of(one(yes)));
+            List<DecidingCase.Cases> left = new ArrayList<>(List.of(one(yes.denied())));
+            for (int again = 0; again < writtenAgain; again++) {
+                taken.add(one(common));
+                left.add(one(common));
+            }
             factors.add(new DecidingCase.Cases.EachOf(List.of(
-                    new DecidingCase.Cases.Together(List.of(one(yes), one(common))),
-                    new DecidingCase.Cases.Together(List.of(one(yes.denied()), one(common))))));
+                    new DecidingCase.Cases.Together(taken),
+                    new DecidingCase.Cases.Together(left))));
         }
         for (int mask = 0; mask < 1 << choices; mask++) {
             List<Proposition> chosen = new ArrayList<>();
@@ -323,9 +454,9 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         }
         Asking asking = new Asking(_ -> true);
 
-        CasesOfALineAsked.Found found = asking.of(new DecidingCase.Cases.Together(factors));
+        Seen found =asking.of(new DecidingCase.Cases.Together(factors));
 
-        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN), found.notWorkedOut(),
+        assertEquals(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached()), found.notWorkedOut(),
                 "the walk is longer than the steps it is allowed");
         Set<Proposition> kept = found.decidesIn().stream().map(DecidingCase::condition)
                 .collect(Collectors.toSet());
@@ -341,19 +472,19 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void aChoiceNobodyTookApartIsSaidOnlyWhereACaseCouldHoldInIt() {
-        CompositionBudget figure = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
+        Figure.Budget figure = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached();
         DecidingCase.Cases cases = new DecidingCase.Cases.Together(List.of(
                 new DecidingCase.Cases.EachOf(List.of(one(A),
                         new DecidingCase.Cases.NotTakenApart(figure))),
                 one(B)));
 
-        CasesOfALineAsked.Found holding = new Asking(_ -> true).of(cases);
+        Seen holding =new Asking(_ -> true).of(cases);
         assertEquals(List.of(DecidingCase.alone(both(A, B))), holding.decidesIn(),
                 "the case that was taken apart is kept");
         assertEquals(Set.of(figure), holding.notWorkedOut(),
                 "and the one that was not is said, beside it");
 
-        CasesOfALineAsked.Found refuted = new Asking(each -> !partsOf(each).contains(B)
+        Seen refuted =new Asking(each -> !partsOf(each).contains(B)
                 && !each.equals(SOME_OF_FOUR)).of(cases);
         assertEquals(List.of(), refuted.decidesIn());
         assertEquals(Set.of(), refuted.notWorkedOut(),
@@ -424,7 +555,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     void aChoiceDividingRowsKeepsOnlyTheCasesChosenToTheEnd() {
         Asking asking = new Asking(each -> !each.equals(both(A, D)));
 
-        CasesOfALineAsked.Found found = asking.of(new DecidingCase.Cases.Together(List.of(one(A),
+        Seen found =asking.of(new DecidingCase.Cases.Together(List.of(one(A),
                 new DecidingCase.Cases.EachOf(List.of(one(C), one(D))))));
         assertEquals(List.of(DecidingCase.alone(both(A, C))), found.decidesIn(),
                 "a divides rows, and of the cases under it only a with c does");
@@ -434,32 +565,78 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
             CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
 
     /**
-     * More ways of choosing a case than cases are taken apart are more cases than were taken
-     * apart, and none is asked: where some one holds is the one question, and the figure is the
-     * one bounding how many cases are taken apart.
+     * More ways of choosing a case than are taken apart are not chosen: where some one holds is
+     * asked of the condition they were said as, which holds exactly there and is no longer for
+     * their being many, and past that the line is not worked out in them, at the figure.
      */
     @Test
-    void moreWaysOfChoosingThanCasesAreTakenApartAreNotAsked() {
+    void moreWaysOfChoosingThanAreTakenApartAreAskedOnlyAsTheConditionTheyWereSaidAs() {
         DecidingCase.Cases many = manyCases(TAKEN_APART + 1);
-        Proposition someOne = many.holdingInSome().orElseThrow();
         Asking asking = new Asking(_ -> true);
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
-                asking.of(many));
-        assertEquals(List.of(someOne), asking.asked(), "where some one holds, and nothing else");
+        assertEquals(new Seen(List.of(), Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())),
+                asking.of(many), "more ways than are taken apart, and none is chosen");
+        assertEquals(List.of(SAID), asking.asked(), "where some one holds, as it was said");
     }
 
     /**
-     * Ways of choosing written as choices are counted as the cases they make, without choosing
-     * any: forty choices of two, one below the other, are more ways than are taken apart, and the
-     * choosing is not begun.
+     * The cases nobody worked out are where the case asked holds, stopped at every figure the
+     * asking met, however it came to them: met as the choosing walks beside a case shown to divide
+     * rows, counted as more than are taken apart, or left where the steps ran out. A case all of
+     * whose cases were worked out leaves none.
+     *
+     * <p>Wider than the cases nobody reached, on purpose: a case of the one asked that was shown to
+     * divide rows, or to divide none, is inside it too. So a row in one of those is not told where
+     * it is by this alone. One shown to divide rows says so where it is read as a case of its own
+     * ({@link CasesOfALineAsked.Found#decidesIn}), and a row there meets the line whatever this
+     * leaves open; one shown to divide none is read nowhere else. Narrowed to what was chosen on the
+     * way to each stop, the place would be as many conditions as the stops, every one asked of each
+     * row read at the line.
      */
     @Test
-    void waysWrittenAsChoicesAreCountedWithoutChoosing() {
+    void theCasesNobodyWorkedOutAreWhereTheCaseAskedHolds() {
+        DecidingCase.Cases besideA = new DecidingCase.Cases.Together(List.of(one(A),
+                new DecidingCase.Cases.EachOf(List.of(new DecidingCase.Cases.NotTakenApart(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()), one(C)))));
+        CasesOfALineAsked.Found beside = new Asking(_ -> true).found(besideA);
+        assertEquals(List.of(DecidingCase.alone(both(A, C))), beside.decidesIn(),
+                "a with c divides rows");
+        assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, besideA),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()))),
+                beside.notWorkedOutIn(), "and the cases nobody took apart beside it, in the case"
+                        + " asked, which holds a with c too");
+
+        // Only where their number is what stopped them are they counted, every one of them: as
+        // many as there are, and no comparison of a number among them to refute any.
+        DecidingCase.Cases many = manyCases(TAKEN_APART + 1);
+        BigInteger ways = BigInteger.valueOf(TAKEN_APART + 1);
+        assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, many),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
+                        Optional.of(new CaseCount(new CaseCount.Ways.Exactly(ways),
+                                new NumericallyConsistentWays.Counted.AtMost(ways))))),
+                new Asking(_ -> true).found(many).notWorkedOutIn(),
+                "more ways than are taken apart, each of them counted");
+        DecidingCase.Cases deep = deepCases(TAKEN_APART, DEPTH);
+        assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, deep),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached()))),
+                new Asking(_ -> true).found(deep).notWorkedOutIn(),
+                "where the steps ran out");
+        assertEquals(List.of(), new Asking(_ -> true).found(FOUR).notWorkedOutIn(),
+                "every case worked out");
+    }
+
+    /**
+     * Ways of choosing written as choices are counted before any is chosen: ten choices of two,
+     * one below the other, are more ways than are taken apart, and nothing is chosen, saying also
+     * the figure the cases at the bottom were never taken apart at. That nothing is chosen is that
+     * nothing is asked but the condition.
+     */
+    @Test
+    void waysWrittenAsChoicesAreCountedBeforeAnyIsChosen() {
         DecidingCase.Cases cases = new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-        for (int i = 0; i < 40; i++) {
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached());
+        for (int i = 0; i < 10; i++) {
             cases = new DecidingCase.Cases.Together(List.of(
                     new DecidingCase.Cases.EachOf(List.of(
                             new DecidingCase.Cases.Together(List.of()),
@@ -469,10 +646,9 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         DecidingCase.Cases deep = cases;
         Asking asking = new Asking(_ -> true);
 
-        CasesOfALineAsked.Found found = assertTimeoutPreemptively(Duration.ofSeconds(10),
-                () -> asking.of(deep), "nothing is chosen");
-        assertEquals(new CasesOfALineAsked.Found(List.of(),
-                Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)), found);
+        Seen found = asking.of(deep);
+        assertEquals(new Seen(List.of(), Set.of(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())), found);
         assertEquals(List.of(SAID), asking.asked(), "and nothing asked but the condition");
     }
 
@@ -485,17 +661,17 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     @Test
     void whatStoppedATakingApartIsSaidWhicheverWayTheAskingComesToIt() {
         DecidingCase.Cases readTooLong = new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN);
+                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(A)),
-                        Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+        assertEquals(new Seen(List.of(DecidingCase.alone(A)),
+                        Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached())),
                 new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(
                         List.of(readTooLong, one(A)))),
                 "met as it walks");
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
-                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
-                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+        assertEquals(new Seen(List.of(), Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached(),
+                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached())),
                 new Asking(each -> !isACaseOf(each, DEPTH)).of(new DecidingCase.Cases.EachOf(
                         List.of(deepCases(TAKEN_APART - 1, DEPTH), readTooLong))),
                 "left where the steps ran out");
@@ -503,18 +679,18 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         List<DecidingCase.Cases> many = new ArrayList<>(
                 ((DecidingCase.Cases.EachOf) manyCases(TAKEN_APART)).alternatives());
         many.add(readTooLong);
-        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
-                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+        assertEquals(new Seen(List.of(), Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached(),
+                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached())),
                 new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(many)),
-                "among more ways of choosing than are taken apart");
+                "among more ways of choosing than are taken apart, where nothing is walked");
     }
 
     /** And as many cases as are taken apart are asked to the end. */
     @Test
     void asManyCasesAsAreTakenApartAreAskedToTheEnd() {
         DecidingCase.Cases many = manyCases(TAKEN_APART);
-        Proposition someOne = many.holdingInSome().orElseThrow();
+        Proposition someOne = many.holdingInSome(TAKEN_APART).orElseThrow();
         Asking asking = new Asking(someOne::equals);
 
         assertEquals(IN_NONE, asking.of(many));
@@ -525,15 +701,16 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     /**
      * Cases chosen through several parts each cost a step for each part and each alternative
      * taken; past the steps, what was asked is no proof either way, and the figure is the one
-     * counting the steps. As many cases as are taken apart, each chosen through four parts no two
-     * of them share, every part but the last leaving rows on both sides, are more steps than that.
+     * counting the steps. As many cases as are taken apart, each chosen through {@link #DEPTH}
+     * parts no two of them share, every part but the last leaving rows on both sides, are more
+     * steps than that.
      */
     @Test
     void pastTheStepsNothingIsProvedAndTheFigureIsSaid() {
         Asking asking = new Asking(each -> !isACaseOf(each, DEPTH));
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
+        assertEquals(new Seen(List.of(),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached())),
                 asking.of(deepCases(TAKEN_APART, DEPTH)),
                 "one more step than the figure allows is not a proof that no case divides rows");
     }
@@ -547,8 +724,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Proposition first = deepCase(0, DEPTH);
         Asking asking = new Asking(each -> !isACaseOf(each, DEPTH) || each.equals(first));
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(first)),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
+        assertEquals(new Seen(List.of(DecidingCase.alone(first)),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached())),
                 asking.of(deepCases(TAKEN_APART, DEPTH)));
     }
 
@@ -574,7 +751,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         List<DecidingCase.Cases> each = new ArrayList<>();
         for (int i = 0; i < TAKEN_APART; i++) {
             DecidingCase.Cases chain = new DecidingCase.Cases.NotTakenApart(
-                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached());
             for (int level = 0; level < DEPTH; level++) {
                 chain = new DecidingCase.Cases.Together(List.of(new DecidingCase.Cases.EachOf(
                         List.of(new DecidingCase.Cases.Together(List.of()))), chain));
@@ -583,15 +760,20 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         }
         Asking asking = new Asking(_ -> true);
 
-        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
-                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
+        assertEquals(new Seen(List.of(), Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached(),
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())),
                 asking.of(new DecidingCase.Cases.EachOf(each)));
         assertEquals(List.of(SAID), asking.asked(), "and asked nothing but the condition");
     }
 
-    /** How many parts each of {@link #deepCases} is chosen through. */
-    private static final int DEPTH = 4;
+    /**
+     * How many parts each of {@link #deepCases} is chosen through: as many steps as the figure
+     * lets each of as many cases as are taken apart take, so that those cases, each a step for its
+     * alternative and one for each part, are more steps than that.
+     */
+    private static final int DEPTH = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum()
+            / CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
 
     /** {@code count} cases of one truth each. */
     private static DecidingCase.Cases manyCases(int count) {
@@ -638,15 +820,15 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     @Test
     void casesNotTakenApartAreAskedAsTheirConditionAndNoFurther() {
         Asking dividing = new Asking(_ -> true);
-        assertEquals(new CasesOfALineAsked.Found(List.of(),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
+        assertEquals(new Seen(List.of(),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())),
                 dividing.of(new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)));
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())));
         assertEquals(List.of(SAID), dividing.asked(), "the condition alone");
 
         assertEquals(IN_NONE,
                 new Asking(_ -> false).of(new DecidingCase.Cases.NotTakenApart(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)));
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())));
     }
 
     /**
@@ -656,11 +838,11 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     @Test
     void anAlternativeThatStoppedDoesNotHideOneThatDividesRows() {
         DecidingCase.Cases notTakenApart = new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached());
         for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, one(A)),
                 List.of(one(A), notTakenApart))) {
-            assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(A)),
-                            Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
+            assertEquals(new Seen(List.of(DecidingCase.alone(A)),
+                            Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())),
                     new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(order)),
                     () -> "a divides rows, asked in the order " + order);
         }
@@ -673,13 +855,13 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     @Test
     void alternativesStoppedAtTwoFiguresSayBoth() {
         DecidingCase.Cases notTakenApart = new DecidingCase.Cases.NotTakenApart(
-                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached());
         DecidingCase.Cases tooDeep = deepCases(TAKEN_APART - 1, DEPTH);
         for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, tooDeep),
                 List.of(tooDeep, notTakenApart))) {
-            assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
-                            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
-                            CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
+            assertEquals(new Seen(List.of(), Set.of(
+                            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached(),
+                            CompositionBudget.CASES_A_LINE_IS_ASKED_IN.reached())),
                     new Asking(each -> !isACaseOf(each, DEPTH))
                             .of(new DecidingCase.Cases.EachOf(order)),
                     () -> "both figures, asked in the order " + order);

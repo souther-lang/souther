@@ -128,9 +128,7 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
 
     @Test
     void aCallIsMarkedOnce() {
-        Compilation compilation = Compilation.ofSource(TWO_CONDITIONS_A_CALL, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation = measuredAll(TWO_CONDITIONS_A_CALL);
         int calls = 0;
         boolean wentDifferentWays = false;
         for (Located each : compilation.warnings()) {
@@ -166,9 +164,7 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
      */
     @Test
     void aWarningSendsAReaderToTheReportOnlyWhereAMarkSaidLess() {
-        Compilation compilation = Compilation.ofSource(TWO_CONDITIONS_A_CALL, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation = measuredAll(TWO_CONDITIONS_A_CALL);
         int sent = 0;
         for (Located each : compilation.warnings()) {
             if (!(each.diagnostic().said() instanceof ExampleMessage.NoRowTakesADecisionRule)) {
@@ -215,9 +211,7 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
 
     @Test
     void aRuleSeenAtNoCallIsMarkedAtTheCallsWhatItStatesWasReadOff() {
-        Compilation compilation = Compilation.ofSource(JOINED, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation = measuredAll(JOINED);
         boolean both = false;
         for (Located each : compilation.warnings()) {
             Set<DiagnosticPlace> places = new HashSet<>();
@@ -245,9 +239,7 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
 
     @Test
     void aConditionConsultedAtTwoCallsIsMarkedAtBoth() {
-        Compilation compilation = Compilation.ofSource(AGAIN, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation = measuredAll(AGAIN);
         boolean both = false;
         for (Located each : compilation.warnings()) {
             Set<DiagnosticPlace> places = new HashSet<>();
@@ -283,12 +275,10 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return measuredAll(MODEL);
+    }
+
+    private static Compilation measuredAll(String source) {
+        return ACompiledModel.measured(source, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
     }
 }

@@ -15,10 +15,6 @@ public enum Unsayable {
      *  and a string is no container of parts. */
     MADE_UP_OF_COPIES_OF_A_TEXT("a string being made up of copies of another"),
 
-    /** That one string stands inside another, at its start or its end or anywhere. A string is
-     *  no container of parts a statement can be made of. */
-    A_STRING_INSIDE_ANOTHER("one string standing inside another"),
-
     /** That a string matches a pattern, which says something of every way the string could be
      *  taken apart. */
     A_STRING_MATCHING_A_PATTERN("a string matching a pattern"),

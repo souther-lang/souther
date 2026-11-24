@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.DecisionReading;
 
 import java.util.List;
@@ -96,9 +97,8 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
      *  every rule as one no row takes. */
     @Test
     void aBuildThatRecordsNothingSaysSoRatherThanCountingTheRulesUncovered() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(MODEL, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
 
         DecisionEvidence took = compilation.db().ask(new Adequacy.Decides("example.decide"))
                 .value().get("decides");
@@ -113,9 +113,7 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
     }
 
     private static DecisionEvidence decision() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Decides("example.decide")).value().get("decides");
     }
 }

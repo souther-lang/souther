@@ -43,8 +43,8 @@ class AQuestionIsPrintedUnderTheMeasureThatAnswersItTest {
     private static String report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /** The lines of the section a heading opens, up to the next heading. */

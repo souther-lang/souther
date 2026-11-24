@@ -259,6 +259,27 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
                 union(union(read, missed), union(other.read, other.missed)), true, Set.of());
     }
 
+    /**
+     * Either part holding, for a reading whose state has a join that keeps what a choice says, and
+     * the choice is one it keeps: both alternatives were taken in whole, at the same positions,
+     * and the state composed them exactly.
+     *
+     * <p>The caller says the join is exact; this says what that comes to for the account. What the
+     * alternatives took in is what the choice took in, and nothing is missed. Nothing is asked of
+     * the readings beside this one: that no other reading holds these positions to something
+     * correlated with what this one keeps is the caller's to show, since a number read exactly
+     * beside a set read exactly is a product, and a choice between pairs is not.
+     */
+    Adoption<A, L> eitherExactly(Adoption<A, L> other) {
+        return new Adoption<>(union(read, other.read), union(settled, other.settled),
+                union(missed, other.missed), hasUnreadPart || other.hasUnreadPart, Set.of());
+    }
+
+    /** Whether this took in at least one position and gave up on none, anywhere in the clause. */
+    boolean tookEveryPartInWhole() {
+        return !read.isEmpty() && missed.isEmpty() && !hasUnreadPart;
+    }
+
     /** Whether this reading settled what the whole of the clause does to {@code position}. */
     boolean took(A position) {
         return (read.contains(position) || settled.contains(position))

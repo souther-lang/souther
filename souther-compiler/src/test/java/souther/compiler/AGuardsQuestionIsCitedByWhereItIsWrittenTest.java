@@ -15,6 +15,7 @@ import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -54,7 +55,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
     private static AdequacyReport.BehaviorReport page() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
     }
 
@@ -112,7 +113,8 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                         + written);
         String said = RuleHandleProse.said(
                 PublishedRuleHandle.of(written, page.rulePlace()),
-                new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE), null);
+                new SourceRendering(SourceNameResolver.identity(), SourceLayouts.NONE),
+                Locale.ENGLISH, null);
         assertTrue(said.startsWith("comparison@"),
                 () -> "what the rule is and where it is written: " + said);
     }
@@ -133,7 +135,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                     | "one" : (Length(5)) -> 1
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         PartitionEvidence evidence = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();
 

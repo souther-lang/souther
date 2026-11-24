@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -117,6 +118,13 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
                         "the region has no order for either position").why());
         assertEquals(pathOf("recordsAreEqual", "a"), why.term().subjectPath(),
                 "and it names the position it has none for");
+
+        // Of two it has none for, the first in the one order the terms are walked in, however the
+        // form was written.
+        SearchRegion.Assumption writtenTheOtherWay = regionOf("recordsAreEqual")
+                .assuming(difference("recordsAreEqual", "b", "a"), Rel.EQ);
+        assertEquals(why, assertInstanceOf(SearchRegion.Assumption.Refused.class,
+                writtenTheOtherWay).why());
     }
 
     /**
@@ -155,7 +163,7 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
     void aTakenInEntryTheRegionCannotCarryIsRefusedLoudly() {
         WayToTheBorder forged = new WayToTheBorder(List.of(new OnTheWay.TakenIn(WHERE,
                 new RowDemand.Relational(new TakenConstraint.Affine(
-                        difference("recordsAreEqual", "a", "b"), Rel.EQ)))));
+                        difference("recordsAreEqual", "a", "b"), Rel.EQ)), NamedElements.NONE)));
 
         assertThrows(IllegalStateException.class,
                 () -> forged.narrowing(regionOf("recordsAreEqual")),
@@ -230,7 +238,7 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
 
     private static Read readingOf(String behavior) {
         return READINGS.computeIfAbsent(behavior, name -> {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            Compilation compilation = ACompiledModel.answered(MODEL);
             String module = compilation.modules().get(0);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");

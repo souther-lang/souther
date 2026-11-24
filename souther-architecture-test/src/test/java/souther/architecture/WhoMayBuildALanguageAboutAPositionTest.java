@@ -178,6 +178,7 @@ class WhoMayBuildALanguageAboutAPositionTest {
             "souther/compiler/partition/Partitions",
             "souther/compiler/partition/Partitions$StringsInsideARun",
             "souther/compiler/partition/Partitions$StringsLeft",
+            "souther/compiler/partition/Partitions$StringsPartedInto",
             "souther/compiler/partition/Partitions$StringsTheRulesAdmit",
             "souther/compiler/partition/Partitions$WhatTheOfferIsShortOf");
 
@@ -216,6 +217,7 @@ class WhoMayBuildALanguageAboutAPositionTest {
     private static final List<String> BUILDS_A_MACHINE = List.of(
             "souther/compiler/partition/Partitions",
             "souther/compiler/partition/Partitions$PatternForAWitness",
+            "souther/compiler/partition/Partitions$StringsPartedInto",
             "souther/compiler/values/Realizer");
 
     @Test

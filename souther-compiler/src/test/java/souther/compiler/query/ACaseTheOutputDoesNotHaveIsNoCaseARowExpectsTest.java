@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 
@@ -40,11 +41,11 @@ class ACaseTheOutputDoesNotHaveIsNoCaseARowExpectsTest {
     void theCountIsOfTheOutputsOwnCases() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1904"), compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
-        String human = report.human(rendering);
+        String human = report.humanInEnglish(rendering);
         assertTrue(human.contains("out specified 1/2  observed 1/2  verified 1/2\n"), human);
         assertTrue(human.contains("! no row expects `Warm`"), human);
 

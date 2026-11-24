@@ -29,8 +29,9 @@ class RulesReadOntoAnEarlierReadingAreTheRulesReadFromTheStartTest {
     private static final String A = "a";
     private static final String B = "b";
 
-    private static final Map<String, Granularity> DENSE =
-            Map.of(A, Granularity.DENSE, B, Granularity.DENSE);
+    private static final Map<String, NumberSpace> DENSE = Map.of(
+            A, NumberSpace.spacedOnly(Granularity.DENSE),
+            B, NumberSpace.spacedOnly(Granularity.DENSE));
 
     /** {@code atom - n}. */
     private static LinearForm<String> from(String atom, long n) {

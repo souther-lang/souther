@@ -1508,12 +1508,12 @@ public final class Resolve {
             return null;
         }
         WrittenName written = dottedName(fa);
-        switch (lookup(written, bound)) {
+        return switch (lookup(written, bound)) {
             case Reach.Reaches(ValueName denotes) -> {
                 ValueName resolved = answered(written, denotes);
                 // The chain is one reference of the source and the root is where it starts, so
                 // which reference it is is the root's answer.
-                return new Hir.Var.Denoting(written,
+                yield new Hir.Var.Denoting(written,
                         ReachName.of(resolved, written.canonical(), reachable.module()),
                         root.origin(), written.region());
             }
@@ -1521,12 +1521,10 @@ public final class Resolve {
             // already, so the chain is answered here rather than taken apart and reported again.
             case Reach.StandsForNothing _ -> {
                 unanswered();
-                return new Hir.Var.Unanswered(written, root.origin(), written.region());
+                yield new Hir.Var.Unanswered(written, root.origin(), written.region());
             }
-            case Reach.NotInScope _ -> {
-                return unknownMember(fa, written, bound);
-            }
-        }
+            case Reach.NotInScope _ -> unknownMember(fa, written, bound);
+        };
     }
 
     /**

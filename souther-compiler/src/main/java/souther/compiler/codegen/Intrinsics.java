@@ -619,10 +619,10 @@ final class Intrinsics {
         t.put(Kernel.INT_FLOOR_MOD, rt(CD_IntMath, "floorMod", order(0, 1), FIXED));
 
         // Decimal — every one of them a DecimalMath static. What a BigDecimal method does is not
-        // what a Souther operation means: each of these is partial at
-        // the ends of the scale range, and the abort that reports it belongs to the operation rather
-        // than to whoever emitted the call (ADR-0112). One emitter for the whole module, so a
-        // Decimal operation added later has one place to be written and no second shape to pick.
+        // what a Souther operation means: a BigDecimal has no place for an answer past its scales,
+        // and saying so is the operation's rather than whoever emitted the call (ADR-0112). One
+        // emitter for the whole module, so a Decimal operation added later has one place to be
+        // written and no second shape to pick.
         t.put(Kernel.DECIMAL_ADD, rt(CD_DecimalMath, "add", order(0, 1), CHECKPOINTED));
         t.put(Kernel.DECIMAL_SUBTRACT, rt(CD_DecimalMath, "subtract", order(0, 1), CHECKPOINTED));
         t.put(Kernel.DECIMAL_MULTIPLY, rt(CD_DecimalMath, "multiply", order(0, 1), CHECKPOINTED));

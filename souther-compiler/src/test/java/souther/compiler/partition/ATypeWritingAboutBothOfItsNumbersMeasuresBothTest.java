@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -115,7 +116,7 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
 
             behavior onHolder : (v: Holder) -> Ok
                 constructs Ok
-            let onHolder (v) = Ok { size = String.length(v.c) }
+            let onHolder (v) = Ok { size = String.length(v.c.value) }
 
             example onHolder | (Holder { c = Code("zzz") }) -> Ok { size = 3 }
             """;
@@ -139,9 +140,9 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
      * at two is drawn — where a position with one number to measure had to give it up to say
      * anything about the strings.
      *
-     * <p>The word beside the format is its own reading's and not this one's: the strings
-     * {@code [0-9]+} admits are not a set this compiler works out, which it would answer whether or
-     * not a length rule stood beside it.
+     * <p>What is said of the format is what is said of it alone: it is a rule about the strings,
+     * and a length rule standing beside it is not a reason for the set it leaves to go unworked
+     * out.
      */
     @Test
     void aFormatBesideALengthLeavesTheLengthItsLine() {
@@ -155,13 +156,27 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
 
                 behavior onC : (v: C) -> Ok
                     constructs Ok
-                let onC (v) = Ok { size = String.length(v) }
+                let onC (v) = Ok { size = String.length(v.value) }
+
+                example onC | (C("123")) -> Ok { size = 3 }
+                """;
+        String formatAlone = """
+                module formatted
+
+                data C = String
+                    invariant String.matches("[0-9]+", value)
+
+                data Ok = { size: Int }
+
+                behavior onC : (v: C) -> Ok
+                    constructs Ok
+                let onC (v) = Ok { size = String.length(v.value) }
 
                 example onC | (C("123")) -> Ok { size = 3 }
                 """;
 
-        assertEquals(List.of("v: EXACT_VALUES_TOO_COSTLY"), notReadIn(source, "onC"),
-                "only the format is unread, and for a reason of its own reading");
+        assertEquals(notReadIn(formatAlone, "onC"), notReadIn(source, "onC"),
+                "only the format is said of, and as it is said of alone");
         assertTrue(linesIn(source, "formatted", "onC").contains("String.length(v) = 2"),
                 "and the length keeps the line its rule draws");
     }
@@ -174,9 +189,7 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
      * would pass.
      */
     private static List<String> namedIn(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior))
                 .flatMap(each -> each.partition().notRead().stream())
@@ -187,9 +200,7 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
 
     /** Every line {@code behavior} draws, by the label a report shows it under, in order. */
     private static List<String> linesIn(String source, String module, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read =
                 Adequacy.readingsOf(compilation.db(), module);
         assertNotNull(read, () -> module + " is a module of the source under test");
@@ -200,9 +211,7 @@ class ATypeWritingAboutBothOfItsNumbersMeasuresBothTest {
 
     /** What {@code behavior} left unread, as the number it is about and the reason. */
     private static List<String> notReadIn(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior))
                 .flatMap(each -> each.partition().notRead().stream())

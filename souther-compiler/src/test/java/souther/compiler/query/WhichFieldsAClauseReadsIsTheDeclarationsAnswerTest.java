@@ -2,17 +2,29 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.check.ValueAsked;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.types.TypeKey;
+import souther.compiler.values.Operand;
+import souther.compiler.values.Value;
 
+import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -137,9 +149,45 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                         Set.of(values("inner", "low"), values("inner", "high")),
                         Set.of(howMany("tags")),
                         Set.of(values("name")),
-                        Set.of(howMany("tags"), values("tags")),
+                        Set.of(howMany("tags"), neededMember("tags", Value.text("a"))),
                         Set.of(howMany("items"), howMany("inner", "members"))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
+        everyClauseReadsWhatItsRulesRead(c);
+    }
+
+    /**
+     * A lookup reads the member it looks for and no other, whether the helper holding it is
+     * written out or handed the container. Where the clause is false without the member it is the
+     * member the clause needs; where it is also true without it, or wants it missing, it is a
+     * member looked up and nothing more.
+     */
+    @Test
+    void aLookupReadsTheMemberItLooksForAndSaysWhetherTheClauseNeedsIt() {
+        Compilation c = started("""
+                module shop.prices exposing ( Range )
+
+                data Range = { key: String, table: Map<String, Int>, other: Map<String, Int>,
+                               tags: Set<String> }
+                    invariant Map.containsKey(key, table)
+                    invariant isOne(key, table)
+                    invariant Map.containsKey(key, other) == false
+                    invariant Set.contains(key, tags) || Set.size(tags) == 0
+                    invariant Map.containsKey(key, table) && Set.contains("a", tags)
+
+                let isOne (key: String, table: Map<String, Int>): Bool =
+                    Map.get(key, table)
+                        |> Option.map(n -> n == 1)
+                        |> Option.withDefault(false)
+                """);
+        assertEquals(List.of(
+                        Set.of(values("key"), neededKey("table", "key")),
+                        Set.of(values("key"), neededKey("table", "key", BigDecimal.ONE)),
+                        Set.of(values("key"), lookedUpMember("other")),
+                        Set.of(values("key"), lookedUpMember("tags"), howMany("tags")),
+                        Set.of(values("key"), neededKey("table", "key"),
+                                neededMember("tags", Value.text("a")))),
+                clausesSay(c, ClauseMeaning.Stated::reads));
+        everyClauseReadsWhatItsRulesRead(c);
     }
 
     /** A call saying no two elements share a field reads that field of each element, and no
@@ -155,8 +203,90 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                     invariant List.allDistinctBy(i -> i.id, items)
                 """);
         assertEquals(List.of(Set.of(new ClauseRead(new RuleKey(List.of("items")),
-                        ClauseRead.Kind.EACH_ELEMENTS_RUN, RuleKey.of("id")))),
+                        ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART, RuleKey.of("id")))),
                 clausesSay(c, ClauseMeaning.Stated::reads));
+    }
+
+    /**
+     * What a clause reads and what it needs are told apart: a call keeping elements apart that the
+     * clause denies, or states as one way among several, is read at the same places and is not one
+     * the clause cannot be true without.
+     */
+    @Test
+    void aCallKeepingElementsApartIsNeededOnlyWhereTheClauseIsFalseWithoutIt() {
+        for (String clause : List.of(
+                "List.allDistinctBy(i -> i.id, items) == false",
+                "List.allDistinctBy(i -> i.id, items) || List.length(items) >= 3")) {
+            Compilation c = started("""
+                    module shop.prices exposing ( Item, Range )
+
+                    data Item = { id: Int, price: Int }
+
+                    data Range = { items: List<Item> }
+                        invariant %s
+                    """.formatted(clause));
+            assertEquals(Set.of(ClauseRead.Kind.EACH_ELEMENTS_RUN),
+                    kindsOfTheElementsRead(c), clause);
+        }
+        Compilation both = started("""
+                module shop.prices exposing ( Item, Range )
+
+                data Item = { id: Int, price: Int }
+
+                data Range = { items: List<Item> }
+                    invariant List.allDistinctBy(i -> i.id, items) && List.length(items) >= 2
+                """);
+        assertEquals(Set.of(ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART),
+                kindsOfTheElementsRead(both), "a conjunct needs what it holds");
+    }
+
+    /**
+     * The same rule written as the law the call comes to — as many different ids as elements —
+     * reads what the call reads, and is needed where the call is: the call is the oracle. Only
+     * where the count is shown to answer for every list: one that may stop works out more of each
+     * element than its id, and whether it stops turns on that, so it reads the elements whole.
+     */
+    @Test
+    void aCountOfDifferentValuesReadsWhatTheCallReads() {
+        String call = "List.allDistinctBy(i -> i.id, items)";
+        String counted = "Set.size(Set.fromList(List.map(i -> i.id, items))) == List.length(items)";
+        for (String clause : List.of("%s", "%s || List.length(items) >= 3",
+                "%s && List.length(items) >= 2")) {
+            assertEquals(clausesSay(itemsUnder(clause.formatted(call)), ClauseMeaning.Stated::reads),
+                    clausesSay(itemsUnder(clause.formatted(counted)), ClauseMeaning.Stated::reads),
+                    clause);
+        }
+        String stopping = "Map.size(Map.fromList(List.map(i -> (i.id, i.price + 9223372036854775807),"
+                + " items))) == List.length(items)";
+        assertTrue(clausesSay(itemsUnder(stopping), ClauseMeaning.Stated::reads).getFirst()
+                        .contains(new ClauseRead(new RuleKey(List.of("items")),
+                                ClauseRead.Kind.ITS_VALUES, RuleKey.THE_VALUE)),
+                "a price added past an Int is read with the ids");
+    }
+
+    private static Compilation itemsUnder(String clause) {
+        return started("""
+                module shop.prices exposing ( Item, Range )
+
+                data Item = { id: Int, price: Int }
+
+                data Range = { items: List<Item> }
+                    invariant %s
+                """.formatted(clause));
+    }
+
+    /** The kinds of read of elements the clauses of {@code c} say, one entry per kind. */
+    private static Set<ClauseRead.Kind> kindsOfTheElementsRead(Compilation c) {
+        Set<ClauseRead.Kind> out = new HashSet<>();
+        for (Set<ClauseRead> each : clausesSay(c, ClauseMeaning.Stated::reads)) {
+            for (ClauseRead read : each) {
+                if (read.kind() == ClauseRead.Kind.EACH_ELEMENTS_RUN
+                        || read.kind() == ClauseRead.Kind.ELEMENTS_THE_CLAUSE_NEEDS_APART) {
+                    out.add(read.kind());
+                }
+            }
+        }
+        return out;
     }
 
     /** A newtype's own {@code value} is the value itself, so a newtype wrapping a record reads its
@@ -176,8 +306,65 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
                 clausesSay(c, ClauseMeaning.Stated::reads));
     }
 
+    /** The places a clause reads are the places its rules read, each rule saying its own. */
+    @Test
+    void eachRuleOfAClauseSaysWhichPlacesItReads() {
+        Compilation c = started("""
+                module shop.prices exposing ( Range )
+
+                data Range = { low: Int, high: Int, cap: Int }
+                    invariant low >= 0 && low <= high && cap >= 0 && (cap >= 8 || high >= 8)
+                """);
+        ClauseMeaning.Stated clause = statedClauses(c).getFirst();
+
+        assertEquals(List.of(Set.of(values("low")), Set.of(values("low"), values("high")),
+                        Set.of(values("cap")), Set.of(values("cap"), values("high"))),
+                clause.parts().leaves().stream().map(ClauseMeaning.Parts.One::reads).toList());
+        everyClauseReadsWhatItsRulesRead(c);
+    }
+
+    /** What a clause reads is what the rules it was written as read, taken together. */
+    private static void everyClauseReadsWhatItsRulesRead(Compilation c) {
+        statedClauses(c).forEach(clause -> {
+            Set<ClauseRead> together = new HashSet<>();
+            clause.parts().leaves().forEach(part -> together.addAll(part.reads()));
+            assertEquals(clause.reads(), together, clause.ref().toString());
+        });
+    }
+
     private static ClauseRead values(String... steps) {
         return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.ITS_VALUES,
+                RuleKey.THE_VALUE);
+    }
+
+    /** A member the clause needs the container at {@code container} to hold as an element: a
+     *  value the clause writes. */
+    private static ClauseRead neededMember(String container, Value written) {
+        return new ClauseRead(new RuleKey(List.of(container)),
+                ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
+                Optional.of(new ClauseRead.Member(new Operand.Written<>(written), false,
+                        Optional.empty())));
+    }
+
+    /** A member the clause needs the map at {@code container} to hold as a key: the value at the
+     *  place {@code lookedFor}. */
+    private static ClauseRead neededKey(String container, String lookedFor) {
+        return neededKey(container, lookedFor, null);
+    }
+
+    /** The same, where the clause also says the value under the key is the number {@code is}. */
+    private static ClauseRead neededKey(String container, String lookedFor, BigDecimal is) {
+        return new ClauseRead(new RuleKey(List.of(container)),
+                ClauseRead.Kind.A_MEMBER_THE_CLAUSE_NEEDS, RuleKey.THE_VALUE,
+                Optional.of(new ClauseRead.Member(new RuleKey(List.of(lookedFor)), true,
+                        Optional.ofNullable(is).map(number -> ValueAsked.at(ValueAsked.THE_VALUE,
+                                OrderedRuns.of(new OrderedInterval(
+                                        Endpoint.inclusive(Count.of(number)),
+                                        Endpoint.inclusive(Count.of(number)))))))));
+    }
+
+    private static ClauseRead lookedUpMember(String... steps) {
+        return new ClauseRead(new RuleKey(List.of(steps)), ClauseRead.Kind.A_LOOKED_UP_MEMBER,
                 RuleKey.THE_VALUE);
     }
 
@@ -194,27 +381,32 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
     /** What each clause of {@code Range} says, in the order the declaration writes them. */
     private static <T> List<Set<T>> clausesSay(Compilation c,
                                                Function<ClauseMeaning.Stated, Set<T>> says) {
+        return statedClauses(c).stream().map(says).toList();
+    }
+
+    /** Each clause of {@code Range}, in the order the declaration writes them. */
+    private static List<ClauseMeaning.Stated> statedClauses(Compilation c) {
         PublishedDeclarationResult said = c.db().ask(new Shapes.MeaningOf(RANGE)).value();
         DeclarationMeaning meaning = assertInstanceOf(PublishedDeclarationResult.Found.class, said,
                 "the declaration under test is published").said();
         return ((DeclarationMeaning.Product) meaning).clauses().stream()
                 .map(ClauseMeaning.Stated.class::cast)
-                .map(says)
                 .toList();
     }
 
     private static void edit(Compilation c, String prices) {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
-        c.update(edited, Set.of());
-        c.answerEverything();
+        c.update(edited, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
     }
 
     private static Compilation started(String prices) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;

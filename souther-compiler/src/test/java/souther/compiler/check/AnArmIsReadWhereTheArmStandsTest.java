@@ -13,6 +13,7 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -134,7 +135,7 @@ class AnArmIsReadWhereTheArmStandsTest {
 
     private static Core.Construct construction(Core given) {
         return new Core.Construct(PERSON, List.of(new Core.FieldValue("name", given, POS)),
-                Type.ref(PERSON), POS);
+                Type.ref(PERSON), OccurrenceLineage.ORIGINAL, POS);
     }
 
     private static Core.IfConstructed attempt(Core given, Core then, List<Core> departures) {
@@ -216,7 +217,7 @@ class AnArmIsReadWhereTheArmStandsTest {
     @Test
     void anArmThatComesToNoValueIsNotOneOfTheValues() {
         ValueOrigin.OneOf<String> choice = choiceIn(attempt(read("a", 0), read("held", 1),
-                List.of(new Core.Unreachable("never", Type.NEVER, POS))));
+                List.of(new Core.Unreachable("never", Type.NEVER, OccurrenceLineage.ORIGINAL, POS))));
 
         assertEquals(1, choice.alternatives().size(),
                 () -> "the value it built, and not the departure: " + choice.alternatives());
@@ -249,7 +250,9 @@ class AnArmIsReadWhereTheArmStandsTest {
     @Test
     void aForkEveryArmOfWhichComesToNoValueComesToNone() {
         assertInstanceOf(ValueOrigin.NoValue.class,
-                originOf(attempt(read("a", 0), new Core.Unreachable("never", Type.NEVER, POS),
-                        List.of(new Core.Unreachable("nor this", Type.NEVER, POS)))));
+                originOf(attempt(read("a", 0),
+                        new Core.Unreachable("never", Type.NEVER, OccurrenceLineage.ORIGINAL, POS),
+                        List.of(new Core.Unreachable("nor this", Type.NEVER,
+                                OccurrenceLineage.ORIGINAL, POS)))));
     }
 }

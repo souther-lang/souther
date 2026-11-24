@@ -1,5 +1,8 @@
 package souther.compiler.reach;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
+
 /**
  * What worked out on the way to a place may stop a run on operands nothing here says.
  *
@@ -14,16 +17,16 @@ package souther.compiler.reach;
  */
 public sealed interface WhatMayStopARun {
 
-    /** What a sentence calls it. */
-    String said();
+    /** What a sentence calls it, as the catalog's entry for it. */
+    Message said();
 
     /** An operator answering on operands nothing here holds it to: a product of two values
      *  nothing bounds, a sum of decimals, a quotient by a value that may be nought. */
     record AnOperator() implements WhatMayStopARun {
 
         @Override
-        public String said() {
-            return "an operator";
+        public Message said() {
+            return new ReportMessage.AnOperator();
         }
     }
 
@@ -31,8 +34,8 @@ public sealed interface WhatMayStopARun {
     record ACall() implements WhatMayStopARun {
 
         @Override
-        public String said() {
-            return "a call";
+        public Message said() {
+            return new ReportMessage.ACall();
         }
     }
 
@@ -40,8 +43,8 @@ public sealed interface WhatMayStopARun {
     record AConstruction() implements WhatMayStopARun {
 
         @Override
-        public String said() {
-            return "a construction";
+        public Message said() {
+            return new ReportMessage.AConstruction();
         }
     }
 }

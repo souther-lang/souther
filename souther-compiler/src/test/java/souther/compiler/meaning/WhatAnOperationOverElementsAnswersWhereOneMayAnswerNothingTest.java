@@ -130,6 +130,23 @@ class WhatAnOperationOverElementsAnswersWhereOneMayAnswerNothingTest {
     }
 
     /**
+     * Some element of the lists answered of each element written out: where every list's reading
+     * answers it is some one of them holding, and where one may answer nothing, which element a
+     * run stops at is the first to say and the rest of them are not read ahead of it.
+     */
+    @Test
+    void someElementOfTheListsAnsweredIsNotReadWhereOneOfThemMayAnswerNothing() {
+        Proposition answering = concluded(new Derivation.SomeElementOfTheListsAnswered(
+                List.of(truthAt(TermPath.of("as")), truthAt(TermPath.of("bs")))));
+        assertEquals(Proposition.any(List.of(truth(TermPath.of("as")), truth(TermPath.of("bs")))),
+                answering);
+        Proposition stated = concluded(new Derivation.SomeElementOfTheListsAnswered(
+                List.of(truthAt(TermPath.of("as")), writtenOut("b"))));
+        assertEquals(new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.WhichElementARunStopsAt(), false, true), stated);
+    }
+
+    /**
      * Some element of a container meeting a statement that answers nothing on some elements: some
      * element where it answers and holds ({@code T}), and every element answering ({@code G}), each
      * of them a quantifier over a statement every row answers. Asking every element, the operation

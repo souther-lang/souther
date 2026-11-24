@@ -81,7 +81,21 @@ class AnExpansionThatDidNotHappenIsARuleNotReachedTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(owner, IMPORTER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
+        return measured(compilation);
+    }
+
+    /** As {@link #read}, of an owner that does not compile: the cycle is its own error, and the
+     *  importer's use of the names it declares is the other two. */
+    private static Map<String, JsonNode> readCycling(String owner) {
+        Compilation compilation =
+                Compilation.ofSources(List.of(owner, IMPORTER), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(List.of("E1022", "E1023", "E1023"), compilation);
+        return measured(compilation);
+    }
+
+    private static Map<String, JsonNode> measured(Compilation compilation) {
         JsonNode document = JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         Map<String, JsonNode> out = new LinkedHashMap<>();
@@ -104,7 +118,7 @@ class AnExpansionThatDidNotHappenIsARuleNotReachedTest {
      */
     @Test
     void aPositionWhoseRulesWereNeverExpandedIsNotReadAsHavingNone() {
-        Map<String, JsonNode> withACycle = read(CYCLES);
+        Map<String, JsonNode> withACycle = readCycling(CYCLES);
         Map<String, JsonNode> without = read(CYCLES.replace("let floor = floor", "let floor = 1"));
 
         assertNotNull(withACycle.get("onPlain"), "the importer measures the position");

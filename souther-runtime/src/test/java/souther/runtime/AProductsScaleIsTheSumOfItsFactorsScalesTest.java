@@ -15,7 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A {@code Decimal} product's scale is the sum of its factors' scales, and a product whose sum is
- * outside the signed 32-bit scales aborts (spec §stdlib-decimal, §a-scale-is-used-as-the-number-written).
+ * outside the signed 32-bit scales a {@code BigDecimal} keeps is one this run has no room to write
+ * ({@link OutOfRoom}, spec §stdlib-decimal): the product is a decimal all the same, and nothing
+ * about it is refused.
  *
  * <p>The factors are nought, one and minus one at scales from both ends of the range and around
  * nought, so the sums fall one past each end, on each end, and inside. Nought is on the left, on the
@@ -87,8 +89,8 @@ class AProductsScaleIsTheSumOfItsFactorsScalesTest {
 
     @ParameterizedTest
     @MethodSource("pairsWhoseSumIsOutOfRange")
-    void aProductWhoseScaleIsOutOfRangeAbortsWhateverItsValue(BigDecimal a, BigDecimal b) {
-        assertThrows(ConstraintViolation.class, () -> DecimalMath.multiply(a, b));
+    void aProductWhoseScaleIsOutOfRangeIsShortOfRoomWhateverItsValue(BigDecimal a, BigDecimal b) {
+        assertThrows(OutOfRoom.class, () -> DecimalMath.multiply(a, b));
     }
 
     /** What the two rules above give, asked of the order the factors come in. */
@@ -102,8 +104,8 @@ class AProductsScaleIsTheSumOfItsFactorsScalesTest {
         try {
             BigDecimal product = DecimalMath.multiply(a, b);
             return product.unscaledValue() + " at scale " + product.scale();
-        } catch (ConstraintViolation _) {
-            return "aborted";
+        } catch (OutOfRoom _) {
+            return "no room";
         }
     }
 }

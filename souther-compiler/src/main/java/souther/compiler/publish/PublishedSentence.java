@@ -1,5 +1,9 @@
 package souther.compiler.publish;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ReportMessage;
+import souther.compiler.diag.msg.SearchMessage;
+
 /**
  * What a field of a document says, for the fields that sometimes say it about a rule.
  *
@@ -27,23 +31,62 @@ public sealed interface PublishedSentence {
     /**
      * A rule handle with words of the field's own around it.
      *
-     * <p>Either side may be empty, which is a field that says the handle and nothing else. Empty is
-     * the words there are and not a missing answer: what a border writes after the handle is the
-     * declarations that took an end of its line in, and a line nothing narrowed has none of those.
+     * <p>The words are a sentence the handle is put into, and not a string before it and a string
+     * after it: where the handle stands in the sentence is the language's, and a language that
+     * names the rule before the point of it has no words to put in front.
      */
-    record AroundAHandle(String before, PublishedRuleHandle handle, String after)
-            implements PublishedSentence {
+    record AroundAHandle(PublishedRuleHandle handle, Around around) implements PublishedSentence {
 
         public AroundAHandle {
-            if (before == null || handle == null || after == null) {
-                throw new IllegalArgumentException("a sentence about a rule is words, a handle and"
-                        + " words: " + before + " " + handle + " " + after);
+            if (handle == null || around == null) {
+                throw new IllegalArgumentException("a sentence about a rule is a handle and the"
+                        + " words around it: " + handle + " " + around);
             }
         }
 
         /** The handle by itself, for a field whose whole sentence it is. */
         public static AroundAHandle alone(PublishedRuleHandle handle) {
-            return new AroundAHandle("", handle, "");
+            return new AroundAHandle(handle, new Around.Alone());
+        }
+    }
+
+    /** The sentences a handle is said in, each with the handle's words as a value. */
+    sealed interface Around {
+
+        /** The sentence, with {@code handle} the rule's words. */
+        Message with(String handle);
+
+        /** The handle and nothing else. */
+        record Alone() implements Around {
+            @Override
+            public Message with(String handle) {
+                return new ReportMessage.Verbatim(handle);
+            }
+        }
+
+        /** A point of the line the rule draws, by its role. */
+        record PointOf(String role) implements Around {
+            @Override
+            public Message with(String handle) {
+                return new ReportMessage.DeclaredPointOf(role, handle);
+            }
+        }
+
+        /** The rule as the declarations that took an end of its line in narrowed it. */
+        record Within(SearchMessage declarations) implements Around {
+            @Override
+            public Message with(String handle) {
+                return new SearchMessage.RuleWithin(new SearchMessage.TheRuleCited(handle),
+                        declarations);
+            }
+        }
+
+        /** The rule and what was asked of it that nothing answered. */
+        record ThenAsked(Message asked) implements Around {
+            @Override
+            public Message with(String handle) {
+                return new ReportMessage.RuleThenAsked(handle, asked);
+            }
         }
     }
 }

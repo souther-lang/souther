@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Emitted;
+import souther.compiler.TestDay;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ModulePath;
@@ -92,9 +94,9 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
     }
 
     private static Compilation started() {
-        Compilation compilation =
-                Compilation.ofDocuments(workspace(PRICES), Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofDocuments(workspace(PRICES), Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertEquals(List.of(), compilation.db().allReports().stream().map(String::valueOf).toList(),
                 "the workspace compiles to begin with");
         return compilation;
@@ -118,8 +120,8 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
         Answer<?> runs = compilation.db()
                 .ask(new Output.Evaluated("shop.prices", ArmObservation.OMIT));
 
-        compilation.update(workspace(REWORDED), Set.of());
-        compilation.answerEverything();
+        compilation.update(workspace(REWORDED), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(compilation);
 
         assertFalse(Arrays.equals(ships, published(compilation)),
                 "the classes that ship carry the declaration as it is now written");

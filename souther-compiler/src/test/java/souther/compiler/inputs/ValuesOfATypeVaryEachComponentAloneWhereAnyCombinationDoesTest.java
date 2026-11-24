@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -98,6 +99,67 @@ class ValuesOfATypeVaryEachComponentAloneWhereAnyCombinationDoesTest {
                 "every combination makes the code minus one");
         assertEquals(List.of(TiedToThree.class.getName() + ".code: [Optional[-1]]"),
                 ValuesOfAType.valuesLeftOut(nearest, every));
+    }
+
+    /** Exactly one of two bounds is absent, so either partner of a counted word is accepted. */
+    record OneBound(String counted, Long fewerThan, Long moreThan) {
+
+        OneBound {
+            if ((fewerThan == null) == (moreThan == null)) {
+                throw new IllegalArgumentException("exactly one bound is absent");
+            }
+        }
+    }
+
+    /** What holds a list of them. */
+    record HoldingBounds(List<OneBound> bounds) {}
+
+    /**
+     * Both ways of asking put a word beside the same partner, so a list of them is made of the same
+     * records either way and nothing is named as left out.
+     */
+    @Test
+    void aListOfRecordsWithTwoAcceptedPartnersIsMadeTheSameWayBothWays() {
+        ValuesOfAType nearest = new ValuesOfAType();
+        ValuesOfAType every = ValuesOfAType.everyCombination();
+
+        assertEquals(nearest.of(HoldingBounds.class), every.of(HoldingBounds.class));
+        assertEquals(List.of(), ValuesOfAType.valuesLeftOut(nearest, every));
+    }
+
+    /**
+     * A code of minus one that is refused whatever stands beside it, among enough flags to count
+     * through. Nought and one are taken, so the record is made whole when the search is let finish.
+     */
+    record RefusedEverywhere(boolean a, boolean b, boolean c, boolean d, int code) {
+
+        RefusedEverywhere {
+            if (code == -1) {
+                throw new IllegalArgumentException("minus one is never a code");
+            }
+        }
+    }
+
+    /**
+     * A search not finished within its budget is an error that says so, and one let finish gives
+     * the absence it found. The error is told from the record's other refusal — a component varied
+     * alone in no two values — by the message, and the control is the same record finishing with
+     * room.
+     */
+    @Test
+    void aSearchOverTooManyCombinationsIsAnErrorAndNotAnAbsence() {
+        AssertionError error = assertThrows(AssertionError.class,
+                () -> ValuesOfAType.everyCombination(3).of(RefusedEverywhere.class));
+        assertTrue(error.getMessage().contains("was not finished after 3 constructions"),
+                error.getMessage());
+        assertTrue(error.getMessage().contains(RefusedEverywhere.class.getName()),
+                error.getMessage());
+
+        List<Object> made = ValuesOfAType.everyCombination().of(RefusedEverywhere.class);
+        assertTrue(made.stream().noneMatch(each -> ((RefusedEverywhere) each).code() == -1),
+                "minus one is not made");
+        assertTrue(made.contains(new RefusedEverywhere(false, false, false, false, 1)),
+                "the record is made whole");
     }
 
     /** The same tie, in a record over a type argument. */

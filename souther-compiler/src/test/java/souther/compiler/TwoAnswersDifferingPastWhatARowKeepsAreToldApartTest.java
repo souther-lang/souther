@@ -73,7 +73,7 @@ class TwoAnswersDifferingPastWhatARowKeepsAreToldApartTest {
     private static RowOutcome rowNamed(String name) {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {

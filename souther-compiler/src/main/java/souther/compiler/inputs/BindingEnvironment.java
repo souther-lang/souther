@@ -3,15 +3,23 @@ package souther.compiler.inputs;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.OrderOfElements;
 import souther.compiler.core.Core;
+import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * What is known of the names in a tree, as answers to the questions a walk over them asks.
@@ -59,7 +67,7 @@ final class BindingEnvironment {
     private final Map<BindingId, TermPath> roots;
     /** What one application of a closure handed a parameter: one of the values written out, which
      *  names nothing, so it is read the same wherever it is read. */
-    private final Map<BindingId, Core> handed;
+    private final Handed handed;
     private final Map<BindingId, Core> table;
     private final Layer newest;
     private final ElementBindings elements;
@@ -73,7 +81,7 @@ final class BindingEnvironment {
     private final Map<BindingId, InputReads.EntryLookedUp> selected;
     /** The lookup each name opens: the call that asked a map for a key, whose answer the arm
      *  binding the name is under holds the value of. */
-    private final Map<BindingId, InputReads.LookupOpened> opened;
+    private final Map<BindingId, InputReads.ArmOpened> opened;
     /** The place inside what a dependency answered each such name is the value at, for a name
      *  given the entry a lookup in a map filed from an answer's list picked out. */
     private final Map<BindingId, InputReads.AnAnswerAt> answered;
@@ -82,6 +90,10 @@ final class BindingEnvironment {
      *  it is worked out from is every value bound, which a reader asking it of one environment
      *  many times would otherwise walk each time. Nought where it has not been. */
     private int hash;
+    /** {@link #hashButForWhatIsHanded}, worked out the first time it is asked, for the same
+     *  reason as {@link #hash}: a reading kept is found by it, once for each time it is asked
+     *  for. Nought where it has not been. */
+    private int hashWithoutWhatWasHanded;
     /**
      * The hash of {@link #elements} and {@link #values}, shared by every environment made from
      * this one, which holds the same two.
@@ -91,6 +103,15 @@ final class BindingEnvironment {
      * hash out again would walk every tree the body holds once per name followed.
      */
     private final HeldHash heldHash;
+    /** The environments made from this one by a step a walk takes again. No part of what this
+     *  environment is. */
+    private final StepsFrom<BindingEnvironment> steps = new StepsFrom<>();
+
+    /** The steps from one environment to another a walk takes again ({@link StepsFrom}). */
+    private enum Step {
+        /** Inside what a binder binds ({@link #inside}). */
+        INSIDE
+    }
 
     /** The hash of what a body holds, worked out the first time an environment holding it is
      *  asked for one, and not before: most environments are never asked. */
@@ -116,17 +137,457 @@ final class BindingEnvironment {
         }
     }
 
+    /**
+     * What the applications on the way here handed, and the hash of all of it, which is its
+     * {@link Map#hashCode}: worked out as each value is handed, once for that value.
+     *
+     * <p>Two environments that are one application apart differ in what it handed and in nothing
+     * else, and an environment is asked for its hash where a reading is kept by it. Hashed by the
+     * names alone, every application of a closure over the values written out is one hash, and
+     * telling them apart walks the values each time two of them meet.
+     */
+    static final class Handed {
+
+        static final Handed NONE = new Handed(Map.of(), 0, null, null);
+
+        private final Map<BindingId, Core> values;
+        private final int hash;
+        private final Handed parent;
+        private final BindingId step;
+        /** How many applications there were on the way here: none for {@link #NONE}, which every
+         *  application comes from. */
+        private final int depth;
+
+        private Handed(Map<BindingId, Core> values, int hash, Handed parent, BindingId step) {
+            this.values = values;
+            this.hash = hash;
+            this.parent = parent;
+            this.step = step;
+            this.depth = parent == null ? 0 : parent.depth + 1;
+        }
+
+        /** This, with {@code binding} handed {@code value} in place of whatever it held. */
+        Handed with(BindingId binding, Core value) {
+            Map<BindingId, Core> wider = new LinkedHashMap<>(values);
+            Core was = wider.put(binding, value);
+            int entry = binding.hashCode() ^ value.hashCode();
+            return new Handed(Map.copyOf(wider),
+                    hash - (was == null ? 0 : binding.hashCode() ^ was.hashCode()) + entry,
+                    this, binding);
+        }
+
+        /**
+         * What {@code binding} was handed here, or null.
+         *
+         * <p>Not a reading that a {@link Watch} sees: a reading asks {@link Watch#read}, which
+         * asks this once it has placed the read. Whoever calls this directly is answering a
+         * question about the values handed and not reading one.
+         */
+        Core unwatched(BindingId binding) {
+            return values.get(binding);
+        }
+
+        /** Where a read of {@code binding} here stands to the environment {@code began} a watch
+         *  on. */
+        private Placing placing(Handed began, BindingId binding) {
+            boolean handedSince = false;
+            for (Handed each = this; each != null; each = each.parent) {
+                if (each == began) {
+                    return handedSince ? Placing.HANDED_SINCE : Placing.AS_BEGUN;
+                }
+                handedSince |= binding.equals(each.step);
+            }
+            // Not reached from here, whatever was handed on the way up: a step that hands the name
+            // in an environment apart from the one the watch began on is not a step since it.
+            return Placing.OFF_THE_WAY;
+        }
+
+        /**
+         * The names handed on the way from the environment {@code began} to this one, or null where
+         * this does not come from it. A name in the answer is handed again since: what a reading
+         * made here was answered of it is no answer of {@code began}.
+         *
+         * <p>The same walk as {@link #placing}, once for a set and not once for each name in it.
+         * It goes up as many applications as there are between the two and no further: an
+         * environment with fewer applications than {@code began} does not come from it.
+         */
+        Steps stepsSince(Handed began) {
+            if (this == began) {
+                return Steps.NONE;
+            }
+            if (depth < began.depth) {
+                return null;
+            }
+            Since last = lastSince;
+            if (last != null && last.began() == began) {
+                return last.steps();
+            }
+            Set<BindingId> steps = new HashSet<>();
+            Handed each = this;
+            while (each.depth > began.depth) {
+                AskedNames.counted(3, 1);
+                steps.add(each.step);
+                each = each.parent;
+            }
+            if (each != began) {
+                return null;
+            }
+            Steps made = new Steps(steps);
+            lastSince = new Since(began, made);
+            return made;
+        }
+
+        /** The steps since an ancestor, which is a fact of this application and the ancestor and
+         *  of nothing else. */
+        private record Since(Handed began, Steps steps) {}
+
+        /** The last one asked, held by this application and so for as long as it is: a watch
+         *  taking in again from an application it took in from before does not walk to the ancestor
+         *  again, and holds no record of the applications it met to know it. Replaced whole, so
+         *  that other threads see one or the other; an ancestor is held already, by the parent. */
+        private volatile Since lastSince;
+
+        /**
+         * Whether the names are handed the same here and in {@code other}.
+         *
+         * <p>Two applications hand a name differently only where a step on the way from the one
+         * they share hands it, so those steps are the names looked at, and what either holds apart
+         * from them is not. Where the reading asked of no name, nothing is looked at.
+         */
+        boolean agreesOn(AskedNames names, Handed other) {
+            if (this == other || !names.hasNames()) {
+                return true;
+            }
+            Handed mine = this;
+            Handed theirs = other;
+            while (mine != theirs) {
+                if (mine.depth >= theirs.depth) {
+                    if (differsOn(mine.step, names, other)) {
+                        return false;
+                    }
+                    mine = mine.parent;
+                } else {
+                    if (differsOn(theirs.step, names, other)) {
+                        return false;
+                    }
+                    theirs = theirs.parent;
+                }
+            }
+            return true;
+        }
+
+        private boolean differsOn(BindingId name, AskedNames names, Handed other) {
+            AskedNames.counted(1, 1);
+            return names.contains(name)
+                    && !Objects.equals(values.get(name), other.values.get(name));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            Watch.compared();
+            return other instanceof Handed that && hash == that.hash
+                    && values.equals(that.values);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return values.toString();
+        }
+    }
+
+    /**
+     * Where a read of a name's handed value stands to the environment a watch began on.
+     *
+     * <p>Every read is one of these three, so a watch that places a read places all of them: a
+     * read that is none is not a read the watch may ignore, and {@link #OFF_THE_WAY} says so.
+     */
+    private enum Placing {
+
+        /** Made on the way from the environment the watch began on, with the name not handed
+         *  since: what it was answered is what the environment began with, and what the reading
+         *  asked after. */
+        AS_BEGUN,
+
+        /** Made on the way from it, with the name handed a value since: the reading decided that
+         *  value itself, and it asked nothing of what was handed before. */
+        HANDED_SINCE,
+
+        /** Made in an environment that does not come from the one the watch began on: an
+         *  ancestor of it, or one made apart from it. What it was answered is no answer of the
+         *  environment another reading is compared with, so nothing the watch says would hold of
+         *  it. */
+        OFF_THE_WAY
+    }
+
+    /**
+     * A reading that is asking which of the values an application handed matter to it.
+     *
+     * <p>Environments made while it runs are made from the one it started on, and a name handed a
+     * value in one of them is either handed it by a step made since, which the reading decides for
+     * itself, or by the environment it started on, which is what it asks after and what another
+     * environment is asked to agree with. A hand comparing environments as wholes, or one that
+     * cannot be placed, says the reading is not one to be told apart by those answers alone.
+     */
+    static final class Watch {
+
+        private static final ThreadLocal<Watch> RUNNING = new ThreadLocal<>();
+
+        private final Handed started;
+        /** The names this reading read itself, which were answered as {@link #started} has them. */
+        private final Set<BindingId> asked = new HashSet<>();
+        /** What the readings taken in asked, or null where none was: most watches take in none. */
+        private Takings takings;
+        private boolean unsure;
+
+        private Watch(Handed started) {
+            this.started = started;
+        }
+
+        /** What {@code reading} comes to, and what it asked of {@code on}'s handed values, which
+         *  is {@link HandedAnswers#UNTOLD} where it cannot be told by those alone.
+         *
+         *  <p>A reading inside another is watched on its own, and what it asked is then asked by
+         *  the one it is inside as well, placed from where the inner one began. */
+        static <T> Watched<T> over(BindingEnvironment on, Supplier<T> reading) {
+            Watch outer = RUNNING.get();
+            Watch watch = new Watch(on.handed);
+            RUNNING.set(watch);
+            try {
+                T result = reading.get();
+                AskedNames names = watch.unsure ? AskedNames.NONE
+                        : AskedNames.of(watch.asked,
+                                watch.takings == null ? List.of() : watch.takings.sets);
+                if (outer != null) {
+                    outer.note(on.handed, names, watch.unsure);
+                }
+                return new Watched<>(result,
+                        watch.unsure ? HandedAnswers.UNTOLD : new HandedAnswers(on.handed, names));
+            } finally {
+                if (outer == null) {
+                    RUNNING.remove();
+                } else {
+                    RUNNING.set(outer);
+                }
+            }
+        }
+
+        /** What a reading taken again asked, asked of the watch running now as the reading it
+         *  stands for would have. */
+        static void replay(BindingEnvironment at, HandedAnswers answers) {
+            Watch watch = RUNNING.get();
+            assert !answers.toldApart() || answers.holdsOf(at)
+                    : "a reading is taken again where what it asked is handed what it was handed";
+            if (watch != null) {
+                watch.note(at.handed, answers.names(), !answers.toldApart());
+            }
+        }
+
+        /**
+         * What was asked of the values handed in {@code in}, noted as this watch notes a read
+         * there: the names asked are taken in as they are, but for the ones handed again on the
+         * way from where this began to {@code in}, and are none of this one's where {@code in}
+         * does not come from there.
+         *
+         * <p>Placed once for the set and not for each name, and the set is shared and not copied
+         * ({@link AskedNames}).
+         */
+        private void note(Handed in, AskedNames names, boolean notTold) {
+            if (notTold) {
+                unsure = true;
+                return;
+            }
+            if (!names.hasNames()) {
+                return;
+            }
+            AskedNames.counted(2, 1);
+            Steps since = in.stepsSince(started);
+            if (since == null) {
+                unsure = true;
+                return;
+            }
+            if (takings == null) {
+                takings = new Takings();
+            }
+            takings.add(takings.projection(names, since));
+        }
+
+        static boolean running() {
+            return RUNNING.get() != null;
+        }
+
+        static void compared() {
+            Watch watch = RUNNING.get();
+            if (watch != null) {
+                watch.unsure = true;
+            }
+        }
+
+        /**
+         * What {@code binding} was handed in {@code in}, which a watch running on this thread
+         * takes note of.
+         *
+         * <p>The one way a value that was handed is read. A read the watch cannot place makes it
+         * unsure, so that it is neither left without that read nor taken for one that holds of
+         * every reading it is compared with.
+         */
+        private static Core read(Handed in, BindingId binding) {
+            Core answer = in.unwatched(binding);
+            Watch watch = RUNNING.get();
+            if (watch != null) {
+                switch (in.placing(watch.started, binding)) {
+                    case AS_BEGUN -> watch.asked.add(binding);
+                    case HANDED_SINCE -> { }
+                    case OFF_THE_WAY -> watch.unsure = true;
+                }
+            }
+            return answer;
+        }
+    }
+
+    /**
+     * The names handed on the way from one application to another, compared by what they are and
+     * with the hash worked out once: a set is asked for its hash at each use, which walks it.
+     */
+    static final class Steps {
+
+        static final Steps NONE = new Steps(Set.of());
+
+        private final Set<BindingId> names;
+        private final int hash;
+
+        Steps(Set<BindingId> names) {
+            this.names = names;
+            this.hash = names.hashCode();
+        }
+
+        Set<BindingId> names() {
+            return names;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Steps that && hash == that.hash
+                    && names.equals(that.names));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    /** A set of names asked, by what object it is, and the names left out of it, by what they are. */
+    private record Without(AskedNames names, Steps out) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Without that && names == that.names && out.equals(that.out);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(names) + out.hashCode();
+        }
+    }
+
+    /**
+     * What one watch took in, and how each came to be.
+     *
+     * <p>What is kept is what the watch took in, and not the applications it met: those are made
+     * for the occasion and let go, and what was asked of one that handed nothing the watch was
+     * told of is nothing to keep. A set left out of the same names, whichever applications they
+     * came from, is the one set; a set that is no different without them is itself, and is not
+     * kept.
+     */
+    private static final class Takings {
+
+        /** The sets taken in, as each stands to where the watch began, each once. */
+        final List<AskedNames> sets = new ArrayList<>();
+        private final Set<AskedNames> distinct = Collections.newSetFromMap(new IdentityHashMap<>());
+        private Map<Without, AskedNames> projected;
+
+        /** {@code names} as it stands to where the watch began, which is without the names handed
+         *  again on the way ({@code since}). */
+        AskedNames projection(AskedNames names, Steps since) {
+            if (since.names().isEmpty()) {
+                return names;
+            }
+            Without key = new Without(names, since);
+            AskedNames kept = projected == null ? null : projected.get(key);
+            if (kept != null) {
+                return kept;
+            }
+            AskedNames made = names.without(since.names());
+            if (made != names) {
+                if (projected == null) {
+                    projected = new HashMap<>();
+                }
+                projected.put(key, made);
+                AskedNames.counted(4, 1);
+            }
+            return made;
+        }
+
+        void add(AskedNames passed) {
+            if (passed.hasNames() && distinct.add(passed)) {
+                sets.add(passed);
+            }
+        }
+    }
+
+    /** What {@code binding} was handed on the way here, or null. */
+    private Core handedTo(BindingId binding) {
+        return Watch.read(handed, binding);
+    }
+
+    /** Whether every name of {@code names} is handed here what it is handed in the application
+     *  {@code began}: the question {@link HandedAnswers} asks. Unwatched. */
+    boolean handedAgrees(Handed began, AskedNames names) {
+        return began.agreesOn(names, handed);
+    }
+
+    /** Whether {@code that} is this but for what was handed. */
+    boolean sameButForWhatIsHanded(BindingEnvironment that) {
+        return this == that || (callsStand == that.callsStand
+                && roots.equals(that.roots)
+                && bound().equals(that.bound())
+                && selected.equals(that.selected)
+                && opened.equals(that.opened)
+                && answered.equals(that.answered)
+                && (elements == that.elements || elements.equals(that.elements))
+                && (values == that.values || values.equals(that.values)));
+    }
+
+    /** {@link #hashCode} but for what was handed. */
+    int hashButForWhatIsHanded() {
+        int h = hashWithoutWhatWasHanded;
+        if (h == 0) {
+            h = Objects.hash(roots, bound().keySet(), heldHash.get(), callsStand,
+                    selected.keySet(), opened.keySet(), answered.keySet());
+            hashWithoutWhatWasHanded = h;
+        }
+        return h;
+    }
+
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, ValueDefinitions values, boolean callsStand) {
-        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, values,
+        this(Map.copyOf(roots), Handed.NONE, Map.copyOf(bound), null, elements, values,
                 new HeldHash(elements, values), callsStand, Map.of(), Map.of(), Map.of());
     }
 
-    private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
+    private BindingEnvironment(Map<BindingId, TermPath> roots, Handed handed,
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
                                ValueDefinitions values, HeldHash heldHash, boolean callsStand,
                                Map<BindingId, InputReads.EntryLookedUp> selected,
-                               Map<BindingId, InputReads.LookupOpened> opened,
+                               Map<BindingId, InputReads.ArmOpened> opened,
                                Map<BindingId, InputReads.AnAnswerAt> answered) {
         this.selected = selected;
         this.opened = opened;
@@ -154,6 +615,12 @@ final class BindingEnvironment {
 
     /** What {@code binding} is bound to on the way here, the nearest binding winning. */
     private Core boundTo(BindingId binding) {
+        Core.IfConstructed attempt = attemptThatBuilt(binding);
+        return attempt != null ? attempt.construct() : heldFor(binding);
+    }
+
+    /** What is held for {@code binding}: its value, or the attempt that built it. */
+    private Core heldFor(BindingId binding) {
         for (Layer layer = newest; layer != null; layer = layer.older()) {
             if (layer.binding().equals(binding)) {
                 return layer.value();
@@ -162,26 +629,57 @@ final class BindingEnvironment {
         return table.get(binding);
     }
 
+    /**
+     * The attempt that built what {@code binding} names, where it names what an
+     * {@code if ... as} built and stands only where the building succeeded, or null. What a
+     * run works out to give it its value is what the attempt worked out, and the attempt ends
+     * no run of its own: a value it refused takes the other arm. Only the name the attempt
+     * writes: a name given the whole {@code if ... as} is given whichever arm it answers.
+     */
+    Core.IfConstructed attemptThatBuilt(BindingId binding) {
+        return Core.withoutStanding(heldFor(binding)) instanceof Core.IfConstructed attempt
+                && attempt.binder() != null && binding.equals(attempt.binder().binding())
+                ? attempt : null;
+    }
+
+    /**
+     * Whether {@code construct} is what an attempt bound on the way here built, read where the
+     * name the attempt writes stands for it ({@link #attemptThatBuilt}): the attempt makes it,
+     * and a value it refuses takes the other arm rather than ending the run.
+     */
+    boolean builtByAnAttempt(Core.Construct construct) {
+        for (Map.Entry<BindingId, Core> each : bound().entrySet()) {
+            if (Core.withoutStanding(each.getValue()) instanceof Core.IfConstructed attempt
+                    && attempt.construct() == construct
+                    && attemptThatBuilt(each.getKey()) == attempt) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Everything bound on the way here as one table, made when it is asked for. */
     private Map<BindingId, Core> bound() {
         Map<BindingId, Core> made = boundAsATable;
         if (made == null) {
-            if (newest == null) {
-                made = table;
-            } else {
-                Map<BindingId, Core> wider = new LinkedHashMap<>(table);
-                List<Layer> oldestFirst = new ArrayList<>();
-                for (Layer layer = newest; layer != null; layer = layer.older()) {
-                    oldestFirst.add(layer);
-                }
-                for (int at = oldestFirst.size() - 1; at >= 0; at--) {
-                    wider.put(oldestFirst.get(at).binding(), oldestFirst.get(at).value());
-                }
-                made = Map.copyOf(wider);
-            }
+            made = newest == null ? table : written(table, newest);
             boundAsATable = made;
         }
         return made;
+    }
+
+    /**
+     * {@code table} with the bindings of {@code newest} and the layers older than it written into
+     * it, the nearest binding of a name winning. Sized for every binding it will hold, and
+     * handed out unmodifiable: every environment made from this one shares it.
+     */
+    private static Map<BindingId, Core> written(Map<BindingId, Core> table, Layer newest) {
+        Map<BindingId, Core> wider = HashMap.newHashMap(table.size() + newest.depth());
+        for (Layer layer = newest; layer != null; layer = layer.older()) {
+            wider.putIfAbsent(layer.binding(), layer.value());
+        }
+        table.forEach(wider::putIfAbsent);
+        return Collections.unmodifiableMap(wider);
     }
 
     /**
@@ -201,7 +699,7 @@ final class BindingEnvironment {
         }
         // The element an application handed it, before the container it is an element of: on this
         // application the name is that one value.
-        Core given = handed.get(binding);
+        Core given = handedTo(binding);
         if (given != null) {
             return new BindingRole.Alias(given);
         }
@@ -222,14 +720,30 @@ final class BindingEnvironment {
      * was given nothing.
      */
     Core given(BindingId binding) {
-        return !handed.containsKey(binding)
+        return handedTo(binding) == null
                 && roleOf(binding) instanceof BindingRole.Alias(Core value) ? value : null;
+    }
+
+    /**
+     * What the body gave {@code binding}, a name standing at a position of the input — or null
+     * where it stands at none or was given nothing. A name taken off a value standing for an
+     * element stands at a place inside the element, and is that element's: the position says the
+     * place, and what it was given says whose.
+     */
+    Core givenWhereItStands(BindingId binding) {
+        return roots.containsKey(binding) ? boundTo(binding) : null;
     }
 
     /** What the operations applying the closure {@code binding} is a parameter of hand it, each
      *  container and how, whatever else the name has come to stand for on the way here. */
     List<HeldIn> handedFrom(BindingId binding) {
         return elements.containersOf(binding);
+    }
+
+    /** Which calls of the language's operations handed the closure {@code binding} is a
+     *  parameter of what it holds ({@link ElementBindings#handedBy}). */
+    Set<ACallOfAnOperation> handedBy(BindingId binding) {
+        return elements.handedBy(binding);
     }
 
     /** The containers the closure {@code binding} is a parameter of is applied over, where every
@@ -248,6 +762,12 @@ final class BindingEnvironment {
      *  where the walk answered no place of it ({@link ElementProjection}). */
     ElementAnswer answerAt(BindingId binding) {
         return elements.answerAt(binding);
+    }
+
+    /** What the walk handing {@code element} its elements answers, where an expansion wrote that
+     *  down ({@link ElementBindings#assembledAt}). */
+    ElementBindings.AssembledWalk assembledAt(BindingId element) {
+        return elements.assembledAt(element);
     }
 
     /** What each binding the body made holds, over the whole of it. */
@@ -306,21 +826,21 @@ final class BindingEnvironment {
         if (binder == null || binder.binding() == null || value == null) {
             return this;
         }
-        // The nearest binding wins, which is what being inside it means. What the name is given is
-        // held as it was written: a build of a value is read as its definition, in the reading a
-        // definition is read in, by the one place that says what a name stands for
-        // (InputReads#meaningOf) — and not swapped for the definition here, where the reading it
-        // would be read in is this one.
-        int depth = newest == null ? 1 : newest.depth() + 1;
-        Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
-        if (depth <= KEPT_APART) {
-            return new BindingEnvironment(roots, handed, table, inner, elements, values, heldHash,
-                    callsStand, selected, opened, answered);
-        }
-        BindingEnvironment written = new BindingEnvironment(roots, handed, table, inner, elements,
-                values, heldHash, callsStand, selected, opened, answered);
-        return new BindingEnvironment(roots, handed, written.bound(), null, elements, values,
-                heldHash, callsStand, selected, opened, answered);
+        return steps.madeBy(Step.INSIDE, binder, value, () -> {
+            // The nearest binding wins, which is what being inside it means. What the name is
+            // given is held as it was written: a build of a value is read as its definition, in
+            // the reading a definition is read in, by the one place that says what a name stands
+            // for (InputReads#meaningOf) — and not swapped for the definition here, where the
+            // reading it would be read in is this one.
+            int depth = newest == null ? 1 : newest.depth() + 1;
+            Layer inner = new Layer(binder.binding(), Core.withoutStanding(value), newest, depth);
+            if (depth <= KEPT_APART) {
+                return new BindingEnvironment(roots, handed, table, inner, elements, values,
+                        heldHash, callsStand, selected, opened, answered);
+            }
+            return new BindingEnvironment(roots, handed, written(table, inner), null, elements,
+                    values, heldHash, callsStand, selected, opened, answered);
+        });
     }
 
     /** The same, over a tree that keeps the language's operations standing as calls, which the
@@ -328,6 +848,15 @@ final class BindingEnvironment {
     BindingEnvironment overStandingCalls() {
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
                 true, selected, opened, answered);
+    }
+
+    /** The same, with {@code binding} an element of the container {@code held} names, as a
+     *  parameter an operation hands the elements of a container is. */
+    BindingEnvironment holdingAnElement(BindingId binding, HeldIn held) {
+        ElementBindings wider = elements.and(new ElementBindings(Map.of(binding, List.of(held)),
+                Map.of(), ElementProvenance.NONE, Map.of()));
+        return new BindingEnvironment(roots, handed, table, newest, wider, values,
+                new HeldHash(wider, values), callsStand, selected, opened, answered);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */
@@ -370,15 +899,15 @@ final class BindingEnvironment {
     }
 
     /** The same, where {@code binding} is what the lookup {@code lookup} found under its key. */
-    BindingEnvironment opening(BindingId binding, InputReads.LookupOpened lookup) {
-        Map<BindingId, InputReads.LookupOpened> wider = new LinkedHashMap<>(opened);
+    BindingEnvironment opening(BindingId binding, InputReads.ArmOpened lookup) {
+        Map<BindingId, InputReads.ArmOpened> wider = new LinkedHashMap<>(opened);
         wider.put(binding, lookup);
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
                 callsStand, selected, Map.copyOf(wider), answered);
     }
 
     /** What {@code binding} is the value of, or null where it is no such name. */
-    InputReads.LookupOpened openedBy(BindingId binding) {
+    InputReads.ArmOpened openedBy(BindingId binding) {
         return opened.get(binding);
     }
 
@@ -387,14 +916,12 @@ final class BindingEnvironment {
      * the values a container was written with, naming no binding of its own.
      */
     BindingEnvironment handing(BindingId binding, Core value) {
-        Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
-        wider.put(binding, value);
-        return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements, values,
-                heldHash, callsStand, selected, opened, answered);
+        return new BindingEnvironment(roots, handed.with(binding, value), table, newest, elements,
+                values, heldHash, callsStand, selected, opened, answered);
     }
 
     /**
-     * The same, where the body of a behavior a call names is read as well: what that body binds to
+     * The same, where another body is read as well, the one a call names: what that body binds to
      * the elements of what, beside what this one does. Its bindings are its own, so none of them is
      * one of these — and the values it builds are defined beside the ones this one does.
      */
@@ -434,16 +961,17 @@ final class BindingEnvironment {
      * is a tree, and an environment made at every name a reading follows would walk every tree
      * bound on the way at each. Two environments binding the same names to different values are
      * still told apart, by {@link #equals}. What the body holds is the hash worked out once, where
-     * it was first held ({@link #heldHash}).
+     * it was first held ({@link #heldHash}), and what was handed is hashed by the values too, each
+     * worked out once as it was handed ({@link Handed}).
      */
     @Override
     public int hashCode() {
         int h = hash;
         if (h == 0) {
-            // The names of what was handed and what was selected, as of what was bound: what each
-            // is handed or picked out by is a tree, and equality reads it where a hash would walk
-            // it for every environment made.
-            h = Objects.hash(roots, handed.keySet(), bound().keySet(), heldHash.get(), callsStand,
+            // What was handed, whose hash was worked out as each value was handed, and the names
+            // of what was selected, as of what was bound: what each of those is picked out by is
+            // a tree, and equality reads it where a hash would walk it for every environment made.
+            h = Objects.hash(roots, handed, bound().keySet(), heldHash.get(), callsStand,
                     selected.keySet(), opened.keySet(), answered.keySet());
             hash = h;
         }
@@ -452,7 +980,9 @@ final class BindingEnvironment {
 
     @Override
     public String toString() {
-        return "BindingEnvironment[roots=" + roots + ", handed=" + handed + ", bound=" + bound()
+        Watch.compared();
+        return "BindingEnvironment[roots=" + roots + ", handed=" + handed + ", bound="
+                + bound()
                 + ", elements=" + elements + ", callsStand=" + callsStand
                 + ", selected=" + selected + ", opened=" + opened.keySet() + "]";
     }

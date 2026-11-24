@@ -4,16 +4,18 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.check.ValuePlaces;
+import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.UnorderedOrder;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +54,7 @@ final class ObservedFixtures {
 
         record Written<T>(T value) implements Writing<T> {}
 
-        record NotWritable<T>(String why) implements Writing<T> {}
+        record NotWritable<T>(SearchMessage why) implements Writing<T> {}
     }
 
     /**
@@ -85,7 +87,7 @@ final class ObservedFixtures {
             if (!(inputs.observedAt(built, path)
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
                 return new Writing.NotWritable<>(
-                        "`" + path + "` is not a position the value built has");
+                        new SearchMessage.NotAPositionTheValueBuiltHas(String.valueOf(path)));
             }
             // Every value there, where a demand asks each element; and the one value, where a
             // demand asks one — both where both do, since the two are asked of one value built.
@@ -93,7 +95,7 @@ final class ObservedFixtures {
                 switch (written(path, found, reading)) {
                     case Writing.Written<List<ValuesHandedOn.Standing>>(var all) ->
                             values.put(path, all);
-                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(String why) -> {
+                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(SearchMessage why) -> {
                         return new Writing.NotWritable<>(why);
                     }
                 }
@@ -108,25 +110,24 @@ final class ObservedFixtures {
                 one = switch (written(path, found, reading)) {
                     case Writing.Written<List<ValuesHandedOn.Standing>>(var all) ->
                             new Writing.Written<>(all.getFirst());
-                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(String why) ->
+                    case Writing.NotWritable<List<ValuesHandedOn.Standing>>(SearchMessage why) ->
                             new Writing.NotWritable<>(why);
                 };
             } else if (found.isEmpty()) {
                 one = new Writing.NotWritable<>(
-                        "nothing stands at `" + path + "` in the value built");
+                        new SearchMessage.NothingStandsThereInTheValueBuilt(String.valueOf(path)));
             } else {
                 if (composedWith == null) {
                     composedWith = planned.get();
                 }
                 one = theOneComposed(found, composedWith.get(path), reading) instanceof
                         Writing.Written<ValuesHandedOn.Standing> written ? written
-                        : new Writing.NotWritable<>("`" + path + "` is at each of "
-                                + found.size() + " elements of the value built, which is no one"
-                                + " value");
+                        : new Writing.NotWritable<>(new SearchMessage.AtEachOfSeveralElements(
+                                String.valueOf(path), Integer.toString(found.size())));
             }
             switch (one) {
                 case Writing.Written<ValuesHandedOn.Standing>(var value) -> chosen.put(path, value);
-                case Writing.NotWritable<ValuesHandedOn.Standing>(String why) -> {
+                case Writing.NotWritable<ValuesHandedOn.Standing>(SearchMessage why) -> {
                     return new Writing.NotWritable<>(why);
                 }
             }
@@ -136,7 +137,8 @@ final class ObservedFixtures {
             if (!(inputs.observedAt(built, container.element())
                     instanceof WalkResult.Reached<List<BehaviorInputs.ObservedAt>>(var found))) {
                 return new Writing.NotWritable<>(
-                        "`" + container + "` is not a container the value built has");
+                        new SearchMessage.NotAContainerTheValueBuiltHas(
+                                String.valueOf(container)));
             }
             List<ElementsTaken> held = new ArrayList<>();
             for (BehaviorInputs.ObservedAt one : found) {
@@ -160,9 +162,10 @@ final class ObservedFixtures {
             switch (of(one.value(), one.type(), reading)) {
                 case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
                         standing.add(new ValuesHandedOn.Standing(one.at(), written));
-                case Writing.NotWritable<FixtureTemplate>(String why) -> {
+                case Writing.NotWritable<FixtureTemplate>(SearchMessage why) -> {
                     return new Writing.NotWritable<>(
-                            "the value built at `" + path + "` cannot be written: " + why);
+                            new SearchMessage.TheValueBuiltCannotBeWritten(String.valueOf(path),
+                                    why));
                 }
             }
         }
@@ -178,7 +181,7 @@ final class ObservedFixtures {
             List<BehaviorInputs.ObservedAt> found, FixtureTemplate composedWith,
             RuleReadingContext reading) {
         if (composedWith == null) {
-            return new Writing.NotWritable<>("nothing was composed there");
+            return new Writing.NotWritable<>(new SearchMessage.NothingWasComposedThere());
         }
         for (BehaviorInputs.ObservedAt one : found) {
             if (of(one.value(), one.type(), reading)
@@ -187,7 +190,7 @@ final class ObservedFixtures {
                 return new Writing.Written<>(new ValuesHandedOn.Standing(one.at(), written));
             }
         }
-        return new Writing.NotWritable<>("none of them is what was composed there");
+        return new Writing.NotWritable<>(new SearchMessage.NoneOfThemIsWhatWasComposed());
     }
 
     /** {@code value}, standing at a position the reading exposes as {@code type}, written as a
@@ -257,7 +260,8 @@ final class ObservedFixtures {
                     : of(value, optional.element(), reading);
             case Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
                  Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ ->
-                    new Writing.NotWritable<>("nothing writes a value at a position of this type");
+                    new Writing.NotWritable<>(
+                            new SearchMessage.NothingWritesAValueOfThisType());
         };
     }
 
@@ -272,7 +276,8 @@ final class ObservedFixtures {
     private static Writing<FixtureTemplate> scalar(ObservedValue value, Type.Prim prim) {
         if (value.primitive() != prim
                 && !(prim == Type.Prim.DECIMAL && value instanceof ObservedValue.Integer)) {
-            return new Writing.NotWritable<>("the value is not one a " + prim + " is written as");
+            return new Writing.NotWritable<>(
+                    new SearchMessage.NotAValueOfThePrimitive(String.valueOf(prim)));
         }
         FixtureTemplate written = switch (prim) {
             case INT -> value instanceof ObservedValue.Integer(long n)
@@ -303,8 +308,8 @@ final class ObservedFixtures {
         // A decimal is the one primitive whose value can be in hand and still have no literal.
         return new Writing.NotWritable<>(
                 prim == Type.Prim.DECIMAL && value instanceof ObservedValue.Decimal
-                        ? "a decimal this far from an ordinary one has no literal"
-                        : "the value is not one a " + prim + " is written as");
+                        ? new SearchMessage.ADecimalThisFarHasNoLiteral()
+                        : new SearchMessage.NotAValueOfThePrimitive(String.valueOf(prim)));
     }
 
     private static Writing<FixtureTemplate> unitCase(TypeSymbol made, RuleReadingContext reading) {
@@ -333,7 +338,7 @@ final class ObservedFixtures {
             ObservedValue held = made.field(field.getKey());
             if (held == null) {
                 return new Writing.NotWritable<>(
-                        "the value built holds nothing at `" + field.getKey() + "`");
+                        new SearchMessage.TheValueBuiltHoldsNothingAt(field.getKey()));
             }
             switch (of(held, field.getValue(), reading)) {
                 case Writing.Written<FixtureTemplate>(FixtureTemplate written) ->
@@ -346,7 +351,7 @@ final class ObservedFixtures {
         return new Writing.Written<>(FixtureTemplate.record(name, fields));
     }
 
-    /** A list in the order it holds its elements, and a set in the order of their text. */
+    /** A list in the order it holds its elements, and a set in the order of their values. */
     private static Writing<FixtureTemplate> sequence(List<ObservedValue> elements,
                                                      Shape.Sequence sequence,
                                                      RuleReadingContext reading) {
@@ -360,12 +365,37 @@ final class ObservedFixtures {
             }
         }
         if (sequence.kind() == Shape.Sequence.Kind.SET) {
-            written.sort(Comparator.comparing(FixtureTemplate::text));
+            written = inUnorderedOrder(elements, written, sequence.element(), reading.source());
         }
         return new Writing.Written<>(FixtureTemplate.collection(written));
     }
 
-    /** A map as its entries, in the order of their text. */
+    /**
+     * {@code written}, the parts of a collection that states no order, in the order
+     * {@link UnorderedOrder} writes them: by the place of {@code observed}, the value each was
+     * written from, at a position of {@code type}, and by text where that position places nothing.
+     *
+     * <p>The place is asked of {@link ValuePlaces}, of the observed value and never of its text.
+     */
+    private static List<FixtureTemplate> inUnorderedOrder(List<ObservedValue> observed,
+                                                          List<FixtureTemplate> written,
+                                                          Type type, RuleReadingSource source) {
+        ValuePlaces places = ValuePlaces.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        List<WrittenFrom> parts = new ArrayList<>(written.size());
+        for (int at = 0; at < written.size(); at++) {
+            parts.add(new WrittenFrom(observed.get(at), written.get(at)));
+        }
+        return UnorderedOrder.of(parts, part -> places.of(part.observed()),
+                part -> part.template().text()).stream().map(WrittenFrom::template).toList();
+    }
+
+    /** A part of a collection, beside the value it was written from. */
+    private record WrittenFrom(ObservedValue observed, FixtureTemplate template) {
+    }
+
+    /** A map as its entries, in the order of its keys' values where they are numbers, and of their
+     *  text otherwise. */
     private static Writing<FixtureTemplate> mapping(List<ObservedValue.Entry> entries,
                                                     Shape.Mapping mapping,
                                                     RuleReadingContext reading) {
@@ -381,21 +411,22 @@ final class ObservedFixtures {
             }
             written.add(FixtureTemplate.entry(k, v));
         }
-        written.sort(Comparator.comparing(FixtureTemplate::text));
-        return new Writing.Written<>(FixtureTemplate.collection(written));
+        List<ObservedValue> keys = entries.stream().map(ObservedValue.Entry::key).toList();
+        return new Writing.Written<>(FixtureTemplate.collection(
+                inUnorderedOrder(keys, written, mapping.key(), reading.source())));
     }
 
     private static <T> Writing<T> unread(ObservedValue value) {
         return new Writing.NotWritable<>(switch (value) {
-            case ObservedValue.Unknown(String reason) -> "the value could not be read back: "
-                    + reason;
-            default -> "a limit stopped the observation before it reached the value";
+            case ObservedValue.Unknown(String reason) ->
+                    new SearchMessage.TheValueCouldNotBeReadBack(reason);
+            default -> new SearchMessage.ALimitStoppedTheObservation();
         });
     }
 
     private static <T> Writing<T> notOf() {
         return new Writing.NotWritable<>(
-                "the value built is not the construction the position declares");
+                new SearchMessage.NotTheConstructionThePositionDeclares());
     }
 
     private ObservedFixtures() {}

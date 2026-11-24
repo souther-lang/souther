@@ -1,6 +1,10 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.InTheOrderGiven;
+
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -67,10 +71,15 @@ public final class DifferenceBounds<A> {
     private DifferenceBounds(Map<A, Map<A, ExactCut>> related, Map<A, ExactCut> above,
                              Map<A, ExactCut> below, Set<A> positions, boolean holdsNothing,
                              boolean everyHopWasComposed) {
-        this.related = related;
-        this.above = above;
-        this.below = below;
-        this.positions = positions;
+        // Held for as long as the closure is, which is as long as what it answers is asked: kept
+        // as the tables they were built in, each holds a table and an entry per position on top
+        // of what it says.
+        Map<A, Map<A, ExactCut>> rows = new LinkedHashMap<>();
+        related.forEach((from, row) -> rows.put(from, InTheOrderGiven.map(row)));
+        this.related = InTheOrderGiven.map(rows);
+        this.above = InTheOrderGiven.map(above);
+        this.below = InTheOrderGiven.map(below);
+        this.positions = InTheOrderGiven.set(positions);
         this.holdsNothing = holdsNothing;
         this.everyHopWasComposed = everyHopWasComposed;
         List<Apart<A>> apart = new ArrayList<>();
@@ -120,6 +129,57 @@ public final class DifferenceBounds<A> {
     }
 
     /**
+     * What {@link #over} comes to for the rules these were made from followed by {@code added}, or
+     * null where that is not worked out from these alone.
+     *
+     * <p>Only where no rule so far relates two positions and none of {@code added} does: then there
+     * is no path through any position, and what each bound comes to is the tightest of the rules
+     * that state it. A rule that relates two positions makes a path of the rules before it and the
+     * ones after, and is closed by {@link #over}.
+     */
+    DifferenceBounds<A> followedBy(List<AffineConstraint<A>> added, CanonicalOrder<A> order) {
+        if (holdsNothing || !related.isEmpty()) {
+            return null;
+        }
+        Map<A, ExactCut> aboveNow = new LinkedHashMap<>(above);
+        Map<A, ExactCut> belowNow = new LinkedHashMap<>(below);
+        Set<A> positionsNow = new LinkedHashSet<>(positions);
+        Set<A> touched = new LinkedHashSet<>();
+        for (AffineConstraint<A> each : added) {
+            for (Edge<A> edge : edgesOf(each, order)) {
+                switch (edge) {
+                    case Edge.Above<A> up -> {
+                        positionsNow.add(up.position());
+                        touched.add(up.position());
+                        aboveNow.merge(up.position(), up.at(), ExactCut::tighterUpper);
+                    }
+                    case Edge.Below<A> down -> {
+                        positionsNow.add(down.position());
+                        touched.add(down.position());
+                        belowNow.merge(down.position(), down.at(), ExactCut::tighterUpper);
+                    }
+                    case Edge.Between<A> _ -> {
+                        return null;
+                    }
+                }
+            }
+        }
+        boolean nothing = false;
+        for (A position : touched) {
+            if (crossed(belowNow.get(position), aboveNow.get(position))) {
+                nothing = true;
+                break;
+            }
+        }
+        if (nothing) {
+            return new DifferenceBounds<>(Map.of(), Map.of(), Map.of(), positionsNow, true,
+                    everyHopWasComposed);
+        }
+        return new DifferenceBounds<>(Map.of(), aboveNow, belowNow, positionsNow, false,
+                everyHopWasComposed);
+    }
+
+    /**
      * Closures over positions no two of them share, as the one closure of all their rules.
      *
      * <p>No edge runs from one of them into another, so no path does either, and closing their
@@ -132,10 +192,22 @@ public final class DifferenceBounds<A> {
      *         is a path from one into the other that neither of them closed
      */
     static <A> DifferenceBounds<A> product(List<DifferenceBounds<A>> parts) {
-        Map<A, Map<A, ExactCut>> related = new LinkedHashMap<>();
-        Map<A, ExactCut> above = new LinkedHashMap<>();
-        Map<A, ExactCut> below = new LinkedHashMap<>();
-        Set<A> positions = new LinkedHashSet<>();
+        // The tables are the parts' put side by side, so how many there will be is known before
+        // the first is copied: held to that, none of them is grown while it is filled.
+        int relatedSize = 0;
+        int aboveSize = 0;
+        int belowSize = 0;
+        int positionsSize = 0;
+        for (DifferenceBounds<A> part : parts) {
+            relatedSize += part.related.size();
+            aboveSize += part.above.size();
+            belowSize += part.below.size();
+            positionsSize += part.positions.size();
+        }
+        Map<A, Map<A, ExactCut>> related = LinkedHashMap.newLinkedHashMap(relatedSize);
+        Map<A, ExactCut> above = LinkedHashMap.newLinkedHashMap(aboveSize);
+        Map<A, ExactCut> below = LinkedHashMap.newLinkedHashMap(belowSize);
+        Set<A> positions = LinkedHashSet.newLinkedHashSet(positionsSize);
         boolean holdsNothing = false;
         boolean everyHopWasComposed = true;
         for (DifferenceBounds<A> part : parts) {
@@ -186,6 +258,27 @@ public final class DifferenceBounds<A> {
             out.add(edge);
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether {@code half} is a bound on the difference of two positions: the shape a path of
+     * differences runs along, and so the one a closure has something to compose it with.
+     *
+     * <p>A bound on one position is an edge too, and is not asked about here: it reaches the ends a
+     * round carries along the differences, and holds nothing a path could pass through.
+     */
+    static <A> boolean relatesTwoPositions(AffineConstraint.HalfSpace<A> half,
+                                           CanonicalOrder<A> order) {
+        return edgeOf(half.form(), half.bound(), order) instanceof Edge.Between<A>;
+    }
+
+    /**
+     * Whether {@code equality} is of the shape these hold exactly, as the two bounds it is: a
+     * difference of two positions, or a bound on one. Asked of the same reading that makes the
+     * edges, so what is held exactly and what is said to be held exactly cannot differ.
+     */
+    static <A> boolean holdsExactly(AffineConstraint.Equality<A> equality, CanonicalOrder<A> order) {
+        return edgeOf(equality.form(), ExactCut.inclusive(equality.at()), order) != null;
     }
 
     /**
@@ -244,55 +337,22 @@ public final class DifferenceBounds<A> {
      * said about {@code a} alone. A path reaches its far end only where every hop on it does, which
      * is why the strictness travels with the sum rather than being decided at the end.
      *
-     * <p>The differences among the positions are closed first, going through each position from the
-     * ones that reach it, so the work is what the rules relate and not the square of the positions.
-     * A shortest path that goes through nought goes through it once, so each bound is then the
-     * tightest of its own edge and every closed difference followed by another position's edge, and
-     * a cycle through nought is a position whose two bounds have crossed.
+     * <p>The differences among the positions are closed first ({@link Paths}). A shortest path that
+     * goes through nought goes through it once, so each bound is then the tightest of its own edge
+     * and every closed difference followed by another position's edge, and a cycle through nought is
+     * a position whose two bounds have crossed.
      */
     private static <A> DifferenceBounds<A> closing(Map<A, Map<A, ExactCut>> between,
                                                    Map<A, ExactCut> aboveEdges,
                                                    Map<A, ExactCut> belowEdges,
                                                    Set<A> positions) {
-        Map<A, Map<A, ExactCut>> shortest = new LinkedHashMap<>();
-        Map<A, Set<A>> reachedFrom = new LinkedHashMap<>();
-        between.forEach((from, row) -> {
-            shortest.put(from, new LinkedHashMap<>(row));
-            row.keySet().forEach(to ->
-                    reachedFrom.computeIfAbsent(to, k -> new LinkedHashSet<>()).add(from));
-        });
-        boolean everyHopWasComposed = true;
-        for (A through : positions) {
-            Map<A, ExactCut> onwards = shortest.get(through);
-            Set<A> into = reachedFrom.get(through);
-            if (onwards == null || into == null) {
-                continue;
-            }
-            List<Map.Entry<A, ExactCut>> hops = List.copyOf(onwards.entrySet());
-            for (A from : List.copyOf(into)) {
-                if (from.equals(through)) {
-                    continue;
-                }
-                Map<A, ExactCut> row = shortest.get(from);
-                ExactCut reaching = row.get(through);
-                for (Map.Entry<A, ExactCut> hop : hops) {
-                    // A hop the exact arithmetic cannot sum is a hop this round does not compose,
-                    // same as one that was never an edge: the closure is looser than the true one by
-                    // exactly this hop, which is sound for every reading that asks whether something
-                    // is left, and is why `everyHopWasComposed` is carried rather than thrown past.
-                    ExactCut round = composed(reaching, hop.getValue());
-                    if (round == null) {
-                        everyHopWasComposed = false;
-                        continue;
-                    }
-                    if (ExactCut.tighterUpper(row.get(hop.getKey()), round) == round) {
-                        row.put(hop.getKey(), round);
-                        reachedFrom.computeIfAbsent(hop.getKey(), k -> new LinkedHashSet<>())
-                                .add(from);
-                    }
-                }
-            }
+        Paths<A> paths = new Paths<>(positions);
+        if (!paths.closed(between)) {
+            return new DifferenceBounds<>(Map.of(), Map.of(), Map.of(), positions, true,
+                    paths.everyHopWasComposed);
         }
+        boolean everyHopWasComposed = paths.everyHopWasComposed;
+        Map<A, Map<A, ExactCut>> shortest = paths.inTheOrderOf(positions);
         Map<A, ExactCut> above = new LinkedHashMap<>(aboveEdges);
         Map<A, ExactCut> below = new LinkedHashMap<>(belowEdges);
         for (Map.Entry<A, Map<A, ExactCut>> row : shortest.entrySet()) {
@@ -343,6 +403,162 @@ public final class DifferenceBounds<A> {
         }
         return new DifferenceBounds<>(shortest, above, below, positions, nothing,
                 everyHopWasComposed);
+    }
+
+    /**
+     * The closed differences among positions, worked out by taking the positions out one at a time,
+     * the one related to the fewest others first, and putting them back in the reverse order.
+     *
+     * <p>Taking a position out composes the hops into it with the hops out of it, and only among the
+     * positions still in. What it saw of those when it went is its row and column of shortest paths
+     * through the positions that went before it. Putting the positions back in the reverse order
+     * finishes every path: the first position of a shortest path that went out later is where the
+     * part through earlier ones stops, and what follows is already closed. A hop the exact
+     * arithmetic cannot sum is one this does not compose, same as one that was never an edge: the
+     * closure is looser than the true one by exactly this hop, which is sound for every reading that
+     * asks whether something is left, and is why {@link #everyHopWasComposed} is carried rather than
+     * thrown past.
+     *
+     * <p>A position related to few others costs few hops and leaves nothing behind for the ones
+     * after it to be read against, so a chain of rules relating each position to the next costs the
+     * square of its length in the paths it ends with, where closing through every position in turn
+     * costs the cube.
+     */
+    private static final class Paths<A> {
+
+        /** A position taken out, and the shortest paths to and from the positions still in. */
+        private record Taken<A>(A position, Map<A, ExactCut> to, Map<A, ExactCut> from) {}
+
+        private final Set<A> positions;
+        private final Map<A, Map<A, ExactCut>> shortest = new LinkedHashMap<>();
+        private boolean everyHopWasComposed = true;
+
+        Paths(Set<A> positions) {
+            this.positions = positions;
+            positions.forEach(position -> shortest.put(position, new LinkedHashMap<>()));
+        }
+
+        /** Closes {@code between}, and says whether anything is left: not where a cycle sums below
+         *  nought. */
+        boolean closed(Map<A, Map<A, ExactCut>> between) {
+            Map<A, Map<A, ExactCut>> out = new LinkedHashMap<>();
+            Map<A, Map<A, ExactCut>> into = new LinkedHashMap<>();
+            for (A position : positions) {
+                out.put(position, new LinkedHashMap<>());
+                into.put(position, new LinkedHashMap<>());
+            }
+            between.forEach((from, row) -> row.forEach((to, by) -> {
+                out.get(from).put(to, by);
+                into.get(to).put(from, by);
+            }));
+            Deque<Taken<A>> taken = new ArrayDeque<>();
+            Set<A> left = new LinkedHashSet<>(positions);
+            while (!left.isEmpty()) {
+                A position = relatedToTheFewest(left, out, into);
+                left.remove(position);
+                Map<A, ExactCut> to = out.remove(position);
+                Map<A, ExactCut> from = into.remove(position);
+                to.remove(position);
+                from.remove(position);
+                from.keySet().forEach(each -> out.get(each).remove(position));
+                to.keySet().forEach(each -> into.get(each).remove(position));
+                for (Map.Entry<A, ExactCut> hopIn : from.entrySet()) {
+                    for (Map.Entry<A, ExactCut> hopOut : to.entrySet()) {
+                        ExactCut round = composed(hopIn.getValue(), hopOut.getValue());
+                        if (round == null) {
+                            everyHopWasComposed = false;
+                        } else if (hopIn.getKey().equals(hopOut.getKey())
+                                && (round.at().signum() < 0
+                                        || (round.at().isZero() && !round.inclusive()))) {
+                            return false;
+                        } else if (ExactCut.tighterUpper(
+                                out.get(hopIn.getKey()).get(hopOut.getKey()), round) == round) {
+                            out.get(hopIn.getKey()).put(hopOut.getKey(), round);
+                            into.get(hopOut.getKey()).put(hopIn.getKey(), round);
+                        }
+                    }
+                }
+                taken.push(new Taken<>(position, to, from));
+            }
+            Set<A> back = new LinkedHashSet<>();
+            while (!taken.isEmpty()) {
+                Taken<A> each = taken.pop();
+                A position = each.position();
+                for (Map.Entry<A, ExactCut> hop : each.to().entrySet()) {
+                    keep(position, hop.getKey(), hop.getValue());
+                    for (Map.Entry<A, ExactCut> onwards
+                            : shortest.get(hop.getKey()).entrySet()) {
+                        keepComposed(position, onwards.getKey(), hop.getValue(),
+                                onwards.getValue());
+                    }
+                }
+                for (Map.Entry<A, ExactCut> hop : each.from().entrySet()) {
+                    keep(hop.getKey(), position, hop.getValue());
+                    for (A before : back) {
+                        ExactCut reaching = shortest.get(before).get(hop.getKey());
+                        if (reaching != null) {
+                            keepComposed(before, position, reaching, hop.getValue());
+                        }
+                    }
+                }
+                back.add(position);
+            }
+            return true;
+        }
+
+        /** The position of {@code left} with the fewest paths through it to compose. */
+        private A relatedToTheFewest(Set<A> left, Map<A, Map<A, ExactCut>> out,
+                                     Map<A, Map<A, ExactCut>> into) {
+            A fewest = null;
+            long cost = Long.MAX_VALUE;
+            for (A position : left) {
+                long hops = (long) (into.get(position).size()
+                        - (into.get(position).containsKey(position) ? 1 : 0))
+                        * (out.get(position).size()
+                        - (out.get(position).containsKey(position) ? 1 : 0));
+                if (hops < cost) {
+                    fewest = position;
+                    cost = hops;
+                }
+            }
+            return fewest;
+        }
+
+        private void keepComposed(A from, A to, ExactCut first, ExactCut second) {
+            ExactCut round = composed(first, second);
+            if (round == null) {
+                everyHopWasComposed = false;
+            } else {
+                keep(from, to, round);
+            }
+        }
+
+        private void keep(A from, A to, ExactCut by) {
+            if (ExactCut.tighterUpper(shortest.get(from).get(to), by) == by) {
+                shortest.get(from).put(to, by);
+            }
+        }
+
+        /** The rows that say anything, each in the order {@code order} puts its positions in, so
+         *  that what the closure holds does not depend on the order positions were taken out. */
+        Map<A, Map<A, ExactCut>> inTheOrderOf(Set<A> order) {
+            Map<A, Map<A, ExactCut>> ordered = new LinkedHashMap<>();
+            for (A from : order) {
+                Map<A, ExactCut> row = shortest.get(from);
+                if (row.isEmpty()) {
+                    continue;
+                }
+                Map<A, ExactCut> inOrder = new LinkedHashMap<>();
+                for (A to : order) {
+                    ExactCut by = row.get(to);
+                    if (by != null) {
+                        inOrder.put(to, by);
+                    }
+                }
+                ordered.put(from, inOrder);
+            }
+            return ordered;
+        }
     }
 
     /** Whether {@code 0 - a <= least} and {@code a - 0 <= most} leave {@code a} no value. */
@@ -431,6 +647,22 @@ public final class DifferenceBounds<A> {
         ExactCut throughNought = most == null || least == null ? null
                 : ExactCut.meetingBoth(most, least).orNull();
         return whereThereAreValues(ExactCut.tighterUpper(along, throughNought));
+    }
+
+    /**
+     * Whether {@link #differenceBound} of {@code a - b} is the tightest this proves. It is not where
+     * both positions are bounded and their bounds cannot be summed: the route through nought is then
+     * left out, and what comes back is looser than the paths say, or nothing where nothing else
+     * relates them — which is not that nothing bounds the difference.
+     *
+     * <p>{@link #everyHopWasComposed} says as much of the closure, and this of one question put to
+     * it, which sums the two bounds when it is asked and not before.
+     */
+    public boolean differenceBoundWasComposed(A a, A b) {
+        ExactCut most = above.get(a);
+        ExactCut least = below.get(b);
+        return a.equals(b) || most == null || least == null
+                || ExactCut.meetingBoth(most, least) instanceof ExactAnswer.Held<ExactCut>;
     }
 
     /**

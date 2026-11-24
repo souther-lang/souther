@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
@@ -21,6 +22,7 @@ import souther.compiler.query.Shapes;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -52,6 +54,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
+
+            let f (r) = Res { n = 0 }
             """;
 
     /**
@@ -171,7 +175,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
 
     private static OnTheWay.TakenIn cutOver(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,
-                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)));
+                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)),
+                NamedElements.NONE);
     }
 
     /** A row composed inside {@code within}, with {@code cut} on the way to it. */
@@ -181,7 +186,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 NumbersAskedFor.of(LevelRegion.point(
                         new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
                 new Reachability.Reaching(within, Requirements.NONE, TruthsAsked.NONE,
-                        List.of(cut), Reachability.Ways.ONE, List.of()),
+                        List.of(cut), Reachability.Ways.ONE, List.of(), Optional.empty()),
                 Generator.CandidateCheck.ANY);
     }
 
@@ -189,7 +194,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        return Compilation.ofSource(BOUNDED, "Main");
+        return ACompiledModel.compiles(Compilation.ofSource(BOUNDED, "Main"));
     }
 
     private static String module() {

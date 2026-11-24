@@ -2,6 +2,7 @@ package souther.lsp.analysis;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
@@ -9,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.test.WrittenOn;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -85,7 +87,9 @@ class WhatACodeActionCostsBenchmark {
         Map<String, String> byId = workspace();
         System.out.printf("workspace: %d modules, %d lines%n", byId.size(), lines(byId));
 
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(WrittenOn.DAY);
+        ACompiledModel.refusedWith(List.of("E1023"), compilation);
         SourceId asked = new SourceId(ASKED);
         if (compilation.repairs(asked).isEmpty()) {
             throw new IllegalStateException("the corpus is meant to hold a misspelling to repair");
@@ -95,8 +99,10 @@ class WhatACodeActionCostsBenchmark {
         System.out.printf("asked:    %s%n", byTurns(compilation, asked, byId, Edit.THE_FILE_ASKED));
         System.out.printf("elsewhere:%s%n", byTurns(compilation, asked, byId, Edit.ANOTHER_FILE));
         System.out.printf("cold:      diagnostics %6.2f ms   repairs %6.2f ms%n",
-                medianMillis(round -> fresh(byId).diagnostics(), ROUNDS / 4),
-                medianMillis(round -> fresh(byId).repairs(asked), ROUNDS / 4));
+                medianMillis(round -> ACompiledModel.refusedWith(List.of("E1023"), fresh(byId))
+                        .diagnostics(), ROUNDS / 4),
+                medianMillis(round -> ACompiledModel.refusedWith(List.of("E1023"), fresh(byId))
+                        .repairs(asked), ROUNDS / 4));
 
         String own = selfContained();
         System.out.printf("alone (one self-contained document): %6.2f ms%n",
@@ -160,6 +166,7 @@ class WhatACodeActionCostsBenchmark {
                 compilation.repairs(asked);
             }
             long closed = System.nanoTime();
+            ACompiledModel.refusedWith(List.of("E1023"), compilation);
             if (round >= ROUNDS) {
                 repairing.add(repairsFirst ? between - opened : closed - between);
                 diagnosing.add(repairsFirst ? closed - between : between - opened);
@@ -177,7 +184,7 @@ class WhatACodeActionCostsBenchmark {
         String touched = edit == Edit.THE_FILE_ASKED ? ASKED : "file:///m1.sou";
         Map<String, String> now = new LinkedHashMap<>(byId);
         now.put(touched, byId.get(touched) + added(round));
-        compilation.update(now, Set.of());
+        compilation.update(now, Set.of(), WrittenOn.DAY);
     }
 
     private static String added(int round) {
@@ -185,7 +192,7 @@ class WhatACodeActionCostsBenchmark {
     }
 
     private static Compilation fresh(Map<String, String> byId) {
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).writtenOn(WrittenOn.DAY);
     }
 
     /** What the offer used to do: a compile of the one document, from nothing, thrown away. */

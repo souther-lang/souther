@@ -8,6 +8,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.SchemaReference;
 import souther.compiler.check.NonAffineOperation;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumberRegion;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
@@ -17,11 +20,13 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
+import souther.compiler.execute.RunStop;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.values.StoppedReading;
@@ -33,6 +38,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -82,6 +89,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // value rule in a form nothing read are met again however much a run is allowed.
         table.put("UnreadComparisonForm", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         table.put("UnreadComparisonDomain", "UNSUPPORTED_DOMAIN/UNAFFECTED");
+        table.put("OrderedExtentEndIsNoValue", "UNSUPPORTED_DOMAIN/UNAFFECTED");
         // A line that falls at a number no exact ratio holds. Its own word beside the one above:
         // the values carry an order and the line is written, and what has no place is a constant of
         // the rule. Nothing was compared against a figure, so a run allowed more meets it again.
@@ -99,6 +107,15 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // each of them. A run allowed more meets it again — nothing was compared against a figure.
         table.put("RuleAboutAnElementOfSeveralContainers",
                 "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS/UNAFFECTED");
+        // A remainder of a number no position holds: what stopped the reading is not a form
+        // nothing takes apart, and nothing was compared against a figure, so a run allowed more
+        // meets it again.
+        table.put("RuleAboutARemainderNoPositionHolds",
+                "RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS/UNAFFECTED");
+        // The comparison was read and what a run works out to evaluate it was not, which no figure
+        // decides, so a run allowed more meets it again.
+        table.put("EvaluationStopsNotFullyRead",
+                "EVALUATION_STOPS_NOT_FULLY_READ/UNAFFECTED");
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         // Arithmetic no form says, which the arithmetic named where it met it. Nothing was made of
         // a position and nothing was compared against a figure, so a run allowed more meets it
@@ -179,6 +196,29 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // and a run allowed more of everything meets the same relation.
         table.put("RelationNotShownToReachEveryValue",
                 "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
+        // The same relation, where what would have shown the other side reaching every value is a
+        // row searched for and the search stopped at a figure: a run allowed more may find it.
+        table.put("RelationNotShownWhereTheSearchStopped",
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/MAY_CHANGE");
+        // The same relation, where the rows searched for met what they were asked to and the
+        // runs on them stopped without answering: no figure was reached, and a run allowed more
+        // stops where they stopped.
+        table.put("RelationNotShownWhereItsRowsStopped",
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
+        // Read to the end, and a relation a run may stop on the way to on what nothing says: not
+        // every value here is shown to get to it, and a run allowed more stops where it stopped.
+        table.put("RelationNotShownReachedAtEveryValue",
+                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE/UNAFFECTED");
+        // Read to the end, and a relation whose classes here stand over the values it was shown
+        // over: what is open is fixed by the longest string and by normalization, and a run
+        // allowed more leaves the same values open.
+        table.put("RelationShownOverARegion",
+                "RELATION_SHOWN_OVER_A_REGION/UNAFFECTED");
+        // Numbers of a run the relation settles in which no row is shown to get past an operation
+        // of decimals: fixed by the operations the rows work out, which a run allowed more meets
+        // again, and said in the word for values not shown to get to the rule.
+        table.put("RelationRowsNotShownComputed",
+                "RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE/UNAFFECTED");
         // What the rule states was taken apart, and the reason no line came of it is read off that
         // meaning. A part declined at how many readings are made, one way down or in all, at how
         // many parts a step states, or at how far a container is written out, is one a run
@@ -190,9 +230,16 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:MORE_PARTS_THAN_ARE_CONCLUDED",
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:MORE_WAYS_THAN_ARE_WRITTEN_OUT",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT",
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:A_PART_NOT_READ", "RULE_MEANING_NOT_READ/UNAFFECTED");
+        // Two elements of one container: no figure was reached, so a run allowed more meets it
+        // again; and the comparison may be written in a form this compiler reads, so it is not
+        // said as a form nothing takes apart.
+        table.put("WhatItStatesIsNoLine:TWO_ELEMENTS_OF_ONE_CONTAINER",
+                "RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER/UNAFFECTED");
         table.put("WhatItStatesIsNoLine:A_NUMBER_NO_POSITION_HOLDS",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
         table.put("WhatItStatesIsNoLine:NO_RELATION_OF_NUMBERS", "UNSUPPORTED_DOMAIN/UNAFFECTED");
@@ -224,6 +271,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // And its own word beside that one: the line is drawn on what a division leaves of the
         // values, which is a number of its own and no run of any position's.
         table.put("ComparisonOnARemainder", "RULE_ABOUT_A_REMAINDER/-");
+        // And its own word beside those: the reading stopped, and the line is drawn on how far
+        // apart the comparison's sides come out on a run, which no position's values are.
+        table.put("ComparisonMeasuredOnItsRuns", "RULE_MEASURED_ON_ITS_RUNS/-");
         // A row of its own, and here is what it is for. The three above are rules that leave the
         // position where they found it: the quantity is empty, the line falls outside it, or the
         // number is over a run. This one holds the position to the values it admits, and everything
@@ -377,6 +427,33 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
+     * Two reasons about one rule at one place are two findings, and neither merges into the
+     * other: a figure a search stopped at is one a run allowed more may get past, and numbers in
+     * which no row is shown computed are not.
+     */
+    @Test
+    void aRuleLeftForTwoReasonsAtOnePlaceKeepsBoth() {
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        RuleCitation cited = new RuleCitation.Written(
+                new RuleRef.Comparison("b",
+                        new SourceConstructOrigin(new WrittenOwner.Body("m", "b"),
+                                1, 1, SourceConstruct.IF)),
+                new RuleReportAnchor.ByTheModuleThatWroteIt());
+        FilingCoordinate at = new FilingCoordinate.AtPosition(TermPath.of("x"));
+        BlockReason.RuleWithoutLineReason numbers =
+                new BlockReason.RelationRowsNotShownComputed(SOME_NUMBERS);
+        BlockReason.RuleWithoutLineReason figure =
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE));
+        gathered.add(cited, at, numbers);
+        gathered.add(cited, at, figure);
+        gathered.add(cited, at, numbers);
+
+        assertEquals(Set.of(numbers, figure), gathered.found().reported().stream()
+                .map(RuleWithoutALine::why).collect(Collectors.toSet()));
+        assertEquals(2, gathered.found().reported().size());
+    }
+
+    /**
      * A finding is a finding whichever half its reason is in, and nothing here decides a measure.
      *
      * <p>What a reason says is what became of the reading, and a reader is owed that either way. It
@@ -495,6 +572,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     private static final Figure AT_A_FIGURE = WorkFigure.ADMITTED_VALUES_IN_ALL.at(
             "200000 states built and 50000000 looked at");
 
+    private static final NumberRegion SOME_NUMBERS = NumberRegion.of(List.of(
+            new NumberRegion.Run(ExactCut.inclusive(ExactRatio.of(5)), null)));
+
     /** {@code why} as a reading stopped by it says it, at a figure where it carries one. */
     private static StoppedReading stopped(UnreadReason why) {
         return StoppedReading.carriesAFigure(why) ? new StoppedReading(why, AT_A_FIGURE)
@@ -505,11 +585,14 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         List<BlockReason> every = new ArrayList<>(List.of(
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
+                new BlockReason.OrderedExtentEndIsNoValue(),
                 new BlockReason.LineAtANumberNoRatioHolds(),
                 new BlockReason.LineSideNotWorkedOut(
                         souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralContainers(),
+                new BlockReason.RuleAboutARemainderNoPositionHolds(),
+                new BlockReason.EvaluationStopsNotFullyRead(),
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.NonAffineArithmetic(
                         NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),
@@ -530,6 +613,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.SeveralLinesInOneRule(),
                 new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
+                new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(AT_A_FIGURE)),
+                new BlockReason.RelationNotShownWhereItsRowsStopped(List.of(new WhereARunStopped(
+                        new RunStop.AtAnEnsures("m", "b", Optional.empty()), Optional.empty()))),
+                new BlockReason.RelationNotShownReachedAtEveryValue(),
+                new BlockReason.RelationShownOverARegion(false, 1L, List.of()),
+                new BlockReason.RelationRowsNotShownComputed(SOME_NUMBERS),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonAnswersNowhere(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
@@ -539,6 +628,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.ComparisonOnARemainder(),
+                new BlockReason.ComparisonMeasuredOnItsRuns(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.ClassesNotComposed(),
@@ -562,7 +652,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     /** The row a reason is written under: its kind, and which of its whys where it carries one. */
     private static String rowOf(BlockReason.RuleWithoutLineReason reason) {
         return switch (reason) {
-            case BlockReason.WhatItStatesIsNoLine(var why) -> "WhatItStatesIsNoLine:" + why;
+            case BlockReason.WhatItStatesIsNoLine(var why, var _) ->
+                    "WhatItStatesIsNoLine:" + why;
             case BlockReason.NonAffineArithmetic(var operation) ->
                     "NonAffineArithmetic:" + operation;
             default -> reason.getClass().getSimpleName();

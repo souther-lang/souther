@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -56,7 +58,7 @@ class OneOfTwoRulesAtOneValueCanBeAGapTest {
         // Set before anything is asked. The lines are measured only where the arms are, and that is
         // what puts two obligations at one value in front of the reading under test.
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
 
         // Both halves. That the gap exists is what makes the lookup happen at all, and a model

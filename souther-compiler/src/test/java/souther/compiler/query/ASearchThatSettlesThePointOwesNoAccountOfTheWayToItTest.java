@@ -97,7 +97,8 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
     void anAnsweredPointAndAnUnmadeSearchOweNothing() {
         assertEquals(List.of(), ItemAssessment.Attempt.Built.certified(
                 new Generator.GeneratedRow(
-                        new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), way())
+                        new Generator.Purpose.ForAPoint("p.x = 11"), List.of()), way(),
+                InputsOfTheBody.aRowOfNoInputsReadBack())
                 .unaccountedFor());
         assertEquals(List.of(), new ItemAssessment.Attempt.Unavailable(
                 ItemAssessment.Attempt.Reason.NO_CLASSES).unaccountedFor());

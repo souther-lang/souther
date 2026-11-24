@@ -3,11 +3,14 @@ package souther.bench;
 import org.junit.jupiter.api.Test;
 
 import souther.bench.SaltedOrderVocabulary.Signature;
+import souther.compiler.execute.RunStop;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.WhereARunStopped;
+import souther.compiler.source.SourceId;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -17,6 +20,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -101,6 +105,38 @@ class TheDeclaredTotalOrdersTieNothingTest {
         Map<String, List<Object>> out = new LinkedHashMap<>();
         out.put(TermPath.class.getName().replace('.', '/'), paths());
         out.put(ClassOfAPosition.class.getName().replace('.', '/'), classes());
+        out.put(WhereARunStopped.class.getName().replace('.', '/'), stops());
+        return out;
+    }
+
+    /**
+     * Places runs stopped at, of every kind, with and without a place and a source. The first two
+     * are spelled alike and are not equal: a module and a type that run together as a rendering
+     * would put them are what an order read off the spelling ties.
+     */
+    private static List<Object> stops() {
+        List<Object> out = new ArrayList<>();
+        Optional<SourceId> none = Optional.empty();
+        out.add(new WhereARunStopped(new RunStop.AtAConstruction("a, clauseType=b", "c",
+                Optional.empty(), 0, Optional.empty()), none));
+        out.add(new WhereARunStopped(new RunStop.AtAConstruction("a", "b, clauseType=c",
+                Optional.empty(), 0, Optional.empty()), none));
+        out.add(new WhereARunStopped(new RunStop.AtAConstruction("a", "c", Optional.of("p"), 0,
+                Optional.empty()), none));
+        out.add(new WhereARunStopped(new RunStop.AtAConstruction("a", "c", Optional.empty(), 1,
+                Optional.empty()), none));
+        out.add(new WhereARunStopped(new RunStop.AtAConstruction("a", "c", Optional.empty(), 0,
+                Optional.of(new RunStop.Site("a", 1, 2))), none));
+        out.add(new WhereARunStopped(new RunStop.AtAConstruction("a", "c", Optional.empty(), 0,
+                Optional.of(new RunStop.Site("a", 2, 1))), Optional.of(new SourceId("s"))));
+        out.add(new WhereARunStopped(new RunStop.AtAnEnsures("a", "one", Optional.empty()), none));
+        out.add(new WhereARunStopped(new RunStop.AtAnEnsures("a", "one", Optional.of("p")),
+                Optional.of(new SourceId("s"))));
+        out.add(new WhereARunStopped(new RunStop.AtAnEnd("a division by zero"), none));
+        out.add(new WhereARunStopped(new RunStop.AtAnUnreachable("never", Optional.empty()),
+                none));
+        out.add(new WhereARunStopped(new RunStop.AtAnUnreachable("never",
+                Optional.of(new RunStop.Site("b", 1, 1))), Optional.of(new SourceId("t"))));
         return out;
     }
 

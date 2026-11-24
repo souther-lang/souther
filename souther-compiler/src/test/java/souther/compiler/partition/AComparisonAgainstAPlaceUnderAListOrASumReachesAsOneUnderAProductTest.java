@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -30,11 +31,9 @@ class AComparisonAgainstAPlaceUnderAListOrASumReachesAsOneUnderAProductTest {
 
     /** The word each place is left with by the one comparison in {@code source}, by its name. */
     private static Map<String, String> left(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> out = new LinkedHashMap<>();
         for (String line : report.lines().map(String::strip).toList()) {
             if (!line.contains("comparison@") || !line.contains("about `")) {

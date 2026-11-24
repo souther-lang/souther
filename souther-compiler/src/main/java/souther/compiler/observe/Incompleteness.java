@@ -102,10 +102,11 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
          *
          * <p>Named for what is caught, which is a {@code LinkageError} and not one of the things
          * that raise it. The case this exists for is the runtime being off the host's classpath —
-         * it is {@code provided}, like CTFE — and the JVM raises the same error for a class that
-         * will not verify, one whose format it does not accept, and one compiled against a
-         * different version of what it calls. Nothing here can tell them apart, so nothing here
-         * says which.
+         * it is {@code provided}, like CTFE — and a runtime of another version that lacks a class
+         * the generated code names raises the same error, so nothing here says which. A class that
+         * will not verify, one whose format the JVM does not accept and one that failed to
+         * initialize are not this: the first two are the compiler's own output failing and the last
+         * is a failure with a cause of its own, and each ends the run instead of being recorded.
          *
          * <p>One place writes it: an example whose evaluation raised one, where nothing was
          * observed and so its rows did not run. It had three, and the other two — a fill that could
@@ -169,7 +170,17 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
          * way: a value with no representation stays unheld on any host, and one this host had no
          * room for is a value a host with more room could still hold.
          */
-        VALUE_ROOM_EXCEEDED(false);
+        VALUE_ROOM_EXCEEDED(false),
+        /**
+         * A value was read, and it is one a rule about its position was shown on neither side of,
+         * so it is in none of the classes drawn over the rest.
+         *
+         * <p>Not {@link #VALUE_UNREADABLE}: the value came back whole, and every class read it.
+         * What stopped is the rule, which was shown over some of the values the position holds
+         * and not this one — a string of a length no run gets to the rule at, or one whose code
+         * points normalization leaves apart — and the report says which rule that is.
+         */
+        VALUE_OUTSIDE_WHAT_WAS_SHOWN(false);
 
         private final boolean leftNoRowRead;
 
@@ -224,6 +235,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
                 // compiler compared anything against; where no representation exists, no host has
                 // more of one to offer. Either way a wider run meets it again.
                 case VALUE_NOT_WORKED_OUT, VALUE_ROOM_EXCEEDED -> RunSensitivity.UNAFFECTED;
+                // What the rule was shown over is the model's and the longest string's, and no
+                // figure of a run's.
+                case VALUE_OUTSIDE_WHAT_WAS_SHOWN -> RunSensitivity.UNAFFECTED;
             };
         }
     }
@@ -505,6 +519,16 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
             return new Met(occurrence.identity(),
                     occurrence.at().map(Set::of).orElseGet(Set::of),
                     occurrence.figure().map(List::of).orElseGet(List::of));
+        }
+
+        /**
+         * One occurrence of this fact, at the first of its figures and with no place: what a reader
+         * that carries a reason as an occurrence is handed for a fact it met elsewhere. The places
+         * are not part of what makes the fact one, and they are gathered where the fact is.
+         */
+        public Incompleteness occurrence() {
+            return new Incompleteness(fact.code(), fact.target(), Optional.empty(),
+                    figures.stream().findFirst());
         }
 
         /**

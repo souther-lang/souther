@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -119,8 +120,7 @@ class EveryShapeOfAConditionOverAContainerABoundValueOrASizeIsReadToTheEndTest {
 
     @Test
     void everyReaderTakesEveryShapeWithNothingLeftUnread() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + compilation.errors());

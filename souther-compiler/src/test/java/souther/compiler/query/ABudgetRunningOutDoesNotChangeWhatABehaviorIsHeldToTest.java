@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.report.AdequacyReport;
@@ -98,7 +99,7 @@ class ABudgetRunningOutDoesNotChangeWhatABehaviorIsHeldToTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(measures, generation));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<AdequacyReport.BehaviorReport> behaviors =
                 AdequacyReport.of(compilation).modules().getFirst().behaviors();
         assertEquals(1, behaviors.size(), "one behavior in the model");

@@ -2,6 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyUnread;
 
 import java.util.List;
 
@@ -29,12 +34,79 @@ final class WhatAForkTests {
 
     private WhatAForkTests() {}
 
-    /** The parts the truth of {@code atom} turns on, each read where it stands. */
-    static List<Denotation> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
-        return WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read())
-                .turnsOn()
-                .stream()
-                .map(Pullback.Leaf::from)
-                .toList();
+    /**
+     * What was read of the parts an answer turns on.
+     *
+     * <p>A proposition a reading stopped in at a figure states the parts it got to, and where it
+     * got to is where the figure ran out and not what the answer turns on. A part it holds may be
+     * one the complete reading would not hold in that form, and a part it lacks was not found
+     * absent. Only a complete reading therefore offers its parts: that no part is left, and which
+     * parts are, are both questions the figure took away. A part nothing reads is a part of the
+     * answer all the same, and does not make it incomplete.
+     */
+    sealed interface PartsRead {
+
+        /**
+         * No figure stopped the proposition, so these are all the parts the answer turns on.
+         * That is all this says: a part another reason left unread is among them, and nothing
+         * here is a proof that the answer was worked out.
+         */
+        record Complete(List<Denotation> parts, ReadAsPieces pieces) implements PartsRead {
+
+            public Complete {
+                parts = List.copyOf(parts);
+            }
+        }
+
+        /** The proposition was stopped in at a figure, for these, and says nothing of which parts
+         *  there are: the parts it got to are not offered. */
+        record Incomplete(List<WhyUnread> stoppedFor) implements PartsRead {
+
+            public Incomplete {
+                stoppedFor = List.copyOf(stoppedFor);
+            }
+        }
+    }
+
+    /**
+     * What the reading of an atom proved of the pieces of a string.
+     *
+     * <p>A part of the atom that is the container whose pieces were walked is stated by the
+     * comparison that was read of one piece only where the truth proved that the value is one of
+     * the pieces ({@link Derivation.SomePieceEqualling}): that some piece is the value is the
+     * existential statement the comparison draws its relation from, and the denial of a comparison
+     * of the piece with the value is not it.
+     *
+     * @param containers the containers the truth proved some piece equal to a value of
+     */
+    record ReadAsPieces(List<Denotation> containers) {
+
+        ReadAsPieces {
+            containers = List.copyOf(containers);
+        }
+    }
+
+    /** What was read of the parts the truth of {@code atom} turns on. */
+    static PartsRead partsRead(Core atom, WhatNamesStandFor names) {
+        Pullback.Pulled truth =
+                WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read());
+        List<WhyUnread> stops = Proposition.stopsIn(truth.proposition());
+        if (stops.stream().anyMatch(why -> why.figure().isPresent())) {
+            return new PartsRead.Incomplete(stops);
+        }
+        List<Pullback.Leaf> turnsOn = truth.turnsOn();
+        return new PartsRead.Complete(turnsOn.stream().map(Pullback.Leaf::from).toList(),
+                new ReadAsPieces(turnsOn.stream().filter(leaf -> isAmongThePieces(leaf.part()))
+                        .map(Pullback.Leaf::from).toList()));
+    }
+
+    /** Whether {@code part} is the relation of a value being one of the pieces of a string. */
+    private static boolean isAmongThePieces(Proposition part) {
+        if (part instanceof Proposition.Some(var _, var ofTheElement, var _, var _)) {
+            return isAmongThePieces(ofTheElement);
+        }
+        return part instanceof Proposition.Compared(Relation.Affine(var form, var _), var _, var _,
+                var _)
+                && form.coefs().keySet().stream().anyMatch(Quantity.IsAmongThePieces.class::isInstance);
     }
 }

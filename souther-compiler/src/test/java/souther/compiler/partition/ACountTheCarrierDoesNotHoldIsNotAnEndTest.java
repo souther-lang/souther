@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -64,7 +66,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: PastEnd) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     @Test
@@ -75,7 +77,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: BeforeStart) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     /** The same at the end of the calendar, which behaved this way before an enumeration was a
@@ -94,7 +96,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: PastDate) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     /** And a bound the carrier does hold is still an end, so none of the above passes by drawing
@@ -162,50 +164,71 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         // What the type wraps still stands for it — a candidate is a proposal the decoder answers,
         // and this one is refused there. What is gone is the value from inside the range, which is
         // where a count past the calendar was being written from.
-        assertEquals(List.of("PastMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("PastMoment(DateTime(\"" + START_OF_THE_DAY + "\"))"),
+                representatives("""
                 module example.pastmoment
 
                 data PastMoment = DateTime
                     invariant value > DateTime("+999999999-12-31T23:59:59.999999999")
-                """, "PastMoment"));
-        assertEquals(List.of("BeforeMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
+                """, "PastMoment", List.of("E1322")));
+        assertEquals(List.of("BeforeMoment(DateTime(\"" + START_OF_THE_DAY + "\"))"),
+                representatives("""
                 module example.beforemoment
 
                 data BeforeMoment = DateTime
                     invariant value < DateTime("-999999999-01-01T00:00:00")
-                """, "BeforeMoment"));
+                """, "BeforeMoment", List.of("E1013")));
     }
 
     /** And a range inside the calendar still gives up a value from inside itself, so the two above
-     * are not short of one for some other reason. */
+     * are not short of one for some other reason. The range starts after the day the rows are
+     * written on, so the value from inside it is not the one that stands for what the type
+     * wraps. */
     @Test
     void aRuleInsideTheCalendarStillOffersAValueFromInsideIt() {
-        assertEquals(List.of("Ordinary(DateTime(\"2026-01-01T00:00:00\"))",
-                        "Ordinary(DateTime(\"1970-01-01T00:00:00\"))"),
+        assertEquals(List.of("Ordinary(DateTime(\"2040-01-01T00:00:00\"))",
+                        "Ordinary(DateTime(\"" + START_OF_THE_DAY + "\"))"),
                 representatives("""
                         module example.ordinary
 
                         data Ordinary = DateTime
-                            invariant value > DateTime("2025-12-31T23:59:59")
+                            invariant value > DateTime("2039-12-31T23:59:59")
                         """, "Ordinary"));
     }
 
+    /** Where a date-time nothing bounds is entered: the start of the day the rows are written on. */
+    private static final String START_OF_THE_DAY = TestDay.DATE.atStartOfDay() + ":00";
+
     /** What stands for a position of {@code name}, written. */
     private static List<String> representatives(String source, String name) {
+        return representatives(source, name, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static List<String> representatives(String source, String name,
+                                                List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.representativesOf(
                         souther.compiler.types.Type.ref(
                                 souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))),
                         RuleReadingContext.unshared(rules,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                                TestDay.TODAY))
                 .values().stream().map(FixtureTemplate::text).toList();
     }
 
     /** Every obligation the one position of {@code source}'s behavior owes, written. */
     private static List<String> obligations(String source) {
+        return obligations(source, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static List<String> obligations(String source, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
@@ -213,7 +236,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         assertFalse(sigs.isEmpty(), "the model under test compiles");
         Map.Entry<String, DeclaredSig> declared = sigs.entrySet().iterator().next();
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         InputDomain domain = InputDomain.of(declared.getValue(), context,
                 TypeCardinality.Counts.workedOutIn(context), Membership.none());
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);

@@ -23,7 +23,6 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -33,7 +32,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -142,6 +140,7 @@ public final class WhatTheDeclarationsLeave {
                     some(applications.each(), want, read);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches the declarations written out as its choices: " + stated);
+            case Proposition.OfTheWays ways -> answer(ways.written(), want, read);
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -150,17 +149,19 @@ public final class WhatTheDeclarationsLeave {
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) -> LEFT;
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
+                                   var _) ->
                     leaves(at, List.of(new Case.Truth(holds == want)), read);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at, var _), boolean holds,
                                      var _) ->
                     leaves(at, List.of(new Case.Presence(holds == want)), read);
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at, var _), CasesLeft cases,
                                      boolean holds, var _) ->
                     amongCases(at, cases, holds == want, read);
             // Whether two values are one is no rule of either position alone, so asked of each
             // on its own, nothing rules it out.
-            case Proposition.SameValue _, Proposition.LastToHold _ -> LEFT;
+            case Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _,
+                 Proposition.InTheStrings _ -> LEFT;
             // The elements of what a dependency answered are what a row stands it in with, the
             // same as the answer itself.
             case Proposition.Some some when some.container() instanceof DecisionSubject.AnAnswer ->
@@ -339,7 +340,8 @@ public final class WhatTheDeclarationsLeave {
     private static AWayThrough leaves(Relation relation, boolean holds, Quantities declared) {
         Rel asked = holds ? relation.proposition() : relation.proposition().denied();
         return switch (relation) {
-            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), var at, Rel _) ->
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), var at,
+                                  Rel _) ->
                     ruledOutByBounds(declared.runsBetween(term), asked, at)
                             ? new AWayThrough.RuledOut(
                                     new WhyRuledOut.TheNumbersLeaveNone(relation, asked))
@@ -365,54 +367,15 @@ public final class WhatTheDeclarationsLeave {
      * leaves of a form of the input's — or null where it weighs another number, or none.
      *
      * <p>A remainder runs where its operation states its answers lie by its divisor
-     * ({@link Quantity.RemainderOfADividend#whatTheOperationStates}), whatever its dividend comes
-     * to, on every way and under every declaration. So a form of remainders runs between the sums
-     * of their ends, each weighed the way it faces, and an end of one that is open leaves that side
-     * of the form open. Not every number between is one the form comes to — a dividend's own values
+     * ({@link FormRange#ofARemainder}), whatever its dividend comes to, on every way and under
+     * every declaration. So a form of remainders runs between the sums of their ends, each weighed
+     * the way it faces. Not every number between is one the form comes to — a dividend's own values
      * may leave a remainder out — so the ends prove what they prove and nothing between them.
      */
     static NumericDomain.Bounds runsOfTheRemainders(LinearForm<Quantity> form) {
-        if (form.coefs().isEmpty()) {
-            return null;
-        }
-        ExactRatio least = form.constant();
-        ExactRatio most = form.constant();
-        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (!(each.getKey() instanceof Quantity.RemainderOfADividend remainder)) {
-                return null;
-            }
-            NumericDomain.Bounds runs = remainder.whatTheOperationStates();
-            ExactRatio low = onAWholeNumber(runs.min(), false);
-            ExactRatio high = onAWholeNumber(runs.max(), true);
-            ExactRatio weight = each.getValue();
-            least = weighedOnto(least, weight, weight.signum() > 0 ? low : high);
-            most = weighedOnto(most, weight, weight.signum() > 0 ? high : low);
-        }
-        return new NumericDomain.Bounds(endAt(least), endAt(most));
-    }
-
-    /**
-     * {@code end} of a run of whole numbers, as the whole number nearest it the run reaches — or
-     * null, where it has no end. A remainder is whole, so {@code r < 7} is {@code r <= 6}, and
-     * weighed it is the end a weighed six is and not one a weighed seven leaves open.
-     */
-    private static ExactRatio onAWholeNumber(Endpoint end, boolean upper) {
-        if (end == null) {
-            return null;
-        }
-        ExactRatio at = Count.number(end.at()).exactly();
-        if (!((upper ? at.floor() : at.ceiling()) instanceof ExactAnswer.Held<BigInteger>(
-                BigInteger whole))) {
-            return null;
-        }
-        return ExactRatio.of(end.inclusive() || ExactRatio.of(whole).compareTo(at) != 0 ? whole
-                : upper ? whole.subtract(BigInteger.ONE) : whole.add(BigInteger.ONE));
-    }
-
-    /** {@code sum} with {@code end} weighed by {@code weight} added — or null, once a part of it
-     *  has no end. */
-    private static ExactRatio weighedOnto(ExactRatio sum, ExactRatio weight, ExactRatio end) {
-        return sum == null || end == null ? null : weight.times(end).flatMap(sum::plus).orNull();
+        FormRange runs = form.coefs().isEmpty() ? null : FormRange.of(form, FormRange::ofARemainder);
+        return runs == null ? null
+                : new NumericDomain.Bounds(endAt(runs.least()), endAt(runs.greatest()));
     }
 
     /** {@code at} as an end a run reaches, or none where it is no number a count writes. */
@@ -422,11 +385,14 @@ public final class WhatTheDeclarationsLeave {
     }
 
     /** {@code form} as one over numbers of the input, or null where a quantity is something else.
-     *  The one place a statement's form is put on the input space, for every reader that does. */
+     *  The one place a statement's form is put on the input space, for every reader that does.
+     *  Null too where two of its numbers are two values at one position: over positions they
+     *  would be one number, which is not what the form says. */
     static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
+                    || coefs.containsKey(term)) {
                 return null;
             }
             coefs.put(term, each.getValue());

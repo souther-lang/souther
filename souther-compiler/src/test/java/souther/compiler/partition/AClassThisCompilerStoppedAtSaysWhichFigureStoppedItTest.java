@@ -101,7 +101,7 @@ class AClassThisCompilerStoppedAtSaysWhichFigureStoppedItTest {
     private static String offered(String source, String behavior) {
         Compilation compilation = measured(source);
         return souther.compiler.report.GeneratedRows.of(compilation, "example.stopped", behavior,
-                SourceRendering.namedByIdentity(compilation.texts())).text();
+                SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static Compilation measured(String source) {

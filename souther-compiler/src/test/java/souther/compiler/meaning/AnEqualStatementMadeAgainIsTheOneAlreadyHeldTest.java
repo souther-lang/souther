@@ -86,12 +86,12 @@ class AnEqualStatementMadeAgainIsTheOneAlreadyHeldTest {
     @Test
     void heldByNobodyItIsLetGo() {
         WeakReference<Proposition> held = new WeakReference<>(statement("let go"));
-        String key = held.get().key();
+        String key = held.get().spelledOut();
         for (int tries = 0; tries < 50 && held.get() != null; tries++) {
             System.gc();
         }
 
         assumeTrue(held.get() == null, "no collection let anything go in this run");
-        assertEquals(key, statement("let go").key());
+        assertEquals(key, statement("let go").spelledOut());
     }
 }

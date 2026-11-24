@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
+import souther.compiler.diag.Localizable;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
@@ -15,6 +16,7 @@ import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WhereAPartDecides;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.List;
@@ -59,10 +61,14 @@ import java.util.Set;
  *               {@link #border} is the first copy's alone where two copies were read as one line
  * @param saidOnTheWay which copies put each entry on the way the line's points were searched along,
  *               of that way alone; nobody where no search was made
+ * @param readOn the applications of closures the line was read on, every reading's put together
+ *               as {@link #readAt} is: what a reader is told the readings of an obligation came
+ *               from, and nothing the line or its rows turn on
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                                AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
-                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay)
+                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay,
+                               ApplicationsReadOn readOn)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -71,6 +77,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                             AnotherLineTheRowsAllow beside) {
         this(border, items, beside, ARowTellingTheLinesApart.notAsked());
     }
+
 
     /**
      * One reading of a line, read at the copy of the comparison {@code border} was drawn by.
@@ -81,7 +88,8 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      */
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
-        this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE);
+        this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE,
+                ApplicationsReadOn.NONE);
     }
 
     /**
@@ -146,36 +154,40 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                 yield out;
             }
             case AnotherLineTheRowsAllow.NotDueYet _, AnotherLineTheRowsAllow.NoSuchQuestion _,
-                 AnotherLineTheRowsAllow.NotApplicable _ -> WeakeningSet.none();
+                 AnotherLineTheRowsAllow.NotApplicable _,
+                 AnotherLineTheRowsAllow.OwedByTheComputation _ -> WeakeningSet.none();
         };
+    }
+
+    /**
+     * What reading the rows of {@code border} in part went without, in the words a reader is told
+     * it in. Said once for every reader of a border's rows, so that two questions over the same
+     * rows that fell short of the same thing say it in the same words.
+     */
+    static WeakeningSet rowsIncomplete(Border border, ReadingReasons met) {
+        WeakeningSet out = WeakeningSet.none();
+        for (souther.compiler.partition.ReadingGap gap : met.eachKindOnce().written()) {
+            out = out.union(WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
+        }
+        return met.tried() instanceof souther.compiler.partition.StandingAtAPoint
+                .ReadingsTried.StoppedAtTheLimit(List<Figure> limits)
+                ? out.union(WeakeningSet.of(
+                        new Weakening.BorderReadingsNotExhausted(border, limits)))
+                : out;
     }
 
     /** What a question about the lines beside this one went without, in the words a reader is
      *  told it in. */
     private WeakeningSet weakeningOf(AnotherLineTheRowsAllow.Unsettled why) {
         return switch (why) {
-            case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) -> {
-                WeakeningSet out = WeakeningSet.none();
-                for (souther.compiler.partition.ReadingGap gap : met.eachKindOnce().written()) {
-                    out = out.union(
-                            WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
-                }
-                yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
-                        .ReadingsTried.StoppedAtTheLimit(List<Figure> limits)
-                        ? out.union(WeakeningSet.of(
-                                new Weakening.BorderReadingsNotExhausted(border, limits)))
-                        : out;
-            }
+            case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) ->
+                    rowsIncomplete(border, met);
             // The reading's own, which is what a measure over these lines is worth.
             case AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(var as) -> as.weakening();
             case AnotherLineTheRowsAllow.Unsettled.TheRowsAreAllOnOneSide _ ->
                     WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
                             Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
                                     .THE_ROWS_ARE_ALL_ON_ONE_SIDE));
-            case AnotherLineTheRowsAllow.Unsettled.NoStrategyForIt _ ->
-                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
-                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
-                                    .NO_STRATEGY_FOR_THE_RULE));
             // The two lines part company only where nothing here can say a row arrives, which is a
             // question about the way to the border rather than about the rows.
             case AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher _ ->
@@ -200,6 +212,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     }
 
     public BorderAssessment {
+        Objects.requireNonNull(readOn, "read on some applications, or on none");
         if (beside == null) {
             throw new IllegalArgumentException("a border says what the rows leave standing beside"
                     + " it, and a border that was not asked says that: " + border);
@@ -366,12 +379,36 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * The cases of the input's values the line decides in, as a report says them
      * ({@link WhereAPartDecides#said}) — or null where the position the line is read at already
      * names all of them: always for a line that is the whole of what its rule states.
+     *
+     * <p>The words the published document holds for a reading: the cases of values and nothing
+     * else, whatever else a surface adds to tell one line from another
+     * ({@link #lineLabel}).
      */
     public String decidesWhere() {
-        List<TermPath> readAt = border.cut().of().numbers().stream()
-                .map(NumericTerm::subjectPath).toList();
+        List<TermPath> readAt = positionsReadAt();
         return border.origin() instanceof LineOrigin.ComparisonOrigin read
                 ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
+    }
+
+    /** The same, as the catalog's phrase, for a diagnostic told in the reader's language. */
+    public Localizable decidesWherePhrase() {
+        List<TermPath> readAt = positionsReadAt();
+        return border.origin() instanceof LineOrigin.ComparisonOrigin read
+                ? read.part().map(part -> part.phrase(readAt)).orElse(null) : null;
+    }
+
+    /**
+     * Which of the lines of the comparison that {@code apart} finds saying the same words under
+     * different points this reading is of, as a surface says it — or null where its words are
+     * its own. A label of the line and not a condition of any case.
+     */
+    public String lineLabel(WhereTheReadingsDiffer apart, DomainPoint point) {
+        return apart.label(this, point);
+    }
+
+    /** The positions the line is read at, which a case need not name again. */
+    List<TermPath> positionsReadAt() {
+        return border.cut().of().numbers().stream().map(NumericTerm::subjectPath).toList();
     }
 
     /** The left of the {@code left = right} a report names this line by. */
@@ -407,16 +444,36 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             return border.label(at);
         }
 
-        /** What this asks of a row, as a report writes it, or null where none is owed: the values,
-         *  and the cases of the input the line decides in where the position does not name
-         *  them. */
-        public String asked() {
+        /**
+         * What this asks of a row, as a report writes it, or null where none is owed: the values,
+         * and the cases of the input the line decides in where the position does not name them.
+         * Another line of the comparison said in the same words under a different point is told
+         * apart by {@code apart}, which is worked out from the points of the module together
+         * ({@link WhereTheReadingsDiffer#NONE} for a reader that has only this one).
+         */
+        public String asked(WhereTheReadingsDiffer apart) {
             if (border.operator(at) == null) {
                 return null;
             }
             String where = border.decidesWhere();
+            String label = border.lineLabel(apart, at);
             return border.operator(at) + " " + border.against(at)
-                    + (where == null ? "" : " where " + where);
+                    + (where == null ? "" : " where " + where)
+                    + (label == null ? "" : " (" + label + ")");
+        }
+
+        /** The same, as the catalog's phrase, for a diagnostic told in the reader's language. */
+        public Localizable askedPhrase(WhereTheReadingsDiffer apart) {
+            Localizable asked = border.border().asked(at);
+            if (asked == null) {
+                return null;
+            }
+            Localizable where = border.decidesWherePhrase();
+            if (where != null) {
+                asked = Localizable.of("reading.where", asked, where);
+            }
+            Localizable label = apart.labelPhrase(border, at);
+            return label == null ? asked : Localizable.of("reading.labelled", asked, label);
         }
 
         /** What the point is against, or null where none is owed. */

@@ -5,8 +5,10 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
+import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -14,17 +16,26 @@ import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.ResultBound;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * How a predicate is read: what a clause owes where a value is built, what a guard settles where one
@@ -49,12 +60,13 @@ final class Predicates {
 
     /** The relations known of every element of {@code container}: those stated of it as written, and
      * those stated of a container it was built from that travel every construction in between. */
-    List<Quantified> elementRelations(Core container, Known k, Denotations at) {
-        List<Quantified> found = new ArrayList<>();
+    List<ElementRelation> elementRelations(Core container, Known k, Denotations at) {
+        List<ElementRelation> found = new ArrayList<>();
         Set<ElementShape> crossed = EnumSet.noneOf(ElementShape.class);
         Core source = container;
+        Denotations here = at;
         while (true) {
-            FactSubject key = terms.subjectOf(source, at);
+            FactSubject key = terms.subjectOf(source, here);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
                     if (key.equals(q.container()) && q.through().containsAll(crossed)) {
@@ -63,7 +75,45 @@ final class Predicates {
                 }
             }
             if (!(Core.withoutStanding(source) instanceof Core.PreservedCall call)) {
-                return found;
+                // A name stands for the call it was given, read where that call was written.
+                Terms.Given given = terms.originating(source, here, new HashSet<>());
+                if (given == null || !(Core.withoutStanding(given.value())
+                        instanceof Core.PreservedCall)) {
+                    return found;
+                }
+                source = given.value();
+                here = given.at();
+                continue;
+            }
+            // What an operation guarantees of the elements it answers holds of every element it
+            // answers, and of every element of a construction over it that keeps the elements it
+            // was given. A construction that makes new ones says nothing of them.
+            if (ElementShape.THAT_KEEP_THE_ELEMENTS.containsAll(crossed)) {
+                Core.Block kept = DischargeRules.keptWhereItHolds(call, here);
+                if (kept != null && key != null) {
+                    found.add(new Quantified(key, Set.copyOf(crossed), kept));
+                }
+                // The value found is one of the elements the closure holds of.
+                Core.Block meeting = DischargeRules.foundWhereItHolds(call, here);
+                if (meeting != null && key != null) {
+                    found.add(new Quantified(key, Set.copyOf(crossed), meeting));
+                }
+                for (ResultBound<DeclaredArgument> row : DischargeRules.boundsOnEachElement(call)) {
+                    // Read where the call was written, which is not always where the elements are
+                    // taken: what the argument stands for goes with the bound.
+                    LinearForm<FactSubject> against =
+                            terms.affineOf(CallArguments.of(row.against(), call), here);
+                    if (against != null) {
+                        found.add(new ElementBound(against, row.offset(), row.rel()));
+                    }
+                }
+            }
+            // The value an operation answers is one of the elements of the container it answers it
+            // from, so everything known of every element of that container is known of it.
+            Core answeredFrom = DischargeRules.elementAnsweredFrom(call);
+            if (answeredFrom != null) {
+                source = answeredFrom;
+                continue;
             }
             Source built = DischargeRules.builtFrom(call);
             if (built == null) {
@@ -74,14 +124,42 @@ final class Predicates {
         }
     }
 
+    /** What {@code relation} says of the value at {@code element}, taken into {@code k}. */
+    Known instantiate(ElementRelation relation, Core element, Known k, Denotations at) {
+        return switch (relation) {
+            case Quantified q -> instantiate(q, element, k, at);
+            case ElementBound bound -> instantiate(bound, element, k, at);
+        };
+    }
+
+    /** {@code k} also holding that the value at {@code element} stands where {@code bound} puts
+     * it. As a quantifier's predicate is, it is taken as the path's: it is stated of an element a
+     * closure is handed, and says nothing the values alone decide. */
+    private Known instantiate(ElementBound bound, Core element, Known k, Denotations at) {
+        LinearForm<FactSubject> against = Terms.add(terms.affineOf(element, at),
+                bound.against(), true);
+        if (against != null && against.minus(LinearForm.constant(ExactRatio.of(bound.offset())))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> stands) {
+            return k.taking(stands.value(), bound.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(stands.value()));
+        }
+        return k;
+    }
+
     /** What {@code q} says of the value at {@code element}, taken into {@code k}. The predicate is
      * read again with the quantifier's own parameter standing for that element — the same reading the
      * seeding does of a type's invariant, over the clause a quantifier holds. A relation the
      * predicate in turn states of a container is recorded, so a container of containers reaches its
      * innermost element. */
     Known instantiate(Quantified q, Core element, Known k, Denotations at) {
-        Core stated = Clauses.substituted(q.predicate().body(),
-                Map.of(q.predicate().params().get(0).binding(), element));
+        return instantiatePredicate(q.predicate(), element, k, at);
+    }
+
+    /** What {@code predicate} says of the value at {@code element}, taken into {@code k}: of one
+     * element of a container as a quantifier does, or of the one value an operation found. */
+    Known instantiatePredicate(Core.Block predicate, Core element, Known k, Denotations at) {
+        Core stated = Clauses.substituted(predicate.body(),
+                Map.of(predicate.params().get(0).binding(), element));
         List<Quantified> nested = new ArrayList<>();
         quantifiedBy(stated, at, true, nested);
         // A quantifier is recorded by a guard and by a type's invariant alike, and carries no record
@@ -91,11 +169,47 @@ final class Predicates {
         return assume(assumed(stated, at, false), k, Known.Held.ON_THE_PATH).and(nested);
     }
 
+    /**
+     * {@code k} also holding that {@code position} is a place in {@code container}: at or above
+     * nought and below how many it holds.
+     *
+     * <p>Of the value and not of the path, as a size's own bound is: the position is the one an
+     * operation hands its closure for an element of the container, whatever was settled before.
+     */
+    Known placeIn(Core.Read position, Core container, Known k, Denotations at) {
+        LinearForm<FactSubject> place = terms.affineOf(position, at);
+        if (place == null) {
+            return k;
+        }
+        Known out = k.taking(place, Rel.GE, Known.Held.OF_THE_VALUE, terms.spacesOf(place));
+        ValueName counting = NumericMeasures.takenOf(container.type(), terms.newtypeInners());
+        FactSubject size = counting == null ? null : terms.sizeAtomFor(counting, container, at);
+        if (size != null && place.minus(LinearForm.atom(size))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> below) {
+            out = out.taking(below.value(), Rel.LT, Known.Held.OF_THE_VALUE,
+                    terms.spacesOf(below.value()));
+        }
+        return out;
+    }
+
     /** What {@code raw}, asserted with polarity {@code positive}, says of every element of a
      * container, added to {@code out}. Read over the clause's shape as {@link #obligations} is, so
      * the two agree about which parts a clause has by having been given the same answer. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
-        out.addAll(new Quantifiers(this).read(raw, positive, at, terms::inside));
+        out.addAll(new Quantifiers(this, Optional.empty(), new int[1])
+                .read(raw, positive, at, terms::inside));
+    }
+
+    /**
+     * What the rule {@code part} is of states of every element of a container, each with the
+     * statement of the part that states it. The statements are counted as
+     * {@link ConjunctStatements} counts them, which is the shape's walk and so the same one, and
+     * are given the identity it gives them.
+     */
+    void quantifiedBy(Clauses.StatedPart part, Denotations at, boolean positive,
+                      List<Quantified> out) {
+        out.addAll(new Quantifiers(this, Optional.of(ConjunctStatements.of(part)), new int[1])
+                .read(part.expr(), positive, at, terms::inside));
     }
 
     /**
@@ -107,7 +221,8 @@ final class Predicates {
      * of what the clause owes and unknown to this one, which is a guarantee assembled from a clause
      * read to two depths.
      */
-    private record Quantifiers(Predicates of)
+    private record Quantifiers(Predicates of, Optional<List<ConjunctStatements.Reached>> conjunct,
+                              int[] counted)
             implements ClauseReading<List<Quantified>, Denotations> {
 
         /**
@@ -127,8 +242,13 @@ final class Predicates {
 
         @Override
         public List<Quantified> whole(ClauseExpr.Part part, Denotations at) {
+            // Counted at every statement the walk arrives at, whether or not it states a
+            // quantifier: which of the conjunct's statements this is is its place among all.
+            int statement = counted[0]++;
             return of.quantifierStatedBy(Conditions.asSizeComparison(part.of()), part.positive(),
-                    at);
+                    at).stream().map(each -> conjunct
+                            .map(reached -> each.statedBy(reached.get(statement).statement()))
+                            .orElse(each)).toList();
         }
 
         private static List<Quantified> together(List<Quantified> left, List<Quantified> right) {
@@ -245,15 +365,15 @@ final class Predicates {
      * One case of a clause read over an operation that answers one of the values it was given: the
      * clause with that value standing where the call did, and what holds of the arguments there.
      *
-     * @param kinds how the values of every atom either of them names are spaced, so that a case can
-     *              be taken into a domain without asking anything further of the caller
+     * @param spaces what the type of every atom either of them names says of its values, so that a
+     *               case can be taken into a domain without asking anything further of the caller
      */
-    record Case(NumericConstraint numeric, List<NumericConstraint> given, Map<FactSubject, Granularity> kinds) {
+    record Case(NumericConstraint numeric, List<NumericConstraint> given, Map<FactSubject, NumberSpace> spaces) {
 
         /**
          * Every atom this case is decided by.
          *
-         * <p>Read off {@code kinds}, which is where the atoms of this case are registered as its
+         * <p>Read off {@code spaces}, which is where the atoms of this case are registered as its
          * forms are built — the substituted clause, the equality saying the call answered this
          * argument, and each condition on the arguments. A reader listing those three would be a
          * second answer to keep in step with the building, and the one that would fall behind: what
@@ -261,14 +381,14 @@ final class Predicates {
          * operation in the table has such an argument.
          */
         Set<FactSubject> atomsItIsDecidedBy() {
-            return kinds.keySet();
+            return spaces.keySet();
         }
 
         /** {@code d} with this case's conditions on the arguments taken as holding. */
         private NumericDomain<FactSubject> in(NumericDomain<FactSubject> d) {
             NumericDomain<FactSubject> out = d;
             for (NumericConstraint one : given) {
-                out = out.assume(one.form(), one.rel(), kinds);
+                out = out.assume(one.form(), one.rel(), spaces);
             }
             return out;
         }
@@ -296,9 +416,9 @@ final class Predicates {
      * disagreeing with itself about one value rather than an answer. The same holds when the cases
      * come to be multiplied out.
      *
-     * <p>One operation to a clause. Where a clause names two of them the cases multiply, and what
-     * that costs is a decision this does not have to make yet — such a clause is read as it stands,
-     * which proves less and states nothing false.
+     * <p>Where a clause names several such values the cases are the choices of an arm of each, up
+     * to {@link #MOST_CASES}; a clause that makes more is read as it stands, which proves less and
+     * states nothing false.
      */
     record Piecewise(List<Case> cases) {
 
@@ -328,6 +448,27 @@ final class Predicates {
             return reached;
         }
 
+        /**
+         * The most the form every case came to can be, the most of the cases a run can reach:
+         * the cases are alternatives, so what holds of all of them is what holds of the largest.
+         * Empty where a case reaches no end, or none is reached.
+         */
+        OptionalLong mostIn(NumericDomain<FactSubject> d) {
+            long most = -1;
+            for (Case one : cases) {
+                NumericDomain<FactSubject> here = one.in(d);
+                if (here.isBottom()) {
+                    continue;
+                }
+                OptionalLong inThis = Predicates.mostIn(here, one.numeric().form());
+                if (inThis.isEmpty()) {
+                    return OptionalLong.empty();
+                }
+                most = Math.max(most, inThis.getAsLong());
+            }
+            return most < 0 ? OptionalLong.empty() : OptionalLong.of(most);
+        }
+
         boolean refutedBy(NumericDomain<FactSubject> d) {
             boolean reached = false;
             for (Case one : cases) {
@@ -344,12 +485,33 @@ final class Predicates {
         }
     }
 
+    /**
+     * What a choice owed at a construction came to, asked of the path as a question about the runs
+     * that reach it rather than of either half.
+     *
+     * <p>A choice holds on a run where one of its halves does, and which half is not what the path
+     * says: a guard may state the same choice the other way round, or a half may be settled by
+     * values neither guard names alone. So neither half is proved on its own. The path with the
+     * choice denied is taken in, and the choice is established where that leaves no run; it is
+     * refused where the path with the choice stated leaves none. A look that was given up before it
+     * came to an end leaves a run in either, and so establishes and refuses nothing.
+     *
+     * @param proved       the path with the choice denied reaches nothing
+     * @param refuted      the path with the choice stated reaches nothing
+     * @param refutedAlone the same with the path's conditions left out
+     */
+    record Choice(boolean proved, boolean refuted, boolean refutedAlone) {
+
+        /** Neither: what the path leaves does not decide the choice. */
+        static final Choice UNDECIDED = new Choice(false, false, false);
+    }
+
     /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
     static final Clause VIOLATED = new Clause(
             new NumericConstraint(
                     LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE),
             null, List.of(),
-            null);
+            null, null);
 
     /**
      * One clause of an invariant, and the two ways it can come out: a relation for the domain to
@@ -357,7 +519,13 @@ final class Predicates {
      * present either one discharging the clause is enough — a guard is written one way and a clause
      * another, and which of the two routes carries it is not the author's concern.
      */
-    record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise) {
+    record Clause(NumericConstraint numeric, Fact fact, List<NumericConstraint> known, Piecewise piecewise,
+                  Choice choice) {
+
+        /** This clause with what asking its choice of the path came to. */
+        Clause choosing(Choice asked) {
+            return new Clause(numeric, fact, known, piecewise, asked);
+        }
 
         /**
          * Every atom a numeric domain could decide this clause differently by.
@@ -395,10 +563,23 @@ final class Predicates {
             return (numeric != null && d.entails(numeric.form(), numeric.rel()))
                     || (fact != null && fact.entailedBy(facts))
                     || (piecewise != null && !decidedAsWritten(d, facts)
-                            && piecewise.entailedBy(d));
+                            && piecewise.entailedBy(d))
+                    || (choice != null && choice.proved());
         }
 
         boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
+            return refutedByWhatItStates(d, facts) || (choice != null && choice.refuted());
+        }
+
+        /** Whether the values alone refute it: {@code d} and {@code facts} are what is known of
+         * them with the path's conditions left out, and so is the choice's own answer to that. */
+        boolean refutedByTheValuesAlone(NumericDomain<FactSubject> d,
+                                        PredicateFacts<FactSubject> facts) {
+            return refutedByWhatItStates(d, facts) || (choice != null && choice.refutedAlone());
+        }
+
+        private boolean refutedByWhatItStates(NumericDomain<FactSubject> d,
+                                              PredicateFacts<FactSubject> facts) {
             return (numeric != null && d.refutes(numeric.form(), numeric.rel()))
                     || (fact != null && fact.refutedBy(facts))
                     || (piecewise != null && !decidedAsWritten(d, facts)
@@ -442,7 +623,20 @@ final class Predicates {
      * @param folded whether the clause came out one way on its own, before any construction was
      *               looked at
      */
-    record Owed(List<Part> parts, Fold folded) {
+    record Owed(List<Part> parts, Fold folded, List<NumericConstraint> following) {
+
+        Owed {
+            following = List.copyOf(following);
+        }
+
+        Owed(List<Part> parts, Fold folded) {
+            this(parts, folded, List.of());
+        }
+
+        /** This, with what holding the clause makes certain of its arguments. */
+        Owed stating(List<NumericConstraint> certain) {
+            return certain.isEmpty() ? this : new Owed(parts, folded, certain);
+        }
 
         /** Nothing is owed because the clause came out one way or the other on its own. */
         static Owed decided(boolean holds) {
@@ -480,19 +674,64 @@ final class Predicates {
             return false;
         }
 
+        /**
+         * Whether what holds in {@code k} leaves no run on which this comes to what it states: it
+         * folded the other way on its own, or a part of it is refuted.
+         *
+         * <p>False is that nothing showed it, and not that some run does. A part the reading made
+         * nothing of refutes nothing.
+         */
+        boolean refutedBy(Known k) {
+            if (folded == Fold.FAILS) {
+                return true;
+            }
+            for (Part each : parts) {
+                if (each instanceof Part.Carried carried
+                        && carried.clause().refutedBy(k.numbers(), k.facts())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Whether what holds in {@code k} leaves every run one on which this comes to what it
+         * states: it folded that way on its own, or it has parts and every one is established.
+         *
+         * <p>False is that nothing showed it. A part the reading made nothing of establishes
+         * nothing, and no part at all is not every part established.
+         */
+        boolean dischargedBy(Known k) {
+            if (folded == Fold.HOLDS) {
+                return true;
+            }
+            boolean any = false;
+            for (Part each : parts) {
+                if (!(each instanceof Part.Carried carried)
+                        || !carried.clause().dischargedBy(k.numbers(), k.facts())) {
+                    return false;
+                }
+                any = true;
+            }
+            return any;
+        }
+
         /** The same, having come out one way on its own as well. Said beside what it owes rather
          *  than instead of it: which of the two a caller acts on is the caller's, and a reading that
          *  answered only one of them decided that for every caller there will ever be. */
         Owed alsoFolded(Fold fold) {
-            return fold == Fold.NOT_DECIDED ? this : new Owed(parts, fold);
+            return fold == Fold.NOT_DECIDED ? this : new Owed(parts, fold, following);
         }
 
         /** Both conjuncts of one clause: every part either owes, in the order they were read, and
-         *  folded only as both of them together fold. */
+         *  folded only as both of them together fold; and what holding either makes certain, which
+         *  holding both does. */
         Owed and(Owed other) {
             List<Part> both = new ArrayList<>(parts);
             both.addAll(other.parts);
-            return new Owed(List.copyOf(both), folded.and(other.folded));
+            List<NumericConstraint> certain = new ArrayList<>(following);
+            certain.addAll(other.following);
+            return new Owed(List.copyOf(both), folded.and(other.folded), certain);
         }
 
         /**
@@ -607,7 +846,8 @@ final class Predicates {
      * happened to be holding decide what a declaration says. The parameter is gone rather than
      * ignored: what is not there cannot come to be read. */
     Owed assumed(Core inv, Denotations at, boolean decidesFalse) {
-        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, null);
+        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, null,
+                null);
     }
 
     /**
@@ -619,7 +859,8 @@ final class Predicates {
      * changes one of them.
      */
     Owed assumed(Core inv, Denotations at, boolean decidesFalse, PerPart per) {
-        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per);
+        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per,
+                null);
     }
 
     /**
@@ -627,7 +868,7 @@ final class Predicates {
      * occurrence is said in the numbering the clause handed out.
      */
     Owed assumed(ClauseExpr of, Denotations at, boolean decidesFalse, PerPart per) {
-        return new Owing(this, Set.of(), decidesFalse, Discharge.AN_ASSUMPTION)
+        return new Owing(this, Set.of(), decidesFalse, Discharge.AN_ASSUMPTION, null)
                 .read(of, at, terms::inside, per == null ? null : per::read);
     }
 
@@ -703,7 +944,31 @@ final class Predicates {
         // What each handed-over value is, worked out once and where the site stands. Read again
         // further down, a value under a binding would be asked about at names the site never had.
         return obligations(inv, at, handedOver(unnamed, at), true, decidesFalse,
-                Discharge.spending(k), null);
+                Discharge.spending(k), null,
+                new Spending(k, handedOver(notWritten(unnamed, at), at)));
+    }
+
+    /**
+     * What a clause owed at a construction is asked against, where it is asked of the path.
+     *
+     * @param known              the path the construction is built on
+     * @param leftToTheRunTime   the values handed over that this check's flagging policy leaves to
+     *                           the run-time check, and not the ones that are written out: a clause
+     *                           naming one of them is not asked of the path, as no clause is
+     */
+    private record Spending(Known known, Set<FactSubject> leftToTheRunTime) {}
+
+    /** The values of {@code values} that are not written out in the model. A written value is
+     * unnamed because there is no guard to add for it, and it folds; any other is unnamed by this
+     * check's flagging policy ({@link Terms#reportableSite}). */
+    private Set<Core> notWritten(Set<Core> values, Denotations at) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Core value : values) {
+            if (terms.writtenValue(value, at) == null) {
+                out.add(value);
+            }
+        }
+        return out;
     }
 
     /**
@@ -715,8 +980,8 @@ final class Predicates {
      */
     private Owed obligations(Core rawInv, Denotations at, Set<FactSubject> unnamed,
                              boolean positive, boolean decidesFalse, Discharge discharge,
-                             PerPart per) {
-        return new Owing(this, unnamed, decidesFalse, discharge)
+                             PerPart per, Spending spending) {
+        return new Owing(this, unnamed, decidesFalse, discharge, spending)
                 .read(rawInv, positive, at, terms::inside,
                         per == null ? null : per::read);
     }
@@ -736,7 +1001,8 @@ final class Predicates {
      * where in the clause the reading stands.
      */
     private record Owing(Predicates of, Set<FactSubject> unnamed, boolean decidesFalse,
-                         Discharge discharge) implements ClauseReading<Owed, Denotations> {
+                         Discharge discharge, Spending spending)
+            implements ClauseReading<Owed, Denotations> {
 
         /**
          * A conjunction owes what both of its conjuncts owe, and a choice is read whole.
@@ -744,7 +1010,8 @@ final class Predicates {
          * <p>Each half of a conjunction on its own: an invariant is a set of things that hold, and
          * one the check cannot read leaves its own run-time check standing without costing the
          * others theirs. A choice states neither of its parts — one of them holds and this cannot
-         * say which — so what is handed to the reader of comparisons is the whole of it.
+         * say which — so what is handed to the reader of comparisons is the whole of it, and where
+         * the path it is owed on is at hand the path is asked about it ({@link Choice}).
          */
         @Override
         public Descent<Owed> at(ClauseExpr.Joined join) {
@@ -756,9 +1023,104 @@ final class Predicates {
 
         @Override
         public Owed whole(ClauseExpr.Part part, Denotations at) {
-            return of.owing(Conditions.asSizeComparison(part.of()), at, unnamed, part.positive(),
-                    decidesFalse, discharge);
+            Owed owed = of.owing(Conditions.asSizeComparison(part.of()), at, unnamed,
+                    part.positive(), decidesFalse, discharge);
+            // A choice taken whole still says what every way of it says.
+            if (part instanceof ClauseExpr.Joined join) {
+                owed = owed.stating(of.followingOf(join, at));
+            }
+            return spending != null && part instanceof ClauseExpr.Joined join
+                    && !of.namesAnyOf(spending.leftToTheRunTime(), part, at)
+                    ? of.askedOfThePath(owed, join, at, spending.known()) : owed;
         }
+    }
+
+    /** Whether the clause {@code part} stands for names any of {@code subjects}. */
+    private boolean namesAnyOf(Set<FactSubject> subjects, ClauseExpr.Part part, Denotations at) {
+        return !subjects.isEmpty()
+                && names(Conditions.asSizeComparison(part.of()), chainsOf(subjects), at);
+    }
+
+    /**
+     * What a choice owes, with the path asked about it.
+     *
+     * <p>Whatever the choice was read as on its own stays: a guard that states the same choice
+     * settles it by name. A choice nothing was made of is owed all the same, because the path can
+     * leave no run on which it fails without either half being readable alone; and a choice that
+     * folded the other way keeps saying so. One that folded to hold owes nothing, and one a
+     * violation was already stated for is not asked again.
+     */
+    private Owed askedOfThePath(Owed owed, ClauseExpr.Joined choice, Denotations at, Known k) {
+        if (owed.folded() == Fold.HOLDS || owed.parts().stream().anyMatch(
+                each -> each instanceof Part.Carried carried
+                        && carried.clause().equals(VIOLATED))) {
+            return owed;
+        }
+        // A guard that states the choice by name already establishes it, and the path is not asked
+        // what it has just answered.
+        for (Part each : owed.parts()) {
+            if (each instanceof Part.Carried carried && carried.clause().fact() != null
+                    && carried.clause().fact().entailedBy(k.facts())) {
+                return owed;
+            }
+        }
+        Choice answer = choiceAt(choice, k, at);
+        List<Part> parts = new ArrayList<>();
+        for (Part each : owed.parts()) {
+            if (each instanceof Part.Carried carried) {
+                parts.add(new Part.Carried(carried.clause().choosing(answer)));
+            }
+        }
+        if (parts.isEmpty()) {
+            parts.add(new Part.Carried(new Clause(null, null, List.of(), null, answer)));
+        }
+        return new Owed(List.copyOf(parts), owed.folded(), owed.following());
+    }
+
+    /**
+     * Whether the path leaves a run on which {@code choice} holds, and one on which it does not.
+     *
+     * <p>Each is the choice (or its denial) taken in over the path, and a path it leaves nothing of
+     * is one no run takes. A path that already leaves nothing is not asked: both questions have an
+     * answer there, and a clause that is established and refused at once says nothing. Taking the
+     * choice in is bounded, and a look that was given up leaves a run, so it neither establishes
+     * nor refuses.
+     */
+    private Choice choiceAt(ClauseExpr.Joined choice, Known k, Denotations at) {
+        if (terms.reachability().reachesNothing(k)) {
+            return Choice.UNDECIDED;
+        }
+        // A path that leaves no run with the choice denied establishes it. Asking whether it also
+        // leaves none with the choice stated would only find the path reaching nothing, which is
+        // asked above, so the second question is spent on a choice that is not established.
+        if (leavesNoRun(assumeShape(choice.denied(), k, at).known())) {
+            return new Choice(true, false, false);
+        }
+        boolean refuted = leavesNoRun(assumeShape(choice, k, at).known());
+        boolean alone = refuted
+                && leavesNoRun(assumeShape(choice, k.ofTheValuesAlone(), at).known());
+        return new Choice(false, refuted, alone);
+    }
+
+    /**
+     * Whether nothing stands where {@code asked} does, as a construction is judged against it: the
+     * conditions cannot all hold, or cannot once what follows about the arithmetic outside the
+     * affine fragment is taken as holding too ({@link DerivedNumericFacts#refine}).
+     *
+     * <p>Derived from the state that was asked, and for each state apart. What follows about a
+     * product is a function of what its factors are bounded by in that state, so a bound derived
+     * under the path is not one the values alone carry, and the two questions are never answered
+     * from one derivation.
+     *
+     * <p>The one place this is decided for a question about the runs that reach a construction:
+     * which parts of a choice a path can enter, which ways of taking a choice apart a construction
+     * is judged under, and whether the choice owed there can fail. A state's own
+     * {@link Known#reachesNothing} knows its conditions and not the recipes of the arithmetic they
+     * are about, so asked alone it calls a part reachable that nothing can enter.
+     */
+    boolean leavesNoRun(Known asked) {
+        return terms.reachability().reachesNothing(asked)
+                || DerivedNumericFacts.refine(asked.numbers(), terms, Set.of()).isBottom();
     }
 
     /** What one part of a clause owes, read as the comparison it states. */
@@ -843,14 +1205,59 @@ final class Predicates {
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
+        List<NumericConstraint> following = followingOf(polar.expr(), stated, at);
         if (numeric == null && fact == null) {
-            return Owed.unreadable(where).alsoFolded(fold);
+            return Owed.unreadable(where).stating(following).alsoFolded(fold);
         }
         // What the values this clause names carry, read off the atoms rather than off the tree: an
         // atom files what it carries where it is named, so having read the clause into forms is
         // having read them ({@link IntrinsicNumericFacts}).
         List<NumericConstraint> known = terms.carriedBy(namedBy(numeric, fact));
-        return Owed.of(new Clause(numeric, fact, known, piecewise)).alsoFolded(fold);
+        return Owed.of(new Clause(numeric, fact, known, piecewise, null)).stating(following)
+                .alsoFolded(fold);
+    }
+
+    /**
+     * What a condition coming out {@code positive} makes certain over the counts and numbers of its
+     * arguments, as the law of the operation it is says it of that side: the same conditions a
+     * guard on it takes ({@link LawOverAtoms#whereItHolds}).
+     *
+     * <p>Said of the condition and not of the clause that carries it: whether the check can read
+     * the clause as a relation or a fact is no part of what the condition says of its arguments,
+     * so an unread clause says it as well.
+     */
+    private List<NumericConstraint> followingOf(Core condition, boolean positive, Denotations at) {
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(condition, at,
+                terms);
+        List<NumericConstraint> certain = law == null ? null
+                : LawOverAtoms.certain(law, positive);
+        return certain == null ? List.of() : certain;
+    }
+
+    /**
+     * What holding {@code part} as stated makes certain: what each part of a conjunction does, and
+     * of a choice what every way of it does — one of them holds and which is not said, so what is
+     * certain is what each says of the same number, at the weakest of what they say
+     * ({@link NumericConstraint#commonTo}).
+     */
+    private List<NumericConstraint> followingOf(ClauseExpr part, Denotations at) {
+        return switch (part) {
+            case ClauseExpr.Leaf leaf -> followingOf(leaf.of(), leaf.positive(), at);
+            case ClauseExpr.Joined join -> switch (join.how()) {
+                case BOTH -> {
+                    List<NumericConstraint> both = new ArrayList<>(followingOf(join.left(), at));
+                    both.addAll(followingOf(join.right(), at));
+                    yield both;
+                }
+                case EITHER -> NumericConstraint.commonTo(List.of(followingOf(join.left(), at),
+                        followingOf(join.right(), at)));
+            };
+            // What a binding stands for says what its body says, read where the binding is entered
+            // as every reading of a clause enters it: a way stated through a helper says what the
+            // same way written out says.
+            case ClauseExpr.Scoped scoped ->
+                    followingOf(scoped.body(), terms.inside(scoped.binding(), at));
+        };
     }
 
     /** What a clause folding to {@code folded}, read with polarity {@code positive}, comes to on its
@@ -994,21 +1401,46 @@ final class Predicates {
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
-        Assumed read = new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+        return assumeThrough(new Assuming(this, BY_ITS_CONSTRAINTS)
+                .read(rawCond, positive, at, terms::inside), k, BY_ITS_CONSTRAINTS);
+    }
+
+    /**
+     * The same over a shape the caller already read the clause into, for a question about the runs
+     * that reach a construction: whether a state is one nothing stands in is asked of what follows
+     * from it as well ({@link #leavesNoRun}), at every part of every choice looked through.
+     */
+    private Assumed assumeShape(ClauseExpr shape, Known k, Denotations at) {
+        Predicate<Known> dead = this::leavesNoRun;
+        return assumeThrough(new Assuming(this, dead).read(shape, at, terms::inside, null), k,
+                dead);
+    }
+
+    /**
+     * Whether a state is one nothing stands in, as far as its conditions alone say. What a guard
+     * is taken in under: a path is looked through at every condition it passes, and what follows
+     * about the arithmetic outside the affine fragment is worked out for a question asked once.
+     */
+    private static final Predicate<Known> BY_ITS_CONSTRAINTS = Known::reachesNothing;
+
+    /** {@code reading} taken in over {@code k}, and the choices the path holds looked through,
+     * a state counting as one nothing stands in where {@code dead} says so. */
+    private Assumed assumeThrough(Assumption reading, Known k, Predicate<Known> dead) {
+        Assumed read = reading.from(k);
         Known after = read.known();
         // A path that holds no choice, or one the looking was given up along, has nothing more to
         // be asked here.
-        if (after.reachesNothing() || !after.holdsAChoice()
+        if (terms.reachability().reachesNothing(after) || !after.holdsAChoice()
                 || (k.holdsAChoice() && k.wayIn() == null)) {
             return read;
         }
-        Known past = wayPast(rawCond, positive, at, k, after);
+        Known past = wayPast(reading, k, after, dead);
         if (past != null) {
             return new Assumed(after.throughWay(past, after.triesLeft()), read.taken(),
                     read.shapeRead(), read.notTaken());
         }
         int[] tries = {after.triesLeft()};
-        return switch (aWayThrough(after, after.heldAsOneOfTheirParts(), 0, tries)) {
+        return switch (aWayThrough(after, after.heldAsOneOfTheirParts(), 0, tries, dead)) {
             case WayFound(Known way) -> new Assumed(after.throughWay(way, tries[0]), read.taken(),
                     read.shapeRead(), read.notTaken());
             // Read to the end: what the conditions come to is that nothing gets past them.
@@ -1028,13 +1460,12 @@ final class Predicates {
      * of the one way known to get through, it is one: the condition read once more, over that way.
      * Where {@code k} held no choice the way is {@code after} itself, and nothing is read again.
      */
-    private Known wayPast(Core cond, boolean positive, Denotations at, Known k, Known after) {
+    private Known wayPast(Assumption cond, Known k, Known after, Predicate<Known> dead) {
         if (!k.holdsAChoice()) {
-            return aPartOfEachSince(after, 0);
+            return aPartOfEachSince(after, 0, dead);
         }
         Known before = k.wayIn();
-        return aPartOfEachSince(new Assuming(this).read(cond, positive, at, terms::inside)
-                .from(before).known(), before.heldCount());
+        return aPartOfEachSince(cond.from(before).known(), before.heldCount(), dead);
     }
 
     /**
@@ -1047,16 +1478,16 @@ final class Predicates {
      * against. So the conditions are taken until none is left that was not, and not over the ones
      * there were when this began.
      */
-    private Known aPartOfEachSince(Known way, int taken) {
+    private Known aPartOfEachSince(Known way, int taken, Predicate<Known> dead) {
         Known out = way;
         int done = taken;
-        while (!out.reachesNothing() && out.heldCount() > done) {
+        while (!dead.test(out) && out.heldCount() > done) {
             int upTo = out.heldCount();
             for (Known.OneOf condition : out.heldSince(done)) {
                 Known through = null;
                 for (ClauseExpr part : partsOf(condition)) {
-                    Known taking = takingPart(condition, part, out).known();
-                    if (!taking.reachesNothing()) {
+                    Known taking = takingPart(condition, part, out, dead).known();
+                    if (!dead.test(taking)) {
                         through = taking;
                         break;
                     }
@@ -1068,7 +1499,7 @@ final class Predicates {
             }
             done = upTo;
         }
-        return out.reachesNothing() ? null : out;
+        return dead.test(out) ? null : out;
     }
 
     /** What looking for a way through the conditions a state holds came to. */
@@ -1092,7 +1523,8 @@ final class Predicates {
      * path has left across every look along it ({@link Known.Choices}); where it runs out the look
      * stops, and says it stopped rather than that it found nothing.
      */
-    private Through aWayThrough(Known k, List<Known.OneOf> pending, int next, int[] tries) {
+    private Through aWayThrough(Known k, List<Known.OneOf> pending, int next, int[] tries,
+                                Predicate<Known> dead) {
         if (next == pending.size()) {
             return new WayFound(k);
         }
@@ -1103,8 +1535,8 @@ final class Predicates {
                 return new PastTheBound();
             }
             tries[0]--;
-            Known taking = takingPart(condition, part, k).known();
-            if (!taking.reachesNothing()) {
+            Known taking = takingPart(condition, part, k, dead).known();
+            if (!dead.test(taking)) {
                 entered.add(taking);
             }
         }
@@ -1116,11 +1548,11 @@ final class Predicates {
             List<Known.OneOf> inside = way.heldSince(k.heldCount());
             Through further;
             if (inside.isEmpty()) {
-                further = aWayThrough(way, pending, next + 1, tries);
+                further = aWayThrough(way, pending, next + 1, tries, dead);
             } else {
                 List<Known.OneOf> rest = new ArrayList<>(pending.subList(next + 1, pending.size()));
                 rest.addAll(inside);
-                further = aWayThrough(way, rest, 0, tries);
+                further = aWayThrough(way, rest, 0, tries, dead);
             }
             if (further instanceof WayFound) {
                 return further;
@@ -1179,7 +1611,7 @@ final class Predicates {
      */
     List<Known> eachWayOf(Known.OneOf condition, Known k) {
         List<Known> ways = new ArrayList<>();
-        for (Assumed way : takingEachPartOf(condition, k)) {
+        for (Assumed way : takingEachPartOf(condition, k, this::leavesNoRun)) {
             ways.add(way.known());
         }
         return ways;
@@ -1187,10 +1619,10 @@ final class Predicates {
 
     /** What taking each part of {@code condition} in alone over {@code k} came to, the state and
      *  what the reading made of the part ({@link #eachWayOf}). */
-    private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k) {
+    private List<Assumed> takingEachPartOf(Known.OneOf condition, Known k, Predicate<Known> dead) {
         List<Assumed> ways = new ArrayList<>();
         for (ClauseExpr part : partsOf(condition)) {
-            ways.add(takingPart(condition, part, k));
+            ways.add(takingPart(condition, part, k, dead));
         }
         return ways;
     }
@@ -1208,12 +1640,14 @@ final class Predicates {
 
     /** What taking {@code part} of {@code condition} in alone over {@code k} came to, speaking of
      *  what {@code k} speaks of ({@link #eachWayOf}). */
-    private Assumed takingPart(Known.OneOf condition, ClauseExpr part, Known k) {
+    private Assumed takingPart(Known.OneOf condition, ClauseExpr part, Known k,
+                               Predicate<Known> dead) {
         long[] counting = COUNTING_PARTS_READ;
         if (counting != null) {
             counting[0]++;
         }
-        Assumed taken = new Assuming(this).read(part, condition.at(), terms::inside, null).from(k);
+        Assumed taken = new Assuming(this, dead).read(part, condition.at(), terms::inside, null)
+                .from(k);
         return new Assumed(taken.known().speakingAs(k), taken.taken(), taken.shapeRead(),
                 taken.notTaken());
     }
@@ -1237,10 +1671,10 @@ final class Predicates {
      * condition no case satisfies is; one left is that part's reading, which took the part in; both
      * left is the whole's, which took neither.
      */
-    private Assumed takingOneOf(Known.OneOf condition, Assumed whole) {
+    private Assumed takingOneOf(Known.OneOf condition, Assumed whole, Predicate<Known> dead) {
         List<Assumed> left = new ArrayList<>();
-        for (Assumed way : takingEachPartOf(condition, whole.known())) {
-            if (!way.known().reachesNothing()) {
+        for (Assumed way : takingEachPartOf(condition, whole.known(), dead)) {
+            if (!dead.test(way.known())) {
                 left.add(way);
             }
         }
@@ -1277,7 +1711,8 @@ final class Predicates {
      * naming it made nothing known, while the same rule written out made the comparison known, and
      * the one reader with no tree-rebuilding above it named a dead branch on one spelling only.
      */
-    private record Assuming(Predicates of) implements ClauseReading<Assumption, Denotations> {
+    private record Assuming(Predicates of, Predicate<Known> dead)
+            implements ClauseReading<Assumption, Denotations> {
 
         /**
          * A conjunction is taken in a half at a time, and a choice whole.
@@ -1297,7 +1732,7 @@ final class Predicates {
 
         @Override
         public Assumption whole(ClauseExpr.Part part, Denotations at) {
-            return known -> of.taking(part, known, at);
+            return known -> of.taking(part, known, at, dead);
         }
 
         /**
@@ -1324,7 +1759,7 @@ final class Predicates {
      * is settled where the clause is read, so a guard states each of them rather than choosing
      * here.
      */
-    private Assumed taking(ClauseExpr.Part part, Known k, Denotations at) {
+    private Assumed taking(ClauseExpr.Part part, Known k, Denotations at, Predicate<Known> dead) {
         boolean positive = part.positive();
         Core cond = Conditions.asSizeComparison(part.of());
         // A connective taken whole states no comparison — that is what taking it whole means — so
@@ -1332,8 +1767,9 @@ final class Predicates {
         // saying they were named a value one of them computes is one nothing has ever spoken of.
         if (part instanceof ClauseExpr.Joined join) {
             Assumed whole = taking(cond, join.writtenHalves(), k, at, positive);
-            return join.how() != ConditionJoin.EITHER || whole.known().reachesNothing() ? whole
-                    : takingOneOf(new Known.OneOf(join, at), whole);
+            return join.how() != ConditionJoin.EITHER
+                    || terms.reachability().reachesNothing(whole.known()) ? whole
+                    : takingOneOf(new Known.OneOf(join, at), whole, dead);
         }
         List<ComparisonReadings.Reading> readings =
                 Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);
@@ -1377,12 +1813,28 @@ final class Predicates {
         List<Quantified> quantified = new ArrayList<>();
         quantifiedBy(cond, at, positive, quantified);
         out = out.and(quantified);
+        // And what the law of the operation answering it says of its arguments, where it comes out
+        // this way: `Set.contains(x, s)` holds exactly where some element of `s` is `x`. The law as
+        // {@link LawOverAtoms} names it, which is the law an arm of a match on what an operation
+        // answered is entered by, and of it only what is certain this way. A condition read by
+        // what the reading of the model says it states takes the same number in there
+        // ({@link MeaningAssumptions}).
+        Derivation.HoldsSomethingWhere.Holding law = LawOverAtoms.whereItHolds(cond, at, terms);
+        List<NumericConstraint> certain = law == null ? List.of()
+                : LawOverAtoms.certain(law, positive);
+        if (certain == null) {
+            return new Assumed(out.reachingNothing(), true, true);
+        }
+        for (NumericConstraint each : certain) {
+            out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(each.form()));
+        }
         // Two answers and not one, as everywhere here: what a proof may rest on, and what an
         // unsettled arm may be explained by. They move together on this route and are still asked
         // apart, because one of them coming to answer the other is how a limit of this compiler
         // gets reported as a fact about the model.
-        boolean taken = !known.isEmpty() || !quantified.isEmpty();
-        boolean shapeRead = !known.isEmpty() || !quantified.isEmpty();
+        boolean taken = !known.isEmpty() || !quantified.isEmpty() || !certain.isEmpty();
+        boolean shapeRead = !known.isEmpty() || !quantified.isEmpty() || !certain.isEmpty();
         return settling(out, Conditions.Polar.itself(cond, positive), at, taken, shapeRead);
     }
 
@@ -1421,7 +1873,9 @@ final class Predicates {
         LinearForm<FactSubject> compared = Terms.add(la, ra, true);
         if (compared != null) {
             out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
-                    terms.kindsOf(compared));
+                    terms.spacesOf(compared));
+            out = whatTheLawsOfTheSizesSay(out, compared);
+            out = whatTheWalksOfAComparisonSay(out, stated, at);
             taken = true;
             shapeRead |= readsItsShape(stated.left(), at) && readsItsShape(stated.right(), at);
         }
@@ -1431,6 +1885,95 @@ final class Predicates {
         named.addAll(spokenOf(stated.right(), at, ra));
         out = out.speaking(named);
         return settling(out, Conditions.polar(stated, positive), at, taken, shapeRead);
+    }
+
+    /**
+     * {@code k} with what the law of an operation says of its arguments, for each size in
+     * {@code form} the operation answered and the path now puts on one side of nought:
+     * {@code String.trim(s)} holds something exactly where some code point of {@code s} is not
+     * whitespace, so a path where it holds something is one where {@code s} does.
+     *
+     * <p>The law read the other way from the recipe the size carries
+     * ({@link Derivation.HoldsSomethingWhere}): the recipe says where the size lies from where the
+     * arguments are, and this says where the arguments are from where the path put the size. Only
+     * what is certain that way is taken ({@link LawOverAtoms#certain}), and each count it names is
+     * asked in turn, once.
+     */
+    private Known whatTheLawsOfTheSizesSay(Known k, LinearForm<FactSubject> form) {
+        Deque<FactSubject> asked = new ArrayDeque<>(form.coefs().keySet());
+        asked.removeIf(atom -> lawOfTheSize(atom) == null);
+        Set<FactSubject> seen = new HashSet<>();
+        Known out = k;
+        while (!asked.isEmpty()) {
+            FactSubject atom = asked.pop();
+            Derivation.HoldsSomethingWhere.Holding law = seen.add(atom) ? lawOfTheSize(atom) : null;
+            Boolean something = law == null ? null
+                    : out.numbers().entails(LinearForm.atomMinusConstant(atom, ExactRatio.ONE),
+                            Rel.GE) ? Boolean.TRUE
+                    : out.numbers().entails(LinearForm.atom(atom), Rel.LE) ? Boolean.FALSE : null;
+            List<NumericConstraint> certain = something == null ? List.of()
+                    : LawOverAtoms.certain(law, something);
+            if (certain == null) {
+                return out.reachingNothing();
+            }
+            for (NumericConstraint each : certain) {
+                out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                        terms.spacesOf(each.form()));
+                asked.addAll(each.form().coefs().keySet());
+            }
+            // Only a path that was given something new can have been left with no way through.
+            if (!certain.isEmpty() && out.reachesNothing()) {
+                return out;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * {@code k} with what a walk a comparison reads says of the container it walked, where the
+     * path puts its answer either side of the seed: a walk over none answers its seed, whatever
+     * its step is, so a total that is not nought is one over something.
+     *
+     * <p>Read off the expression the comparison is written over, which is where the container is
+     * known: a walk is one value however many places walk equal values, and how many a container
+     * holds is the place's.
+     */
+    private Known whatTheWalksOfAComparisonSay(Known k, StatedComparison stated, Denotations at) {
+        List<Core> leaves = new ArrayList<>();
+        Terms.additiveLeaves(stated.left(), leaves);
+        Terms.additiveLeaves(stated.right(), leaves);
+        Known out = k;
+        for (Core leaf : leaves) {
+            Terms.WalkOver walk = terms.walkOver(leaf, at);
+            LinearForm<FactSubject> away = walk == null ? null
+                    : LinearForm.atom(walk.answer()).minus(walk.seed()).orNull();
+            if (away != null && (out.numbers().entails(away, Rel.GT)
+                    || out.numbers().entails(away, Rel.LT))) {
+                LinearForm<FactSubject> something =
+                        LinearForm.atomMinusConstant(walk.walked(), ExactRatio.ONE);
+                out = out.taking(something, Rel.GE, Known.Held.ON_THE_PATH,
+                        terms.spacesOf(something));
+                out = whatTheLawsOfTheSizesSay(out, LinearForm.atom(walk.walked()));
+            }
+        }
+        return out;
+    }
+
+    /** The law {@code atom}, a size, holds something by, where the operation that answered the
+     *  container is settled whether it does by one — or null where it is not. */
+    private Derivation.HoldsSomethingWhere.Holding lawOfTheSize(FactSubject atom) {
+        if (!(terms.knowledgeOf(atom).computation()
+                instanceof AtomKnowledge.Computation.Derived(Derivation recipe))) {
+            return null;
+        }
+        List<Derivation> recipes = recipe instanceof Derivation.Each(var each) ? each
+                : List.of(recipe);
+        for (Derivation one : recipes) {
+            if (one instanceof Derivation.HoldsSomethingWhere(var holds)) {
+                return holds;
+            }
+        }
+        return null;
     }
 
     /** {@code k} with each of {@code mentioned} recorded as one this condition named. No form is
@@ -1450,7 +1993,7 @@ final class Predicates {
     private Known carrying(Known k, List<NumericConstraint> known) {
         Known out = k;
         for (NumericConstraint c : known) {
-            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
+            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.spacesOf(c.form()));
         }
         return out;
     }
@@ -1573,6 +2116,12 @@ final class Predicates {
         // saying nothing here would leave a value its own type guarantees something about looking
         // like one nothing is known of.
         out = out.speaking(subjectsIn(owed));
+        // What holding the clause makes certain of its arguments, as a guard saying the same says
+        // it. Of the clause as it was stated and not of the parts that were carried, so a clause
+        // left to the run-time check says it as well.
+        for (NumericConstraint each : owed.following()) {
+            out = out.taking(each.form(), each.rel(), held, terms.spacesOf(each.form()));
+        }
         // What could not be read says nothing here: a clause left to the run-time check is not one
         // the seeding may assume, and the flag saying so is the construction site's to act on.
         for (Part eachC : owed.parts()) {
@@ -1584,11 +2133,11 @@ final class Predicates {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.
                 out = out.taking(known.form(), known.rel(), Known.Held.OF_THE_VALUE,
-                        terms.kindsOf(known.form()));
+                        terms.spacesOf(known.form()));
             }
             if (c.numeric() != null) {
                 out = out.taking(c.numeric().form(), c.numeric().rel(), held,
-                        terms.kindsOf(c.numeric().form()));
+                        terms.spacesOf(c.numeric().form()));
             }
             if (c.fact() != null) {
                 // What is guaranteed is guaranteed of the term as written; a container built from it
@@ -1626,8 +2175,15 @@ final class Predicates {
     }
 
     /**
-     * {@code owed} read as the cases of the one value inside it that is one of several, or null
-     * where there is no such value, where there is more than one, or where a case could not be read.
+     * {@code owed} read as the cases of the values inside it that are each one of several, or null
+     * where there is no such value, where the cases they make together are more than
+     * {@link #MOST_CASES}, or where a case could not be read.
+     *
+     * <p>One case for each choice of an arm of each such value. Values that are decided by one
+     * condition ({@code List.take} and {@code List.drop} at one count over one list) make cases of
+     * which only the ones agreeing on it are reached; the rest each settle something the others
+     * contradict, and the domain drops them ({@link Piecewise#entailedBy}). Over the bound nothing
+     * is read: a part of the cases says nothing of the whole.
      *
      * <p>The cases are the arms of the recipe the value was recorded with ({@link Derivation.Chosen}):
      * one of the values a call was given, what a case of a library operation's definition computes
@@ -1642,37 +2198,116 @@ final class Predicates {
      * first and leave the second saying nothing.
      */
     private Piecewise piecewiseOf(NumericConstraint owed) {
-        FactSubject atom = null;
-        List<Derivation.Chosen.Arm> arms = null;
-        for (FactSubject each : owed.form().coefs().keySet()) {
-            List<Derivation.Chosen.Arm> its = armsOf(terms.knowledgeOf(each).computation());
-            if (its != null) {
-                if (atom != null) {
-                    return null;
-                }
-                atom = each;
-                arms = its;
-            }
-        }
-        if (atom == null) {
+        return piecewiseOf(owed, List.of());
+    }
+
+    /** The same, where {@code given} says of the values inside the clause what is known of them
+     *  besides, so that a value only those name is read case by case as well. */
+    private Piecewise piecewiseOf(NumericConstraint owed, List<NumericConstraint> given) {
+        if (chosenIn(owed.form(), given, Set.of()) == null) {
             return null;
         }
-        ExactRatio coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
-        for (Derivation.Chosen.Arm arm : arms) {
-            LinearForm<FactSubject> answered = arm.answer();
-            // The rule with the atom taken out and what this arm answers put in its place. A form
-            // no ratio holds is a reading this does not make, and the clause keeps the reading it
-            // has without the cases.
-            LinearForm<FactSubject> instead = owed.form()
-                    .minus(LinearForm.weighing(atom, coefficient))
-                    .flatMap(without -> answered.times(coefficient).flatMap(without::plus))
-                    .orNull();
-            if (instead == null) {
-                return null;
+        return expand(owed, owed.form(), given, Set.of(), cases)
+                ? new Piecewise(List.copyOf(cases)) : null;
+    }
+
+    /**
+     * Whether {@code owed} holds in every case of the values inside it that are each one of
+     * several, under what {@code k} holds ({@link #piecewiseOf}); false where it makes no cases.
+     */
+    boolean entailedInEveryCase(NumericConstraint owed, Known k, List<NumericConstraint> given) {
+        Piecewise cases = piecewiseOf(owed, given);
+        return cases != null && cases.entailedBy(k.numbers());
+    }
+
+    /**
+     * The most {@code form} can be under what {@code k} holds, or empty where no end is shown.
+     *
+     * <p>Read of the values as a whole and case by case ({@link #piecewiseOf}), each of which is a
+     * bound the same facts prove, so the answer is the least of the two. The number is what the
+     * domain says and not one of a list tried in turn: a bound the domain shows is a bound here.
+     */
+    OptionalLong mostOf(LinearForm<FactSubject> form, Known k, List<NumericConstraint> given) {
+        OptionalLong whole = mostIn(k.numbers(), form);
+        Piecewise cases = piecewiseOf(new NumericConstraint(form, Rel.LE), given);
+        OptionalLong byCases = cases == null ? OptionalLong.empty() : cases.mostIn(k.numbers());
+        return Terms.least(whole, byCases);
+    }
+
+    /** The most {@code form} can be in {@code d}, as a count, or empty where it has no end or
+     *  {@code d} holds no value at all. */
+    private static OptionalLong mostIn(NumericDomain<FactSubject> d, LinearForm<FactSubject> form) {
+        if (d.isBottom()) {
+            return OptionalLong.empty();
+        }
+        int most = CountDomain.mostFrom(d.boundsOf(form).max());
+        return most < 0 || most == Integer.MAX_VALUE ? OptionalLong.empty()
+                : OptionalLong.of(most);
+    }
+
+    /**
+     * The most cases a clause is read as. Each is one closure of the domain, and what a clause
+     * costs is that many of them, no more and no less, so the bound is what reading a clause case
+     * by case may cost, stated once.
+     *
+     * <p>The clauses the library and the corpus make fall in two groups far apart: those of a few
+     * cases up to this many, and those of several times it, which cost several times as much for
+     * a clause. Any bound between leaves both groups as they are; this is the one that reads every
+     * clause of the first and none of the second.
+     */
+    private static final int MOST_CASES = 32;
+
+    /** An atom of {@code form} or of what {@code given} says, not in {@code done}, recorded as one
+     *  of several — or null where there is none. */
+    private FactSubject chosenIn(LinearForm<FactSubject> form, List<NumericConstraint> given,
+                                 Set<FactSubject> done) {
+        List<LinearForm<FactSubject>> read = new ArrayList<>();
+        read.add(form);
+        given.forEach(each -> read.add(each.form()));
+        for (LinearForm<FactSubject> one : read) {
+            for (FactSubject each : one.coefs().keySet()) {
+                if (!done.contains(each) && armsOf(terms.knowledgeOf(each).computation()) != null) {
+                    return each;
+                }
             }
-            List<NumericConstraint> given = new ArrayList<>();
-            Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
+        }
+        return null;
+    }
+
+    /**
+     * Adds to {@code cases} the cases of {@code owed} where {@code form}, what it has come to,
+     * has each value inside it that is one of several answer by one of its arms — or answers false
+     * where a form could not be held or the cases are more than {@link #MOST_CASES}.
+     *
+     * <p>{@code given} is what the arms chosen so far say, and {@code done} the values they were
+     * chosen for. The rule with the atom taken out and what its arm answers put in its place. What
+     * an arm answers, and what choosing it settles, may name another such value: which arm that one
+     * is stands to this one's by what it settles, so it is chosen too, or a case that cannot be
+     * reached would be reached for want of it.
+     * A form no ratio holds is a reading this does not make, and the clause keeps the reading it
+     * has without the cases.
+     */
+    private boolean expand(NumericConstraint owed, LinearForm<FactSubject> form,
+                           List<NumericConstraint> given, Set<FactSubject> done,
+                           List<Case> cases) {
+        FactSubject atom = chosenIn(form, given, done);
+        if (atom == null) {
+            Map<FactSubject, NumberSpace> spaces = new HashMap<>(terms.spacesOf(form));
+            given.forEach(each -> spaces.putAll(terms.spacesOf(each.form())));
+            cases.add(new Case(new NumericConstraint(form, owed.rel()), List.copyOf(given),
+                    Map.copyOf(spaces)));
+            return cases.size() <= MOST_CASES;
+        }
+        ExactRatio coefficient = form.coefs().get(atom);
+        Set<FactSubject> chosen = new HashSet<>(done);
+        chosen.add(atom);
+        for (Derivation.Chosen.Arm arm : armsOf(terms.knowledgeOf(atom).computation())) {
+            LinearForm<FactSubject> answered = arm.answer();
+            LinearForm<FactSubject> instead = coefficient == null ? form
+                    : form.minus(LinearForm.weighing(atom, coefficient))
+                            .flatMap(without -> answered.times(coefficient).flatMap(without::plus))
+                            .orNull();
             // What the call answers here, said of the call itself: in this case the two are one
             // value. Without it a guard written about the call would stand outside the cases, and a
             // clause could come out established by these and refused by that. It belongs to this
@@ -1680,19 +2315,17 @@ final class Predicates {
             // has nothing to tie back — which is why what is shared with that reader stops at the
             // arms and what they settle.
             LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered).orNull();
-            if (answeredHere == null) {
-                return null;
+            if (instead == null || answeredHere == null) {
+                return false;
             }
-            given.add(new NumericConstraint(answeredHere, Rel.EQ));
-            kinds.putAll(terms.kindsOf(answeredHere));
-            for (NumericConstraint stands : arm.settles()) {
-                given.add(stands);
-                kinds.putAll(terms.kindsOf(stands.form()));
+            List<NumericConstraint> now = new ArrayList<>(given);
+            now.add(new NumericConstraint(answeredHere, Rel.EQ));
+            now.addAll(arm.settles());
+            if (!expand(owed, instead, now, chosen, cases)) {
+                return false;
             }
-            cases.add(new Case(new NumericConstraint(instead, owed.rel()), List.copyOf(given),
-                    Map.copyOf(kinds)));
         }
-        return new Piecewise(List.copyOf(cases));
+        return true;
     }
 
     /** The arms of a value recorded as one of several, alone or beside another account of it
@@ -1713,7 +2346,7 @@ final class Predicates {
             }
             case Derivation.Product _, Derivation.TruncatingQuotient _,
                  Derivation.TruncatingRemainder _, Derivation.RoundedQuotient _,
-                 Derivation.HoldsSomethingWhere _ -> null;
+                 Derivation.HoldsSomethingWhere _, Derivation.GuaranteedWhere _ -> null;
         };
     }
 

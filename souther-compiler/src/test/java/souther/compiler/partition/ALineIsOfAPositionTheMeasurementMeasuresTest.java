@@ -3,13 +3,14 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
@@ -68,7 +69,7 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
             declared.add(new InputDomain.Parameter(each, null, Type.INT));
         }
         RuleReadingContext context =
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return InputDomain.of(declared, context, TypeCardinality.Counts.workedOutIn(context),
                 Membership.none()).reading(SYMBOLS);
     }
@@ -99,7 +100,7 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
 
     private static LineOrigin aBound() {
         return new LineOrigin.InvariantOrigin(
-                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.fee", "Amount")), 0),

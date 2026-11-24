@@ -59,14 +59,14 @@ public enum Kernel {
     MAP_EMPTY("map.empty"),
     MAP_GET("map.get"),
     MAP_CONTAINS_KEY("map.containsKey"),
-    MAP_KEYS("map.keys"),
-    MAP_VALUES("map.values"),
+    MAP_KEYS("map.keys", true),
+    MAP_VALUES("map.values", true),
     MAP_SINGLETON("map.singleton"),
     MAP_INSERT("map.insert"),
     MAP_REMOVE("map.remove"),
     MAP_IS_EMPTY("map.isEmpty"),
     MAP_SIZE("map.size"),
-    MAP_TO_LIST("map.toList"),
+    MAP_TO_LIST("map.toList", true),
     MAP_FROM_LIST("map.fromList"),
     // list
     LIST_LENGTH("list.length"),
@@ -91,7 +91,7 @@ public enum Kernel {
     SET_DIFFERENCE("set.difference"),
     SET_IS_EMPTY("set.isEmpty"),
     SET_SIZE("set.size"),
-    SET_TO_LIST("set.toList"),
+    SET_TO_LIST("set.toList", true),
     SET_FROM_LIST("set.fromList"),
     // date
     DATE_ADD_DAYS("date.addDays"),
@@ -149,8 +149,24 @@ public enum Kernel {
 
     private final String key;
 
+    private final boolean listsInNoOrder;
+
     Kernel(String key) {
+        this(key, false);
+    }
+
+    Kernel(String key, boolean listsInNoOrder) {
         this.key = key;
+        this.listsInNoOrder = listsInNoOrder;
+    }
+
+    /**
+     * Whether this lists what a set or a map holds, in an order the language leaves unspecified:
+     * the list answered has a first element and a last that no model names. Declared here, beside
+     * the operation, so that a kernel added to the library says which it is where it is added.
+     */
+    public boolean listsInNoOrder() {
+        return listsInNoOrder;
     }
 
     /** The key a declaration names this kernel by: {@code "string.trim"}. What a declaration is read

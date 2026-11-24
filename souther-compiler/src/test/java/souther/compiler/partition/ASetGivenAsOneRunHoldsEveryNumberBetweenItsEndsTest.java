@@ -3,14 +3,17 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.WholeNumberSet;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -44,7 +47,11 @@ class ASetGivenAsOneRunHoldsEveryNumberBetweenItsEndsTest {
                     Band.endAt(null, Bound.at(at(3), true), Towards.BELOW))),
             new NumericSet.InARunExcept(run(0, true, 10, true), List.of(Count.of(0))),
             new NumericSet.InARunExcept(run(0, true, 10, true), List.of(Count.of(5))),
-            new NumericSet.AwayFrom(List.of(Count.of(3))));
+            new NumericSet.AwayFrom(List.of(Count.of(3))),
+            // The even numbers: a set that gives no ends holding what lies between them, since
+            // every second number is left out.
+            new NumericSet.InTheNumbers(WholeNumberSet.ofClass(
+                    new Congruences(BigInteger.ZERO, BigInteger.TWO))));
 
     @Test
     void theEndsHoldEveryNumberOfTheSetAndNoOther() {
@@ -87,10 +94,22 @@ class ASetGivenAsOneRunHoldsEveryNumberBetweenItsEndsTest {
     /** Every shape a set comes in is among the ones checked. */
     @Test
     void everyShapeIsChecked() {
-        Set<Class<?>> shapes = Arrays.stream(NumericSet.class.getPermittedSubclasses())
-                .collect(Collectors.toSet());
+        Set<Class<?>> shapes = shapesBelow(NumericSet.class);
         Set<Class<?>> checked = SETS.stream().map(Object::getClass).collect(Collectors.toSet());
         assertEquals(shapes, checked);
+    }
+
+    /** The shapes a sealed type comes in, those a sealed one among them is made of in its place. */
+    private static Set<Class<?>> shapesBelow(Class<?> sealed) {
+        Set<Class<?>> out = new LinkedHashSet<>();
+        for (Class<?> each : sealed.getPermittedSubclasses()) {
+            if (each.isSealed()) {
+                out.addAll(shapesBelow(each));
+            } else {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     private static boolean above(Endpoint end, int k) {

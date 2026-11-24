@@ -14,19 +14,23 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.StringsLanguage;
+import souther.compiler.meaning.ValueIdentity;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.ConstantArguments;
@@ -38,6 +42,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Operand;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.ValueSet;
 
@@ -46,10 +51,12 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -96,13 +103,15 @@ final class MeaningAssumptions {
      *                   path starts with
      * @param typeAt     what stands at a position, or null where nothing is known to
      * @param standing   the expression of the condition that reads each position, in the tree the
-     *                   reader walks
+     *                   reader walks, by the position and which value there it reads
+     *                   ({@link ValueIdentity}): two names for two elements of one container read
+     *                   one position and two values
      * @param answering  the expression of the condition that is each place in an answer a
      *                   dependency gave, in the tree the reader walks: the call, or a name it was
      *                   given, with the fields read off it
      */
     record InputPlaces(Map<String, BindingId> parameters, Function<TermPath, Type> typeAt,
-                       Map<TermPath, Core> standing, Map<AnswerPlace, Core> answering) {
+                       Map<ReadAt, Core> standing, Map<AnswerPlace, Core> answering) {
 
         /** Where nothing stands: no proposition names a place here. */
         static final InputPlaces NONE =
@@ -115,8 +124,17 @@ final class MeaningAssumptions {
 
         /** The same places, with what a condition reads standing at each position it reads and
          *  each place in an answer it reads. */
-        InputPlaces readBy(Map<TermPath, Core> condition, Map<AnswerPlace, Core> answers) {
+        InputPlaces readBy(Map<ReadAt, Core> condition, Map<AnswerPlace, Core> answers) {
             return new InputPlaces(parameters, typeAt, condition, answers);
+        }
+    }
+
+    /** A position of the input, and which value there an expression reads. */
+    record ReadAt(TermPath position, ValueIdentity identity) {
+
+        ReadAt {
+            Objects.requireNonNull(position, "a value is read at some position");
+            Objects.requireNonNull(identity, "and is some value there");
         }
     }
 
@@ -136,6 +154,8 @@ final class MeaningAssumptions {
     }
 
     private final Terms terms;
+    /** Whether a state reaches nothing, as the engine these terms were lent by keeps it. */
+    private final ReachabilityAnswers reachability;
     private final InputPlaces places;
     /** What the bindings in force where the condition stands are, which is where a value the body
      *  bound is found. */
@@ -155,7 +175,8 @@ final class MeaningAssumptions {
 
     private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known,
                                Tries tries) {
-        this.terms = terms;
+        this.terms = Objects.requireNonNull(terms, "a condition is read in some terms");
+        this.reachability = terms.reachability();
         this.places = places;
         this.at = at;
         this.known = known;
@@ -171,21 +192,46 @@ final class MeaningAssumptions {
      * disjunctions of its own, each of whose parts is taken alone again, so what grows is the
      * nesting: a disjunction of two parts never reaches a count kept for it alone, however many
      * times over the nesting takes it.
+     *
+     * <p>Settling the choices a path left undecided is counted the same way against the path's
+     * own count ({@link #settling}), which is another figure. Each count carries the reason a
+     * part past it is declined for, naming the figure it was counted against, so a reason met in
+     * a part is told apart by which count it came of and not by its kind.
      */
     private static final class Tries {
 
         private int left;
 
-        Tries() {
-            this(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum());
+        private final WhyNotTaken.MoreAlternativesThanAreTried pastIt;
+
+        private Tries(int left, Figure figure) {
+            this.left = left;
+            this.pastIt = new WhyNotTaken.MoreAlternativesThanAreTried(figure);
         }
 
-        Tries(int left) {
-            this.left = left;
+        /** The parts one reading of a condition takes alone. */
+        static Tries reading() {
+            return new Tries(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.maximum(),
+                    CompositionBudget.ALTERNATIVES_A_PATH_TRIES.reached());
+        }
+
+        /**
+         * What is left of the parts the path {@code known} is on may take alone settling its
+         * choices, said where it runs out as the whole figure it is counted for the path against:
+         * the parts other readings along the path took are what it was counted against too.
+         */
+        static Tries settling(Known known) {
+            return new Tries(known.settlingLeft(),
+                    WorkFigure.PARTS_A_PATH_SETTLES.at(Known.Choices.PARTS_A_PATH_SETTLES));
         }
 
         int left() {
             return left;
+        }
+
+        /** Why a part past this count is declined. */
+        WhyNotTaken.MoreAlternativesThanAreTried pastIt() {
+            return pastIt;
         }
 
         /** Whether another part may be taken alone, counting it where it may. */
@@ -203,7 +249,7 @@ final class MeaningAssumptions {
     static Predicates.Assumed assumed(Proposition stated, boolean positive, Known k, Terms terms,
                                       InputPlaces places, Denotations at) {
         Proposition asked = positive ? stated : stated.denied();
-        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, new Tries());
+        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, Tries.reading());
         // A count of statements is taken as the choices of which of them hold, every count in
         // the statement written out together and held to one figure.
         switch (CountsWrittenOut.of(asked)) {
@@ -233,13 +279,16 @@ final class MeaningAssumptions {
      *
      * <p>A choice is read over the state it is kept in, and taken out of it only once a part is
      * taken in for it. The parts read are counted for the path ({@link Known.Choices#PARTS_A_PATH_SETTLES});
-     * where the count runs out the choices left stay undecided, as they were when they were kept.
-     * That is no fact about the condition being read, so it is said of none.
+     * where the count runs out the choices left stay undecided, as they were when they were kept,
+     * and that is said of none: nothing was taken in for them. Where it runs out inside the one
+     * part a choice comes to, that part is taken in with a disjunction of it declined, and the
+     * reading says so as it says any reason the part gave, naming the path's count
+     * ({@link Tries#settling}).
      */
     private void settleWhatWasLeftUndecided() {
-        Tries settling = new Tries(known.settlingLeft());
+        Tries settling = Tries.settling(known);
         boolean settled = true;
-        while (settled && !known.reachesNothing() && known.awaitsSettling()
+        while (settled && !reachability.reachesNothing(known) && known.awaitsSettling()
                 && settling.left() > 0) {
             settled = false;
             for (Known.Declined choice : known.declinedChoices()) {
@@ -247,7 +296,7 @@ final class MeaningAssumptions {
                         choice.at(), known, settling);
                 again.takingOneOf(choice.any());
                 if (again.leftUndecided) {
-                    if (again.notTaken.contains(new WhyNotTaken.MoreAlternativesThanAreTried())) {
+                    if (again.notTaken.contains(settling.pastIt())) {
                         break;
                     }
                     continue;
@@ -271,7 +320,7 @@ final class MeaningAssumptions {
             return k;
         }
         MeaningAssumptions settling = new MeaningAssumptions(terms, InputPlaces.NONE, null, k,
-                new Tries());
+                Tries.reading());
         settling.settleWhatWasLeftUndecided();
         return settling.known;
     }
@@ -279,7 +328,7 @@ final class MeaningAssumptions {
     /** Why each choice this reading leaves undecided, and no earlier one, was not taken in — none
      *  where nothing is reached, since no part of a choice is then left unread. */
     private void sayWhatIsStillUndecided() {
-        if (known.reachesNothing()) {
+        if (reachability.reachesNothing(known)) {
             return;
         }
         Set<Known.Declined> before = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -314,19 +363,20 @@ final class MeaningAssumptions {
                 take(where.states());
             }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
-                                      boolean holds, var _) -> {
+                                      boolean holds, var _, var _) -> {
                 switch (formAt(form)) {
                     case FormAt.Named(LinearForm<FactSubject> over) -> {
                         known = known.taking(over, holds ? p : p.denied(),
-                                Known.Held.ON_THE_PATH, terms.kindsOf(over));
+                                Known.Held.ON_THE_PATH, terms.spacesOf(over));
                         taken = true;
                     }
                     case FormAt.Unnamed(Set<WhyNotTaken.DomainLimit> edges) ->
                             edges.forEach(this::outside);
                 }
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
-                FactSubject place = placeOf(at);
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at, ValueIdentity identity),
+                    boolean holds, var _) -> {
+                FactSubject place = placeOf(at, identity);
                 if (place != null) {
                     known = known.taking(place, holds, Known.Held.ON_THE_PATH);
                     taken = true;
@@ -338,21 +388,42 @@ final class MeaningAssumptions {
             case Proposition.Any any -> takingOneOf(any);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
                     "a count reaches a path written out as its choices: " + asked);
+            case Proposition.OfTheWays _ -> throw new IllegalArgumentException(
+                    "a statement over the ways reaches a path written out as its cases: " + asked);
             // Which application is no fact of a path.
             case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                             .forEach(this::notTaken);
+            // Some element being a value is how many of the container's elements are that value,
+            // which a path holds; and the container holding one where some is.
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity),
+                                  Proposition.SameValue(DecisionSubject one,
+                                          Operand.At<DecisionSubject>(DecisionSubject other),
+                                          boolean same, var _), boolean holds, var _)
+                    when same && howManyAre(container, identity, one, other) != null -> {
+                FactSubject count = howManyAre(container, identity, one, other);
+                known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
+                        holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
+                        terms.spacesOf(LinearForm.atom(count)));
+                taken = true;
+                if (holds) {
+                    tookTheCount(container, identity, true);
+                }
+            }
             // Some element, asked nothing of it, is the container holding one: a count, which a path
             // holds.
-            case Proposition.Some(DecisionSubject.AnInput(TermPath container),
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity),
                                   Proposition.Always(boolean anyElement), boolean holds, var _)
-                    when anyElement -> holdingOne(container, holds);
+                    when anyElement -> holdingOne(container, identity, holds);
             // Some element meeting something is the container holding one as well, which is taken
             // where a path names the count; which element it is, is not.
-            case Proposition.Some(DecisionSubject.AnInput(TermPath container), var _,
+            case Proposition.Some(DecisionSubject.AnInput(TermPath container,
+                                          ValueIdentity identity), var _,
                                   boolean holds, var _) when holds -> {
-                tookTheCount(container, true);
+                tookTheCount(container, identity, true);
                 WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                         .forEach(this::notTaken);
@@ -370,10 +441,14 @@ final class MeaningAssumptions {
                             ? WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES
                             : WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN),
                     asked).forEach(this::notTaken);
-            case Proposition.Unread unread ->
-                    notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
+            // A part nothing read the meaning of is no fact of the way, and what it would be said
+            // as still makes certain what that statement does.
+            case Proposition.Unread unread -> {
+                unread.couldBe().ifPresent(could -> takingTheLengths(could.on(unread.holds())));
+                notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
+            }
             case Proposition.Carried carried -> throw carried.handedToAReader();
-            case Proposition.Compared(Relation.Ordered ordered, boolean holds, var _) ->
+            case Proposition.Compared(Relation.Ordered ordered, boolean holds, var _, var _) ->
                     onAnOrder(ordered, holds);
             case Proposition.Truth(DecisionSubject.AnAnswer answer, boolean holds, var _) -> {
                 Core standing = answering(answer);
@@ -395,7 +470,68 @@ final class MeaningAssumptions {
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT);
             case Proposition.SameValue _, Proposition.LastToHold _ ->
                     outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
+            // One string inside another, or which language a string is in, is no fact a path holds
+            // of a place: what it holds is what the statement says of how long each string is.
+            case Proposition.StringInside _ -> {
+                takingTheLengths(asked);
+                outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_STRING_INSIDE_ANOTHER);
+            }
+            case Proposition.InTheStrings _ -> {
+                takingTheLengths(asked);
+                outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            }
         }
+    }
+
+    /**
+     * What a statement about strings makes certain of their lengths, on the side it comes out; and
+     * nothing of any other statement.
+     */
+    private void takingTheLengths(Proposition stated) {
+        switch (stated) {
+            case Proposition.StringInside(Quantity inner, Quantity outer, var _, boolean holds,
+                                          var _) -> takingTheLengths(
+                    WhatAStringSaysOfItsLength.inside(lengthOfAString(inner),
+                            lengthOfAString(outer)), holds);
+            case Proposition.InTheStrings(var of, StringsLanguage accepts, boolean holds, var _) -> {
+                FactSubject length = of instanceof Proposition.InTheStrings.Strings.AtAPosition(
+                        TermPath at, ValueIdentity identity) ? lengthAt(at, identity) : null;
+                if (length != null) {
+                    takingTheLengths(WhatAStringSaysOfItsLength.inALanguage(length,
+                            accepts.meaning()), holds);
+                }
+            }
+            default -> { }
+        }
+    }
+
+    private void takingTheLengths(WhatAStringSaysOfItsLength.Sides<FactSubject> said,
+                                  boolean holds) {
+        for (WhatAStringSaysOfItsLength.Condition<FactSubject> each
+                : holds ? said.ifHolds() : said.ifDenied()) {
+            NumericConstraint stated = NumericConstraint.of(each);
+            known = known.taking(stated.form(), stated.rel(), Known.Held.ON_THE_PATH,
+                    terms.spacesOf(stated.form()));
+            taken = true;
+        }
+    }
+
+    /** How many code points {@code string} holds, where it is a string of the input; or null. */
+    private FactSubject lengthOfAString(Quantity string) {
+        return string instanceof DecisionAtom.OfTheInput(
+                NumericTerm.ValueOf(TermPath at), ValueIdentity identity)
+                ? lengthAt(at, identity) : null;
+    }
+
+    /** How many code points the string at {@code at} holds, named as a guard on it names it. */
+    private FactSubject lengthAt(TermPath at, ValueIdentity identity) {
+        Type type = places.typeAt().apply(at);
+        ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
+        FactSubject count = size == null ? null : terms.sizeAtPlace(size, placeOf(at, identity));
+        if (count != null) {
+            carrying(count, size);
+        }
+        return count;
     }
 
     /**
@@ -473,16 +609,25 @@ final class MeaningAssumptions {
     private AtomAt atomAt(Quantity quantity) {
         FactSubject named;
         switch (quantity) {
-            case DecisionAtom.OfTheInput(NumericTerm term) -> named = atomOf(term);
+            case DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity identity) ->
+                    named = atomOf(term, identity);
             case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
                     named = answerAtom(answer);
             case Quantity.OfABinding bound -> named = boundAtom(bound);
-            case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
+            // What a call answers on a run is a value a path names nothing by.
+            case Quantity.OfACall call -> {
+                call.madeOf().ifPresent(why -> notTaken(new WhyNotTaken.MeaningUnread(why)));
+                return new AtomAt.AtTheEdge(
+                        WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+            }
+            case Quantity.HowManyMeet _, Quantity.HowManyMeetAcross _,
+                 Quantity.HowManyHold _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
             }
-            case Quantity.HowManyDifferent _, Quantity.HowManyDifferentBelow _,
-                 Quantity.HowManyDifferentAcross _, Quantity.SumOver _ -> {
+            case Quantity.HowManyDifferent _, Quantity.HowManyDifferentMeet _,
+                 Quantity.HowManyDifferentBelow _, Quantity.HowManyDifferentAcross _,
+                 Quantity.SumOver _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS);
             }
@@ -492,12 +637,13 @@ final class MeaningAssumptions {
             case Quantity.CodePointsOfAPiece _, DecisionAtom.TakenOfAnAnswer _,
                  DecisionAtom.ComputedOverAnAnswer _,
                  Quantity.WhatAnOperationAnswers _, Quantity.ProductOfTwo _,
-                 Quantity.RemainderByAnInput _, Quantity.APieceOf _,
+                 Quantity.RemainderByAnInput _, Quantity.APieceOf _, Quantity.ThePieceAt _,
                  Quantity.IsAmongThePieces _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }
             case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
+            case Quantity.TheKeptTotal kept -> throw kept.reachedAReader();
         }
         return named != null ? new AtomAt.Named(named)
                 : new AtomAt.AtTheEdge(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
@@ -510,29 +656,45 @@ final class MeaningAssumptions {
      * <p>A size carries what its operation bounds its result to, of the value and not of the path:
      * a size is never negative whether or not the condition holds.
      */
-    private FactSubject atomOf(NumericTerm term) {
+    private FactSubject atomOf(NumericTerm term, ValueIdentity identity) {
         return switch (term) {
             case NumericTerm.ValueOf(TermPath at) -> {
                 Type type = places.typeAt().apply(at);
-                yield type == null ? null : terms.atomAt(placeOf(at), type);
+                yield type == null ? null : terms.atomAt(placeOf(at, identity), type);
             }
             case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
-                    && isASize(taken) -> {
-                FactSubject size = terms.sizeAtPlace(taken.operation(), placeOf(taken.position()));
+                    && ofTheValueAsItStands(taken) && isASize(taken) -> {
+                FactSubject size = terms.sizeAtPlace(taken.operation(),
+                        placeOf(taken.position(), identity));
                 if (size != null) {
                     carrying(size, taken.operation());
                 }
                 yield size;
             }
+            // An hour, a month, a year: a part of a time or a date, which its operation bounds to
+            // the hours of a day, the months of a year and the years a date is written in whether
+            // or not the condition holds.
+            case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
+                    && ofTheValueAsItStands(taken)
+                    && (taken.takenAs() instanceof TakenAs.PartOfTime
+                    || taken.takenAs() instanceof TakenAs.PartOfDate) -> {
+                FactSubject part = terms.partAtPlace(taken.operation(),
+                        placeOf(taken.position(), identity));
+                if (part != null) {
+                    carrying(part, taken.operation());
+                }
+                yield part;
+            }
             // What a division leaves of the value at a place, named as the call that takes it is, so
             // a guard on the remainder here and one on the value a body bound the call to are about
             // one number. It carries both ends its operation bounds it to by this divisor.
             case NumericTerm.TakenOf taken
-                    when taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                    when ofTheValueAsItStands(taken)
+                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
                     && remainder.read(taken.arguments()) instanceof BigDecimal divisor
                     && isAWholeNumberOfALong(divisor) -> {
                 FactSubject left = terms.remainderAtPlace(taken.operation(),
-                        placeOf(taken.position()), divisor.longValue());
+                        placeOf(taken.position(), identity), divisor.longValue());
                 if (left != null) {
                     carryingBothEnds(left, taken.operation(), taken.arguments());
                 }
@@ -552,15 +714,24 @@ final class MeaningAssumptions {
      * of what the places are than that their form leaves it.
      */
     private FactSubject remainderOfAForm(Quantity.RemainderOfADividend remainder) {
-        if (remainder.divisor().bitLength() >= Long.SIZE
-                || !(remainder.dividend().constant().floor()
+        LinearForm<NumericTerm> dividend = remainder.overTheInput();
+        if (dividend == null || remainder.divisor().bitLength() >= Long.SIZE
+                || !(dividend.constant().floor()
                         instanceof ExactAnswer.Held<BigInteger>(BigInteger constant))) {
             return null;
         }
+        // Which value at its position each number is: one term each, since a form over positions
+        // holds no two values at one.
+        Map<NumericTerm, ValueIdentity> identities = new HashMap<>();
+        remainder.dividend().coefs().keySet().forEach(each -> {
+            if (each instanceof DecisionAtom.OfTheInput(NumericTerm term, ValueIdentity identity)) {
+                identities.put(term, identity);
+            }
+        });
         List<Map.Entry<FactSubject, BigDecimal>> weighed = new ArrayList<>();
         for (Map.Entry<NumericTerm, ExactRatio> each
-                : NumericTerms.entriesInOrder(remainder.dividend().coefs())) {
-            FactSubject place = atomOf(each.getKey());
+                : NumericTerms.entriesInOrder(dividend.coefs())) {
+            FactSubject place = atomOf(each.getKey(), identities.get(each.getKey()));
             if (place == null || !(each.getValue().floor()
                     instanceof ExactAnswer.Held<BigInteger>(BigInteger weight))) {
                 return null;
@@ -585,20 +756,25 @@ final class MeaningAssumptions {
     /** {@code atom} held between the ends {@code operation} bounds what it answers to, for the
      *  arguments it was given beside the value. */
     private void carryingBothEnds(FactSubject atom, ValueName operation, TakenArguments given) {
-        NumericDomain.Bounds range = ResultRange.of(
-                DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
-                argument -> Optional.ofNullable(given.at(argument.position())));
+        carrying(atom, ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation),
+                argument -> Optional.ofNullable(given.at(argument.position()))));
+    }
+
+    /** {@code atom} held between the ends of {@code range}, where the representation stops
+     *  included: whether the arm a condition opens can be reached asks what a value can be. */
+    private void carrying(FactSubject atom, NumericDomain.Bounds range) {
         if (range.min() != null) {
             ExactRatio at = Count.number(range.min().at()).exactly();
             known = known.taking(LinearForm.atomMinusConstant(atom, at),
                     range.min().inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
-                    terms.kindsOf(LinearForm.atom(atom)));
+                    terms.spacesOf(LinearForm.atom(atom)));
         }
         if (range.max() != null) {
             ExactRatio at = Count.number(range.max().at()).exactly();
             known = known.taking(LinearForm.atomMinusConstant(atom, at),
                     range.max().inclusive() ? Rel.LE : Rel.LT, Known.Held.OF_THE_VALUE,
-                    terms.kindsOf(LinearForm.atom(atom)));
+                    terms.spacesOf(LinearForm.atom(atom)));
         }
     }
 
@@ -651,11 +827,12 @@ final class MeaningAssumptions {
      */
     private void onAnOrder(Relation.Ordered ordered, boolean holds) {
         TermPath at = ordered.term() instanceof DecisionAtom.OfTheInput(
-                NumericTerm.ValueOf(TermPath value)) ? value : null;
-        FactSubject place = at == null ? null : placeOf(at);
+                NumericTerm.ValueOf(TermPath value), var _) ? value : null;
+        FactSubject place = at == null ? null : placeOf(at,
+                ((DecisionAtom.OfTheInput) ordered.term()).identity());
         Type type = place == null ? null : places.typeAt().apply(at);
         Carrier carrier = type == null ? null : Carrier.ofValue(type, terms.declarations());
-        OrderedInterval range = rangeOf(holds ? ordered.proposition()
+        OrderedInterval range = OrderedInterval.leftBy(holds ? ordered.proposition()
                 : ordered.proposition().denied(), ordered.at());
         if (carrier == null || range == null) {
             outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER);
@@ -665,19 +842,6 @@ final class MeaningAssumptions {
         taken = true;
     }
 
-    /** What {@code rel} against {@code at} leaves a value on the order, or null where it leaves a
-     *  hole rather than a range. */
-    private static OrderedInterval rangeOf(Rel rel, Place at) {
-        return switch (rel) {
-            case GE -> new OrderedInterval(Endpoint.inclusive(at), null);
-            case GT -> new OrderedInterval(Endpoint.exclusive(at), null);
-            case LE -> new OrderedInterval(null, Endpoint.inclusive(at));
-            case LT -> new OrderedInterval(null, Endpoint.exclusive(at));
-            case EQ -> new OrderedInterval(Endpoint.inclusive(at), Endpoint.inclusive(at));
-            case NE -> null;
-        };
-    }
-
     /**
      * The value {@code of} is one of {@code cases}, taken in under the subject a fork on it in the
      * tree names it by, so an arm further in on the same value is read under it
@@ -685,7 +849,8 @@ final class MeaningAssumptions {
      */
     private void inCases(DecisionSubject of, CasesLeft cases) {
         FactSubject value = switch (of) {
-            case DecisionSubject.AnInput(TermPath at) -> placeOf(at);
+            case DecisionSubject.AnInput(TermPath at, ValueIdentity identity) ->
+                    placeOf(at, identity);
             case DecisionSubject.AnAnswer answer -> {
                 Core standing = answering(answer);
                 yield standing == null ? null : terms.subjectOf(standing, at);
@@ -735,7 +900,8 @@ final class MeaningAssumptions {
         Set<Quantity> numbers = new LinkedHashSet<>();
         if (comparesOnlyNumbers(any, numbers) && numbers.size() == 1
                 && atomAt(numbers.iterator().next()) instanceof AtomAt.Named(FactSubject number)
-                && terms.carrierOf(number) instanceof Carrier.Whole) {
+                && terms.carrierOf(number) instanceof Carrier carrier
+                && carrier.countsInWholeNumbers()) {
             WholeNumberRuns values = leftOf(any);
             if (values != null) {
                 holdingTheValues(number, values);
@@ -745,14 +911,13 @@ final class MeaningAssumptions {
         List<MeaningAssumptions> left = new ArrayList<>();
         for (Proposition part : any.parts()) {
             if (!tries.another()) {
-                WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
-                        .forEach(this::notTaken);
+                WhyNotTaken.declinedWhole(tries.pastIt(), any).forEach(this::notTaken);
                 leftUndecided = true;
                 return;
             }
             MeaningAssumptions alone = new MeaningAssumptions(terms, places, at, known, tries);
             alone.take(part);
-            if (!alone.known.reachesNothing()) {
+            if (!reachability.reachesNothing(alone.known)) {
                 left.add(alone);
                 if (left.size() == 2) {
                     break;
@@ -771,12 +936,11 @@ final class MeaningAssumptions {
                 only.notTaken.forEach(this::notTaken);
             }
             default -> {
-                boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
-                        new WhyNotTaken.MoreAlternativesThanAreTried()));
+                boolean cutShort = left.stream()
+                        .anyMatch(each -> each.notTaken.contains(tries.pastIt()));
                 leftUndecided = true;
                 if (cutShort) {
-                    WhyNotTaken.declinedWhole(new WhyNotTaken.MoreAlternativesThanAreTried(), any)
-                            .forEach(this::notTaken);
+                    WhyNotTaken.declinedWhole(tries.pastIt(), any).forEach(this::notTaken);
                 } else {
                     // Said when the reading ends, and only if no later condition has settled it.
                     Known.Declined declined = new Known.Declined(any, at, places);
@@ -799,7 +963,7 @@ final class MeaningAssumptions {
             case Proposition.Any any ->
                     any.parts().stream().allMatch(part -> comparesOnlyNumbers(part, numbers));
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel _),
-                                      boolean _, var _)
+                                      boolean _, var _, var _)
                     when form.coefs().size() == 1
                     && form.coefs().values().iterator().next().signum() != 0 -> {
                 numbers.add(form.coefs().keySet().iterator().next());
@@ -845,7 +1009,8 @@ final class MeaningAssumptions {
                 yield out;
             }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
-                                      boolean holds, var _) -> leftBy(form, holds ? p : p.denied());
+                                      boolean holds, var _, var _) ->
+                    leftBy(form, holds ? p : p.denied());
             default -> throw new IllegalStateException(
                     "a part that compares no number was let through: " + stated);
         };
@@ -883,15 +1048,15 @@ final class MeaningAssumptions {
             return;
         }
         if (held.runs().size() == 1) {
-            Map<FactSubject, Granularity> kinds = terms.kindsOf(LinearForm.atom(number));
+            Map<FactSubject, NumberSpace> spaces = terms.spacesOf(LinearForm.atom(number));
             WholeNumberRuns.Run run = held.runs().getFirst();
             if (run.from() != null) {
                 known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.from())),
-                        Rel.GE, Known.Held.ON_THE_PATH, kinds);
+                        Rel.GE, Known.Held.ON_THE_PATH, spaces);
             }
             if (run.to() != null) {
                 known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.to())),
-                        Rel.LE, Known.Held.ON_THE_PATH, kinds);
+                        Rel.LE, Known.Held.ON_THE_PATH, spaces);
             }
             return;
         }
@@ -917,26 +1082,80 @@ final class MeaningAssumptions {
      * {@code holds} is false, taken in as what its count is: the same atom a clause or a guard
      * stating the count names.
      */
-    private void holdingOne(TermPath container, boolean holds) {
-        if (!tookTheCount(container, holds)) {
+    private void holdingOne(TermPath container, ValueIdentity identity, boolean holds) {
+        if (!tookTheCount(container, identity, holds)) {
             outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
         }
     }
 
-    /** The same, saying whether the count was named here at all, and nothing about why not. */
-    private boolean tookTheCount(TermPath container, boolean holds) {
+    /**
+     * How many elements of the container at {@code container}, or keys, are the value one of
+     * {@code one} and {@code other} names, where the other is the element or the key — or null
+     * where neither is, the value is no input, or either is a place a path does not read.
+     */
+    private FactSubject howManyAre(TermPath container, ValueIdentity identity, DecisionSubject one,
+                                   DecisionSubject other) {
         Type type = places.typeAt().apply(container);
         ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
-        FactSubject count = size == null ? null : terms.sizeAtPlace(size, placeOf(container));
+        for (AddsWhatItDoesNotHold.Of of : AddsWhatItDoesNotHold.Of.values()) {
+            DecisionSubject value = heldAs(container, of, one) ? other
+                    : heldAs(container, of, other) ? one : null;
+            FactSubject count = value instanceof DecisionSubject.AnInput(TermPath at,
+                    ValueIdentity named)
+                    ? terms.howManyAreAtPlace(placeOf(container, identity), placeOf(at, named), of,
+                            size)
+                    : null;
+            if (count != null) {
+                return count;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code subject} is what of the container at {@code container} a value is held as,
+     *  as {@code of} says: its element, or its key. */
+    private static boolean heldAs(TermPath container, AddsWhatItDoesNotHold.Of of,
+                                  DecisionSubject subject) {
+        return subject instanceof DecisionSubject.AnInput(TermPath at, var _)
+                && at.equals(switch (of) {
+                    case ELEMENTS -> container.element();
+                    case KEYS -> container.key();
+                });
+    }
+
+    /** The same, saying whether the count was named here at all, and nothing about why not. */
+    private boolean tookTheCount(TermPath container, ValueIdentity identity, boolean holds) {
+        Type type = places.typeAt().apply(container);
+        ValueName size = type == null ? null : NumericMeasures.takenOf(type, terms.newtypeInners());
+        FactSubject count = size == null ? null
+                : terms.sizeAtPlace(size, placeOf(container, identity));
         if (count == null) {
             return false;
         }
         carrying(count, size);
         known = known.taking(LinearForm.atomMinusConstant(count, ExactRatio.ONE),
                 holds ? Rel.GE : Rel.LT, Known.Held.ON_THE_PATH,
-                terms.kindsOf(LinearForm.atom(count)));
+                terms.spacesOf(LinearForm.atom(count)));
         taken = true;
         return true;
+    }
+
+    /**
+     * Whether {@code taken} is a number of the value standing at its place as it stands, and not
+     * of one derived from it.
+     *
+     * <p>A place names one number only when the value is the place's own. The year of {@code d}
+     * and the year of {@code Date.addDays(1, d)} are two numbers that differ on the last day of a
+     * year, so the atom keyed by the operation and the place would hold both to one answer and
+     * make a guard that is reachable contradict itself. A number of a derived value is named by
+     * no atom here, which says nothing of it, and a kind of derivation added is one more arm that
+     * this says how to name.
+     */
+    private static boolean ofTheValueAsItStands(NumericTerm.TakenOf taken) {
+        return switch (taken.transformation()) {
+            case ValueTransformation.Identity _ -> true;
+            case ValueTransformation.DateShift _ -> false;
+        };
     }
 
     /** Whether {@code taken} is the count of what its position holds. */
@@ -948,28 +1167,26 @@ final class MeaningAssumptions {
 
     /** {@code atom} holding where {@code operation} bounds what it answers. */
     private void carrying(FactSubject atom, ValueName operation) {
-        Endpoint least = ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
-                ConstantArguments.none()).min();
-        if (least == null) {
-            return;
-        }
-        ExactRatio at = Count.number(least.at()).exactly();
-        known = known.taking(LinearForm.atomMinusConstant(atom, at),
-                least.inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
-                terms.kindsOf(LinearForm.atom(atom)));
+        carrying(atom, ResultRange.of(
+                DefaultBoundOperationFacts.get().everyBoundOnTheResult(operation),
+                ConstantArguments.none()));
     }
 
     /**
      * The place a position is in this tree: a chain of fields from a parameter, or what the
      * expression of the condition that reads it names — or null where neither stands for it.
+     *
+     * <p>The value there the proposition is about is {@code identity}, and the expression is the
+     * one that reads that value: another name for another element of the same container is
+     * another value at the same position.
      */
-    private FactSubject placeOf(TermPath position) {
+    private FactSubject placeOf(TermPath position, ValueIdentity identity) {
         BindingId parameter = places.parameters().get(position.head());
         RuleKey fields = position.ruleKey();
         if (parameter != null && fields != null) {
             return terms.under(terms.placeSubject(parameter), fields);
         }
-        Core reading = places.standing().get(position);
+        Core reading = places.standing().get(new ReadAt(position, identity));
         return reading == null ? null : terms.subjectOf(reading, at);
     }
 }

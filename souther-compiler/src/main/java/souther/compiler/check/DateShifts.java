@@ -77,6 +77,50 @@ public final class DateShifts {
     }
 
     /**
+     * One shift whatever its count is: the date it moves and the count it moves it by, which is
+     * any number and not one written out.
+     *
+     * @param date   the date the call was given
+     * @param count  the count of days the call was given, before it is weighed
+     * @param weight what the library weighs the count by
+     */
+    public record Moved(Core date, Core count, ExactRatio weight) {}
+
+    /**
+     * {@code e} as a date moved by a count of days of any kind, or null where it is no shift.
+     *
+     * <p>For a reader that asks what the count is made of: a date moved by the count one less
+     * than its own day of the month is the first of its month, however the call is written.
+     */
+    public static Moved movedBy(Core e) {
+        ValueName operation = Terms.operationOf(e);
+        if (operation == null || Core.withoutStanding(e).type() != Type.Prim.DATE) {
+            return null;
+        }
+        LinearForm<DeclaredArgument> says = shapeOf(operation);
+        if (says == null) {
+            return null;
+        }
+        List<Core> args = Terms.argsOf(e);
+        Core date = null;
+        Core count = null;
+        ExactRatio weight = null;
+        for (Map.Entry<DeclaredArgument, ExactRatio> each : says.coefs().entrySet()) {
+            int at = CallArguments.positionOf(each.getKey(), operation);
+            if (at < 0 || at >= args.size()) {
+                return null;
+            }
+            if (each.getKey().stands() == Type.Prim.DATE) {
+                date = args.get(at);
+            } else {
+                count = args.get(at);
+                weight = each.getValue();
+            }
+        }
+        return date == null || count == null ? null : new Moved(date, count, weight);
+    }
+
+    /**
      * Whether {@code operation} is declared as a shift: its answer is its date argument and a
      * count of days, and nothing else.
      *

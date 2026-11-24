@@ -51,7 +51,7 @@ import java.util.Set;
  *                    boundary, since every row a line is weighed at is read along it
  */
 public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisfiedOn,
-                                    QuantityKey direction) {
+                                    QuantityKey direction) implements DrawnBoundary {
 
     public OrderedAffineBoundary {
         if (of == null || seam == null || satisfiedOn == null || direction == null) {
@@ -138,11 +138,26 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
      * {@code n <= 100} and {@code n > 100} part the values in one place and are satisfied on
      * opposite sides of it.
      */
+    @Override
     public ExactAnswer<Boolean> satisfies(Map<NumericTerm, Place> values) {
         // Three answers and not two. A row whose sum the exact arithmetic cannot hold is neither
         // kept nor refused as far as this can tell, and read as either it is evidence nobody
         // established: read as refused, a row the model keeps would rule out a line beside this one.
         return along(direction, values).map(at -> seam.sideOf(at) == satisfiedOn);
+    }
+
+    /**
+     * Whether a row would satisfy this rule if its positions were weighed {@code weights} in the
+     * quantity's own units and the rule parted the values where it does — or why the sum could not
+     * be worked out.
+     *
+     * <p>The line the model drew with a computation weighing a position otherwise, read against the
+     * threshold the model wrote: a table of thresholds is looked up by a value that is worked out
+     * wrongly, and not by one with a threshold of its own.
+     */
+    public ExactAnswer<Boolean> satisfiesWeighing(Map<NumericTerm, ExactRatio> weights,
+                                                  Map<NumericTerm, Place> values) {
+        return summed(weights, values, ExactRatio.ZERO).map(at -> seam.sideOf(at) == satisfiedOn);
     }
 
     /**

@@ -51,7 +51,7 @@ class ARowIsOfferedAsSourceWhateverItIsNamedAfterTest {
         assertEquals(java.util.List.of(), compilation.errors(),
                 "the model under test compiles");
         return GeneratedRows.of(compilation, null, null,
-                new SourceRendering(id -> "esc.sou", compilation.texts())).text();
+                new SourceRendering(id -> "esc.sou", compilation.texts())).textInEnglish();
     }
 
     /** The name is written as a string the language reads back. */
@@ -60,7 +60,7 @@ class ARowIsOfferedAsSourceWhateverItIsNamedAfterTest {
         String block = offered(NAMED_AFTER_A_RULE_ABOUT_STRINGS);
 
         assertTrue(block.contains("""
-                    | "code=String.startsWith(\\"JP\\", x)"\
+                    | "code: String.startsWith(\\"JP\\", x) at code"\
                 """),
                 () -> "a row named after a rule about strings, as source: " + block);
     }

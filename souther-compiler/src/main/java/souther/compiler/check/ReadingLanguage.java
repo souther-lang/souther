@@ -57,6 +57,10 @@ sealed interface ReadingLanguage {
      * that held the rule would have to hold two lists apart by what is inside them. What this one
      * says is that the rule was read whole — the containers it admits are the ones whose builders
      * keep the elements apart, and each element still takes every value.
+     *
+     * <p>And how a map's entries stand to a key beside it ({@link EntryHeld}): the map is taken in
+     * at the map and at the key, since the rule is about the two together and the builders of the
+     * record choose the key first and build the map holding the entry under it.
      */
     final class Elements implements ReadingLanguage {
 

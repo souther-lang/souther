@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -228,8 +230,8 @@ class WhatEachFieldHoldsIsTheClosureOfWhatADeclarationSpreadsTest {
     private static Compilation compiling(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;
@@ -238,8 +240,8 @@ class WhatEachFieldHoldsIsTheClosureOfWhatADeclarationSpreadsTest {
     private static void edit(Compilation c, String source) {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", source);
-        c.update(edited, Set.of());
-        c.answerEverything();
+        c.update(edited, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
                 + c.db().allReports());
     }

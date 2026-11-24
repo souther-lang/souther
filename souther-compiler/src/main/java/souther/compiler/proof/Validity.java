@@ -3,13 +3,16 @@ package souther.compiler.proof;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.StringContainment;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -86,6 +89,9 @@ final class Validity {
 
         /** That two values are one. */
         record Alike(Set<Value> values) implements Atom {}
+
+        /** That one string stands inside another where the place says. */
+        record Inside(Value inner, Value outer, StringContainment where) implements Atom {}
     }
 
     /**
@@ -166,6 +172,22 @@ final class Validity {
                             return false;
                         }
                     }
+                    case LawProposition.Inside<Value>(LawSubject<Value> inner,
+                                                      LawSubject<Value> outer,
+                                                      StringContainment place, boolean holds) -> {
+                        Value a = valueOf(inner);
+                        Value b = valueOf(outer);
+                        // A string is inside itself, at the start of itself and at the end of it.
+                        if (a.equals(b)) {
+                            if (!holds) {
+                                return false;
+                            }
+                            continue;
+                        }
+                        if (!take(new Atom.Inside(a, b, place), holds, truths, todo, known)) {
+                            return false;
+                        }
+                    }
                 }
             }
             List<List<LawProposition<Value>>> still = new ArrayList<>();
@@ -240,6 +262,13 @@ final class Validity {
                 Value b = valueOf(other);
                 yield a.equals(b) ? Boolean.valueOf(holds)
                         : polarity(truths.get(new Atom.Alike(Set.of(a, b))), holds);
+            }
+            case LawProposition.Inside<Value>(LawSubject<Value> inner, LawSubject<Value> outer,
+                                              StringContainment place, boolean holds) -> {
+                Value a = valueOf(inner);
+                Value b = valueOf(outer);
+                yield a.equals(b) ? Boolean.valueOf(holds)
+                        : polarity(truths.get(new Atom.Inside(a, b, place)), holds);
             }
             case LawProposition.Compared<Value>(LinearForm<LawNumber<Value>> form, Rel states) -> {
                 if (!numbers.keySet().containsAll(form.coefs().keySet())) {
@@ -422,6 +451,9 @@ final class Validity {
                 yield new LawProposition.Same<>(new LawSubject.Argument<>(two.get(0)),
                         new LawSubject.Argument<>(two.get(1)), true);
             }
+            case Atom.Inside(Value inner, Value outer, StringContainment place) ->
+                    new LawProposition.Inside<>(new LawSubject.Argument<>(inner),
+                            new LawSubject.Argument<>(outer), place, true);
         };
     }
 
@@ -509,6 +541,41 @@ final class Validity {
                     Props.either(new LawProposition.SomeElement<>(container, ofTheElement, false),
                             holds(container)));
             case Atom.Alike _ -> List.of();
+            // What standing inside another says of how long a string is, on each side, is a
+            // condition of that side only: a string no longer than another need not stand inside
+            // it, and one holding some may.
+            case Atom.Inside(Value inner, Value outer, StringContainment place) -> {
+                WhatAStringSaysOfItsLength.Sides<Value> said =
+                        WhatAStringSaysOfItsLength.inside(inner, outer);
+                List<LawProposition<Value>> out = new ArrayList<>();
+                for (WhatAStringSaysOfItsLength.Condition<Value> each : said.ifHolds()) {
+                    out.add(Props.either(new LawProposition.Inside<>(
+                            new LawSubject.Argument<>(inner), new LawSubject.Argument<>(outer),
+                            place, false), stated(each)));
+                }
+                for (WhatAStringSaysOfItsLength.Condition<Value> each : said.ifDenied()) {
+                    out.add(Props.either(new LawProposition.Inside<>(
+                            new LawSubject.Argument<>(inner), new LawSubject.Argument<>(outer),
+                            place, true), stated(each)));
+                }
+                yield out;
+            }
+        };
+    }
+
+    /** What {@code condition} of the lengths of strings states, over the sizes of the values. */
+    private static LawProposition<Value> stated(
+            WhatAStringSaysOfItsLength.Condition<Value> condition) {
+        return switch (condition) {
+            case WhatAStringSaysOfItsLength.Condition.AtLeast<Value>(Value string, long length) ->
+                    Props.compared(sizeOf(string), Rel.GE, Props.constant(length));
+            case WhatAStringSaysOfItsLength.Condition.AtMost<Value>(Value string, long length) ->
+                    Props.compared(sizeOf(string), Rel.LE, Props.constant(length));
+            case WhatAStringSaysOfItsLength.Condition.NoLongerThan<Value>(
+                    Value inner, Value outer) ->
+                    Props.compared(sizeOf(inner), Rel.LE, sizeOf(outer));
+            case WhatAStringSaysOfItsLength.Condition.Impossible<Value> _ ->
+                    new LawProposition.Always<>(false);
         };
     }
 
@@ -569,9 +636,12 @@ final class Validity {
         return new LinearForm<>(form.constant(), coefs);
     }
 
-    private Map<Integer, Granularity> spacings(LinearForm<LawNumber<Value>> form) {
-        Map<Integer, Granularity> out = new HashMap<>();
-        form.coefs().keySet().forEach(number -> out.put(idOf(number), spacingOf(number)));
+    /** What is told of each number of {@code form}: how its values are spaced, and nothing of
+     *  where they stop, since a law is argued about numbers and not about a type's. */
+    private Map<Integer, NumberSpace> spacings(LinearForm<LawNumber<Value>> form) {
+        Map<Integer, NumberSpace> out = new HashMap<>();
+        form.coefs().keySet().forEach(number ->
+                out.put(idOf(number), NumberSpace.spacedOnly(spacingOf(number))));
         return out;
     }
 

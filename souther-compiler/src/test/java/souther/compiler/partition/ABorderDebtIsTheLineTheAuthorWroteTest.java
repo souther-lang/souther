@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.meaning.AuthoredPointMapping;
@@ -19,7 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -535,9 +537,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
 
     /** The points the comparisons of {@code example.overlap} owe, as the account holds them. */
     private static List<BorderObligationPointAssessment> pointsOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         List<BorderObligationPointAssessment> points = compilation.db().ask(
                 new Adequacy.Obligations("example.overlap", new GenerationScope.Module(),
                         HowALineIsRead.VALUES_COMPOSED)).value();
@@ -587,7 +587,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                         occurrence, SourceConstruct.CALL)))),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE.outcome(occurrence)), ElementsMetOn.EVERY,
-                        LineOrigin.NOTHING_ON_THE_WAY),
+                        LineOrigin.NOTHING_ON_THE_WAY, Optional.empty(), Optional.empty()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
@@ -599,7 +599,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
      *  here. */
     private static DeclaredLine aStatementOf(RuleRef.Invariant clause) {
         return new DeclaredLine.OfAStatement(
-                new InvariantStatementId(new PartId<>(clause, 0), 0));
+                AStatementOfAConjunct.numbered(new PartId<>(clause, 0), 0));
     }
 
     /** The clause the bound in these tests names, which is only an identity here. */
@@ -758,15 +758,14 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
      * right whatever it was.
      */
     private static List<Border> bordersOfThePosition(String model, String behavior, String path) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(model);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, souther.compiler.check.DeclaredSig> sigs = compilation.db()
                 .ask(new souther.compiler.query.Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         RuleReadingContext context = RuleReadingContext.unshared(rules,
-                ReadAs.THE_COMPILATION_DOES);
+                ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         souther.compiler.inputs.InputDomain domain =
                 InputDomain.of(sigs.get(behavior), context,
                         TypeCardinality.Counts.workedOutIn(context),
@@ -943,9 +942,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     /** Every border of {@code module}, as the measure holds them: per behavior, and one entry per
      *  occurrence. For a caller counting them rather than looking one up. */
     private static Map<String, List<BorderAssessment>> boundariesOf(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");
@@ -955,9 +952,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     /** Every border of {@code module}, by the line it is at. Each label names one position, so the
      *  map holds one entry per occurrence and not one per debt. */
     private static Map<String, BorderAssessment> bordersOf(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");

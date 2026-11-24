@@ -97,7 +97,8 @@ public sealed interface RuleSearch {
                     .sorted(Comparator
                             .comparingInt((souther.compiler.partition.CameToNothing each) ->
                                     PublicationOrders.positionOf(each.why().reason()))
-                            .thenComparing(each -> String.valueOf(each.why())))
+                            .thenComparing(souther.compiler.partition.CameToNothing::why,
+                                    Generator.UnresolvedCombination.IN_WHAT_IT_SAYS))
                     .map(Came::of)
                     .toList());
         }

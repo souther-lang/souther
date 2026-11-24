@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -117,9 +118,8 @@ class ADemandOnADistanceReadsTheOtherWayRoundTest {
                     Yes { v = 1 }
                 }
                 """.formatted(type, type, guard);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(model, Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.searchedBoundariesOf(compilation.db(), "m");
         return BorderAssessment.pointsOf(boundaries.get("cmp"));

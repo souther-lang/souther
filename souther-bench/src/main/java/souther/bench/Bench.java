@@ -20,6 +20,7 @@ import java.util.List;
  *   scale   how a whole-workspace compile grows with the number of modules
  *   values  how one module's compile grows with the number of values it declares
  *   choice  what settling a choice costs, and what makes it cost that
+ *   summed  what measuring a guard over a total of choices costs per point it owes a row at
  *   report  how what a source has against its canonical form grows with the source
  * </pre>
  *
@@ -35,7 +36,7 @@ public final class Bench {
         Report report = new Report(System.out);
         List<String> wanted = args.length == 0
                 ? List.of("cold", "warm", "phase", "offer", "edit", "run", "scale", "values",
-                        "choice", "report")
+                        "choice", "summed", "report")
                 : new ArrayList<>(List.of(args));
 
         List<Corpus> corpora = Corpus.all();
@@ -92,6 +93,10 @@ public final class Bench {
         }
         if (wanted.contains("choice")) {
             Choices.measure(report);
+            report.blank();
+        }
+        if (wanted.contains("summed")) {
+            SummedChoices.measure(report);
             report.blank();
         }
         if (wanted.contains("report")) {

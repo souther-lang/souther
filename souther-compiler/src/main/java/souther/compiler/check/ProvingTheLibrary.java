@@ -5,16 +5,19 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.proof.AppliedClosures;
+import souther.compiler.proof.AskedOnTheWay;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Lemma;
 import souther.compiler.proof.Library;
 import souther.compiler.proof.LibraryProver;
+import souther.compiler.proof.LibraryTerm;
 import souther.compiler.proof.Proof;
 import souther.compiler.proof.Slot;
 import souther.compiler.proof.Unproved;
 import souther.compiler.proof.WalksFromASeed;
 import souther.compiler.proof.WhatAStatementSurvives;
 import souther.compiler.proof.WhatItAccumulates;
+import souther.compiler.proof.OnTheWay;
 import souther.compiler.proof.WhereTheElementsCameFrom;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentsStand;
@@ -30,6 +33,7 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -114,14 +118,31 @@ final class ProvingTheLibrary implements LibraryProofs {
         }
         Library library = new LibraryUnderProof(stdlib, facts, this::forAProof, this::builtFrom,
                 this::relationsOf);
+        Set<ValueName.Stdlib.Operation> walks = readThrough(stdlib, facts);
+        this.prover = new LibraryProver(library, walks);
+        this.elements = new WhereTheElementsCameFrom(library, walks);
+        this.accumulated = new WhatItAccumulates(library, walks);
+    }
+
+    @Override
+    public Map<LibraryTerm, Type> typesOf(ValueName.Stdlib.Operation operation, LibraryTerm body) {
+        return prover.typesOf(operation, body);
+    }
+
+    @Override
+    public OnTheWay onTheWay(AskedOnTheWay asked) {
+        return prover.onTheWay(asked);
+    }
+
+    /** The operations of {@code stdlib} a proof reads the body of where it is called: the walks it
+     *  writes over another walk. */
+    static Set<ValueName.Stdlib.Operation> readThrough(Stdlib stdlib, BoundOperationFacts facts) {
         Set<ValueName.Stdlib.Operation> walks = new LinkedHashSet<>(WalksFromASeed.of(stdlib,
                 AppliedClosures.of(stdlib, Combinators.kernelsIn(stdlib),
                         operation -> Combinators.listing(stdlib, facts, operation),
                         Combinators.signaturesOf(stdlib))).keySet());
         walks.remove(stdlib.walk().operation());
-        this.prover = new LibraryProver(library, walks);
-        this.elements = new WhereTheElementsCameFrom(library, walks);
-        this.accumulated = new WhatItAccumulates(library, walks);
+        return walks;
     }
 
     /**
@@ -152,6 +173,16 @@ final class ProvingTheLibrary implements LibraryProofs {
                     elements.assemblesPieces(operation, assembles.source().position(),
                             assembles.closure().position(), assembles.piece())
                             instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.IsTheOperator is -> prover.isTheOperator(operation,
+                    is.operator()) instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.KeepsTheElementsWhereItHolds keeps ->
+                    elements.keepsWhereItHolds(operation, keeps.source().position(),
+                            keeps.closure().position())
+                            instanceof LibraryProver.Outcome.Proved;
+            case BoundOperationFact.KeepsTheEntriesWhereItHolds keeps ->
+                    elements.keepsEntriesWhereItHolds(operation, keeps.source().position(),
+                            keeps.closure().position())
+                            instanceof LibraryProver.Outcome.Proved;
             case BoundOperationFact.HoldsTheElementsByIndex byIndex ->
                     elements.byAnIndex(operation, byIndex.count().position(),
                             byIndex.list().position(), byIndex.kept())
@@ -179,10 +210,18 @@ final class ProvingTheLibrary implements LibraryProofs {
             // A kernel's, which an operation with a body is refused where the facts are bound, or
             // a statement no body here is proved to make.
             case BoundOperationFact.HasALaw _ -> false;
+            case BoundOperationFact.AgreesWithAnotherWhereItIsGivenText _ -> false;
             case BoundOperationFact.HoldsThePiecesOf _ -> false;
             case BoundOperationFact.ListsTheCodePointsOf _ -> false;
             case BoundOperationFact.EveryElementOfItsAnswerIs _ -> false;
             case BoundOperationFact.AnswersTheClosureOnWhatItHolds _ -> false;
+            case BoundOperationFact.BoundsEachElementOfItsResult _ -> false;
+            case BoundOperationFact.AnswersAnElementOf _ -> false;
+            case BoundOperationFact.AnswersAnExtremeElementOf _ -> false;
+            case BoundOperationFact.AnswersTheValueFiledUnder _ -> false;
+            case BoundOperationFact.AnswersTheElementAt _ -> false;
+            case BoundOperationFact.HoldsEachWholeNumberInTurn _ -> false;
+            case BoundOperationFact.AnswersAnElementWhereTheClosureHolds _ -> false;
             case BoundOperationFact.KeepsWhetherItHoldsACodePointOf _ -> false;
             case BoundOperationFact.IsRelated _ -> false;
             case BoundOperationFact.PutsAValueIn _ -> false;
@@ -190,11 +229,12 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.AnswersAFormOfItsArguments _ -> false;
             case BoundOperationFact.StatesTheOrderOfItsArguments _ -> false;
             case BoundOperationFact.ShiftsBy _ -> false;
+            case BoundOperationFact.MovesADateByMonths _ -> false;
             case BoundOperationFact.CountsWholeUnitsBetween _ -> false;
-            case BoundOperationFact.RoundsToAWholeNumber _ -> false;
+            case BoundOperationFact.CountsTheWholeUnitsOf _ -> false;
+            case BoundOperationFact.RoundsToAStep _ -> false;
             case BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven _ -> false;
             case BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> false;
-            case BoundOperationFact.EndsAreWhereTheRepresentationStops _ -> false;
             case BoundOperationFact.ComputesANumber _ -> false;
         };
     }
@@ -314,13 +354,14 @@ final class ProvingTheLibrary implements LibraryProofs {
     /** What is stated of {@code operation}'s answer beside what others answer, as a proof may take
      *  it: an axiom of a kernel, and of an operation the library writes only once proved. */
     private List<LawProposition<Slot>> relationsOf(ValueName.Stdlib.Operation operation) {
-        if (!stdlib.helpers().containsKey(operation)) {
-            return facts.relationsOf(operation);
-        }
         List<LawProposition<Slot>> out = new ArrayList<>();
-        for (Related each : relates.getOrDefault(operation, List.of())) {
-            if (relates(operation, each)) {
-                out.add(each.holds());
+        if (!stdlib.helpers().containsKey(operation)) {
+            out.addAll(facts.relationsOf(operation));
+        } else {
+            for (Related each : relates.getOrDefault(operation, List.of())) {
+                if (relates(operation, each)) {
+                    out.add(each.holds());
+                }
             }
         }
         return out;
@@ -420,10 +461,8 @@ final class ProvingTheLibrary implements LibraryProofs {
                         Map.of(numberAt(bound.against()), ExactRatio.ONE));
         LawProposition<Integer> where = switch (bound.provided()) {
             case ResultBound.Provided.Always<DeclaredArgument> _ -> new LawProposition.Always<>(true);
-            case ResultBound.Provided.ConstantAboveZero<DeclaredArgument>(var argument) ->
-                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.GT);
-            case ResultBound.Provided.ConstantBelowZero<DeclaredArgument>(var argument) ->
-                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.LT);
+            case ResultBound.Provided.ArgumentStands<DeclaredArgument>(var argument, var rel) ->
+                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), rel);
         };
         return prover.answers(operation, bound.rel(), against, where)
                 instanceof LibraryProver.Outcome.Proved;
@@ -467,16 +506,8 @@ final class ProvingTheLibrary implements LibraryProofs {
     /** How a side of {@code operation} is settled, as a proof reads it. */
     private Library.Settled forAProof(ValueName.Stdlib.Operation operation,
                                       OperationLaw.Observed observed) {
-        BoundOperationFacts.Settled settling = stdlib.helpers().containsKey(operation)
+        return LibraryUnderProof.asAProofTakesIt(stdlib.helpers().containsKey(operation)
                 ? settle(operation, observed)
-                : kernels.getOrDefault(operation, Map.of()).get(observed);
-        return switch (settling) {
-            case null -> null;
-            case BoundOperationFacts.Settled.ByALaw(var law, var _) ->
-                    new Library.Settled.ByALaw(ByPlace.law(law, DeclaredArgument::position));
-            case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> new Library.Settled.Unsaid(why);
-            case BoundOperationFacts.Settled.Open(var _, Unproved why) ->
-                    new Library.Settled.Open(why);
-        };
+                : kernels.getOrDefault(operation, Map.of()).get(observed));
     }
 }

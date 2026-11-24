@@ -1,9 +1,9 @@
 package souther.compiler.codegen;
 
 import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.coverage.CoverageSites;
@@ -55,7 +55,8 @@ class APlannedArmNothingEmittedIsNamedTest {
             }
             """;
 
-    private final Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
+    private final Compilation compilation =
+            ACompiledModel.compiles(Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY));
 
     /** The numbering of this module's bodies, which is the one a generation of them would be given. */
     private CoverageSites.Plan planned() {
@@ -74,7 +75,7 @@ class APlannedArmNothingEmittedIsNamedTest {
                 Shapes.declarationKinds(compilation.db()), NewtypeInners.asWritten(symbols),
                 symbols.library().kernelSignatures(), Map.of(), Map.of(),
                 compilation.db().ask(new Front.PublishedNames(MODULE)).value(), Map.of(),
-                SourceLayouts.NONE, new QuotedFrom.TextItCannotName(),
+                TextsOfModules.NONE, new QuotedFrom.TextItCannotName(),
                 new LinkageReader(MODULE, Map.of(), _ -> null, Map.of()));
         ctx.setCoveragePlan(plan);
         return ctx;

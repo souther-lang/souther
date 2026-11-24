@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -63,7 +64,7 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
     private static final RuleReadingSource RULES = RuleReadings.ofSource(MODULE);
 
     private static final RuleReadingContext READING =
-            RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES);
+            RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
 
     private static final Set<CompositionBudget> ELEMENTS =
             Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS);

@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -147,7 +148,7 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
     void aViewOfOneBehaviorSaysWhatItsLinesLeaveOut() {
         Compilation compilation = compiled(TWO_TYPES);
         String peek = AdequacyReport.of(compilation).only(null, "peek")
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> declarations = block(peek, "declarations");
 
         assertTrue(declarations.getFirst().startsWith("declarations   borders 2"),
@@ -328,7 +329,7 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
 
     private static String human(Compilation compilation) {
         return AdequacyReport.of(compilation)
-                .human(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     /**
@@ -338,13 +339,10 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation compiled(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(source, each -> {
             Compilation compilation = Compilation.ofSource(each, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: "
-                    + compilation.errors());
             return compilation;
-        });
+        }));
     }
 }

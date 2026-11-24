@@ -51,7 +51,7 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     }
 
     /** One where the position is even and three where it is odd. */
-    private static final ElementValue BY_POSITION = new ElementValue.ByPosition(
+    private static final ElementValue BY_POSITION = new ElementValue.Choose(
             new ElementValue.PositionTest(2, Rel.EQ, 0), weighed(1), weighed(3));
 
     private static NumericTerm.TakenOver total(RunSource run) {
@@ -152,7 +152,8 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     void whetherItTurnsOnThePositionIsAskedOfAllOfIt() {
         assertTrue(BY_POSITION.readsThePosition());
         assertFalse(weighed(3).readsThePosition());
-        ElementValue flagged = ElementValue.choosing(ElementProjection.ofFields(List.of("debit")),
+        ElementValue flagged = ElementValue.choosing(
+                new ElementValue.Test.Flag(ElementProjection.ofFields(List.of("debit"))),
                 BY_POSITION, weighed(1));
         assertTrue(flagged.readsThePosition(), "inside a choice by a flag");
         Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
@@ -160,7 +161,7 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
         chosen.put(flagged, ExactRatio.ONE);
         assertTrue(ElementValue.summed(ExactRatio.ZERO, Map.of(), chosen).readsThePosition(),
                 "and among choices added up");
-        ElementValue alike = ElementValue.choosingByPosition(
+        ElementValue alike = ElementValue.choosing(
                 new ElementValue.PositionTest(2, Rel.EQ, 0), weighed(3), weighed(3));
         assertEquals(weighed(3), alike);
         assertFalse(alike.readsThePosition());
@@ -169,7 +170,7 @@ class ARunComputedByPositionClaimsTheOrderItWasShownTest {
     /** A choice of numbers times a form weighs the form by whichever number the element chose. */
     @Test
     void aChoiceOfNumbersTimesAFormWeighsTheForm() {
-        ElementValue weight = new ElementValue.ByPosition(
+        ElementValue weight = new ElementValue.Choose(
                 new ElementValue.PositionTest(2, Rel.EQ, 0),
                 new ElementValue.Affine(LinearForm.constant(ExactRatio.ONE)),
                 new ElementValue.Affine(LinearForm.constant(ExactRatio.of(3))));

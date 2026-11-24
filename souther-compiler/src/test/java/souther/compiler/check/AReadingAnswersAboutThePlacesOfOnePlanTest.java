@@ -1,13 +1,17 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.ReachEvidence;
+import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.partition.ComparisonWitnesses;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.ProducedCases;
 import souther.compiler.partition.RuleReachNumbering;
@@ -202,11 +206,12 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
         ArmProbe elsewhere = refused.armProvenDead().probe().orElseThrow();
 
         assertEquals(PathReachability.Answers.Contradictions.NONE,
-                capped.arrives.asRunWith(Set.of(), Set.of()).contradicted(),
+                capped.arrives.asRunWith(ReachEvidence.NONE).contradicted(),
                 "no row ran, so this reading is shown wrong nowhere");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
-                () -> capped.arrives.asRunWith(Set.of(elsewhere), Set.of()));
+                () -> capped.arrives.asRunWith(
+                        Runs.evidenceOf(Set.of(elsewhere), Set.of(), Set.of())));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());
@@ -286,7 +291,8 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
             AnalysisBody analysis = checked.analysisBodies().get("pick");
             return GuardThresholds.of("pick", analysis, body, plan, inputs.reading(rules),
                     ElementBindings.of(analysis.core(), analysis.elements(), rules.newtypes()),
-                    against.arrivals(), new RuleReachNumbering(module, "pick"));
+                    against.arrivals(), new RuleReachNumbering(module, "pick"),
+                    ComparisonWitnesses.AtComparisons.NONE);
         }
 
         /** What this behavior's body declares cannot arrive. */
@@ -318,8 +324,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
     }
 
     private static Read read(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(model);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Map<String, PathReachability.Answers> answers =
