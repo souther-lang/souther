@@ -291,12 +291,43 @@ final class StopsOfABody {
 
     // ---- constructions ----
 
+    /**
+     * What is shown of {@code made} on every way a run gets to it: inside a closure, on each
+     * application with what it asks read in that application's names, a stop shown on one being
+     * shown, and otherwise the first not resolved; elsewhere on every way at once.
+     */
     private ConstructionStopAssessment.Judgement ofAConstruction(Core.Construct made) {
         Ways ways = waysTo(made);
+        Map<InputReads, List<WaysToASite.Reach>> byNames = new LinkedHashMap<>();
+        for (Reached each : ways.each()) {
+            byNames.computeIfAbsent(each.reads(), _ -> new ArrayList<>()).add(each.reach());
+        }
+        if (byNames.size() <= 1) {
+            return ofAConstruction(made, byNames.isEmpty() ? List.of()
+                    : byNames.values().iterator().next(), asked(made, null), ways.every());
+        }
+        ConstructionStopAssessment.Judgement first = null;
+        for (Map.Entry<InputReads, List<WaysToASite.Reach>> each : byNames.entrySet()) {
+            ConstructionStopAssessment.Judgement judged = ofAConstruction(made, each.getValue(),
+                    asked(made, each.getKey()), ways.every());
+            if (judged instanceof ConstructionStopAssessment.Judgement.Stops) {
+                return judged;
+            }
+            if (first == null || (first instanceof ConstructionStopAssessment.Judgement.Safe
+                    && judged instanceof ConstructionStopAssessment.Judgement.Unresolved)) {
+                first = judged;
+            }
+        }
+        return first;
+    }
+
+    private ConstructionStopAssessment.Judgement ofAConstruction(
+            Core.Construct made, List<WaysToASite.Reach> ways, AConstructionOnTheWay.Asked asked,
+            boolean every) {
         List<AConstructionOnTheWay.Reach> reaches = new ArrayList<>();
         List<SearchRegion> regions = new ArrayList<>();
-        for (int at = 0; at < ways.each().size(); at++) {
-            WaysToASite.Reach reach = ways.each().get(at).reach();
+        for (int at = 0; at < ways.size(); at++) {
+            WaysToASite.Reach reach = ways.get(at);
             reaches.add(new AConstructionOnTheWay.Reach(at, reach.way(), reach.way(),
                     reach.before(), reach.read()));
             if (Reachability.of(new WayToTheBorder(reach.way()), read.quantities().region())
@@ -304,14 +335,14 @@ final class StopsOfABody {
                 regions.add(reaching.region());
             }
         }
-        AConstructionOnTheWay one = new AConstructionOnTheWay(made, asked(made), reaches,
-                ways.every());
+        AConstructionOnTheWay one = new AConstructionOnTheWay(made, asked, reaches, every);
         return ConstructionStopAssessment.ofASite(one, regions, asks(), constructionWays(), read,
                 definitions);
     }
 
-    /** What {@code made} asks, read with the names as they stand where the walk met it. */
-    private AConstructionOnTheWay.Asked asked(Core.Construct made) {
+    /** What {@code made} asks, read with {@code names}, or with the names as they stand where the
+     *  walk met it where that is null. */
+    private AConstructionOnTheWay.Asked asked(Core.Construct made, InputReads names) {
         if (ClausesInOrder.at(made, read.rules()).governsNothing()) {
             return new AConstructionOnTheWay.Asked.Nothing();
         }
@@ -319,7 +350,8 @@ final class StopsOfABody {
         if (met.isEmpty()) {
             return new AConstructionOnTheWay.Asked.NotRead();
         }
-        return conditions.whereItsOperatorsAnswer(made, met.get().reads(), read).asks().stream()
+        return conditions.whereItsOperatorsAnswer(made, names == null ? met.get().reads() : names,
+                        read).asks().stream()
                 .filter(ask -> ask.of(made)).findFirst()
                 .<AConstructionOnTheWay.Asked>map(AConstructionOnTheWay.Asked.Read::new)
                 .orElseGet(AConstructionOnTheWay.Asked.NotRead::new);
@@ -333,7 +365,7 @@ final class StopsOfABody {
             List<ConstructionAsk> out = new ArrayList<>();
             for (Core step : where.steps()) {
                 if (Core.withoutStanding(step) instanceof Core.Construct made
-                        && asked(made) instanceof AConstructionOnTheWay.Asked.Read(var ask)) {
+                        && asked(made, null) instanceof AConstructionOnTheWay.Asked.Read(var ask)) {
                     out.add(ask);
                 }
             }
@@ -963,18 +995,36 @@ final class StopsOfABody {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
-        List<TakenConstraint.Affine> way = StopAssessment.asRelations(reached.reach().way());
-        if (way == null) {
+        boolean[] waysLeft = {false};
+        List<List<TakenConstraint.Affine>> ways =
+                StopAssessment.asWaysOfRelations(reached.reach().way(), waysLeft);
+        if (ways == null) {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ);
         }
-        way.addAll(within);
         GotPast gotPast = gotPastOn(reached, left);
         if (gotPast == null) {
             return new StopAssessment.Judgement.Unresolved(site,
                     WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         }
-        return lookedForByEachWay(site, gotPast, left, way);
+        // A condition that came out one of several ways is got past along any of them: a stop
+        // shown along one is shown.
+        StopAssessment.Judgement first = null;
+        for (List<TakenConstraint.Affine> one : ways) {
+            List<TakenConstraint.Affine> way = new ArrayList<>(one);
+            way.addAll(within);
+            StopAssessment.Judgement judged = lookedForByEachWay(site, gotPast, left, way);
+            if (judged instanceof StopAssessment.Judgement.Stops) {
+                return judged;
+            }
+            if (first == null) {
+                first = judged;
+            }
+        }
+        return first == null || waysLeft[0]
+                ? new StopAssessment.Judgement.Unresolved(site,
+                        WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
+                : first;
     }
 
     /** How many ways of the values worked out an operation and what comes before it are over are
@@ -1012,6 +1062,7 @@ final class StopsOfABody {
         boolean cutShort = !waysOf(values, 0, new LinkedHashMap<>(), new ArrayList<>(way), worked,
                 ways);
         StopAssessment.Judgement first = null;
+        boolean everyOneWithin = true;
         for (Map<NumericTerm, Attainment> one : ways) {
             List<TakenConstraint.Affine> holding = new ArrayList<>(way);
             one.values().forEach(each -> holding.addAll(each.holding()));
@@ -1025,6 +1076,10 @@ final class StopsOfABody {
                 case StopAssessment.Site.ByNought(var divisor) ->
                         new StopAssessment.Site.ByNought(atTheWay(divisor, one));
             };
+            if (stopsNothingUnder(there, holding)) {
+                continue;
+            }
+            everyOneWithin = false;
             StopAssessment.Judgement judged = StopAssessment.aStopLookedFor(there, before,
                     divisors, left, holding, read);
             if (judged instanceof StopAssessment.Judgement.Stops(var shown)) {
@@ -1038,10 +1093,40 @@ final class StopsOfABody {
                 first = judged;
             }
         }
+        if (everyOneWithin && !cutShort) {
+            // Every way a row makes the values come to keeps the site from stopping, or none is
+            // one a row on this way meets.
+            return new StopAssessment.Judgement.Safe(site,
+                    site instanceof StopAssessment.Site.ByNought
+                            ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
+                            : StopAssessment.WhyNone.WITHIN_ITS_ENDS);
+        }
         return first == null || cutShort
                 ? new StopAssessment.Judgement.Unresolved(site,
                         WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED)
                 : first;
+    }
+
+    /**
+     * Whether {@code site}, over numbers of the input, stops no run meeting {@code holding}: its
+     * operation lies within its ends, or its divisor away from nought, over the ends each number
+     * it is over has as its declaration and {@code holding} leave them ({@link #boundsUnder}).
+     */
+    private boolean stopsNothingUnder(StopAssessment.Site site,
+                                      List<TakenConstraint.Affine> holding) {
+        return switch (site) {
+            case StopAssessment.Site.PastItsEnds(var operation) -> {
+                LinearForm<NumericTerm> form = operation.overTheInput();
+                FormRange range = form == null ? null
+                        : FormRange.of(form, read, boundsUnder(form, holding));
+                yield range != null && range.liesWithin(operation.least(), operation.greatest());
+            }
+            case StopAssessment.Site.ByNought(var divisor) -> {
+                FormRange range = divisor == null ? null
+                        : FormRange.of(divisor, read, boundsUnder(divisor, holding));
+                yield range != null && !range.holds(ExactRatio.ZERO);
+            }
+        };
     }
 
     /** Each value worked out {@code operation} is over, with the ways a row makes it a number,

@@ -272,6 +272,59 @@ final class StopAssessment {
         return out;
     }
 
+    /** How many ways a way of several alternatives is read as ({@link #asWaysOfRelations})
+     *  before the rest are left. */
+    static final int MOST_WAYS_OF_ALTERNATIVES = 8;
+
+    /**
+     * {@code way} as each way of relations of numbers of the input a value on it may meet, a
+     * condition that came out one of several ways ({@link OnTheWay.OneOf}) read as each of them
+     * in turn, and every other entry as {@link #asRelations} reads it: as many as
+     * {@link #MOST_WAYS_OF_ALTERNATIVES}. Null where some entry is not read so; a way not made for
+     * the figure is said by {@code left}.
+     */
+    static List<List<TakenConstraint.Affine>> asWaysOfRelations(List<OnTheWay> way,
+                                                                boolean[] left) {
+        List<List<TakenConstraint.Affine>> out = new ArrayList<>();
+        return waysOfRelations(way, 0, new ArrayList<>(), out, left) ? out : null;
+    }
+
+    private static boolean waysOfRelations(List<OnTheWay> way, int at,
+                                           List<TakenConstraint.Affine> sofar,
+                                           List<List<TakenConstraint.Affine>> out,
+                                           boolean[] left) {
+        if (at == way.size()) {
+            if (out.size() >= MOST_WAYS_OF_ALTERNATIVES) {
+                left[0] = true;
+            } else {
+                out.add(List.copyOf(sofar));
+            }
+            return true;
+        }
+        OnTheWay entry = way.get(at);
+        if (entry instanceof OnTheWay.OneOf several) {
+            for (List<OnTheWay> alternative : several.alternatives()) {
+                List<OnTheWay> past = new ArrayList<>(alternative);
+                past.addAll(way.subList(at + 1, way.size()));
+                if (!waysOfRelations(past, 0, sofar, out, left)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        List<TakenConstraint.Affine> one = asRelations(List.of(entry));
+        if (one == null) {
+            return false;
+        }
+        int mark = sofar.size();
+        sofar.addAll(one);
+        try {
+            return waysOfRelations(way, at + 1, sofar, out, left);
+        } finally {
+            sofar.subList(mark, sofar.size()).clear();
+        }
+    }
+
     /**
      * {@code way} as the relations of numbers of the input a value on it meets, or null where a
      * condition of it is not one: each relation it takes in, each place a narrowing leaves a

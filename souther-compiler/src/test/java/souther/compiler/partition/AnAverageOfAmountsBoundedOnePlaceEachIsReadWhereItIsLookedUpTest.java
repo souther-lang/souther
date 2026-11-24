@@ -292,19 +292,23 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     }
 
     /** Control: without a bound on each amount the total of two can pass the greatest
-     *  {@code Int}, and a run getting there stops; bounded, none does. The stop is said with the
-     *  rows it turns on, as one not resolved: the amounts are totalled in what a helper answers
-     *  over values the declarations bound, which no existence of a stopping run is shown over. */
+     *  {@code Int}, and a run getting there stops; bounded, none does. The stop is said at the
+     *  addition in the helper, read on the month it is applied to, with the rows it turns on —
+     *  and what the amount built there asks is said of the month as well, and of no name the
+     *  helper's body stands in for it. */
     @Test
     void theSameAverageOfAmountsWithNoBoundIsSaidToStopWhereATotalPassesAnInt() {
-        assertTrue(stopsWhereATotalPassesAnInt(report("", "", AVERAGE_WRITTEN_AT_THE_CALL)));
+        List<String> unbounded = report("", "", AVERAGE_WRITTEN_AT_THE_CALL);
+        assertTrue(stopsWhereATotalPassesAnInt(unbounded));
+        assertTrue(unbounded.stream().noneMatch(line -> line.contains("INLINER")),
+                () -> String.join("\n", unbounded));
         assertFalse(stopsWhereATotalPassesAnInt(report(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL)));
     }
 
     /** Whether {@code report} says a run that gets there stops where the total of a month passes
      *  an {@code Int}. */
     private static boolean stopsWhereATotalPassesAnInt(List<String> report) {
-        return report.stream().anyMatch(line -> line.contains("stop not resolved:")
+        return report.stream().anyMatch(line -> line.contains("may stop a run:")
                 && line.contains("w.first.base + w.first.extra is at least 9223372036854775808"));
     }
 }
