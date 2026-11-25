@@ -619,7 +619,7 @@ final class StopAssessment {
             if (!stopsAtTheSite(site, form.constant())) {
                 return null;
             }
-            return tryingEach(numbers, 0, new LinkedHashMap<>(), tried, left,
+            return TriedInTurn.first(numbers, tried, left,
                     values -> stopsAt(site, before, values) ? new Shown(site, values) : null);
         }
         for (boolean above : new boolean[] {true, false}) {
@@ -634,7 +634,7 @@ final class StopAssessment {
                 NumericTerm free = frees.get(which);
                 List<NumericTerm> rest = numbers.stream().filter(each -> !each.equals(free))
                         .toList();
-                Shown found = tryingEach(rest, 0, new LinkedHashMap<>(), tried, left, values -> {
+                Shown found = TriedInTurn.first(rest, tried, left, values -> {
                     ExactRatio put = whereItTakes(form, free, past, above, values);
                     FormRange ends = FormRange.endsOf(free, read);
                     if (put == null || ends == null || !within(put, ends)) {
@@ -657,39 +657,6 @@ final class StopAssessment {
                 }
             }
         }
-        return null;
-    }
-
-    /** What is asked of one value of every number but one. */
-    @FunctionalInterface
-    private interface Asking {
-        Shown at(Map<NumericTerm, ExactRatio> values);
-    }
-
-    /** {@code ask} of each way of putting {@code rest} from {@code from} on at the values tried
-     *  for each, while {@code left} lasts, until it answers. */
-    private static Shown tryingEach(List<NumericTerm> rest, int from,
-                                    Map<NumericTerm, ExactRatio> values,
-                                    Map<NumericTerm, List<ExactRatio>> tried, Tries left,
-                                    Asking ask) {
-        if (from == rest.size()) {
-            return left.spend() ? ask.at(values) : null;
-        }
-        List<ExactRatio> tryAt = tried.get(rest.get(from));
-        for (int at = 0; at < tryAt.size(); at++) {
-            values.put(rest.get(from), tryAt.get(at));
-            Shown found = tryingEach(rest, from + 1, values, tried, left, ask);
-            if (found != null) {
-                return found;
-            }
-            if (left.spent()) {
-                if (at < tryAt.size() - 1) {
-                    left.leftSomethingUndone();
-                }
-                return null;
-            }
-        }
-        values.remove(rest.get(from));
         return null;
     }
 

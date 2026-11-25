@@ -499,8 +499,8 @@ final class ConstructionStopAssessment {
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, taken, first, ask, read));
         }
-        int[] left = {MOST_VALUES_TRIED};
-        Shown shown = tryingEach(List.copyOf(numbers), 0, new LinkedHashMap<>(), tried, left,
+        StopAssessment.Tries left = new StopAssessment.Tries(MOST_VALUES_TRIED);
+        Shown shown = TriedInTurn.first(List.copyOf(numbers), tried, left,
                 values -> (stopsAt(values, taken, first, ask)
                         && declared.get().tiesHoldAt(values))
                         ? new Shown(told, values) : null);
@@ -511,7 +511,7 @@ final class ConstructionStopAssessment {
         // the arithmetic can say, so no value is refused by it.
         return new Found.None(!ask.requirement().overTheInput()
                 ? WhyAConstructionStopIsNotShown.NOT_OVER_THE_INPUT
-                : left[0] <= 0 ? WhyAConstructionStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
+                : left.cutShort() ? WhyAConstructionStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
                 : WhyAConstructionStopIsNotShown.NO_VALUE_FOUND);
     }
 
@@ -705,36 +705,6 @@ final class ConstructionStopAssessment {
             }
         }
         return WholeValuesMeeting.valueOf(form, values);
-    }
-
-    /** What is asked of one value of every number. */
-    @FunctionalInterface
-    private interface Asking {
-        Shown at(Map<NumericTerm, ExactRatio> values);
-    }
-
-    /** {@code ask} of each way of putting {@code numbers} from {@code from} on at the values tried
-     *  for each, while {@code left} lasts, until it answers. */
-    private static Shown tryingEach(List<NumericTerm> numbers, int from,
-                                    Map<NumericTerm, ExactRatio> values,
-                                    Map<NumericTerm, List<ExactRatio>> tried, int[] left,
-                                    Asking ask) {
-        if (from == numbers.size()) {
-            if (left[0] <= 0) {
-                return null;
-            }
-            left[0]--;
-            return ask.at(values);
-        }
-        for (ExactRatio value : tried.get(numbers.get(from))) {
-            values.put(numbers.get(from), value);
-            Shown found = tryingEach(numbers, from + 1, values, tried, left, ask);
-            if (found != null || left[0] <= 0) {
-                return found;
-            }
-        }
-        values.remove(numbers.get(from));
-        return null;
     }
 
     /**
