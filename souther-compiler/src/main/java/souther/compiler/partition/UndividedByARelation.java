@@ -2960,11 +2960,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * never gets here, and which runs get here is the way's to say. A name it is over that a
      * container hands it ({@link IntOperand.OfABinding}) is handed a value only where the
      * container holds one, from the least it hands to the greatest: rows where it holds none are
-     * none a run works {@code it} out at. Nothing where an end of it is no form of the input's
-     * numbers, or no such row is in any region.
+     * none a run works {@code it} out at. And each of {@code met}, which every run getting to
+     * {@code it} has worked out within its ends: rows where one is past them are none either, a
+     * run there having stopped before it got here. Nothing where an end of it is no form of the
+     * input's numbers, or no such row is in any region.
      */
     static List<EveryRunStops> everyRunStopsAt(IntOperation it, InputReading read,
-                                               List<SearchRegion> regions) {
+                                               List<SearchRegion> regions,
+                                               List<IntOperation> met) {
         LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
         LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
         if (atItsLeast == null || atItsGreatest == null) {
@@ -2978,6 +2981,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && most.minus(least) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
                             var spread)) {
                 handed.add(new Bounded(spread, BigInteger.ZERO, null));
+            }
+        }
+        for (IntOperation before : met) {
+            LinearForm<NumericTerm> over = before.overTheInput();
+            if (over != null && !over.coefs().isEmpty()) {
+                handed.add(new Bounded(over, before.least(), before.greatest()));
             }
         }
         Set<EveryRunStops> out = new LinkedHashSet<>();

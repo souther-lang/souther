@@ -13,7 +13,7 @@ import souther.runtime.Behavior;
  * generic parameters are gone at the reflection boundary. This helper confines the unavoidable
  * unchecked casts to three private methods so the tests themselves stay free of raw types.
  */
-final class Codecs {
+public final class Codecs {
 
     private Codecs() {}
 
@@ -68,7 +68,8 @@ final class Codecs {
     }
 
     /** Decode and unwrap the success value; the cast fails if the result is an error. */
-    static Object decoded(ClassLoader loader, String className, Object raw) throws Exception {
+    public static Object decoded(ClassLoader loader, String className, Object raw)
+            throws Exception {
         return ((Ok<?>) decode(loader, className, raw)).value();
     }
 
@@ -78,7 +79,8 @@ final class Codecs {
     }
 
     /** Encode {@code value} through the named class's {@code encoder} factory. */
-    static Object encode(ClassLoader loader, String className, Object value) throws Exception {
+    public static Object encode(ClassLoader loader, String className, Object value)
+            throws Exception {
         return encoder(loader, className).encode(value);
     }
 
@@ -88,7 +90,7 @@ final class Codecs {
     }
 
     /** Apply a reflectively-instantiated behavior to an input. */
-    static Object apply(Object behavior, Object input) {
+    public static Object apply(Object behavior, Object input) {
         return asBehavior(behavior).apply(input);
     }
 }

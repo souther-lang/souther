@@ -358,11 +358,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         notTold("fieldBesideARefusedPart", afterAStep,
                 WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         notTold("foldOfAStep", afterAStep, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
-        // The fold's sum is said to stop every run whose elements are at the greatest Int, the
-        // rows of the step that adds one to each: every such run stops at that step first, and
-        // none gets to the sum.
-        NOT_ABOUT.put("foldOfAStep", "the rows of the step before the fold's sum, said at the"
-                + " sum, which every run within them stops before");
         notTold("totalOfAStep", afterAStep, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         notTold("totalOfTakenSteps", afterAStep, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         notTold("totalOfTheSameChoice", afterAStep,

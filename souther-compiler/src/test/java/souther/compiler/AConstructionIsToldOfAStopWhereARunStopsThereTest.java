@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
-import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -132,11 +131,6 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         // one after a value is built whose template ends every run, before the rule
         FORMS.put("afterAValueThatStops", new Form("OneC", "Count",
                 "{ let t = past \n let m = Count(q) \n OneC { a = m, w = q <= t } }"));
-        // the template's sum is a step of this body, which every run stops at, and the finding
-        // there says it found no value within what it tried, though the sum's numbers are
-        // constants
-        NOT_SHOWN.put("afterAValueThatStops",
-                Set.of(WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED));
         // a construction over a place no rule on the way reads
         FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
                 "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));

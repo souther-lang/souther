@@ -3,6 +3,10 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.ArgumentsStand;
+import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -233,6 +237,58 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         return whole.bitLength() < Long.SIZE ? Optional.of(whole.longValue()) : Optional.empty();
     }
 
+    /**
+     * What {@code call} comes to where its operation is defined by cases
+     * ({@link DischargeRules#chosenBy}) and the algebra folds no kernel of it: the answer of the
+     * first case the folded arguments reach, worked out of them. Empty where it is defined by
+     * none, an argument a case reads folds to nothing, or the answer is where a run stops —
+     * {@code Int.abs} of the least {@code Int}.
+     */
+    private Optional<Object> byItsCases(Core.PreservedCall call, E at) {
+        for (DefinitionCase<DeclaredArgument> one : DischargeRules.chosenBy(call)) {
+            boolean reached = true;
+            for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
+                Object left = at(stands.left(), call, at).orElse(null);
+                Object right = at(stands.right(), call, at).orElse(null);
+                Boolean holds = left == null || right == null ? null
+                        : ConstantAlgebra.stands(stands.rel(), left, right);
+                if (holds == null) {
+                    return Optional.empty();
+                }
+                if (!holds) {
+                    reached = false;
+                    break;
+                }
+            }
+            if (reached) {
+                return at(one.answers(), call, at);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** {@code form} of the arguments of {@code call}, worked out of what each folds to. */
+    private Optional<Object> at(LinearForm<DeclaredArgument> form, Core.PreservedCall call,
+                                E at) {
+        Object sum = whole(form.constant()).orElse(null);
+        for (Map.Entry<DeclaredArgument, ExactRatio> term : form.coefs().entrySet()) {
+            Object weight = whole(term.getValue()).orElse(null);
+            Object value = eval(CallArguments.of(term.getKey(), call), at).orElse(null);
+            Object weighed = weight == null || value == null ? null
+                    : ConstantAlgebra.binary(BinOp.MUL, weight, value).orElse(null);
+            sum = sum == null || weighed == null ? null
+                    : ConstantAlgebra.binary(BinOp.ADD, sum, weighed).orElse(null);
+        }
+        return Optional.ofNullable(sum);
+    }
+
+    /** {@code number} as an {@code Int} constant, or empty where it is none. */
+    private static Optional<Object> whole(ExactRatio number) {
+        BigInteger whole = number.wholeOrNull();
+        return whole == null || whole.bitLength() >= Long.SIZE ? Optional.empty()
+                : Optional.of(whole.longValue());
+    }
+
     private Optional<Object> call(Core.PreservedCall call, E at) {
         if (!(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return Optional.empty();
@@ -247,6 +303,13 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         if (rounding.isPresent()) {
             return rounding;
         }
+        Optional<Object> kernelled = byItsKernel(call, operation, at);
+        return kernelled.isPresent() ? kernelled : byItsCases(call, at);
+    }
+
+    /** What {@code call} comes to where the algebra folds the kernel its operation runs as. */
+    private Optional<Object> byItsKernel(Core.PreservedCall call,
+                                         ValueName.Stdlib.Operation operation, E at) {
         Kernel kernel = symbols.kernelOf(operation);
         if (kernel == null) {
             return Optional.empty();

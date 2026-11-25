@@ -625,6 +625,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the same, on the tree the rules are discharged over and the one an input is"
                             + " read on: the operator is carried to the one algebra that folds it,"
                             + " and this reads nothing of it"),
+            new Held("souther.compiler.check.FoldedValue.at",
+                    "works out the answer a library operation's case writes over its arguments,"
+                            + " a weighed sum, by the one algebra that folds an operator"),
             new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
                     "which operators answer from their left operand alone, which is what says"
                             + " whether the one beside it is read at all"),

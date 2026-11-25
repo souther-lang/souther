@@ -176,9 +176,13 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // two quotients of one dividend, whose runs stop for one reason with one dividend
         FORMS.put("twoQuotientsOfOneDividend", new Form("e == e",
                 "Rational.toInt(DOWN, e / p) + Rational.toInt(DOWN, e / q) >= 2"));
-        // a sum of two places, whose rows every run stops at are a form of both: its end is at
-        // no value of either alone
-        FORMS.put("aSumOfTwoPlaces", new Form("e == e", "p + q > e"));
+        // an arm whose condition the source settles false, which no run takes: the sum over what
+        // the choice comes to is of nought alone, and stops no run
+        FORMS.put("anArmNoRunTakes", new Form("e == e",
+                "(if p > 0 && 1 > 2 then q else 0) + 1 > e"));
+        // a sum of two places weighed, whose rows every run stops at are a form of both: its end
+        // is at no value of either alone, and no value the input gives either puts it there
+        FORMS.put("aSumOfTwoPlaces", new Form("e == e", "2 * p + 3 * q > e"));
         // two steps kept going by one region, each bound of which is said at one of them
         FORMS.put("twoStepsKeptByOneRegion", new Form("e == e", "p + 1 > e && q + 1 > e"));
         // a helper inlined here and in a behavior called here: a run stopping in the behavior
@@ -210,8 +214,6 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 + " the way, which holds q at the greatest Int");
         NOT_ABOUT.put("aCallBeforeTheSumThatStops", "the call before the sum stops every run of"
                 + " the way, which holds p at nought");
-        NOT_ABOUT.put("aHelperInlinedHereAndInABehaviorCalledHere", "a run with q at the greatest"
-                + " Int stops in the helper before the sum the rows are of");
     }
 
     static Stream<String> forms() {
@@ -454,6 +456,17 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
     }
 
     /**
+     * A sum over a choice one arm of which no run takes is said of the other arm alone: nothing
+     * is said not resolved there, where no run stops.
+     */
+    @Test
+    void anArmNoRunTakesLeavesNothingUnresolved() {
+        String name = "anArmNoRunTakes";
+        StopsHeldToTheRuns.Held held = StopsHeldToTheRuns.heldTo(saidOf(name), runsOf(name));
+        assertEquals(Set.of(), held.notResolvedWhereNoneStops(), saidOf(name).toString());
+    }
+
+    /**
      * The rows over two places every run stops at, moved one in, are refused: a run whose two
      * numbers come to the greatest {@code Int} together is then within them, and its sum stops
      * nowhere. A form of two places is weighed of both, and the grid holds runs on its end.
@@ -486,8 +499,9 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
 
     /**
      * One region keeps two steps going, its bounds said one at each: held as the one region it
-     * is, with some run within it getting to the steps, and refused where the bound said at one
-     * step is let out, though what is said at the other step is unchanged.
+     * is, whichever step each bound is said at — a step's own bound said at the other step is the
+     * same region — and refused where the bound said at one step is let out, though what is said
+     * at the other step is unchanged.
      */
     @Test
     void oneRegionSaidAtTwoStepsIsHeldAsOneRegion() {
@@ -498,10 +512,14 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 .filter(StepWhereARunMayStop.class::isInstance)
                 .map(StepWhereARunMayStop.class::cast)
                 .filter(each -> each.keeping().isPresent()).toList();
-        assertTrue(kept.size() >= 2, "the region's bounds are said at two steps: " + said);
+        assertEquals(2, kept.size(), "the region's bounds are said at two steps: " + said);
         StopsHeldToTheRuns.Held held = StopsHeldToTheRuns.heldTo(said, runs);
         assertEquals(List.of(), held.unheld());
         assertEquals(List.of(), held.notAbout());
+        List<WhatIsShownOfAStop> swapped = new ArrayList<>(said);
+        swapped.set(said.indexOf(kept.get(0)), kept.get(0).keptBy(kept.get(1).keeping()));
+        swapped.set(said.indexOf(kept.get(1)), kept.get(1).keptBy(kept.get(0).keeping()));
+        assertEquals(List.of(), StopsHeldToTheRuns.heldTo(swapped, runs).unheld());
         StepWhereARunMayStop one = kept.getFirst();
         Set<ABoundThatKeepsEveryRunGoing> letOut = new LinkedHashSet<>();
         for (ABoundThatKeepsEveryRunGoing bound : one.keeping().orElseThrow().bounds()) {

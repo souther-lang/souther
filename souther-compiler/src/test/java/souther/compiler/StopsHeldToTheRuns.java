@@ -181,21 +181,18 @@ final class StopsHeldToTheRuns {
             }
             Map<String, Set<Object>> widened = new LinkedHashMap<>();
             input.values().forEach((place, each) -> widened.put(place, new LinkedHashSet<>(each)));
-            // An end of a number is put at its place; an end of an element, as the one element of a
-            // list at the place of the list.
-            endsNamedBy(said).forEach((place, ends) -> {
+            // A number is put at its place; an element, as the one element of a list at the place
+            // of the list.
+            endsNamedBy(said).forEach((place, values) -> {
                 Object sample = widened.get(place).iterator().next();
-                for (BigInteger end : ends) {
-                    for (BigInteger near : List.of(end.subtract(BigInteger.ONE), end,
-                            end.add(BigInteger.ONE))) {
-                        if (near.bitLength() >= Long.SIZE) {
-                            continue;
-                        }
-                        if (sample instanceof Long) {
-                            widened.get(place).add(near.longValueExact());
-                        } else if (sample instanceof List<?>) {
-                            widened.get(place).add(List.of(near.longValueExact()));
-                        }
+                for (BigInteger value : values) {
+                    if (value.bitLength() >= Long.SIZE) {
+                        continue;
+                    }
+                    if (sample instanceof Long) {
+                        widened.get(place).add(value.longValueExact());
+                    } else if (sample instanceof List<?>) {
+                        widened.get(place).add(List.of(value.longValueExact()));
                     }
                 }
             });
@@ -293,11 +290,12 @@ final class StopsHeldToTheRuns {
 
         /**
          * Every value at a place of the input where a claim of every run in {@code said} turns:
-         * for a form of the rows, each value of one place it weighs that puts the form at an end,
+         * values that put what the claim weighs at an end it names and at each number beside the
+         * end. For a form of the rows, each value of one place it weighs that puts the form there,
          * the other places it weighs at each value the input gives them — so that an input of the
-         * grid stands on the end, and not each place at the form's end, which a form of several
-         * places is at no input of; and the place a bound is declared on, at the bound. A place
-         * whose value would come to no whole number there is given none.
+         * grid stands on the end and beside it, whatever the weights, and not each place at the
+         * form's end, which a form of several places is at no input of. For a bound, the place it
+         * is declared on, there. A place whose value would come to no whole number is given none.
          */
         private Map<String, List<BigInteger>> endsNamedBy(List<WhatIsShownOfAStop> said) {
             Map<String, List<BigInteger>> out = new LinkedHashMap<>();
@@ -305,10 +303,12 @@ final class StopsHeldToTheRuns {
                 for (EveryRunStops stop : everyRunStopsOf(each)) {
                     for (EveryRunStops.Within within : stop.where()) {
                         Map<String, BigInteger> weighed = weighed(within);
+                        BigInteger shift = within.form().constant().wholeOrNull();
                         for (BigInteger end : new BigInteger[] {within.least(),
                                 within.greatest()}) {
-                            if (end != null && weighed != null) {
-                                onTheEnd(weighed, end, out);
+                            if (end != null && weighed != null && shift != null) {
+                                beside(end.subtract(shift)).forEach(at ->
+                                        onTheEnd(weighed, at, out));
                             }
                         }
                     }
@@ -316,9 +316,14 @@ final class StopsHeldToTheRuns {
                 keepingOf(each).ifPresent(kept -> kept.bounds().forEach(bound ->
                         fieldBounded(bound, input).ifPresent(place ->
                                 out.computeIfAbsent(place, _ -> new ArrayList<>())
-                                        .add(bound.at()))));
+                                        .addAll(beside(bound.at())))));
             }
             return out;
+        }
+
+        /** {@code end} and each whole number next to it. */
+        private static List<BigInteger> beside(BigInteger end) {
+            return List.of(end.subtract(BigInteger.ONE), end, end.add(BigInteger.ONE));
         }
 
         /** The places of the input {@code within} weighs, each with its weight: a number at a
@@ -338,8 +343,8 @@ final class StopsHeldToTheRuns {
             return out;
         }
 
-        /** Each value of each place {@code weighed} names that puts the form at {@code end}, the
-         *  others at every number the input gives them, into {@code out}. */
+        /** Each value of each place {@code weighed} names that puts the form it weighs at
+         *  {@code end}, the others at every number the input gives them, into {@code out}. */
         private void onTheEnd(Map<String, BigInteger> weighed, BigInteger end,
                               Map<String, List<BigInteger>> out) {
             for (String solved : weighed.keySet()) {

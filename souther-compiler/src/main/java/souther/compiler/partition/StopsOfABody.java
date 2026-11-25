@@ -739,15 +739,38 @@ final class StopsOfABody {
             if (sites == null) {
                 continue;
             }
+            List<UndividedByARelation.IntOperation> met = operandsOf(step, each.reads());
             for (StopAssessment.Site site : sites) {
                 if (site instanceof StopAssessment.Site.PastItsEnds(var operation)
                         && !left.keepsWithinItsEnds(operation)) {
                     out.addAll(UndividedByARelation.everyRunStopsAt(operation, read,
-                            List.of(reaching.region())));
+                            List.of(reaching.region()), met));
                 }
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Each operand of {@code step}, as what it comes to ({@link #operand}) held to an
+     * {@code Int}: a value a run getting to the step holds, however it was worked out, so that
+     * the rows the step is said to stop at are rows a run gets there at.
+     */
+    private List<UndividedByARelation.IntOperation> operandsOf(Core step, InputReads at) {
+        List<UndividedByARelation.IntOperation> out = new ArrayList<>();
+        if (Core.withoutStanding(step) instanceof Core.Binary binary
+                && binary.type() == Type.INT) {
+            for (Core side : List.of(binary.left(), binary.right())) {
+                LinearForm<UndividedByARelation.IntOperand> form = operand(side, at);
+                if (form != null) {
+                    out.add(new UndividedByARelation.IntOperation(form,
+                            BigInteger.valueOf(Long.MIN_VALUE),
+                            BigInteger.valueOf(Long.MAX_VALUE), List.of(), true,
+                            new UndividedByARelation.IntOperation.Origin(side)));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -1282,28 +1305,46 @@ final class StopsOfABody {
                 ? any : List.of(stated);
         List<List<TakenConstraint.Affine>> out = new ArrayList<>();
         for (Proposition part : parts) {
-            List<TakenConstraint.Affine> relations = relationsOf(part);
-            if (relations == null) {
+            List<List<TakenConstraint.Affine>> ways = waysOf(part);
+            if (ways == null) {
                 return null;
             }
-            out.add(relations);
+            out.addAll(ways);
         }
         return out;
     }
 
-    /** {@code stated} as the relations of numbers of the input a row meets for it, or null where
-     *  it asks anything else of a row ({@link DemandReading#asked}). */
-    private List<TakenConstraint.Affine> relationsOf(Proposition stated) {
+    /**
+     * {@code stated} as the ways a row meets it: none where the source settles it false, which
+     * no row meets, and otherwise one, the relations of numbers of the input a row meets for it.
+     * Null where it asks anything else of a row ({@link DemandReading#asked}). A condition the
+     * source settles is read to the end, and is no condition this reading fell short on.
+     */
+    private List<List<TakenConstraint.Affine>> waysOf(Proposition stated) {
         List<TakenConstraint.Affine> out = new ArrayList<>();
         for (DemandReading.Read each : DemandReading.asked(stated, read)) {
             if (each instanceof DemandReading.Read.Demands(
                     RowDemand.Relational(TakenConstraint.Affine affine))) {
                 out.add(affine);
-            } else if (!(each instanceof DemandReading.Read.Settled(boolean thisWay) && thisWay)) {
+            } else if (each instanceof DemandReading.Read.Settled(boolean thisWay)) {
+                if (!thisWay) {
+                    return List.of();
+                }
+            } else {
                 return null;
             }
         }
-        return out;
+        return List.of(out);
+    }
+
+    /**
+     * {@code stated} as the relations of numbers of the input a row meets for it, or null where
+     * it asks anything else of a row, or no row meets it: a reader of relations held together
+     * says a statement no row meets by none of them, which is not what holding none says.
+     */
+    private List<TakenConstraint.Affine> relationsOf(Proposition stated) {
+        List<List<TakenConstraint.Affine>> ways = waysOf(stated);
+        return ways == null || ways.isEmpty() ? null : ways.getFirst();
     }
 
     /** {@code number} moved by {@code by}, or null where that is no number held exactly. */
