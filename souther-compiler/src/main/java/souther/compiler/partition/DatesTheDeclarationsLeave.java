@@ -73,11 +73,7 @@ final class DatesTheDeclarationsLeave {
     private static DatesThatHoldEveryStatement.Answer withThePartIn(
             DatePartsLeft left, List<RuleOfDateParts> rules, DateTranslation days,
             TakenAs.DatePart part, BigInteger least, BigInteger most, DateTranslation moved) {
-        int[] calendar = switch (part) {
-            case YEAR -> new int[] {LocalDate.MIN.getYear(), LocalDate.MAX.getYear()};
-            case MONTH -> new int[] {1, 12};
-            case DAY -> new int[] {1, 31};
-        };
+        int[] calendar = {part.least(), part.greatest()};
         int from = least == null ? calendar[0]
                 : least.max(BigInteger.valueOf(calendar[0])).min(BigInteger.valueOf(calendar[1]
                         + 1L)).intValueExact();

@@ -475,9 +475,9 @@ public sealed interface TakenAs {
                 return run(part.of(first), part.of(last));
             }
             if (moved[1] - moved[0] + 1 >= DAYS_A_YEAR_HOLDS_AT_LEAST) {
-                return run(1, part == DatePart.MONTH ? MONTHS_A_YEAR_HAS : DAYS_A_MONTH_HAS_AT_MOST);
+                return run(part.least(), part.greatest());
             }
-            boolean[] seen = new boolean[DAYS_A_MONTH_HAS_AT_MOST + 1];
+            boolean[] seen = new boolean[DatePart.DAY.greatest() + 1];
             for (LocalDate at = first; !at.isAfter(last); at = at.plusDays(1)) {
                 seen[part.of(at)] = true;
             }
@@ -542,10 +542,6 @@ public sealed interface TakenAs {
          *  every day of a month of. */
         private static final int DAYS_A_YEAR_HOLDS_AT_LEAST = 365;
 
-        private static final int MONTHS_A_YEAR_HAS = 12;
-
-        private static final int DAYS_A_MONTH_HAS_AT_MOST = 31;
-
         private static NumericDomain.Bounds run(int least, int most) {
             return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(least)),
                     Endpoint.inclusive(Count.of(most)));
@@ -570,6 +566,24 @@ public sealed interface TakenAs {
                 case YEAR -> date.getYear();
                 case MONTH -> date.getMonthValue();
                 case DAY -> date.getDayOfMonth();
+            };
+        }
+
+        /** The least number this part is of any date the calendar holds. */
+        public int least() {
+            return switch (this) {
+                case YEAR -> LocalDate.MIN.getYear();
+                case MONTH, DAY -> 1;
+            };
+        }
+
+        /** The greatest number this part is of any date the calendar holds: for a day, the days
+         *  of the longest month, since which month a date is in is the date's. */
+        public int greatest() {
+            return switch (this) {
+                case YEAR -> LocalDate.MAX.getYear();
+                case MONTH -> 12;
+                case DAY -> 31;
             };
         }
     }
