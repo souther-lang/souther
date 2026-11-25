@@ -790,22 +790,26 @@ public enum CompositionBudget {
      *
      * <p>Counted in rows composed and not in runs, because a row that is composed again or does not
      * meet the requirement costs composing and no run, and a walk over every assignment of every
-     * parameter multiplies. It stops the walk before a row that answers was found, so the point is
-     * one this compiler stopped looking for a row at, and never one no row answers at.
+     * parameter multiplies. Over every walk looking for the one row ({@link LookingForARow}), as
+     * the choice among them is one choice. It stops the walk before a row that answers was found,
+     * so the point is one this compiler stopped looking for a row at, and never one no row answers
+     * at.
      */
     ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
 
     /**
-     * How many times a walk composing a row for a point goes on to the search for one of its
-     * parameters, under the values the parameters before it took, or hands a whole row on.
+     * How many searches looking for one row goes through: each attempt made for it, each time a
+     * walk across the row's parameters goes on to the search for one of them under the values the
+     * ones before it took, and each whole row it hands on.
      *
-     * <p>Each parameter's own search is bounded ({@link #ASSIGNMENTS_A_SEARCH_COMPOSES}), and each
-     * value it hands on starts the search for the next parameter afresh. So a walk whose last
-     * parameter comes to nothing under every value of the ones before it goes through as many
-     * searches as their values multiply, and a bound on each search is no bound on the walk. Spent
-     * over every way the row for the point is written along, so splitting the walk is no way past
-     * it. It stops the walk before a row was found, so the point is one this compiler stopped
-     * looking for a row at, and never one no row answers at.
+     * <p>Each of those is bounded ({@link #ASSIGNMENTS_A_SEARCH_COMPOSES} for a parameter's), and
+     * their number is not. Each value a parameter's search hands on starts the next parameter's
+     * afresh, so a walk whose last parameter comes to nothing under every value of the ones before
+     * it goes through as many searches as their values multiply; and a row for a point is attempted
+     * along each way, at each value, for each pair of the input's numbers and each way of standing
+     * the dependencies in. Spent over all of them ({@link LookingForARow}), so splitting the
+     * looking is no way past it. It stops the looking before a row was found, so the point is one
+     * this compiler stopped looking for a row at, and never one no row answers at.
      */
     SEARCHES_A_ROW_IS_COMPOSED_THROUGH(4096),
 

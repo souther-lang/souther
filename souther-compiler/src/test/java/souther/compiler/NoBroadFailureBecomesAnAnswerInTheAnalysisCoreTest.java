@@ -266,7 +266,8 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                             + "Lsouther/compiler/partition/NumbersAskedFor;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"
                             + "Lsouther/compiler/partition/AnswersDemanded;"
-                            + "Ljava/util/Optional;)"
+                            + "Ljava/util/Optional;"
+                            + "Lsouther/compiler/partition/LookingForARow;)"
                             + "Ljava/util/List;",
                     "java.lang.LinkageError",
                     "whether the classes generated for this model link, asked by building a row"

@@ -115,20 +115,21 @@ final class RemainderSolutions {
         List<Choices> choices = new ArrayList<>();
         List<BigInteger> sizes = new ArrayList<>();
         CompositionBudget stopped = null;
+        // The compiler's one figure for the steps of a search, counted over all of it: each number
+        // looked at to find a demand's remainders, each combination of them tried, and each number
+        // of a set looked at below.
+        int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
+        int[] tried = {0};
         for (Demand demand : demands) {
             BigInteger size = Arithmetic.AFloorRemainder.magnitudeOf(demand.divisor());
             if (size == null) {
                 return new Answer.NoneThere();
             }
-            Choices here = choicesOf(demand, size, carrier);
+            Choices here = choicesOf(demand, size, carrier, tried, steps);
             stopped = stopped != null ? stopped : here.stoppedBy();
             choices.add(here);
             sizes.add(size);
         }
-        // How many combinations of the demands' choices are tried: the compiler's one figure for the
-        // steps of a search, which numbers of a set looked at below are counted against as well.
-        int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
-        int[] tried = {0};
         BigInteger found = search(choices, sizes, 0, value.standing(), value, tried, steps, null);
         if (found != null) {
             return new Answer.Found(found);
@@ -181,7 +182,8 @@ final class RemainderSolutions {
      * nought, not reaching it, for a divisor below nought. Which of those the demand holds is asked
      * of its set, and the set's own ends say where to begin.
      */
-    private static Choices choicesOf(Demand demand, BigInteger size, Carrier carrier) {
+    private static Choices choicesOf(Demand demand, BigInteger size, Carrier carrier,
+                                     int[] tried, int steps) {
         boolean positive = demand.divisor().signum() > 0;
         BigInteger least = positive ? BigInteger.ZERO : size.subtract(BigInteger.ONE).negate();
         BigInteger most = positive ? size.subtract(BigInteger.ONE) : BigInteger.ZERO;
@@ -197,10 +199,8 @@ final class RemainderSolutions {
         BigInteger to = highestWholeNumberOf(extent.max());
         BigInteger at = from == null || from.compareTo(least) < 0 ? least : from;
         BigInteger last = to == null || to.compareTo(most) > 0 ? most : to;
-        int looked = 0;
-        int lookedAtMost = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
-        for (; at.compareTo(last) <= 0 && found.size() < allowed && looked < lookedAtMost;
-                at = at.add(BigInteger.ONE), looked++) {
+        for (; at.compareTo(last) <= 0 && found.size() < allowed && tried[0] < steps;
+                at = at.add(BigInteger.ONE), tried[0]++) {
             if (!at.equals(named) && admits(demand, at, least, most, carrier)) {
                 found.add(at);
             }

@@ -226,20 +226,36 @@ class AMembershipIsComposedIntoTheRowTest {
         Generator.CandidateCheck noContainer = Generator.CandidateCheck.refusing(
                 (p, candidate) -> p == 0 ? Optional.of("no container") : Optional.empty());
         for (String behavior : List.of("boxed", "chained")) {
-            Tries three = new Tries(3);
+            LookingForARow three = new LookingForARow(3);
             Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
                     Generator.BoundaryAttempt.Stopped.class,
                     composedPast(behavior, true, noContainer, three), behavior);
-            assertTrue(three.cutShort(), behavior + " was cut short at three searches");
+            assertTrue(three.searches().cutShort(), behavior + " was cut short at three searches");
             assertTrue(stopped.met().figures()
                             .contains(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH),
                     () -> behavior + " says the searches across its parameters stopped it: "
                             + stopped.met());
-            Tries declared = new Tries(
-                    CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH.maximum());
+            LookingForARow declared = new LookingForARow();
             composedPast(behavior, true, noContainer, declared);
-            assertFalse(declared.cutShort(), behavior + " walked every value out");
+            assertFalse(declared.searches().cutShort(), behavior + " walked every value out");
         }
+    }
+
+    /**
+     * Attempts for one row spend of one looking: a second attempt with what the first left of a
+     * figure of three is stopped where the first was, and does not start again from three.
+     */
+    @Test
+    void theAttemptsForOneRowSpendOfOneLooking() {
+        Generator.CandidateCheck noContainer = Generator.CandidateCheck.refusing(
+                (p, candidate) -> p == 0 ? Optional.of("no container") : Optional.empty());
+        LookingForARow three = new LookingForARow(3);
+        composedPast("boxed", true, noContainer, three);
+        Generator.BoundaryAttempt.Stopped again = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class,
+                composedPast("boxed", true, Generator.CandidateCheck.ANY, three));
+        assertTrue(again.met().figures()
+                .contains(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH), again::toString);
     }
 
     private static List<Integer> digitsIn(String written) {
@@ -305,13 +321,12 @@ class AMembershipIsComposedIntoTheRowTest {
 
     private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
                                                           Generator.CandidateCheck check) {
-        return composedPast(behavior, holding, check, new Tries(
-                CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH.maximum()));
+        return composedPast(behavior, holding, check, new LookingForARow());
     }
 
     private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
                                                           Generator.CandidateCheck check,
-                                                          Tries searches) {
+                                                          LookingForARow looking) {
         List<OnTheWay.TakenIn> way = stated(behavior, holding).stream()
                 .map(each -> assertInstanceOf(OnTheWay.TakenIn.class, each)).toList();
         SearchRegion region = new WayToTheBorder(List.copyOf(way))
@@ -321,8 +336,7 @@ class AMembershipIsComposedIntoTheRowTest {
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
                         Reachability.Ways.ONE, List.of(), Optional.empty()),
                 check, StandInAttempt.REQUIRING_NOTHING, Generator.Trial.NOTHING_RUNS,
-                Optional.empty(),
-                searches);
+                Optional.empty(), looking);
     }
 
     /** What {@code behavior}'s body coming out {@code holding} asks of a row, one entry for each

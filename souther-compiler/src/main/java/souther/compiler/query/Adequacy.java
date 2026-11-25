@@ -202,6 +202,7 @@ import souther.compiler.partition.StatementsOfAnInput;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.LookingForARow;
 import souther.compiler.partition.WhatStopsMeasuring;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -3512,7 +3513,8 @@ public final class Adequacy {
                     RuleRequirement.Excluded out = unreached.onTheWay(ruled);
                     yield out != null ? RuleSettlement.read(out)
                             : everyRowAborts ? null
-                            : whatASearchFinds(ruled, probe, taken, reaching);
+                            : whatASearchFinds(ruled, probe, taken, reaching,
+                                    new LookingForARow());
                 }
             };
         }
@@ -3758,13 +3760,14 @@ public final class Adequacy {
         private static RuleSettlement whatASearchFinds(
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
                 RunPlacement taken,
-                souther.compiler.partition.Reachability.Reaching reaching) {
+                souther.compiler.partition.Reachability.Reaching reaching,
+                LookingForARow looking) {
             // Where a condition on the way came out one of several ways, a row is composed along
             // each of them first. A row of one that the run places at the rule is a witness of it;
             // anything else one of them comes to says nothing of the others, so the rule is then
-            // answered as the way whole answers it.
+            // answered as the way whole answers it. Each is the one row for the rule looked for.
             for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
-                RuleSettlement one = whatASearchFinds(ruled, probe, taken, along);
+                RuleSettlement one = whatASearchFinds(ruled, probe, taken, along, looking);
                 if (one.requirement() instanceof RuleRequirement.Required) {
                     return one;
                 }
@@ -3787,7 +3790,7 @@ public final class Adequacy {
             });
             List<Generator.BoundaryAttempt> ways = probe.attempt("a rule of the decision", Map.of(),
                     souther.compiler.partition.NumbersAskedFor.ANYTHING,
-                    reaching, ruled.demands(), Optional.of(atTheRule));
+                    reaching, ruled.demands(), Optional.of(atTheRule), looking);
             // The proof, where every way of standing the dependencies in came back with one. Asked
             // of the ways together and before the fold below: what that fold joins on is how much
             // one way established about the rule, and a proof is not more of that — it is the one
@@ -4210,11 +4213,12 @@ public final class Adequacy {
                 }
                 return false;
             };
+            LookingForARow looking = new LookingForARow();
             for (souther.compiler.partition.Reachability.Reaching along
                     : reaching.waysToTryForARow()) {
                 building.probe().attempt("a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
-                        Optional.of(rewrittenIntoTheCase));
+                        Optional.of(rewrittenIntoTheCase), looking);
                 if (found[0] != null) {
                     return found[0];
                 }
@@ -4247,12 +4251,13 @@ public final class Adequacy {
                 return ranAtTheRule(setting, read, ruled)
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
+            LookingForARow looking = new LookingForARow();
             for (souther.compiler.partition.Reachability.Reaching along
                     : reaching.waysToTryForARow()) {
                 for (Generator.BoundaryAttempt made : building.probe().attempt(
                         "a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
-                        Optional.of(inTheCase))) {
+                        Optional.of(inTheCase), looking)) {
                     // Every row built was accepted by the judge, which is the only way the walk
                     // takes one.
                     if (made instanceof Generator.BoundaryAttempt.Built built) {
@@ -4457,7 +4462,7 @@ public final class Adequacy {
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands,
-                Optional<Generator.RowJudge> judge) {
+                Optional<Generator.RowJudge> judge, LookingForARow looking) {
             Generator.CandidateCheck check = checkAgainst(building, sig);
             try {
                 // One per way of standing the dependencies in. Which of them answers what was asked
@@ -4480,7 +4485,7 @@ public final class Adequacy {
                     for (souther.compiler.partition.StandInAttempt stood
                             : answers.of(demands, pinned.values())) {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
-                                pinned.reaching(), check, stood, trial, judge));
+                                pinned.reaching(), check, stood, trial, judge, looking));
                     }
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
                         return List.copyOf(out);

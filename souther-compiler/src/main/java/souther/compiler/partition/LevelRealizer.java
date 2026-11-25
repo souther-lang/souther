@@ -814,9 +814,11 @@ public final class LevelRealizer {
         if (offered.stoppedShort()) {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
+        // The item's steps, over every level it is asked at ({@link Steps}).
+        Steps steps = new Steps();
         for (Level level : offered.levels()) {
             LevelWalk walk = walkLevel(over.form(), terms, over.on(), level.asAnExactNumber(),
-                    within, runs, tried, stoppedBy, unheld, new Steps());
+                    within, runs, tried, stoppedBy, unheld, steps);
             if (walk.found() != null) {
                 return walk.found();
             }
