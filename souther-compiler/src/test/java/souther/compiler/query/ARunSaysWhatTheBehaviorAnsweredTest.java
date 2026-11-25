@@ -270,7 +270,7 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                 .ask(new Shapes.Prepared(compilation.modules().get(0))).value();
         Hir.ExampleRow row = prepared.examples().stream()
                 .map(Prepared.Example::read)
-                .filter(block -> block.target().equals(behavior))
+                .filter(block -> block.named().equals(behavior))
                 .flatMap(block -> block.rows().stream())
                 .filter(each -> each.identity().shown().equals(name))
                 .findFirst().orElseThrow();
