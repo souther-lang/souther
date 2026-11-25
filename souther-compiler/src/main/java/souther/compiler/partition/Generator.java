@@ -9319,17 +9319,12 @@ public final class Generator {
                                 .map(way -> writing(at, term, way.target(), way.taken(), missed))
                                 .filter(Objects::nonNull)
                                 .iterator();
-                    }, way -> {
-                        switch (witnessed(way.trying(), way.routes(), way.owing())) {
-                            case Placed.AtAll placed -> {
-                                found[0] = placed;
-                                return false;
-                            }
-                            case Placed.AtNone(ReachabilityGap why) -> {
-                                missed.add(why);
-                                return true;
-                            }
+                    }, way -> switch (witnessed(way.trying(), way.routes(), way.owing())) {
+                        case Placed.AtAll placed -> {
+                            found[0] = placed;
+                            yield false;
                         }
+                        case Placed.AtNone(ReachabilityGap why) -> missed.add(why);
                     });
             if (found[0] != null) {
                 return found[0];
