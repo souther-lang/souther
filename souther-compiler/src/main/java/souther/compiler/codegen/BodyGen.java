@@ -857,9 +857,11 @@ final class BodyGen {
          * checker validated. Only the passthrough arms (if/let/match/call) forward it.
          */
         Type genExpr(Core e, Type expected) {
-            if (!aStepThatMayEndARun(e)) {
+            WhatARunMayEndFor.Endings ends = whatMayEndARunAt(e);
+            if (ends.endsNone()) {
                 return emitted(e, expected);
             }
+            boolean itself = ends instanceof WhatARunMayEndFor.Endings.Known;
             Label start = code.newLabel();
             Label end = code.newLabel();
             Label left = code.newLabel();
@@ -868,13 +870,19 @@ final class BodyGen {
             Type out = emitted(e, expected);
             code.labelBinding(end);
             Optional<TextsOfModules.WrittenAt> at = ctx.writtenAt(e.pos());
-            if (at.isPresent()) {
+            if (itself && at.isPresent()) {
                 placed(at.get());
                 code.invokestatic(CD_StepsGotPast, "passed", MTD_passed);
             }
             code.goto_(after);
             code.labelBinding(left);
-            writtenAt(e.pos());
+            if (itself) {
+                writtenAt(e.pos());
+            } else {
+                code.aconst_null();
+                code.loadConstant(0);
+                code.loadConstant(0);
+            }
             code.invokevirtual(CD_ConstraintViolation, "placedAt", MTD_placedAt);
             code.athrow();
             code.exceptionCatch(start, end, left, CD_ConstraintViolation);
@@ -883,20 +891,24 @@ final class BodyGen {
         }
 
         /**
-         * Whether this generation says where runs stop and {@code e} is a step that may itself end
-         * one, for a reason its place is not said by anything else.
+         * What {@code e} itself may end a run for, where this generation says where runs stop; that
+         * it ends none where it does not say, or {@code e} is an {@code unreachable}, which says
+         * where it is reached.
          *
          * <p>Which steps may end a run is {@link WhatARunMayEndFor#itself}'s, read of the step and
          * not of what it is made of: what it is made of is a step of its own, emitted inside this
-         * one, which says it ended the run first as the run leaves it. Whether the step has a place
-         * to say is no part of this: one written in no text this compilation holds laid out still
-         * says it ended the run, with no place, so no step around it says so in its stead. A
-         * construction and an {@code unreachable} say theirs where they are refused or reached.
+         * one, which says it ended the run first as the run leaves it. A step that ends a run for
+         * a reason that is known says where it is written, or that it is written nowhere this
+         * compilation holds laid out. One that may end a run for what is not known here — a call
+         * into another declaration's body, a function applied, a construction — says only that
+         * the run ended inside it, at a step it cannot name: the step was in code that may not say
+         * where it is, and it is not this one, which the run never finished working out. A
+         * construction's refusal carries its own place, and nothing said here moves it.
          */
-        private boolean aStepThatMayEndARun(Core e) {
-            return ctx.sayingWhereRunsStop() && !(Core.withoutStanding(e) instanceof Core.Unreachable)
-                    && WhatARunMayEndFor.itself(e) instanceof WhatARunMayEndFor.Endings.Known(
-                            AbortSet kinds) && !kinds.isEmpty();
+        private WhatARunMayEndFor.Endings whatMayEndARunAt(Core e) {
+            return (!ctx.sayingWhereRunsStop() || Core.withoutStanding(e) instanceof Core.Unreachable)
+                    ? new WhatARunMayEndFor.Endings.Known(AbortSet.NONE)
+                    : WhatARunMayEndFor.itself(e);
         }
 
         /** Pushes the module, line and column of {@code at}. */
@@ -1592,8 +1604,10 @@ final class BodyGen {
                     // entry, which is public and takes nothing, so no type the value is built from
                     // is named here; what its answer is taken as is what the entry offers.
                     LinkageProjection.Value entered = ctx.publishedValue(value);
+                    boolean inside = entering(call);
                     code.invokestatic(entered.entry().ownerClass(), entered.entry().method(),
                             entered.entry().methodType());
+                    left(inside);
                     castFromObject(code, entered.answers());
                 }
                 case Core.Reaches.AHelper _ -> {
