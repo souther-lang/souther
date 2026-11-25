@@ -1641,6 +1641,30 @@ public final class Names {
     public record Listed(List<Resolve.TypeUse> types, List<Resolve.ValueUse> values) {}
 
     /**
+     * What an import entry naming {@code from} and {@code name} names: what that module hands over
+     * under the name, as a claim on such an entry is settled ({@link Scoping#handedOver}), or
+     * absent where it hands nothing over.
+     *
+     * <p>Asked about an entry written where no claim is made — a line in a file the compile could
+     * not read. The entry writes both the module and the name, so what it names is the same
+     * answer a line of a module the compile read gets, by the same rule.
+     */
+    public record HandedOver(String from, String name) implements Key<Scoping.Brought> {
+        @Override
+        public String module() {
+            return from;
+        }
+
+        @Override
+        public Answer<Scoping.Brought> compute(Db db) {
+            ModuleUniverse.InSight there = CompilationUniverse.over(db).module(from);
+            Scoping.Brought brought = there instanceof ModuleUniverse.InSight.Read read
+                    ? Scoping.handedOver(from, name, read) : null;
+            return brought == null ? Answer.absent() : Answer.of(brought);
+        }
+    }
+
+    /**
      * Each parameter through which a module's {@code let}s take a behavior they depend on, with
      * that behavior.
      *

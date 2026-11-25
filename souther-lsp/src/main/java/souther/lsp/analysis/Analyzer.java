@@ -14,6 +14,7 @@ import souther.compiler.check.Requirements;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Abandonment;
@@ -1413,22 +1414,21 @@ public final class Analyzer {
             return name == null ? Optional.empty() : Optional.of(new Location(uri, tokenRange(lines.lines(), name)));
         }
         String targetModule = reading.importing(nameOf(ident));
-        return targetModule == null ? Optional.empty()
-                : declaredIn(compilation, graph, targetModule, nameOf(ident));
-    }
-
-    /** Where the document of {@code module} declares {@code name}, read off its tree. */
-    private Optional<Location> declaredIn(Compilation compilation, ModuleGraph graph,
-                                          String module, String name) {
-        String targetUri = uriOfModule(compilation, graph, module);
+        if (targetModule == null) {
+            return Optional.empty();
+        }
+        String targetUri = uriOfModule(compilation, graph, targetModule);
         if (targetUri == null) {
             return Optional.empty();
         }
         Reading target = readingOf(graph, targetUri);
-        SyntaxNode def = declaringDef(target.root(), name);
-        SyntaxToken token = def == null ? null : nameToken(def);
-        return token == null ? Optional.empty()
-                : Optional.of(new Location(targetUri, tokenRange(target.lines(), token)));
+        SyntaxNode def = declaringDef(target.root(), nameOf(ident));
+        if (def == null) {
+            return Optional.empty();
+        }
+        SyntaxToken name = nameToken(def);
+        return name == null ? Optional.empty()
+                : Optional.of(new Location(targetUri, tokenRange(target.lines(), name)));
     }
 
     /**
@@ -1477,8 +1477,9 @@ public final class Analyzer {
     }
 
     /**
-     * A declaration as a list in a document the compile could not read names it: the module that
-     * declares it, and the name it is declared under.
+     * A module's declaration by where it is and what it is called: the module that declares it,
+     * and the name it is declared under — what says whether a rename can reach it, and what a list
+     * in a document the compile could not read names it by.
      */
     private record Spelled(String module, String name) {
 
@@ -1536,10 +1537,11 @@ public final class Analyzer {
      * What the name under the cursor is, where that can be told for certain.
      *
      * <p>In a document the compile read, it is the compiler's answer. In one it could not read, it
-     * is told only on an import list entry, which writes both the module and the name: the
-     * declaration that module makes under it, as the compiler answers at that declaration.
-     * Anywhere else in such a document a spelling could be a field, a binding or anything else
-     * spelled alike, and nothing is told.
+     * is told only on an import list entry, which writes both the module and the name: what that
+     * module hands over under the name, by the rule a claim on a line the compile read is settled
+     * by ({@link Names.HandedOver}) — so a name it declares and does not expose is nothing here as
+     * well. Anywhere else in such a document a spelling could be a field, a binding or anything
+     * else spelled alike, and nothing is told.
      */
     private Identified certainlyAt(Compilation compilation, String uri, Position pos,
                                    ModuleGraph graph) {
@@ -1558,10 +1560,17 @@ public final class Analyzer {
         if (module == null) {
             return Identified.NOTHING;
         }
-        Location declared =
-                declaredIn(compilation, graph, dottedName(module), nameOf(ident)).orElse(null);
-        return (declared == null || !resolves(compilation, declared.uri())) ? Identified.NOTHING
-                : identifiedAt(compilation, declared.uri(), declared.range().start());
+        Scoping.Brought brought = compilation.db()
+                .ask(new Names.HandedOver(dottedName(module), nameOf(ident))).value();
+        return switch (brought) {
+            case null -> Identified.NOTHING;
+            case Scoping.Brought.ADeclaration(TypeSymbol type) -> new Identified(type, null);
+            case Scoping.Brought.ABehavior(ValueName.Behavior behavior) ->
+                    new Identified(null, behavior);
+            case Scoping.Brought.AHelper helper -> new Identified(null, helper.named());
+            case Scoping.Brought.ALibraryOperation(ValueName.Stdlib operation) ->
+                    new Identified(null, operation);
+        };
     }
 
     /**
@@ -1610,6 +1619,13 @@ public final class Analyzer {
             }
         }
         return found;
+    }
+
+    /** Whether the module declaring {@code spelled} is one whose source this workspace holds. */
+    private boolean declaredInTheWorkspace(Compilation compilation, ModuleGraph graph,
+                                           Spelled spelled) {
+        SourceId source = compilation.sourceIdOf(spelled.module());
+        return source != null && graph.text(uriOf(source)) != null;
     }
 
     /** The documents the compile did not read, which only a spelling can answer about. */
@@ -1755,10 +1771,11 @@ public final class Analyzer {
     /**
      * Where renaming touches, before what to write there is decided.
      *
-     * <p>Only what this workspace declares is renamed: a type a module declares, a helper or a
-     * behavior, a local. A library operation and what the language gives are named all over a
-     * workspace and declared in none of it, so rewriting where they are named would rename nothing
-     * and break every place that named them.
+     * <p>Only what a document of this workspace declares is renamed: a local, or a type, helper or
+     * behavior of a module whose source the workspace holds. What is declared anywhere else — by
+     * the library, by the language, by a module off the path — is named here and declared where
+     * no edit reaches, so rewriting where it is named would rename nothing and break every place
+     * that named it. Which kind of name it is does not say this; where it is declared does.
      *
      * <p>A rename writes to sources, so it touches only places it can tell are the name: the
      * places the compiler answers for the identity {@link #certainlyAt} tells, and in a document
@@ -1773,8 +1790,9 @@ public final class Analyzer {
         TypeSymbol type = named.type();
         ValueName value = named.value();
         Map<String, List<Range>> byUri = new LinkedHashMap<>();
-        if (!(type instanceof TypeSymbol.AtModule) && !(value instanceof ValueName.OfAModule)
-                && !(value instanceof ValueName.Local)) {
+        Spelled spelled = Spelled.of(type, value);
+        if (!(value instanceof ValueName.Local)
+                && (spelled == null || !declaredInTheWorkspace(compilation, graph, spelled))) {
             return byUri;
         }
         for (Location loc : references(uri, pos, graph, true)) {
@@ -1788,7 +1806,6 @@ public final class Analyzer {
         // same identity the references were: a list entry is answered with the declaration it
         // names as a use is, so renaming from a qualified use, a list or the declaration reaches
         // one set. Where it could not, they are the entries of a list about the declaring module.
-        Spelled spelled = Spelled.of(type, value);
         if (spelled != null) {
             addExposingAndImportSites(compilation, spelled.name(), spelled.module(),
                     unread(compilation, graph), graph, byUri);

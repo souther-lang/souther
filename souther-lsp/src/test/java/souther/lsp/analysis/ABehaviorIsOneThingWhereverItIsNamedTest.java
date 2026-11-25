@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import souther.compiler.ACompiledModel;
+import souther.compiler.Compiler;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.lsp.protocol.Hover;
@@ -22,6 +23,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * A behavior is named in many places — its {@code behavior} and {@code let} lines, a
@@ -81,11 +83,14 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
             import m ( find )
             """;
 
-    /** A file the compile cannot read, which goes on naming `find` all the same. */
+    /** A file the compile cannot read, which goes on naming `find` all the same — and names
+     *  `other`'s, which `other` does not expose. */
     private static final String BROKEN = """
             module broken
 
             import m ( find )
+
+            import other ( find )
 
             let g (d) = find(d)
 
@@ -256,12 +261,70 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
         assertEquals(renamed.rewrites(), rewrites);
     }
 
+    /** A module put on the path, which the workspace holds no source for. */
+    private static final String BILLING = """
+            module billing exposing ( Amount, quote, tax )
+
+            data Amount = { cents: Int }
+
+            behavior quote : (a: Amount) -> Amount
+
+            let quote (a) = a
+
+            let tax (n: Int): Int = n
+            """;
+
+    private static final String BILLED = """
+            module app
+
+            import billing ( Amount, quote, tax )
+
+            data Order = { price: Amount }
+
+            behavior priced : (o: Order) -> Amount
+                depends on quote
+
+            let priced (o, quote) = quote(o.price)
+
+            let taxed (n: Int): Int = tax(n)
+            """;
+
+    /**
+     * What a module off the path declares — a type, a behavior, a helper — is named here and
+     * declared where no edit reaches, so a rename of it is refused wherever it is asked from. Each
+     * place is one the compiler answers, which the references there show; a rename that is empty
+     * because nothing was answered would say nothing.
+     */
+    @Test
+    void whatAModuleOffThePathDeclaresIsNotRenamed() {
+        String uri = "file:///app.sou";
+        ModuleGraph graph = ModuleGraph.of(Map.of(uri, BILLED),
+                new ModulesOnThePath(ModulePath.of(Compiler.compile(BILLING)), 0));
+        Analyzer analyzer = new Analyzer();
+
+        for (String place : List.of("import billing ( [Amount], quote, tax )",
+                "{ price: [Amount] }", "depends on [quote]", "= [tax](n)")) {
+            Position at = at(BILLED, place);
+            assertNotEquals(List.of(), analyzer.references(uri, at, graph, false), place);
+            assertEquals(Map.of(), analyzer.renameEdits(uri, at, graph, "renamed"), place);
+        }
+    }
+
     /** In a file the compile cannot read, a name in a body is a spelling and nothing more, so a
      *  rename asked there is refused rather than guessed. */
     @Test
     void aRenameAskedWhereOnlyASpellingIsReadRenamesNothing() {
         assertEquals(Map.of(), ANALYZER.renameEdits(BROKEN_URI,
                 at(BROKEN, "let g (d) = [find](d)"), GRAPH, "renamed"));
+    }
+
+    /** An import entry in a file the compile cannot read names what its module hands over by the
+     *  rule a line the compile read is held to, so one naming what the module does not expose
+     *  names nothing here either, and renames nothing. */
+    @Test
+    void anEntryForWhatTheModuleDoesNotExposeRenamesNothingWhereverItIsWritten() {
+        assertEquals(Map.of(), ANALYZER.renameEdits(BROKEN_URI,
+                at(BROKEN, "import other ( [find] )"), GRAPH, "renamed"));
     }
 
     /**

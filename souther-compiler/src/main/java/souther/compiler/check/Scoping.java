@@ -260,24 +260,37 @@ public final class Scoping {
             refused.add(new Refusal.NotExposed(imp, imported));
             return new Claim.DoesNot(imp, named);
         }
-        Ast.Def declared = there.declaration(imported);
-        if (declared != null) {
-            return new Claim.Stands(imp, named,
-                    new Brought.ADeclaration(TypeSymbols.declared(declared.declaredKey())));
-        }
-        if (there.declaresBehavior(imported)) {
-            return new Claim.Stands(imp, named,
-                    new Brought.ABehavior(new ValueName.Behavior(imp.module(), imported)));
-        }
-        java.util.Optional<ModuleUniverse.InSight.Read.PublishedHelper> published =
-                there.publishedHelper(imported);
-        if (published.isPresent()) {
-            return new Claim.Stands(imp, named, new Brought.AHelper(published.get()));
-        }
+        Brought what = handedOver(imp.module(), imported, there);
         // A value declared and exposed with nothing to hand over. Nothing is wrong with the line and
         // nothing arrived, so no claim is made on the spelling at all — it is not in scope here,
         // and a use of it is a name this module never had.
-        return null;
+        return what == null ? null : new Claim.Stands(imp, named, what);
+    }
+
+    /**
+     * What {@code there}, the module {@code module}, hands over to a line asking it for
+     * {@code name}: null where it does not declare the name, does not expose it, or declares and
+     * exposes a value with nothing to hand over.
+     *
+     * <p>The half of a claim that is about the module and not about the line, and so the answer
+     * to what an entry naming {@code module} and {@code name} names wherever that entry is written
+     * — on a line of a module the compile read, or of a file it could not read and an editor still
+     * has to say something about.
+     */
+    public static Brought handedOver(String module, String name, ModuleUniverse.InSight.Read there) {
+        if (!there.declares(name) || !there.exposes(name)) {
+            return null;
+        }
+        Ast.Def declared = there.declaration(name);
+        if (declared != null) {
+            return new Brought.ADeclaration(TypeSymbols.declared(declared.declaredKey()));
+        }
+        if (there.declaresBehavior(name)) {
+            return new Brought.ABehavior(new ValueName.Behavior(module, name));
+        }
+        java.util.Optional<ModuleUniverse.InSight.Read.PublishedHelper> published =
+                there.publishedHelper(name);
+        return published.isPresent() ? new Brought.AHelper(published.get()) : null;
     }
 
     /** Every name a line asks for, claimed by nothing — the line could not do its job at all. */
