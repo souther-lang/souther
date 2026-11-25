@@ -9,6 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.DeclarationAccess;
@@ -2075,10 +2076,13 @@ final class BodyGen {
          * Answers whether it recorded one, for {@link #left}.
          *
          * <p>What a run stopped inside when it stopped at a step of another declaration's body: a
-         * finding of the caller names the call and not that step.
+         * finding of the caller names the call and not that step. Not a build of a value the
+         * module declares, run as a method though it is: the analysis goes through the value's
+         * template as part of the body that builds it ({@link ValueTemplates#builtBy}), so a step
+         * of the template is a step of that body, and a finding of it names that step.
          */
         private boolean entering(Core.Call call) {
-            if (!ctx.sayingWhereRunsStop()) {
+            if (!ctx.sayingWhereRunsStop() || call.fn() instanceof Core.Reached.OfValue) {
                 return false;
             }
             writtenAt(call.pos());

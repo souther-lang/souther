@@ -7,8 +7,14 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The steps that may end a run that a run got past, each where it is written, and the calls it was
- * inside when it ended, recorded by the code as it goes.
+ * The steps of the body a run began in that may end a run and that it got past, each where it is
+ * written, and the calls it was inside when it ended, recorded by the code as it goes.
+ *
+ * <p>The calls recorded are the ones the generated code makes into another declaration's body that
+ * an analysis of the body keeps as calls and does not read through — a behavior, a helper called
+ * rather than inlined, a value another module publishes — so that what is a step of the body here
+ * is what is a step of it there. A value the module declares is run as a method and is not one of
+ * them: the analysis goes through its template as part of the body that builds it.
  *
  * <p>Got past and not got to. A step is recorded once working it out answered, after what it is made
  * of was worked out and it was itself; a run that stopped at it got to it as well, and that is said
@@ -47,11 +53,17 @@ public final class StepsGotPast {
 
     private static final ThreadLocal<Recording> RECORDING = new ThreadLocal<>();
 
-    /** Called by generated code where a step that may end a run answered. Public and static
-     *  because that is what an {@code invokestatic} from a generated class needs. */
+    /**
+     * Called by generated code where a step that may end a run answered. Recorded only of the
+     * body the run began in, outside every call it entered: a step of another declaration's body
+     * is no step of this one, though a helper inlined into both writes it at the same place, and
+     * what a finding of this body says of the step is said of the runs that get to it here.
+     * Public and static because that is what an {@code invokestatic} from a generated class
+     * needs.
+     */
     public static void passed(String module, int line, int column) {
         Recording recording = RECORDING.get();
-        if (recording != null) {
+        if (recording != null && recording.inside().isEmpty()) {
             recording.gotPast().add(new RunStop.Site(module, line, column));
         }
     }

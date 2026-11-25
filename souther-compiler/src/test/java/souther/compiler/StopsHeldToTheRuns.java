@@ -119,16 +119,30 @@ final class StopsHeldToTheRuns {
             return endedInsideACall().orElse(firstStopAt());
         }
 
-        /** Whether the run stopped first at {@code step}, for an operation the language refuses to
-         *  finish. */
-        boolean endedAt(RunStop.Site step) {
-            return stopped.orElse(null) instanceof RunStop.AtAnEnd
-                    && firstStopAt().equals(Optional.of(step));
+        /**
+         * Where the run stopped first at a step of the body it began in: none where it did not
+         * stop, stopped inside a call, or the code said no place. A step of another declaration's
+         * body is none of this body's, though a helper inlined into both writes it at the same
+         * place: what a finding of this body says of where a run stops is said of this body's
+         * steps.
+         */
+        Optional<RunStop.Site> stoppedInTheBodyAt() {
+            return endedInsideACall().isPresent() ? Optional.empty() : firstStopAt();
         }
 
-        /** Whether the run got to {@code step}: got past it, or stopped there first. */
+        /** Whether the run stopped first at {@code step} of the body it began in, for an
+         *  operation the language refuses to finish. */
+        boolean endedAt(RunStop.Site step) {
+            return stopped.orElse(null) instanceof RunStop.AtAnEnd
+                    && stoppedInTheBodyAt().equals(Optional.of(step));
+        }
+
+        /** Whether the run got to {@code step} of the body it began in: got past it there
+         *  ({@link StepsGotPast}, which records that body's steps alone), or stopped there
+         *  first. */
         boolean gotTo(RunStop.Site step) {
-            return account.gotPast().contains(step) || firstStopAt().equals(Optional.of(step));
+            return account.gotPast().contains(step)
+                    || stoppedInTheBodyAt().equals(Optional.of(step));
         }
     }
 
@@ -277,26 +291,24 @@ final class StopsHeldToTheRuns {
             so.remove(places.get(from));
         }
 
-        /** Every end a claim of every run in {@code said} names, by the place of the input it is
-         *  an end of: each place a form of the rows weighs, and the place a bound is declared on. */
+        /**
+         * Every value at a place of the input where a claim of every run in {@code said} turns:
+         * for a form of the rows, each value of one place it weighs that puts the form at an end,
+         * the other places it weighs at each value the input gives them — so that an input of the
+         * grid stands on the end, and not each place at the form's end, which a form of several
+         * places is at no input of; and the place a bound is declared on, at the bound. A place
+         * whose value would come to no whole number there is given none.
+         */
         private Map<String, List<BigInteger>> endsNamedBy(List<WhatIsShownOfAStop> said) {
             Map<String, List<BigInteger>> out = new LinkedHashMap<>();
             for (WhatIsShownOfAStop each : said) {
                 for (EveryRunStops stop : everyRunStopsOf(each)) {
                     for (EveryRunStops.Within within : stop.where()) {
-                        for (NumericTerm term : within.form().coefs().keySet()) {
-                            Optional<String> place = term instanceof NumericTerm.ValueOf(
-                                    TermPath path) ? placeOf(path).or(() -> elementOf(path))
-                                    : Optional.empty();
-                            if (place.isEmpty() || !input.values().containsKey(place.get())) {
-                                continue;
-                            }
-                            for (BigInteger end : new BigInteger[] {within.least(),
-                                    within.greatest()}) {
-                                if (end != null) {
-                                    out.computeIfAbsent(place.get(), _ -> new ArrayList<>())
-                                            .add(end);
-                                }
+                        Map<String, BigInteger> weighed = weighed(within);
+                        for (BigInteger end : new BigInteger[] {within.least(),
+                                within.greatest()}) {
+                            if (end != null && weighed != null) {
+                                onTheEnd(weighed, end, out);
                             }
                         }
                     }
@@ -305,6 +317,63 @@ final class StopsHeldToTheRuns {
                         fieldBounded(bound, input).ifPresent(place ->
                                 out.computeIfAbsent(place, _ -> new ArrayList<>())
                                         .add(bound.at()))));
+            }
+            return out;
+        }
+
+        /** The places of the input {@code within} weighs, each with its weight: a number at a
+         *  place, or the element of a list at one; null where it weighs anything else. */
+        private Map<String, BigInteger> weighed(EveryRunStops.Within within) {
+            Map<String, BigInteger> out = new LinkedHashMap<>();
+            for (Map.Entry<NumericTerm, ExactRatio> term : within.form().coefs().entrySet()) {
+                BigInteger weight = term.getValue().wholeOrNull();
+                Optional<String> place = term.getKey() instanceof NumericTerm.ValueOf(
+                        TermPath path) ? placeOf(path).or(() -> elementOf(path)) : Optional.empty();
+                if (weight == null || place.isEmpty()
+                        || !input.values().containsKey(place.get())) {
+                    return null;
+                }
+                out.put(place.get(), weight);
+            }
+            return out;
+        }
+
+        /** Each value of each place {@code weighed} names that puts the form at {@code end}, the
+         *  others at every number the input gives them, into {@code out}. */
+        private void onTheEnd(Map<String, BigInteger> weighed, BigInteger end,
+                              Map<String, List<BigInteger>> out) {
+            for (String solved : weighed.keySet()) {
+                List<String> others = weighed.keySet().stream()
+                        .filter(place -> !place.equals(solved)).toList();
+                List<BigInteger> rests = new ArrayList<>(List.of(end));
+                for (String other : others) {
+                    List<BigInteger> next = new ArrayList<>();
+                    for (BigInteger rest : rests) {
+                        for (BigInteger number : numbersAt(other)) {
+                            next.add(rest.subtract(weighed.get(other).multiply(number)));
+                        }
+                    }
+                    rests = next;
+                }
+                for (BigInteger rest : rests) {
+                    BigInteger[] divided = rest.divideAndRemainder(weighed.get(solved));
+                    if (divided[1].signum() == 0) {
+                        out.computeIfAbsent(solved, _ -> new ArrayList<>()).add(divided[0]);
+                    }
+                }
+            }
+        }
+
+        /** The whole numbers the input gives {@code place}: its numbers, or every element of its
+         *  lists. */
+        private List<BigInteger> numbersAt(String place) {
+            List<BigInteger> out = new ArrayList<>();
+            for (Object value : input.values().get(place)) {
+                if (value instanceof Long number) {
+                    out.add(BigInteger.valueOf(number));
+                } else if (value instanceof List<?> list) {
+                    list.forEach(element -> out.add(BigInteger.valueOf((Long) element)));
+                }
             }
             return out;
         }
@@ -366,14 +435,13 @@ final class StopsHeldToTheRuns {
      *                                  stop at, and only one saying it is not resolved names, with
      *                                  why each finding there says so
      * @param notResolvedWhereNoneStops each step said not resolved that no run of the grid stops at
-     * @param rowsHeldTo                how many claims of the rows every run stops at some run of
-     *                                  the grid is about
-     * @param keepingHeldTo             how many claims of what keeps every run going some run of the
-     *                                  grid is about
+     * @param notAbout                  each claim of every run no run of the grid is about, which
+     *                                  holds of every run there is and is held to none: a step no
+     *                                  input gets to is one
      */
     record Held(List<Unheld> unheld, List<String> notHeldTo,
                 Map<RunStop.Site, Set<Enum<?>>> notShown,
-                Set<RunStop.Site> notResolvedWhereNoneStops, int rowsHeldTo, int keepingHeldTo) {
+                Set<RunStop.Site> notResolvedWhereNoneStops, List<String> notAbout) {
 
         /** The kinds of claim held wrong. */
         Set<Claim> refused() {
@@ -395,10 +463,12 @@ final class StopsHeldToTheRuns {
     static Held heldTo(List<WhatIsShownOfAStop> said, Runs runs) {
         List<Unheld> out = new ArrayList<>();
         List<String> notHeldTo = new ArrayList<>();
-        int[] heldTo = new int[2];
+        List<String> notAbout = new ArrayList<>();
         Set<RunStop.Site> named = new LinkedHashSet<>();
         Set<RunStop.Site> shownAt = new LinkedHashSet<>();
         Map<RunStop.Site, Set<Enum<?>>> openAt = new LinkedHashMap<>();
+        Set<ABoundThatKeepsEveryRunGoing> bounds = new LinkedHashSet<>();
+        Set<RunStop.Site> ofAnOperation = new LinkedHashSet<>();
         for (WhatIsShownOfAStop each : said) {
             Optional<RunStop.Site> step = runs.placed(each.at());
             if (step.isEmpty()) {
@@ -410,17 +480,24 @@ final class StopsHeldToTheRuns {
                 case StepWhereARunMayStop stops -> {
                     shownAt.add(step.get());
                     shown(stops, step.get(), runs, out, notHeldTo);
+                    if (!stops.shown().isEmpty() && stops.constructions().isEmpty()) {
+                        ofAnOperation.add(step.get());
+                    }
                 }
                 case StepWhereAStopIsNotShown open -> {
                     Set<Enum<?>> why = openAt.computeIfAbsent(step.get(),
                             _ -> new LinkedHashSet<>());
                     open.notShown().forEach(one -> why.add(one.why()));
                     open.asks().forEach(one -> why.add(one.why()));
+                    if (!open.notShown().isEmpty() && open.asks().isEmpty()) {
+                        ofAnOperation.add(step.get());
+                    }
                 }
             }
-            heldTo[0] += everyRunStops(everyRunStopsOf(each), step.get(), runs, out, notHeldTo);
-            heldTo[1] += keeping(keepingOf(each), step.get(), runs, out, notHeldTo);
+            everyRunStops(everyRunStopsOf(each), step.get(), runs, out, notHeldTo, notAbout);
+            keepingOf(each).ifPresent(kept -> bounds.addAll(kept.bounds()));
         }
+        keeping(bounds, ofAnOperation, runs, out, notHeldTo, notAbout);
         Set<RunStop.Site> stoppedAt = new LinkedHashSet<>();
         for (Run run : runs.grid()) {
             said(run, named, out);
@@ -434,36 +511,35 @@ final class StopsHeldToTheRuns {
         }
         Set<RunStop.Site> noneStops = new LinkedHashSet<>(openAt.keySet());
         noneStops.removeAll(stoppedAt);
-        return new Held(out, notHeldTo, notShown, noneStops, heldTo[0], heldTo[1]);
+        return new Held(out, notHeldTo, notShown, noneStops, notAbout);
     }
 
     /**
-     * That a stop of {@code run} is at a step some finding names: the step it stopped at first,
-     * or, where it stopped inside a call of the body, that call. Where the stop or the call says no
-     * place, that is said whatever is named: a place not said is no place a finding is shown to
-     * name.
+     * That a stop of {@code run} is at a step some finding names: where it stopped inside a call
+     * of the body, that call, whatever step of the callee it stopped at — a step written at the
+     * same place in this body, by a helper inlined into both, is no step the callee's stop is at —
+     * and the step it stopped at first otherwise ({@link Run#stepToSay}). Where the stop or the
+     * call says no place, that is said whatever is named: a place not said is no place a finding is
+     * shown to name.
      */
     private static void said(Run run, Set<RunStop.Site> named, List<Unheld> out) {
         if (run.stopped().isEmpty()) {
             return;
         }
-        Optional<RunStop.Site> first = run.firstStopAt();
-        if (first.isEmpty()) {
+        if (run.firstStopAt().isEmpty()) {
             out.add(new Unheld(Claim.EVERY_STOP_PLACED, run.in() + " stops where the code says no"
                     + " place: " + run.stopped()));
             return;
         }
-        if (named.contains(first.get())) {
-            return;
-        }
-        Optional<Optional<RunStop.Site>> call = run.endedInsideACall();
-        if (call.isPresent() && call.get().isEmpty()) {
+        Optional<RunStop.Site> step = run.stepToSay();
+        if (step.isEmpty()) {
             out.add(new Unheld(Claim.EVERY_STOP_PLACED, run.in() + " stops inside a call the code"
                     + " says no place for: " + run.stopped()));
-        } else if (call.isEmpty() || !named.contains(call.get().get())) {
-            out.add(new Unheld(Claim.EVERY_STOP_SAID, run.in() + " stops at " + first.get()
-                    + call.map(at -> " inside the call at " + at.get()).orElse("")
-                    + ", a step nothing is said of: " + run.stopped()));
+        } else if (!named.contains(step.get())) {
+            out.add(new Unheld(Claim.EVERY_STOP_SAID, run.in() + " stops at " + run.firstStopAt()
+                    .orElseThrow() + run.endedInsideACall().map(at -> " inside the call at "
+                    + at.orElseThrow()).orElse("") + ", a step nothing is said of: "
+                    + run.stopped()));
         }
     }
 
@@ -495,7 +571,7 @@ final class StopsHeldToTheRuns {
             for (Map<String, Object> in : inputs.get()) {
                 Run run = runs.of(in);
                 if (!(run.stopped().orElse(null) instanceof RunStop.AtAConstruction)
-                        || !run.firstStopAt().equals(Optional.of(step))) {
+                        || !run.stoppedInTheBodyAt().equals(Optional.of(step))) {
                     out.add(new Unheld(Claim.A_STOP_SHOWN, "a construction shown at " + step
                             + ", and the run of " + in + " stops first at " + run.firstStopAt()
                             + ": " + run.stopped()));
@@ -504,11 +580,14 @@ final class StopsHeldToTheRuns {
         }
     }
 
-    /** Every run of the grid inside the rows, getting to {@code step}, stops there. Answers how
-     *  many of {@code stops} some run of the grid is about. */
-    private static int everyRunStops(List<EveryRunStops> stops, RunStop.Site step, Runs runs,
-                                     List<Unheld> out, List<String> notHeldTo) {
-        int heldTo = 0;
+    /**
+     * Every run of the grid inside the rows, getting to {@code step}, stops there: a claim of
+     * that one step, of the runs that get to it and no other, as it is made of each step on its
+     * own way. A claim no run of the grid is about is said in {@code notAbout}.
+     */
+    private static void everyRunStops(List<EveryRunStops> stops, RunStop.Site step, Runs runs,
+                                      List<Unheld> out, List<String> notHeldTo,
+                                      List<String> notAbout) {
         for (EveryRunStops each : stops) {
             boolean about = false;
             boolean weighed = true;
@@ -529,38 +608,52 @@ final class StopsHeldToTheRuns {
                             + " stops first at " + run.firstStopAt() + ": " + run.stopped()));
                 }
             }
-            heldTo += (about && weighed) ? 1 : 0;
+            if (weighed && !about) {
+                notAbout.add("the rows every run getting to " + step + " stops at: " + each);
+            }
         }
-        return heldTo;
     }
 
-    /** No run of the grid meeting the bounds stops at {@code step} past where a number stops.
-     *  Answers one where some run of the grid is about what is kept, and none where none is or
-     *  nothing is kept. */
-    private static int keeping(Optional<WhatKeepsEveryRunGoing> kept, RunStop.Site step, Runs runs,
-                               List<Unheld> out, List<String> notHeldTo) {
-        if (kept.isEmpty()) {
-            return 0;
+    /**
+     * No run of the grid within the region every bound said of the body declares stops at a step
+     * of {@code ofAnOperation} past where a number stops.
+     *
+     * <p>One region of the body and not a region of each step. What keeps every run going is
+     * found of every step a run may stop at in an operation together, and each bound of it is
+     * said once, at one step, so that the bounds said at a step are where they are written and
+     * not what keeps that step: a step a tighter bound said elsewhere keeps is said nothing of.
+     * The region is every bound said, and what it keeps is every step whose findings are of an
+     * operation; a body any of whose steps stops a run at a quotient, or at a construction, is
+     * said no region at all, so every stop at one of these steps the region is said of is past
+     * where a number stops.
+     */
+    private static void keeping(Set<ABoundThatKeepsEveryRunGoing> bounds,
+                                Set<RunStop.Site> ofAnOperation, Runs runs, List<Unheld> out,
+                                List<String> notHeldTo, List<String> notAbout) {
+        if (bounds.isEmpty()) {
+            return;
         }
         boolean about = false;
         for (Run run : runs.grid()) {
-            Optional<Boolean> meets = meets(kept.get().bounds(), run.in(), runs.input);
+            Optional<Boolean> meets = meets(bounds, run.in(), runs.input);
             if (meets.isEmpty()) {
-                notHeldTo.add("bounds declared on what is no place of the input: "
-                        + kept.get().bounds());
-                return 0;
+                notHeldTo.add("bounds declared on what is no place of the input: " + bounds);
+                return;
             }
-            if (!meets.get() || !run.gotTo(step)) {
+            if (!meets.get()) {
                 continue;
             }
-            about = true;
-            if (run.endedAt(step)) {
-                out.add(new Unheld(Claim.KEEPING, "no run within " + kept.get().bounds()
-                        + " stops at " + step + ", and the run of " + run.in() + " does: "
-                        + run.stopped()));
+            for (RunStop.Site step : ofAnOperation) {
+                about |= run.gotTo(step);
+                if (run.endedAt(step)) {
+                    out.add(new Unheld(Claim.KEEPING, "no run within " + bounds + " stops at "
+                            + step + ", and the run of " + run.in() + " does: " + run.stopped()));
+                }
             }
         }
-        return about ? 1 : 0;
+        if (!about) {
+            notAbout.add("what keeps every run going at " + ofAnOperation + ": " + bounds);
+        }
     }
 
     /**

@@ -214,7 +214,9 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                                 + " build: " + held.notHeldTo()),
                 () -> assertEquals(NOT_SHOWN_WHERE_A_RUN_STOPS.getOrDefault(name, Set.of()),
                         held.notShownBecause(), "a run stops at a step said not resolved, for"
-                                + " the reasons written down: " + held.notShown()));
+                                + " the reasons written down: " + held.notShown()),
+                () -> assertEquals(List.of(), held.notAbout(),
+                        "every claim of every run is about some run of the grid"));
     }
 
     @ParameterizedTest

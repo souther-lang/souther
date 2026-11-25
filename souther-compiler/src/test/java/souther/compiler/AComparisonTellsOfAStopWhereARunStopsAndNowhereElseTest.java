@@ -72,6 +72,10 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
      *  there: a stop that cannot be ruled out yet, each with why. */
     private static final Map<String, String> UNTOLD_THOUGH_NONE_STOPS = new LinkedHashMap<>();
 
+    /** The forms a claim of every run of which no run of the numbers tried is about, each with
+     *  why. */
+    private static final Map<String, String> NOT_ABOUT = new LinkedHashMap<>();
+
     /** {@code name} as a form a run stops at a step of that is said not resolved, for
      *  {@code because}, as {@code why} says. */
     private static void notTold(String name, String why, Enum<?>... because) {
@@ -354,6 +358,11 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         notTold("fieldBesideARefusedPart", afterAStep,
                 WhyAConstructionStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         notTold("foldOfAStep", afterAStep, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+        // The fold's sum is said to stop every run whose elements are at the greatest Int, the
+        // rows of the step that adds one to each: every such run stops at that step first, and
+        // none gets to the sum.
+        NOT_ABOUT.put("foldOfAStep", "the rows of the step before the fold's sum, said at the"
+                + " sum, which every run within them stops before");
         notTold("totalOfAStep", afterAStep, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         notTold("totalOfTakenSteps", afterAStep, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         notTold("totalOfTheSameChoice", afterAStep,
@@ -398,12 +407,16 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         Map<String, Object> wrong = new TreeMap<>();
         Map<String, Set<Enum<?>>> notShown = new TreeMap<>();
         Set<String> notResolvedWhereNoneStops = new TreeSet<>();
+        Map<String, List<String>> notAbout = new TreeMap<>();
         for (int at = 0; at < names.size(); at++) {
             List<WhatIsShownOfAStop> said = StopsHeldToTheRuns.saidOf(compilation, "demo", "b" + at);
             StopsHeldToTheRuns.Held held = StopsHeldToTheRuns.heldTo(said,
                     new StopsHeldToTheRuns.Runs(compilation, loader, INPUT, "b" + at, said));
             if (!held.unheld().isEmpty() || !held.notHeldTo().isEmpty()) {
                 wrong.put(names.get(at), List.of(held.unheld(), held.notHeldTo()));
+            }
+            if (!held.notAbout().isEmpty()) {
+                notAbout.put(names.get(at), held.notAbout());
             }
             if (!held.notShown().isEmpty()) {
                 notShown.put(names.get(at), held.notShownBecause());
@@ -421,6 +434,9 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                     assertEquals(written, notShown,
                             "a run stops at a step said not resolved, for the reasons written down");
                 },
+                () -> assertEquals(new TreeSet<>(NOT_ABOUT.keySet()), notAbout.keySet(),
+                        "a claim of every run no run of the numbers tried is about, beside the"
+                                + " forms written down: " + notAbout),
                 () -> assertEquals(new TreeSet<>(UNTOLD_THOUGH_NONE_STOPS.keySet()),
                         notResolvedWhereNoneStops,
                         "a step is said not resolved where no run of the numbers tried stops,"
