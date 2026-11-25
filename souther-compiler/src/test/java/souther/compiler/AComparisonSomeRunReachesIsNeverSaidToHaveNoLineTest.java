@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -337,8 +338,10 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
     }
 
     /**
-     * For each behavior, whether the comparison on the gate was said to have no line: what the
-     * rules divide is derived with no rows measured, so no row is searched for.
+     * For each behavior, whether the comparison on the gate was said to have no line because no
+     * row that arrives at it holds a value at the line — and for no other reason, which says
+     * something else of the comparison than that no run gets to it: what the rules divide is
+     * derived with no rows measured, so no row is searched for.
      */
     private static Map<String, Boolean> noLineAtTheGate(String source) {
         Compilation made = Compilation.ofSource(source, "Main");
@@ -346,10 +349,13 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
         ACompiledModel.compiles(made);
         Map<String, Boolean> out = new LinkedHashMap<>();
         made.db().ask(new Adequacy.Coverage(MODULE)).value().forEach((behavior, partition) ->
-                out.put(behavior, partition.notRead().stream()
-                        .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
-                        .map(PartitionEvidence.NotRead::at)
-                        .anyMatch("x.gate"::equals)));
+                out.put(behavior, partition.notRead().stream().anyMatch(each ->
+                        each instanceof PartitionEvidence.NotRead.ARule(var finding)
+                                && finding.at().toString().equals("x.gate")
+                                && (finding.why() instanceof
+                                        BlockReason.ComparisonNothingArrivesAtItsLine
+                                        || finding.why() instanceof
+                                        BlockReason.ComparisonRelationNothingArrivesAt))));
         return out;
     }
 }

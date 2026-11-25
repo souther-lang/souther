@@ -25,16 +25,31 @@ public final class StopsTheReportSays {
     private StopsTheReportSays() {
     }
 
-    /**
-     * One operation a stop is said of: as it is written, or null where the run may stop in
-     * something worked out that no operation names; and why neither that it stops nor that it
-     * does not is shown, or null where it is shown to stop.
-     */
-    public record Operation(String written, String unresolvedBecause) {}
+    /** What a finding says of the step it names: that a run is shown to stop there, or that
+     *  whether one does is not resolved. */
+    public enum Kind { SHOWN, NOT_RESOLVED }
 
-    /** A finding that a run may stop at the step {@code subject} names, and the operations it is
+    /**
+     * One operation a stop is said of, and what is said of it: that it is not resolved, and why;
+     * or the rows every run getting to the step stops at, which say where a run stops and not that
+     * one does.
+     *
+     * @param written           the operation as it is written, or null where the run may stop in
+     *                          something worked out that no operation names
+     * @param unresolvedBecause why neither that it stops nor that it does not is shown, or null
+     *                          where it is said of as the rows every run stops at
+     */
+    public record Operation(String written, String unresolvedBecause) {
+
+        /** Whether it is said of as the rows every run getting to the step stops at. */
+        public boolean everyRunStops() {
+            return unresolvedBecause == null;
+        }
+    }
+
+    /** A finding of {@code kind} about the step {@code subject} names, and the operations it is
      *  said of. */
-    public record Stop(String subject, List<Operation> operations) {}
+    public record Stop(Kind kind, String subject, List<Operation> operations) {}
 
     /** A finding that what a rule states about {@code subject} is not read, and why. */
     public record Unread(String subject, String because) {}
@@ -63,7 +78,9 @@ public final class StopsTheReportSays {
                     node.path("everyRunStops").forEach(each -> operations.add(new Operation(
                             each.has("operation") ? each.path("operation").asString() : null,
                             null)));
-                    stops.add(new Stop(node.path("subject").asString(), List.copyOf(operations)));
+                    stops.add(new Stop(node.path("kind").asString().equals("step_may_stop_a_run")
+                            ? Kind.SHOWN : Kind.NOT_RESOLVED, node.path("subject").asString(),
+                            List.copyOf(operations)));
                 }
                 case "partition_not_read" -> unread.add(new Unread(node.path("subject").asString(),
                         node.path("reason").asString()));

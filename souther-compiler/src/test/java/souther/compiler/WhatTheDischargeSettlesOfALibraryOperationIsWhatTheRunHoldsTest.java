@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Located;
 import souther.compiler.query.Compilation;
+import souther.runtime.ConstraintViolation;
+import souther.runtime.InvariantFailure;
 import souther.test.Nightly;
 
 import java.util.ArrayList;
@@ -16,6 +18,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -271,16 +274,13 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
             for (Object input : decoded) {
                 try {
                     Codecs.apply(behavior, input);
-                } catch (Throwable thrown) {
+                } catch (ConstraintViolation stopped) {
                     // An operation that aborts, such as a slice out of range, is not the invariant
-                    // breaking; it names the data when it is.
-                    if (thrown.getClass().getSimpleName().equals("ConstraintViolation")
-                            && String.valueOf(thrown.getMessage()).contains(row.data())) {
+                    // breaking; the run says which data's invariant it was when it is.
+                    if (stopped.failure() instanceof InvariantFailure failed
+                            && failed.module().equals("demo") && failed.type().equals(row.data())) {
                         broke.add(row.data());
                         break;
-                    }
-                    if (!thrown.getClass().getSimpleName().equals("ConstraintViolation")) {
-                        throw thrown;
                     }
                 }
             }
@@ -382,20 +382,31 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
         }
     }
 
-    @Test
-    void whatIsProvedOfOneTotalAgainstAnotherHoldsOfEveryInput() throws Exception {
-        List<Map<String, Object>> inputs = inputsOfTotals(600);
+    /**
+     * What the discharge proves of each of {@code forms} taken from each other, below each of
+     * {@code belows}, and which of those an input of {@code inputs} breaks.
+     *
+     * @param proved  each row proved, as its count and how far below it is held
+     * @param unsound each row proved and broken by an input
+     */
+    private record Pairs(List<String> proved, List<String> unsound) {}
+
+    private Pairs everyPairOf(List<String> forms, String between, int belows, int firstId,
+                              List<Map<String, Object>> inputs, String header) throws Exception {
         List<String> unsound = new ArrayList<>();
         List<String> proved = new ArrayList<>();
-        int id = 200_000;
-        for (String left : TOTALS) {
+        int id = firstId;
+        for (String left : forms) {
             List<Row> rows = new ArrayList<>();
-            for (String right : TOTALS) {
+            for (String right : forms) {
                 if (!left.equals(right)) {
-                    rows.add(new Row(id++, "true", true, left + " - (" + right + ")", 0));
+                    for (int below = 0; below < belows; below++) {
+                        rows.add(new Row(id++, "true", true, between.formatted(left, right),
+                                below));
+                    }
                 }
             }
-            Judged judged = judged(rows, inputs, INPUT_OF_TOTALS, true);
+            Judged judged = judged(rows, inputs, header, true);
             for (Row row : rows) {
                 if (judged.provedAndBroke().contains(row.data())) {
                     unsound.add(row.count() + " - " + row.below());
@@ -405,7 +416,15 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
                 }
             }
         }
-        assertEquals(List.of(), unsound, "proved, and broken by an input");
+        return new Pairs(proved, unsound);
+    }
+
+    @Test
+    void whatIsProvedOfOneTotalAgainstAnotherHoldsOfEveryInput() throws Exception {
+        Pairs pairs = everyPairOf(TOTALS, "%s - (%s)", 1, 200_000, inputsOfTotals(600),
+                INPUT_OF_TOTALS);
+        List<String> proved = pairs.proved();
+        assertEquals(List.of(), pairs.unsound(), "proved, and broken by an input");
         // A row the discharge owes is no claim, so these are what the runs above held it to: one of
         // each way a list is taken apart.
         assertTrue(proved.containsAll(List.of(
@@ -419,25 +438,9 @@ class WhatTheDischargeSettlesOfALibraryOperationIsWhatTheRunHoldsTest {
 
     @Test
     void whatIsProvedOfOneCountAgainstAnotherHoldsOfEveryInput() throws Exception {
-        List<Map<String, Object>> inputs = inputs(600);
-        List<String> unsound = new ArrayList<>();
-        int id = 100_000;
-        for (String left : COUNTS) {
-            List<Row> rows = new ArrayList<>();
-            for (String right : COUNTS) {
-                if (!left.equals(right)) {
-                    for (int below = 0; below <= 1; below++) {
-                        rows.add(new Row(id++, "true", true, left + " - " + right, below));
-                    }
-                }
-            }
-            Judged judged = judged(rows, inputs, INPUT, true);
-            for (Row row : rows) {
-                if (judged.provedAndBroke().contains(row.data())) {
-                    unsound.add(row.count() + " - " + row.below());
-                }
-            }
-        }
-        assertEquals(List.of(), unsound, "proved, and broken by an input");
+        Pairs pairs = everyPairOf(COUNTS, "%s - %s", 2, 100_000, inputs(600), INPUT);
+        assertEquals(List.of(), pairs.unsound(), "proved, and broken by an input");
+        // A row the discharge owes is no claim: none proved is no claim the runs held it to.
+        assertFalse(pairs.proved().isEmpty(), "some count is proved against another");
     }
 }

@@ -34,6 +34,7 @@ import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -1185,7 +1186,8 @@ final class StopsOfABody {
      * under, as the relations of numbers of the input a row meets for it on a list of one element
      * — the list a value looked for at the element is ({@link AValueOfTheInput#ofTheOnlyElement}):
      * that the container holds some element meeting something is that its one element meets it.
-     * Null where some part of it is no relation read so.
+     * Null where some part of it is no relation read so. That the container holds the one element
+     * at all is {@link #holdingAnElement}'s.
      */
     private List<TakenConstraint.Affine> madeOnTheElementAs(Proposition made) {
         List<TakenConstraint.Affine> out = new ArrayList<>();
@@ -1201,6 +1203,41 @@ final class StopsOfABody {
                 return null;
             }
             out.addAll(relations);
+        }
+        return out;
+    }
+
+    /**
+     * That each container {@code made} asks some element of holds one, as the relation of
+     * numbers of the input every run getting to the site meets: how many it holds is at least
+     * one. An application standing for every element is made only where there is an element, so
+     * a value no element of which is held gets to nothing inside it, whatever the site comes to.
+     *
+     * <p>At least one and not one. A value looked for at the element is written as a list of one
+     * ({@link AValueOfTheInput#ofTheOnlyElement}), and that is how it is written, not what a run
+     * getting there meets: where an element stands runs up to one below how many the list holds,
+     * and a way held to one element would say of every run what only the runs of a list of one
+     * meet — which a reading proving no run stops would take as proved of them all.
+     *
+     * <p>Of the container and of no element of it, so it is no statement of another element than
+     * the one the site is over. Null where a container is no list at a place of the input, which
+     * holds no count a row can be asked for.
+     */
+    private List<TakenConstraint.Affine> holdingAnElement(Proposition made) {
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (Proposition part : made instanceof Proposition.All(var all, var _, var _) ? all
+                : List.of(made)) {
+            if (!(part instanceof Proposition.Some(var container, var _, boolean holds, var _))
+                    || !holds) {
+                continue;
+            }
+            NumericTerm count = container instanceof DecisionSubject.AnInput(var at, var _)
+                    ? AValueOfTheInput.howMany(at, read) : null;
+            if (count == null) {
+                return null;
+            }
+            out.add(new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ONE.negated(),
+                    Map.of(count, ExactRatio.ONE)), Rel.GE));
         }
         return out;
     }
@@ -1628,11 +1665,15 @@ final class StopsOfABody {
         // the way are, so that it is a statement of that element and not of another.
         List<TakenConstraint.Affine> made = List.of();
         if (reached.forEvery()) {
-            made = madeOnTheElementAs(reached.made());
-            if (made == null || !overTheNumbersOf(made, site, ways)) {
+            List<TakenConstraint.Affine> ofTheElement = madeOnTheElementAs(reached.made());
+            List<TakenConstraint.Affine> held = holdingAnElement(reached.made());
+            if (ofTheElement == null || held == null
+                    || !overTheNumbersOf(ofTheElement, site, ways)) {
                 return new StopAssessment.Judgement.Unresolved(site,
                         WhyAStopIsNotShown.A_CONDITION_NOT_READ);
             }
+            made = new ArrayList<>(ofTheElement);
+            made.addAll(held);
         }
         // A condition that came out one of several ways is got past along any of them, each way
         // read as one reading of the site ({@link WhatEveryWayShows}).

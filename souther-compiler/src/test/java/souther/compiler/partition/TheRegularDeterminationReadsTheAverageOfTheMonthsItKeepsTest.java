@@ -201,7 +201,8 @@ class TheRegularDeterminationReadsTheAverageOfTheMonthsItKeepsTest {
         return compilation;
     }
 
-    /** The operations over the months' remuneration a stop is said of, as written. */
+    /** The operations over the months' remuneration a stop is said of, shown or not resolved, as
+     *  written. */
     private static List<String> stopsInTheTotal(Compilation compilation) {
         return StopsTheReportSays.of(compilation).stops().stream()
                 .flatMap(stop -> stop.operations().stream())

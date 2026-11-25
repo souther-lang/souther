@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Emitted;
+import souther.compiler.execute.RunStop;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -14,7 +15,6 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.runtime.Behavior;
-import souther.runtime.ConstraintViolation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -199,7 +199,10 @@ class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
     }
 
     /** Whether running {@code module}, which takes {@code demo.In} and answers {@code demo.Out},
-     *  aborted. */
+     *  stopped at an operation the language refuses to finish, which the closure's on the
+     *  second element is and nothing else of the module is. A run that stopped otherwise — a
+     *  construction refused, an {@code unreachable} reached — is none of what this asks, and is
+     *  thrown. */
     static boolean aborts(String module) throws Exception {
         Map<String, ClassFileImage> classes = Compiler.compile(module);
         ClassLoader loader = new ClassLoader(
@@ -226,10 +229,8 @@ class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
             behavior.apply(in);
             return false;
         } catch (RuntimeException stopped) {
-            for (Throwable cause = stopped; cause != null; cause = cause.getCause()) {
-                if (cause instanceof ConstraintViolation) {
-                    return true;
-                }
+            if (RunStop.ofTheEndOf(stopped).orElse(null) instanceof RunStop.AtAnEnd) {
+                return true;
             }
             throw stopped;
         }
