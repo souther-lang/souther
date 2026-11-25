@@ -6,6 +6,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.DeclarationReads;
@@ -1511,7 +1512,8 @@ public final class Names {
 
     /**
      * The type the cursor is on at {@code at}: the one a name there denotes, or — when the cursor is
-     * on a declaration's own name — that declaration.
+     * on a declaration's own name, or on a name a header lists ({@link Listings}) — that
+     * declaration.
      *
      * <p>One question, so an editor's go-to-definition, find-references and rename all agree about
      * what the cursor is on. They used to each decide for themselves, by spelling.
@@ -1540,10 +1542,87 @@ public final class Names {
                     }
                 }
             }
+            Answer<Listed> listed = db.ask(new Listings(name));
+            if (listed.present()) {
+                for (Resolve.TypeUse entry : listed.value().types()) {
+                    if (spans(entry.written(), at)) {
+                        return Answer.of(entry.denotes());
+                    }
+                }
+            }
             Resolve.TypeUse denoted = db.ask(new DenotedAt(at)).value();
             return denoted == null ? Answer.absent() : Answer.of(denoted.denotes());
         }
     }
+
+    /**
+     * What each name a module's header lists denotes: every entry of its {@code exposing} clause
+     * and of its import lines, each with the declaration it names.
+     *
+     * <p>Beside {@link Facts} and not in it. A list names a declaration without using it — an
+     * import list entry is what an unused import is found by, and counted among the uses every
+     * import would be used by being written — so the two are asked apart. What they share is that
+     * both are the compiler's answer: an editor asking what the name under the cursor is, or where
+     * a declaration is named, is answered the same at a list entry as at a use, and nothing reads a
+     * list's meaning off its spelling.
+     *
+     * <p>An entry is answered with the declaration of that name in the module the line is about —
+     * this one for {@code exposing}, the one imported for an import — in each namespace that module
+     * declares it in, and with nothing where it declares none. A qualified {@code exposing} entry
+     * names nothing here: the clause is granular to the type, and one is refused.
+     */
+    public record Listings(String name) implements Key<Listed> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Listed> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m == null) {
+                return Answer.absent();
+            }
+            List<Resolve.TypeUse> types = new ArrayList<>();
+            List<Resolve.ValueUse> values = new ArrayList<>();
+            if (m.exposing() instanceof ExposingClause.Written written) {
+                for (WrittenName entry : written.entries()) {
+                    if (!entry.canonical().contains(".")) {
+                        declaredUnder(db, name, entry, types, values);
+                    }
+                }
+            }
+            for (Ast.Import line : m.imports()) {
+                for (Ast.ImportedName entry : line.importedNames()) {
+                    declaredUnder(db, line.module(), entry.written(), types, values);
+                }
+            }
+            return Answer.of(new Listed(List.copyOf(types), List.copyOf(values)));
+        }
+
+        /** What {@code module} declares under the name {@code entry} writes, in either namespace,
+         *  added as what that entry denotes. */
+        private static void declaredUnder(Db db, String module, WrittenName entry,
+                                          List<Resolve.TypeUse> types,
+                                          List<Resolve.ValueUse> values) {
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(module));
+            Ast.Def def = defs.present()
+                    ? defs.value().declarations().get(entry.canonical()) : null;
+            if (def != null) {
+                types.add(new Resolve.TypeUse(entry,
+                        writtenRegistry(db).identify(def.declaredKey())));
+            }
+            Answer<Scoping.Scoped> scope = db.ask(new ModuleScope(module));
+            ValueName value = scope.present()
+                    ? scope.value().values().reachable().byName().get(entry.canonical()) : null;
+            if (value instanceof ValueName.OfAModule declared && declared.module().equals(module)) {
+                values.add(new Resolve.ValueUse(entry, value));
+            }
+        }
+    }
+
+    /** The names a module's header lists, by namespace, each with what it denotes. */
+    public record Listed(List<Resolve.TypeUse> types, List<Resolve.ValueUse> values) {}
 
     /** Every place a module names {@code denoted}, wherever it was declared. */
     public record UsesOf(String name, TypeSymbol denoted) implements Key<List<Resolve.TypeUse>> {
@@ -1631,7 +1710,8 @@ public final class Names {
 
     /**
      * The value the cursor is on at {@code at}: the one a name there denotes, or — when the cursor
-     * is on a binding or on the name a declaration declares — that binding or declaration.
+     * is on a binding, on the name a declaration declares or on a name a header lists
+     * ({@link Listings}) — that binding or declaration.
      *
      * <p>{@link TypeAt} for the value namespace, and for the same reason: a reader asking about a
      * name is asking from one end or the other, and the two ends are one question. Answering only
@@ -1668,6 +1748,14 @@ public final class Names {
             ValueName declared = declaredAt(db, name, at);
             if (declared != null) {
                 return Answer.of(declared);
+            }
+            Answer<Listed> listed = db.ask(new Listings(name));
+            if (listed.present()) {
+                for (Resolve.ValueUse entry : listed.value().values()) {
+                    if (spans(entry.written(), at)) {
+                        return Answer.of(entry.denotes());
+                    }
+                }
             }
             Resolve.ValueUse use = db.ask(new ValueDenotedAt(at)).value();
             if (use == null) {

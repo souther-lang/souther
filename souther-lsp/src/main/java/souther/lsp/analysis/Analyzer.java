@@ -1359,12 +1359,12 @@ public final class Analyzer {
      * Go-to-definition across the workspace: where the declaration the name under the cursor names
      * is written.
      *
-     * <p>Which declaration that is, is the compiler's answer wherever it read the name, and that
-     * answer is final: a name it says denotes something with no source here — a library operation,
-     * a value the language gives — is sent nowhere, and so is one it read and found to name
-     * nothing, such as an {@code example} target that is another module's behavior. Neither is
-     * sent to whatever this workspace spells alike. The spelling answers only where the compiler
-     * read nothing ({@link #namesTheCompileDidNotRead}).
+     * <p>Which declaration that is, is the compiler's answer wherever it read the document, and
+     * that answer is final: a name it says denotes something with no source here — a library
+     * operation, a value the language gives — is sent nowhere, and so is one it read and found to
+     * name nothing, such as an {@code example} target that is another module's behavior. Neither
+     * is sent to whatever this workspace spells alike. The spelling answers only for a document the
+     * compile could not read ({@link #resolves}).
      */
     public Optional<Location> definition(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
@@ -1378,12 +1378,8 @@ public final class Analyzer {
                 return declarationOf(compilation, type, graph);
             }
             ValueName value = valueUnderCursor(compilation, uri, pos);
-            if (value != null) {
-                return valueDeclarationOf(compilation, value, uri, graph);
-            }
-            if (!namesTheCompileDidNotRead(uri, pos, graph)) {
-                return Optional.empty();
-            }
+            return value == null ? Optional.empty()
+                    : valueDeclarationOf(compilation, value, uri, graph);
         }
         Reading reading = readingOf(graph, uri);
         SourceLayout lines = laidOut(uri, reading);
@@ -1465,13 +1461,9 @@ public final class Analyzer {
                 return References.of(declarations, usesOf(compilation, type, graph));
             }
             ValueName value = valueUnderCursor(compilation, uri, pos);
-            if (value != null) {
-                return References.of(valueDeclarationsOf(compilation, value, uri, graph),
-                        valueUsesOf(compilation, value, graph));
-            }
-            if (!namesTheCompileDidNotRead(uri, pos, graph)) {
-                return References.none();
-            }
+            return value == null ? References.none()
+                    : References.of(valueDeclarationsOf(compilation, value, uri, graph),
+                            valueUsesOf(compilation, value, graph));
         }
         return bySpelling(uri, text, pos, graph, compilation);
     }
@@ -1605,8 +1597,24 @@ public final class Analyzer {
         return false;
     }
 
-    /** Where renaming touches, before what to write there is decided. */
+    /**
+     * Where renaming touches, before what to write there is decided.
+     *
+     * <p>Only what this workspace declares is renamed: a type a module declares, a helper or a
+     * behavior, a local. A library operation and what the language gives are named all over a
+     * workspace and declared in none of it, so rewriting where they are named would rename nothing
+     * and break every place that named them.
+     */
     private Map<String, List<Range>> renameRanges(String uri, Position pos, ModuleGraph graph) {
+        Compilation compilation = compileOf(graph);
+        boolean answered = resolves(compilation, uri);
+        TypeSymbol type = answered ? typeUnderCursor(compilation, uri, pos) : null;
+        ValueName value =
+                (answered && type == null) ? valueUnderCursor(compilation, uri, pos) : null;
+        if (answered && !(type instanceof TypeSymbol.AtModule)
+                && !(value instanceof ValueName.OfAModule) && !(value instanceof ValueName.Local)) {
+            return new LinkedHashMap<>();
+        }
         Map<String, List<Range>> byUri = new LinkedHashMap<>();
         for (Location loc : references(uri, pos, graph, true)) {
             byUri.computeIfAbsent(loc.uri(), k -> new ArrayList<>()).add(loc.range());
@@ -1614,37 +1622,40 @@ public final class Analyzer {
         if (byUri.isEmpty()) {
             return byUri;   // nothing under the cursor to rename
         }
-        // references() treats a name in an `exposing`/`import` list as a binding site, not a use, and
-        // skips it. Rename must still update those, or the module stops exposing (and importers stop
-        // importing) the renamed symbol, breaking the build.
+        // references() leaves out a name in an `exposing` or `import` list: a list names a
+        // declaration without using it. Rename must still rewrite those, or the module stops
+        // exposing — and importers stop importing — what was renamed.
         //
-        // Which module those belong to is the same question the references were found by, and it has
-        // to be answered the same way: renaming from a qualified use renames the module the
-        // reference names, and matching the spelling here would edit this module's own `exposing`
-        // instead — leaving both modules uncompilable.
-        Compilation compilation = compileOf(graph);
-        TypeSymbol type = typeUnderCursor(compilation, uri, pos);
-        // What the language gives is exposed by no module and imported by nobody, so there is no
-        // `exposing` line and no `import` line naming it to edit.
-        if (type instanceof TypeSymbol.AtModule at) {
-            addExposingAndImportSites(compilation, at.name(), at.module(), graph, byUri);
-            return byUri;
-        }
-        if (type != null) {
-            return byUri;
-        }
-        ValueName value = valueUnderCursor(compilation, uri, pos);
-        if (value != null) {
-            String declaring = switch (value) {
-                case ValueName.Helper h -> h.module();
-                case ValueName.Behavior b -> b.module();
-                // a local is named where it is bound and nowhere else; the library and the language
-                // are not this workspace's to rename
-                case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _ -> null;
-            };
-            if (declaring != null) {
-                addExposingAndImportSites(compilation, value.name(), declaring, graph, byUri);
+        // Where the compile read the document, which entries those are is its answer, asked of the
+        // same identity the references were: a list entry is answered with the declaration it names
+        // as a use is, so renaming from a qualified use, a list or the declaration reaches one set.
+        if (answered) {
+            SourceLayouts texts = textsOf(graph);
+            for (String module : compilation.modules()) {
+                abandonment.stopIfAsked();
+                Names.Listed listed = compilation.db().ask(new Names.Listings(module)).value();
+                if (listed == null) {
+                    continue;
+                }
+                String moduleUri = uriOf(compilation.sourceIdOf(module));
+                List<WrittenName> naming = new ArrayList<>();
+                for (Resolve.TypeUse each : listed.types()) {
+                    if (each.denotes().equals(type)) {
+                        naming.add(each.written());
+                    }
+                }
+                for (Resolve.ValueUse each : listed.values()) {
+                    if (each.denotes().equals(value)) {
+                        naming.add(each.written());
+                    }
+                }
+                for (WrittenName entry : naming) {
+                    String at = documentOf(entry.pos(), moduleUri, graph);
+                    if (at != null) {
+                        byUri.computeIfAbsent(at, k -> new ArrayList<>())
+                                .add(writtenRange(texts, entry));
+                    }
+                }
             }
             return byUri;
         }
@@ -1739,20 +1750,6 @@ public final class Analyzer {
     /** Whether an identifier token spells {@code name}, which is canonical. */
     private static boolean spells(SyntaxToken token, String name) {
         return token != null && name.equals(nameOf(token));
-    }
-
-    /**
-     * Whether the cursor is on a list of names a module writes in its header — what it exposes,
-     * what it imports — which name declarations without being uses of them, and which the compile
-     * reads as lists rather than as names to answer. Everywhere else in a document the compile
-     * resolved, a name it is silent about is a name it read and found to denote nothing.
-     */
-    private boolean namesTheCompileDidNotRead(String uri, Position pos, ModuleGraph graph) {
-        Reading reading = readingOf(graph, uri);
-        SyntaxNode root = reading.root();
-        int offset = laidOut(uri, reading).lines().offsetOf(pos.line(), pos.character());
-        return enclosing(root, offset, SyntaxKind.IMPORT_DECL) != null
-                || enclosing(root, offset, SyntaxKind.EXPOSING_CLAUSE) != null;
     }
 
     /**
@@ -2817,7 +2814,7 @@ public final class Analyzer {
     /** Node kinds where an identifier names a type. */
     private static final java.util.Set<SyntaxKind> TYPE_POSITIONS = java.util.Set.of(
             SyntaxKind.TYPE_REF, SyntaxKind.TYPE_ARGS, SyntaxKind.SUM_BODY, SyntaxKind.NEWTYPE_BODY,
-            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.DEPENDS_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
+            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
             SyntaxKind.PATTERN_CTOR);
 
     /** Node kinds where an identifier binds a value name (a param or a {@code let}). A pattern puts
@@ -3633,10 +3630,11 @@ public final class Analyzer {
             return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
         }
         return switch (parent) {
-            case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
+            case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE,
                  ENSURES_ARM,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
-            case BEHAVIOR_DEF, FN_DEF, STAGE -> T_FUNCTION;
+            // a `depends on` clause names behaviors, as a composition's stages do
+            case BEHAVIOR_DEF, FN_DEF, STAGE, DEPENDS_CLAUSE -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
             case FIELD, FIELD_INIT, FIELD_ACCESS, FIELD_GETTER -> T_PROPERTY;
             case MODULE_HEADER, QUALIFIED_NAME, IMPORT_DECL -> T_NAMESPACE;

@@ -3,9 +3,12 @@ package souther.compiler.examples;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The rows a binding makes runnable, and the running of one of them.
@@ -51,14 +54,18 @@ public final class BoundExamples {
      * that had nothing to run them.
      */
     public List<RecordedRow> rows() {
+        Set<ValueName.Behavior> behaviors = new HashSet<>();
+        for (String each : bound) {
+            behaviors.add(forExamples.targeted(each));
+        }
         List<RecordedRow> found = new ArrayList<>();
         for (Prepared.Example block : forExamples.examples()) {
-            Hir.Example written = block.read();
-            if (!bound.contains(written.named())) {
+            ValueName.Behavior exampled = block.exampled();
+            if (exampled == null || !behaviors.contains(exampled)) {
                 continue;
             }
-            for (Hir.ExampleRow row : written.rows()) {
-                found.add(new RecordedRow(this, written.named(), row));
+            for (Hir.ExampleRow row : block.read().rows()) {
+                found.add(new RecordedRow(this, exampled.name(), row));
             }
         }
         return found;

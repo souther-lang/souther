@@ -1,5 +1,6 @@
 package souther.compiler.ast;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,8 +56,13 @@ public sealed interface ExposingClause {
         }
     }
 
-    /** The module writes a clause, with these entries. Empty for {@code exposing ()}. */
-    record Written(List<String> entries) implements ExposingClause {
+    /**
+     * The module writes a clause, with these entries. Empty for {@code exposing ()}.
+     *
+     * <p>Each entry is the occurrence that writes it, so a reader asking what the name at a place
+     * in the header denotes is asking about a name this tree holds where it is written.
+     */
+    record Written(List<WrittenName> entries) implements ExposingClause {
 
         public Written {
             entries = List.copyOf(entries);
@@ -65,7 +71,7 @@ public sealed interface ExposingClause {
         @Override
         public Predicate<String> admitting() {
             Set<String> named = new HashSet<>();
-            for (String entry : entries) {
+            for (String entry : named()) {
                 int dot = entry.indexOf('.');
                 named.add(dot < 0 ? entry : entry.substring(0, dot));
             }
@@ -81,6 +87,13 @@ public sealed interface ExposingClause {
      * {@link Ast.Module#published}, and an empty answer here says nothing about it.
      */
     default List<String> named() {
-        return this instanceof Written written ? written.entries() : List.of();
+        if (!(this instanceof Written written)) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (WrittenName entry : written.entries()) {
+            out.add(entry.canonical());
+        }
+        return List.copyOf(out);
     }
 }

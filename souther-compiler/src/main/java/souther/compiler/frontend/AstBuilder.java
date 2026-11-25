@@ -268,11 +268,12 @@ public final class AstBuilder {
 
     private ExposingClause.Written readExposing(SyntaxNode clause,
                                                 Map<String, Ast.RetType> outputs) {
-        List<String> names = new ArrayList<>();
+        List<WrittenName> names = new ArrayList<>();
         for (SyntaxNode entry : clause.childNodes(SyntaxKind.EXPOSED_ENTRY)) {
-            String name = qualifiedNameText(entry.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
+            WrittenName name = qualifiedNameOf(entry.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
             names.add(name);
-            entry.child(SyntaxKind.RET_TYPE).ifPresent(rt -> outputs.put(name, retType(rt)));
+            entry.child(SyntaxKind.RET_TYPE)
+                    .ifPresent(rt -> outputs.put(name.canonical(), retType(rt)));
         }
         return new ExposingClause.Written(names);
     }

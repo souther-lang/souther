@@ -8,6 +8,7 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 
@@ -53,11 +54,12 @@ public final class ComposedRows {
 
     /** The written row {@code name} of {@code behavior}, as a composed row is handed to a run. */
     public static RowToRun rowNamed(Compilation compilation, String behavior, String name) {
-        Prepared prepared = compilation.db()
-                .ask(new Shapes.Prepared(compilation.modules().getFirst())).value();
+        String module = compilation.modules().getFirst();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        ValueName.Behavior target = new ValueName.Behavior(module, behavior);
         Hir.ExampleRow row = prepared.examples().stream()
+                .filter(block -> target.equals(block.exampled()))
                 .map(Prepared.Example::read)
-                .filter(block -> block.named().equals(behavior))
                 .flatMap(block -> block.rows().stream())
                 .filter(each -> each.identity().shown().equals(name))
                 .findFirst().orElseThrow();

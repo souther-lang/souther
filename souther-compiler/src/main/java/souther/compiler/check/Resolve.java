@@ -1007,7 +1007,14 @@ public final class Resolve {
                 case Denotation.Denotes d ->
                         denotations.add(new TypeUse(denoted.written(), d.type()));
                 case Denotation.StandsForNothing _ -> failed++;
-                case Denotation.NotInScope _ -> { }
+                // A primitive is in no module's scope and is still what the name denotes: the
+                // language declares it. Kept with the rest, so a reader asking what is written
+                // here is answered rather than told nothing is.
+                case Denotation.NotInScope _ -> {
+                    if (denoted.type() instanceof Type.Prim prim) {
+                        denotations.add(new TypeUse(denoted.written(), TypeSymbol.primitive(prim)));
+                    }
+                }
             }
         }
         return denoted;

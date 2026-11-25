@@ -378,9 +378,10 @@ public final class ExampleVerifier {
     private List<StatedRow> recordedRowsOf(BoundExamples of, String behavior,
                                            FixtureReader fixtures, Sig sig) {
         List<StatedRow> found = new ArrayList<>();
+        ValueName.Behavior stated = module.targeted(behavior);
         for (souther.compiler.check.Prepared.Example block : module.examples()) {
             Hir.Example written = block.read();
-            if (!written.named().equals(behavior)) {
+            if (!stated.equals(written.exampled())) {
                 continue;
             }
             for (Hir.ExampleRow row : written.rows()) {

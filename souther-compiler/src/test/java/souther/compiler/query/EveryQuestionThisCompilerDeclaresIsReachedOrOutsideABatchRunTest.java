@@ -103,6 +103,11 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             Sites.Authored.class.getName(),
             "where a module's source was written, occurrence by occurrence — a projection for a"
                     + " reader outside the compiler, and no answer of a batch compilation reads it",
+            Names.Listings.class.getName(),
+            "what each entry of a module's exposing clause and import lines names — the answer an"
+                    + " editor goes to, shows and renames from at a list. What a batch compile"
+                    + " checks a list against is the scope the lines settle, and nothing it produces"
+                    + " rests on this",
             Bodies.DeclaredParameters.class.getName(),
             "what a module's behaviors declare their parameters to be, worked out once per"
                     + " revision so that the answers an editor asks about one buffer share it. What"
