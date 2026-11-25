@@ -198,7 +198,7 @@ public record BorderAccount(String module, GenerationScope scope,
         List<At> came = new ArrayList<>();
         coverage.came().forEach((reading, search) -> {
             switch (search) {
-                case SearchCoverage.ReadingSearch.Attempted(var why) ->
+                case SearchCoverage.ReadingSearch.Attempted(var why, var _) ->
                         came.add(new At.Searched(reading, why));
                 // Kept and not skipped. A reading this run could not search is something that
                 // happened to it, and dropping it here would put back the absence the coverage was
@@ -383,7 +383,7 @@ public record BorderAccount(String module, GenerationScope scope,
     private static GenerationOutcome.CannotGenerate cannot(SearchCoverage coverage) {
         List<CameToNothing> said = new ArrayList<>();
         coverage.came().forEach((_, search) -> {
-            if (search instanceof SearchCoverage.ReadingSearch.Attempted(var why)) {
+            if (search instanceof SearchCoverage.ReadingSearch.Attempted(var why, var _)) {
                 // The words alone. What a search of a point met of this compiler's is the point's
                 // own to say and is said at the point's account, where a reader asks about the
                 // point — carried here as well, one figure would arrive twice and read as two.

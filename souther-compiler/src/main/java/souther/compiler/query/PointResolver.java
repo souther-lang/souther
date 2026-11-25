@@ -139,32 +139,25 @@ public final class PointResolver {
                                 offered = new PointResolution.Generated(reading, made.row());
                             }
                         }
-                        case ItemAssessment.Attempt.Unresolved(var why, var _, var _) ->
-                                walked.put(reading,
-                                        new SearchCoverage.ReadingSearch.Attempted(why));
+                        case ItemAssessment.Attempt.Unresolved it -> walked.put(reading,
+                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
                         // A search a budget of this compiler's ended, which came to nothing like
                         // the one above. What offering a row is short of is the same either way,
                         // and which figure ended it is the point's own to say rather than this
                         // walk's: what is recorded here is that a search ran and produced no row.
-                        case ItemAssessment.Attempt.Stopped(var why, var _, var _, var _, var _,
-                                                            var _) ->
-                                walked.put(reading,
-                                        new SearchCoverage.ReadingSearch.Attempted(why));
+                        case ItemAssessment.Attempt.Stopped it -> walked.put(reading,
+                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
                         // And a search that ran to the end of what this compiler writes. This walk
                         // records of it what it records of the one above — a search ran and no row
                         // came of it — and what it writes some of travels on the point's account.
-                        case ItemAssessment.Attempt.Unexhausted(var why, var _, var _, var _,
-                                                                var _) ->
-                                walked.put(reading,
-                                        new SearchCoverage.ReadingSearch.Attempted(why));
+                        case ItemAssessment.Attempt.Unexhausted it -> walked.put(reading,
+                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
                         // And a search whose answer was about less than the point had. What this
                         // walk records of it is the same as of the two above — a search ran and no
                         // row came of it — and the figure that made the answer short travels on the
                         // point's own account.
-                        case ItemAssessment.Attempt.Limited(var why, var _, var _, var _, var _,
-                                                            var _) ->
-                                walked.put(reading,
-                                        new SearchCoverage.ReadingSearch.Attempted(why));
+                        case ItemAssessment.Attempt.Limited it -> walked.put(reading,
+                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
                         // A reading nothing was searched for, which is not one that was searched
                         // and came to nothing. Recorded as a search with no answer to give: counted
                         // among the ones that were walked, a reading nobody looked at would take
@@ -191,7 +184,7 @@ public final class PointResolver {
                                         new Generator.UnresolvedCombination(
                                                 List.of(reading.target().label()),
                                                 Generator.UnresolvedCombination.Reason
-                                                        .NOTHING_TO_BUILD_AGAINST)));
+                                                        .NOTHING_TO_BUILD_AGAINST), false));
                     }
                     }
                 }

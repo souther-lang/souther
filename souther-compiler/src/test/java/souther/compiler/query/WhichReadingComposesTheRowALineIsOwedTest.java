@@ -155,20 +155,20 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void onlyAWalkThatSawEveryReadingSaysTheLineCannotBeWritten() {
         SearchCoverage everyOne = coverageOf(Map.of(
-                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                at("elsewhere"), new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
+                at("here"), provedNothingThere(),
+                at("elsewhere"), provedNothingThere()),
                 List.of(at("here"), at("elsewhere")));
         SearchCoverage oneLeftOut = coverageOf(Map.of(
-                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                at("here"), provedNothingThere(),
                 at("elsewhere"), new SearchCoverage.ReadingSearch.OutOfScope()),
                 List.of(at("here"), at("elsewhere")));
         SearchCoverage oneUnanswered = coverageOf(Map.of(
-                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
+                at("here"), provedNothingThere(),
                 at("elsewhere"), new SearchCoverage.ReadingSearch.Unavailable()),
                 List.of(at("here"), at("elsewhere")));
         SearchCoverage oneOfThemMerelyRefused = coverageOf(Map.of(
-                at("here"), new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                at("elsewhere"), new SearchCoverage.ReadingSearch.Attempted(refused())),
+                at("here"), provedNothingThere(),
+                at("elsewhere"), refusedThere()),
                 List.of(at("here"), at("elsewhere")));
 
         assertTrue(everyOne.provesTheLineCannotBeWritten());
@@ -193,8 +193,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
         Reading first = new Reading(aLineAt("one", "x.a"), ITS_OWN);
         Reading second = new Reading(aLineAt("one", "x.b"), ITS_OWN);
         SearchCoverage coverage = coverageOf(Map.of(
-                        first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
-                        second, new SearchCoverage.ReadingSearch.Attempted(refused())),
+                        first, provedNothingThere(),
+                        second, refusedThere()),
                 List.of(first, second));
 
         assertTrue(coverage.walkedEveryReading(), "both were searched");
@@ -207,7 +207,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aLineWithOneReadingIsWalkedToTheEndByOneReading() {
         SearchCoverage alone = coverageOf(
-                Map.of(at("only"), new SearchCoverage.ReadingSearch.Attempted(nothingThere())),
+                Map.of(at("only"), provedNothingThere()),
                 List.of(at("only")));
 
         assertTrue(alone.walkedEveryReading());
@@ -230,7 +230,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
         Reading unasked = at("further");
 
         SearchCoverage coverage = coverageOf(Map.of(
-                        answered, new SearchCoverage.ReadingSearch.Attempted(refused()),
+                        answered, refusedThere(),
                         silent, new SearchCoverage.ReadingSearch.Unavailable(),
                         unasked, new SearchCoverage.ReadingSearch.OutOfScope()),
                 List.of(answered, silent, unasked));
@@ -256,8 +256,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aCoverageOutOfTheReadingsOrderIsRefused() {
         SequencedMap<Reading, SearchCoverage.ReadingSearch> backwards = new LinkedHashMap<>();
-        backwards.put(at("elsewhere"), new SearchCoverage.ReadingSearch.Attempted(refused()));
-        backwards.put(at("here"), new SearchCoverage.ReadingSearch.Attempted(refused()));
+        backwards.put(at("elsewhere"), refusedThere());
+        backwards.put(at("here"), refusedThere());
 
         assertThrows(IllegalStateException.class,
                 () -> new SearchCoverage(List.of(at("here"), at("elsewhere")), backwards));
@@ -267,7 +267,7 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aCoverageShortOfAReadingIsRefused() {
         assertThrows(IllegalStateException.class, () -> coverageOf(
-                Map.of(at("here"), new SearchCoverage.ReadingSearch.Attempted(refused())),
+                Map.of(at("here"), refusedThere()),
                 List.of(at("here"), at("elsewhere"))));
     }
 
@@ -366,5 +366,13 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     private static Generator.UnresolvedCombination nothingThere() {
         return new Generator.UnresolvedCombination(List.of(SAID),
                 Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+    }
+
+    private static SearchCoverage.ReadingSearch.Attempted provedNothingThere() {
+        return new SearchCoverage.ReadingSearch.Attempted(nothingThere(), true);
+    }
+
+    private static SearchCoverage.ReadingSearch.Attempted refusedThere() {
+        return new SearchCoverage.ReadingSearch.Attempted(refused(), false);
     }
 }

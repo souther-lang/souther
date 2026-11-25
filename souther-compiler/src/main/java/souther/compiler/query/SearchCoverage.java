@@ -50,8 +50,15 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
          * <p>The reading's reason and not the line's. What a search of one position came to is a
          * fact about that position — the rules reaching it, the values its decoder took — and a
          * line is what its readings agree about rather than what one of them found.
+         *
+         * @param why    what the search said, in the words a report prints
+         * @param proves whether the search showed the rules leave nothing at the position, as the
+         *               search's outcome answers it ({@link ItemAssessment.Attempt#proves}) — a
+         *               search a figure stopped or that had less than the point may keep a word that
+         *               proves about the part it had, and the word alone would say it of the line
          */
-        record Attempted(Generator.UnresolvedCombination why) implements ReadingSearch {
+        record Attempted(Generator.UnresolvedCombination why, boolean proves)
+                implements ReadingSearch {
 
             public Attempted {
                 if (why == null) {
@@ -112,7 +119,7 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
     public List<Generator.UnresolvedCombination> attempted() {
         List<Generator.UnresolvedCombination> out = new ArrayList<>();
         for (ReadingSearch each : came.values()) {
-            if (each instanceof ReadingSearch.Attempted(var why)) {
+            if (each instanceof ReadingSearch.Attempted(var why, var _)) {
                 out.add(why);
             }
         }
@@ -133,11 +140,11 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
      * things, so an answer that named one would be picking which reading stands for the line — and
      * a reader wanting what each of them said has them all in {@link #attempted}.
      *
-     * <p>Asked of the reason rather than matched against a word, which is where that decision
-     * already lives ({@link Generator.UnresolvedCombination.Reason#provesInfeasible}).
+     * <p>Asked of what each search's outcome answered, which is where that decision lives
+     * ({@link ItemAssessment.Attempt#proves}), and never of its word alone.
      */
     public boolean provesTheLineCannotBeWritten() {
-        return walkedEveryReading()
-                && attempted().stream().allMatch(why -> why.reason().provesInfeasible());
+        return walkedEveryReading() && came.values().stream().allMatch(each ->
+                each instanceof ReadingSearch.Attempted(var _, var proves) && proves);
     }
 }

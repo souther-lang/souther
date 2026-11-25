@@ -225,9 +225,7 @@ public record SearchOutcomes(List<Made> made) {
         // Nothing was searched, so nothing proved anything. Said before the quantifier rather than
         // left to it: a universal over no outcomes is true, and true here would be a point nobody
         // looked at coming back as one the rules refuse.
-        return ran() && each().stream().allMatch(it ->
-                it instanceof ItemAssessment.Attempt.Unresolved unresolved
-                        && unresolved.why().reason().provesInfeasible());
+        return ran() && each().stream().allMatch(ItemAssessment.Attempt::proves);
     }
 
     /**

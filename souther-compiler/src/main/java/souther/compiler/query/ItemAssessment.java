@@ -960,6 +960,20 @@ public sealed interface ItemAssessment {
         }
 
         /**
+         * Whether this shows the rules leave nothing at the point: a search that walked the whole
+         * of what the rules leave and came to a word that proves.
+         *
+         * <p>The one place that is asked, and of the shape before the word. A search a figure
+         * stopped, one that walked some of a population or could not hold a place, and one over a
+         * plan cut short may each keep a word that proves — the answer about the part it had — and
+         * none of them had the whole point ({@link SearchOutcomes#provesInfeasible}). A reader
+         * asking the word alone is told a proof about less than the point had.
+         */
+        default boolean proves() {
+            return this instanceof Unresolved it && it.why().reason().provesInfeasible();
+        }
+
+        /**
          * Every condition on the way that the row this came to was not composed against, and which
          * stage let each one go.
          *
@@ -989,7 +1003,7 @@ public sealed interface ItemAssessment {
             souther.compiler.partition.CompositionAccount uncomposed;
             switch (this) {
                 case Unresolved it -> {
-                    if (it.why().reason().provesInfeasible()) {
+                    if (it.proves()) {
                         return List.of();
                     }
                     way = it.way();

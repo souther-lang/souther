@@ -50,7 +50,7 @@ final class WaysOfAMeeting {
                 .comparingInt((CameToNothing each) ->
                         PublicationOrders.positionOf(each.why().reason()))
                 .thenComparing(each -> String.valueOf(each.why()));
-        CameToNothing said = ways.stream().filter(each -> !each.why().reason().provesInfeasible())
+        CameToNothing said = ways.stream().filter(each -> !each.proves())
                 .min(asSaid).orElseGet(() -> ways.stream().min(asSaid).orElseThrow());
         // The word for all that every way found out, which is the question of what was found out
         // and is asked of it ({@link SearchShortfall#wordFor}): a figure, a repertoire or a number

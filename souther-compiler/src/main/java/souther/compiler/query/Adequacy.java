@@ -221,6 +221,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -7444,27 +7445,42 @@ public final class Adequacy {
                         new GenerationOutcome.Generated(List.of(composed.rowFor(row)));
                 case ReplacementDisposition.NoneFound none -> {
                     List<CameToNothing> why = new ArrayList<>();
-                    for (ReplacementDisposition.Ended each : none.ways()) {
-                        why.add(CameToNothing.metNothing(new Generator.UnresolvedCombination(
-                                List.of(), switch (each) {
-                                    case EVERY_ROW_ANSWERED_ALIKE ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .NO_CERTIFIED_WITNESS;
-                                    case RUNS_A_REWRITE_MAY_TAKE, A_FIGURE_OF_THE_COMPOSING,
-                                         A_RUN_DID_NOT_COME_BACK, A_RULE_REFUSED_A_CANDIDATE ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
-                                    case ROWS_A_BLOCK_MAY_HOLD ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE;
-                                    case NOTHING_WAS_COMPOSED, NOTHING_RAN ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .NOTHING_COMPOSES_ONE;
-                                })));
-                    }
+                    none.ended().forEach((each, met) -> why.add(cameToNothing(each, met)));
                     yield new GenerationOutcome.CannotGenerate(why);
                 }
             };
+        }
+
+        /**
+         * One way a search for a rewrite ended, with what was met there, in the words every other
+         * search's answer is written in: the figures of this compiler's it met are what an author
+         * raises, and are held as met beside the word ({@link CameToNothing#alsoMet}). A figure that
+         * is no budget of the composing — how far a run went — is no number of this compiler's to
+         * raise, and is the word's alone.
+         */
+        static CameToNothing cameToNothing(ReplacementDisposition.Ended each,
+                                           ReplacementDisposition.Met met) {
+            Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
+            for (Figure figure : met.figures()) {
+                if (figure instanceof Figure.Budget(var budget, var _)) {
+                    budgets.add(budget);
+                }
+            }
+            return CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of(),
+                    switch (each) {
+                        case EVERY_ROW_ANSWERED_ALIKE ->
+                                Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS;
+                        case RUNS_A_REWRITE_MAY_TAKE, A_FIGURE_OF_THE_COMPOSING,
+                             A_RUN_DID_NOT_COME_BACK, A_RULE_REFUSED_A_CANDIDATE ->
+                                Generator.UnresolvedCombination.Reason
+                                        .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                        case ROWS_A_BLOCK_MAY_HOLD ->
+                                Generator.UnresolvedCombination.Reason
+                                        .THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE;
+                        case NOTHING_WAS_COMPOSED, NOTHING_RAN ->
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+                    })).alsoMet(budgets.isEmpty() ? CompositionShortfall.NONE
+                    : CompositionShortfall.of(budgets));
         }
 
 
@@ -10029,7 +10045,7 @@ public final class Adequacy {
                 switch (composed.discharge().at(each)) {
                     case ClassDisposition.Built _ -> exist.add(each);
                     case ClassDisposition.Unresolved unresolved -> {
-                        if (unresolved.why().reason().provesInfeasible()) {
+                        if (unresolved.came().proves()) {
                             none.add(each);
                         }
                     }
