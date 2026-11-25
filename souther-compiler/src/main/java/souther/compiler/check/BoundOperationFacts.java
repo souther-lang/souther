@@ -1117,14 +1117,11 @@ public final class BoundOperationFacts {
     private static boolean instanceOf(Type actual, Type declared) {
         return switch (declared) {
             case Type.Var _ -> true;
-            case Type.ListOf l -> actual instanceof Type.ListOf a
-                    && instanceOf(a.element(), l.element());
-            case Type.SetOf l -> actual instanceof Type.SetOf a
-                    && instanceOf(a.element(), l.element());
-            case Type.OptionOf l -> actual instanceof Type.OptionOf a
-                    && instanceOf(a.element(), l.element());
-            case Type.MapOf l -> actual instanceof Type.MapOf a
-                    && instanceOf(a.key(), l.key()) && instanceOf(a.value(), l.value());
+            // The containers a declared operand is written as. A tuple or a function is no
+            // operand's declared type, and stands for itself.
+            case Type.ListOf _, Type.SetOf _, Type.OptionOf _, Type.MapOf _ ->
+                    Type.paired(declared, actual) instanceof List<Type.Paired> pairs
+                            && pairs.stream().allMatch(at -> instanceOf(at.other(), at.one()));
             default -> declared.equals(actual);
         };
     }

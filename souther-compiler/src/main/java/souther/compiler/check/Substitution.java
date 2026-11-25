@@ -4,6 +4,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -116,53 +117,14 @@ final class Substitution {
         }
         // Position by position where the two shapes line up. Where they do not there is no variable
         // here to decide, and whether they agree is {@link #fits}'s question.
-        switch (left) {
-            case Type.ListOf l -> {
-                if (right instanceof Type.ListOf a) {
-                    return decide(l.element(), a.element(), kinds, sums);
+        // A leaf holds nothing to descend into, so nothing here decides a variable.
+        if (Type.paired(left, right) instanceof List<Type.Paired> pairs) {
+            for (Type.Paired each : pairs) {
+                Fit at = decide(each.one(), each.other(), kinds, sums);
+                if (at instanceof Fit.Disagrees) {
+                    return at;
                 }
             }
-            case Type.SetOf s -> {
-                if (right instanceof Type.SetOf a) {
-                    return decide(s.element(), a.element(), kinds, sums);
-                }
-            }
-            case Type.OptionOf o -> {
-                if (right instanceof Type.OptionOf a) {
-                    return decide(o.element(), a.element(), kinds, sums);
-                }
-            }
-            case Type.MapOf m -> {
-                if (right instanceof Type.MapOf a) {
-                    Fit key = decide(m.key(), a.key(), kinds, sums);
-                    return key instanceof Fit.Disagrees ? key
-                            : decide(m.value(), a.value(), kinds, sums);
-                }
-            }
-            case Type.TupleOf t -> {
-                if (right instanceof Type.TupleOf a
-                        && t.elements().size() == a.elements().size()) {
-                    for (int i = 0; i < t.elements().size(); i++) {
-                        Fit at = decide(t.elements().get(i), a.elements().get(i), kinds, sums);
-                        if (at instanceof Fit.Disagrees) {
-                            return at;
-                        }
-                    }
-                }
-            }
-            case Type.FnOf f -> {
-                if (right instanceof Type.FnOf a && f.params().size() == a.params().size()) {
-                    for (int i = 0; i < f.params().size(); i++) {
-                        Fit at = decide(f.params().get(i), a.params().get(i), kinds, sums);
-                        if (at instanceof Fit.Disagrees) {
-                            return at;
-                        }
-                    }
-                    return decide(f.result(), a.result(), kinds, sums);
-                }
-            }
-            // Nothing inside it to descend into, so nothing here decides a variable.
-            case Type.Leaf _ -> { }
         }
         return Fit.FITS;
     }

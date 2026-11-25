@@ -476,6 +476,57 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
         }
     }
 
+    /** One position two types of one shape hold: what {@code one} holds there and what
+     *  {@code other} does. */
+    record Paired(Type one, Type other) {}
+
+    /**
+     * What {@code one} and {@code other} hold position by position, in the order
+     * {@link #forEachChild} visits them — or null where they are not one compound constructor
+     * holding as many positions: two lists, two maps, two tuples of one length, two functions of
+     * one arity.
+     *
+     * <p>The pairing and nothing else. Whether the two at a position have to be equal, one has to
+     * admit the other or they are joined, which way round a position is read, and which
+     * constructors a reader goes inside at all are each reader's own; what is said once here is
+     * which positions two values of one constructor line up at, which is {@link #atChildren}'s to
+     * say for each of them.
+     */
+    static java.util.List<Paired> paired(Type one, Type other) {
+        if (!(one instanceof Compound) || one.getClass() != other.getClass()) {
+            return null;
+        }
+        java.util.List<Type> ones = new java.util.ArrayList<>();
+        java.util.List<Type> others = new java.util.ArrayList<>();
+        forEachChild(one, ones::add);
+        forEachChild(other, others::add);
+        if (ones.size() != others.size()) {
+            return null;
+        }
+        java.util.List<Paired> out = new java.util.ArrayList<>(ones.size());
+        for (int i = 0; i < ones.size(); i++) {
+            out.add(new Paired(ones.get(i), others.get(i)));
+        }
+        return out;
+    }
+
+    /**
+     * {@code t} with its positions holding {@code children}, in the order {@link #paired} names
+     * them: what a reader that worked out a type at each position of a pair puts back together.
+     *
+     * @throws IllegalArgumentException where {@code children} are not as many as {@code t} holds
+     */
+    static Type withChildren(Type t, java.util.List<Type> children) {
+        int[] positions = {0};
+        forEachChild(t, _ -> positions[0]++);
+        if (positions[0] != children.size()) {
+            throw new IllegalArgumentException(show(t) + " holds " + positions[0] + " types and not "
+                    + children.size());
+        }
+        int[] at = {0};
+        return mapChildren(t, _ -> children.get(at[0]++));
+    }
+
     /** A user-facing rendering of {@code t} in surface syntax: {@code Int}, {@code List<Int>},
      * {@code A | B}, {@code (A, B)}, {@code T?}. Used by diagnostics; unlike the record {@code toString}
      * it reads the way the source is written. */
