@@ -279,14 +279,9 @@ public final class DataChecker {
     static void collectConstructs(Hir.Expr e, Constructs out, Symbols symbols,
                                           Map<String, Constructs> recConstructs) {
         switch (e) {
-            case Hir.LetIn li -> {
-                collectConstructs(li.value(), out, symbols, recConstructs);
-                collectConstructs(li.body(), out, symbols, recConstructs);
-            }
-            // A build constructs what the value's body does, and being a build adds nothing.
-            case Hir.Materialised m -> collectConstructs(m.body(), out, symbols, recConstructs);
             // A call to the method a value is emitted as constructs what that method does, as a
-            // value's construction always is: carried by the value.
+            // value's construction always is: carried by the value. What it is handed are names of
+            // bindings already made, which construct nothing here.
             case Hir.ValueInvocation call -> {
                 Constructs viaValue = recConstructs.get(call.reaches());
                 if (viaValue != null) {
@@ -303,15 +298,6 @@ public final class DataChecker {
                 if (viaValue != null) {
                     out.absorb(viaValue.allCarried());
                 }
-            }
-            // An expansion builds what its arguments build and what the callee's body builds. What a
-            // function argument builds is counted from the body, where the callee applies it; counted
-            // here as well, one lambda's construction would be recorded twice.
-            case Hir.Expansion ex -> {
-                for (Hir.Bound b : ex.bound()) {
-                    collectConstructs(b.value(), out, symbols, recConstructs);
-                }
-                collectConstructs(ex.body(), out, symbols, recConstructs);
             }
             case Hir.NewData nd -> {
                 // A construction this body was handed is not this body's. It is handed one two ways.
@@ -331,13 +317,12 @@ public final class DataChecker {
                                     ? out.carried() : out.originated();
                     side.putIfAbsent(built.type(), nd.typeName().name().quoted());
                 }
+                // The fields written, and not a spread: what the name a spread holds stands for was
+                // built where it was made.
                 for (Hir.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, recConstructs);
                 }
             }
-            case Hir.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, recConstructs);
-            case Hir.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
-            case Hir.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, recConstructs);
             case Hir.Apply call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be —
@@ -351,47 +336,9 @@ public final class DataChecker {
                 if (viaHelper != null) {
                     out.absorb(call.wasCarriedByValue() ? viaHelper.allCarried() : viaHelper);
                 }
+                // The arguments, and not the name applied: what it reaches is absorbed above.
                 call.args().forEach(a -> collectConstructs(a, out, symbols, recConstructs));
             }
-            case Hir.Binary bin -> {
-                collectConstructs(bin.left(), out, symbols, recConstructs);
-                collectConstructs(bin.right(), out, symbols, recConstructs);
-            }
-            case Hir.Neg neg -> collectConstructs(neg.operand(), out, symbols, recConstructs);
-            case Hir.Match m -> {
-                collectConstructs(m.scrutinee(), out, symbols, recConstructs);
-                for (Hir.Case c : m.cases()) {
-                    collectConstructs(c.body(), out, symbols, recConstructs);
-                }
-            }
-            case Hir.If iff -> {
-                collectConstructs(iff.cond(), out, symbols, recConstructs);
-                collectConstructs(iff.then(), out, symbols, recConstructs);
-                collectConstructs(iff.els(), out, symbols, recConstructs);
-            }
-            // an attempt builds the value on its success branch, so it needs the same permission a
-            // plain construction does — what it does not do is abort when it fails
-            case Hir.IfConstructed ic -> {
-                collectConstructs(ic.construct(), out, symbols, recConstructs);
-                collectConstructs(ic.then(), out, symbols, recConstructs);
-                ic.els().forEach(arm ->
-                        collectConstructs(arm.body(), out, symbols, recConstructs));
-            }
-            case Hir.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
-            // Whichever collection the brackets turn out to be, what a row writes in them is what it
-            // builds: the notation decides the container and not what is put in it.
-            case Hir.RowCollection row ->
-                    row.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
-            case Hir.ListComp comp -> {
-                collectConstructs(comp.element(), out, symbols, recConstructs);
-                comp.guards().forEach(g -> collectConstructs(g, out, symbols, recConstructs));
-            }
-            // a block builds under the enclosing behavior's permission (spec §blocks)
-            case Hir.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
-            case Hir.IntLit _ -> { }
-            case Hir.DecimalLit _ -> { }
-            case Hir.StringLit _ -> { }
-            case Hir.BoolLit _ -> { }
             // A bare name denoting a unit data constructs that unit's value (spec §unit-data) and
             // is still not collected here. A construction set records what a behavior holds authority to
             // build, and a unit needs none: it has no fields, can carry no invariant, and has one
@@ -401,8 +348,15 @@ public final class DataChecker {
             // against a case (`r.kind == Domestic`) demanded an entry that opening the same case
             // with `match` did not, since only the first is an expression.
             case Hir.Var _ -> { }
-            // it builds nothing: no value is made where it stands
-            case Hir.Unreachable _ -> { }
+            // Everything else builds what its parts build and adds nothing of its own: a build
+            // what the value's body does, a block under the enclosing behavior's permission (spec
+            // §blocks), an attempt the value on its success branch, which needs the permission a
+            // plain construction does, and a row's brackets what is written in them, whichever
+            // collection they turn out to be. An expansion builds what its arguments and the
+            // callee's body build, and a function argument is counted from the body, where the
+            // callee applies it ({@link Hir#forEachChild} takes no handed-over caller code).
+            default -> Hir.forEachChild(e, part -> collectConstructs(part, out, symbols,
+                    recConstructs));
         }
     }
 
