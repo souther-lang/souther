@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.partition.Generator;
 import souther.compiler.query.BorderObligationPointAssessment.Reading;
 
 import java.util.LinkedHashMap;
@@ -139,54 +138,17 @@ public final class PointResolver {
                                 offered = new PointResolution.Generated(reading, made.row());
                             }
                         }
-                        case ItemAssessment.Attempt.Unresolved it -> walked.put(reading,
-                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
-                        // A search a budget of this compiler's ended, which came to nothing like
-                        // the one above. What offering a row is short of is the same either way,
-                        // and which figure ended it is the point's own to say rather than this
-                        // walk's: what is recorded here is that a search ran and produced no row.
-                        case ItemAssessment.Attempt.Stopped it -> walked.put(reading,
-                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
-                        // And a search that ran to the end of what this compiler writes. This walk
-                        // records of it what it records of the one above — a search ran and no row
-                        // came of it — and what it writes some of travels on the point's account.
-                        case ItemAssessment.Attempt.Unexhausted it -> walked.put(reading,
-                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
-                        // And a search whose answer was about less than the point had. What this
-                        // walk records of it is the same as of the two above — a search ran and no
-                        // row came of it — and the figure that made the answer short travels on the
-                        // point's own account.
-                        case ItemAssessment.Attempt.Limited it -> walked.put(reading,
-                                new SearchCoverage.ReadingSearch.Attempted(it.why(), it.proves()));
-                        // A reading nothing was searched for, which is not one that was searched
-                        // and came to nothing. Recorded as a search with no answer to give: counted
-                        // among the ones that were walked, a reading nobody looked at would take
-                        // part in what the line's readings together establish, which is this
-                        // compiler's shortfall being read as the model's answer.
-                        case ItemAssessment.Attempt.Unplanned _ -> walked.put(reading,
-                                new SearchCoverage.ReadingSearch.Unavailable());
-                        // A search that ran with nothing to run against. Said in the words the
-                        // generator says it in, as the reading's own outcome: it is a fact about
-                        // this run, and one of the reasons a reader may not act on — so a line
-                        // holding one of these is not one the model settles.
-                        //
-                        // Named by the reading it happened at, which is what has a name for the
-                        // quantity: a clause names what it is about and a comparison in a body
-                        // names nothing, so a subject taken from the point would be a word the
-                        // model does not have wherever the line is a body's.
-                        //
-                        // Put into words here and nowhere earlier. Which reading this is is settled
-                        // by the value the walk is keyed on, and what goes into the outcome is a
-                        // sentence for whoever reads it — the whole of the line, because half of it
-                        // is a word two readings of one line can share.
-                        case ItemAssessment.Attempt.Unavailable _ -> walked.put(reading,
-                                new SearchCoverage.ReadingSearch.Attempted(
-                                        new Generator.UnresolvedCombination(
-                                                List.of(reading.target().label()),
-                                                Generator.UnresolvedCombination.Reason
-                                                        .NOTHING_TO_BUILD_AGAINST), false));
+                        // A search that came to no row. What every search of the reading came to
+                        // together is said once below, of all of them.
+                        case ItemAssessment.Attempt.Unresolved _, ItemAssessment.Attempt.Stopped _,
+                             ItemAssessment.Attempt.Unexhausted _, ItemAssessment.Attempt.Limited _,
+                             ItemAssessment.Attempt.Unplanned _,
+                             ItemAssessment.Attempt.Unavailable _ -> { }
                     }
                     }
+                    // Every search of the reading, as one part of the coverage: what they came to
+                    // together is their owner's to say, and is never the last of them.
+                    walked.put(reading, SearchCoverage.ReadingSearch.of(outcomes));
                 }
             }
         }

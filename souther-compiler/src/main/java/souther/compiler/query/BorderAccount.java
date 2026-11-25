@@ -198,8 +198,9 @@ public record BorderAccount(String module, GenerationScope scope,
         List<At> came = new ArrayList<>();
         coverage.came().forEach((reading, search) -> {
             switch (search) {
-                case SearchCoverage.ReadingSearch.Attempted(var why, var _) ->
-                        came.add(new At.Searched(reading, why));
+                case SearchCoverage.ReadingSearch.Attempted searched ->
+                        searched.came(reading).forEach(it ->
+                                came.add(new At.Searched(reading, it.why())));
                 // Kept and not skipped. A reading this run could not search is something that
                 // happened to it, and dropping it here would put back the absence the coverage was
                 // made total to take out: a reader would see the readings that answered and no sign
@@ -382,12 +383,12 @@ public record BorderAccount(String module, GenerationScope scope,
      */
     private static GenerationOutcome.CannotGenerate cannot(SearchCoverage coverage) {
         List<CameToNothing> said = new ArrayList<>();
-        coverage.came().forEach((_, search) -> {
-            if (search instanceof SearchCoverage.ReadingSearch.Attempted(var why, var _)) {
-                // The words alone. What a search of a point met of this compiler's is the point's
-                // own to say and is said at the point's account, where a reader asks about the
-                // point — carried here as well, one figure would arrive twice and read as two.
-                said.add(CameToNothing.metNothing(why));
+        coverage.came().forEach((reading, search) -> {
+            if (search instanceof SearchCoverage.ReadingSearch.Attempted searched) {
+                // Each search with what it met and what cut its plan short. Those decide whether
+                // its word is a proof ({@link CameToNothing#proves}), so a word carried without
+                // them would be a proof about part of the point handed on as one about the whole.
+                said.addAll(searched.came(reading));
             }
         });
         // Where no reading was searched there is nothing any of them said, and the run says that

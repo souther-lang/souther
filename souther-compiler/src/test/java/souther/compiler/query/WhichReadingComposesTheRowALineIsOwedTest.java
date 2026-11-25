@@ -12,11 +12,16 @@ import souther.compiler.observe.Limits;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.partition.CameToNothing;
+import souther.compiler.partition.CompositionAccount;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Level;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.query.BorderObligationPointAssessment.Reading;
 
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -203,6 +208,48 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                         + " own position");
     }
 
+    /**
+     * A reading searched twice is what both searches came to, in whichever order they were made.
+     * One a figure stopped did not see the whole of the point, so the reading proves nothing — and
+     * a walk that kept the search it met last would prove it or not by the order of the searches.
+     */
+    @Test
+    void aReadingSearchedTwiceProvesOnlyWhereBothSearchesProve() {
+        List<List<ItemAssessment.Attempt>> orders = List.of(
+                List.of(proved(), stopped()), List.of(stopped(), proved()));
+        for (List<ItemAssessment.Attempt> order : orders) {
+            SearchCoverage coverage = assertInstanceOf(PointResolution.Unresolved.class,
+                    PointResolver.resolveAt(owed(), List.of(at("only")), reading ->
+                            new PointResolver.ReadingEvidence.Searched(
+                                    SearchOutcomes.each(order)))).coverage();
+            assertFalse(coverage.provesTheLineCannotBeWritten(), order::toString);
+        }
+        SearchCoverage both = assertInstanceOf(PointResolution.Unresolved.class,
+                PointResolver.resolveAt(owed(), List.of(at("only")), reading ->
+                        new PointResolver.ReadingEvidence.Searched(
+                                SearchOutcomes.each(List.of(proved(), proved()))))).coverage();
+        assertTrue(both.provesTheLineCannotBeWritten());
+    }
+
+    /**
+     * What a walk that composed nothing hands on says what each search met, which is what decides
+     * whether its word proves: taken down to the word, a search a figure stopped would be handed on
+     * as one that met nothing.
+     */
+    @Test
+    void whatEachSearchMetTravelsWithItsWord() {
+        SearchCoverage coverage = coverageOf(Map.of(at("only"),
+                        new SearchCoverage.ReadingSearch.Attempted(
+                                SearchOutcomes.each(List.of(proved(), stopped())))),
+                List.of(at("only")));
+
+        List<CameToNothing> came =
+                ((SearchCoverage.ReadingSearch.Attempted) coverage.came().get(at("only")))
+                        .came(at("only"));
+        assertEquals(2, came.size(), came::toString);
+        assertTrue(came.stream().anyMatch(each -> !each.met().nothing()), came::toString);
+    }
+
     /** One reading is enough for the claim where the line has one reading, whoever asked. */
     @Test
     void aLineWithOneReadingIsWalkedToTheEndByOneReading() {
@@ -368,11 +415,26 @@ class WhichReadingComposesTheRowALineIsOwedTest {
                 Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     }
 
+    private static ItemAssessment.Attempt proved() {
+        return new ItemAssessment.Attempt.Unresolved(nothingThere(), null);
+    }
+
+    /** A search a figure of this compiler's stopped, which proves nothing whatever it walked. */
+    private static ItemAssessment.Attempt stopped() {
+        CompositionBudget budget = CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH;
+        return new ItemAssessment.Attempt.Stopped(new Generator.UnresolvedCombination(
+                List.of(SAID), Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
+                null, CompositionAccount.NOTHING,
+                PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(List.of()));
+    }
+
     private static SearchCoverage.ReadingSearch.Attempted provedNothingThere() {
-        return new SearchCoverage.ReadingSearch.Attempted(nothingThere(), true);
+        return new SearchCoverage.ReadingSearch.Attempted(SearchOutcomes.of(proved()));
     }
 
     private static SearchCoverage.ReadingSearch.Attempted refusedThere() {
-        return new SearchCoverage.ReadingSearch.Attempted(refused(), false);
+        return new SearchCoverage.ReadingSearch.Attempted(SearchOutcomes.of(notComposed()));
     }
 }
