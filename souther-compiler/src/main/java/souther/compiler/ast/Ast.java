@@ -328,8 +328,12 @@ public interface Ast {
      * its target module). {@code exampleFileTarget} on a {@link Module} is non-null exactly when the
      * module was parsed from an {@code examples for <module>} file: it names the target and marks the
      * module as an example-only contribution, not a module of its own.
+     *
+     * <p>The target is a name to be resolved, as a {@link Fake}'s is, and not a spelling to be
+     * looked up later. Which behavior it names is the module's to answer (spec
+     * §example-target-is-a-behavior).
      */
-    record Example(String target, List<ExampleRow> rows, SourcePos pos) implements Ast {}
+    record Example(Var target, List<ExampleRow> rows, SourcePos pos) implements Ast {}
 
     /**
      * What stands where a row's answer goes.

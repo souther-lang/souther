@@ -213,7 +213,7 @@ public final class ExampleVerifier {
                 // nobody left.
                 EvaluationContext.rethrowUnlessTheRuntimeIsAbsent(e);
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
-                        Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
+                        Incompleteness.Scope.BEHAVIOR, ex.named(), ex.pos()));
             }
         }
         // A row that could not be decided is read here rather than restated at each place it happens,
@@ -380,7 +380,7 @@ public final class ExampleVerifier {
         List<StatedRow> found = new ArrayList<>();
         for (souther.compiler.check.Prepared.Example block : module.examples()) {
             Hir.Example written = block.read();
-            if (!written.target().equals(behavior)) {
+            if (!written.named().equals(behavior)) {
                 continue;
             }
             for (Hir.ExampleRow row : written.rows()) {
@@ -855,7 +855,8 @@ public final class ExampleVerifier {
     // --- one example (a target and its rows) --------------------------------------------------
 
     private void checkExample(Hir.Example ex, List<Diagnostic> out, List<RowOutcome> rows) {
-        ExampleTarget target = targetOf(ex.target());
+        ValueName.Behavior exampled = ex.exampled();
+        ExampleTarget target = exampled == null ? null : targetOf(exampled.name());
         if (target == null) {
             out.add(notRunnable(ex));
             return;
@@ -1221,12 +1222,12 @@ public final class ExampleVerifier {
      * The diagnostic for a target this module declares no behavior for: a name it does not know
      * ({@code E1901}), or a helper {@code let} of that name ({@code E1902}).
      *
-     * <p>Only reached when {@link #targetOf} found no behavior, so being injected is not one of the
-     * reasons any more: an injected behavior is a behavior, and its rows are recorded. What is left
-     * for {@code E1902} is a target that is not a behavior at all.
+     * <p>Only reached where the target resolved to no behavior of this module, so being injected is
+     * not one of the reasons: an injected behavior is a behavior, and its rows are recorded. What is
+     * left for {@code E1902} is a target that is not a behavior at all.
      */
     private Diagnostic notRunnable(Hir.Example ex) {
-        String name = ex.target();
+        String name = ex.named();
         boolean isHelper = module.fns().stream().anyMatch(f -> f.name().equals(name));
         if (!isHelper) {
             return Diagnostic.at(ex.pos()).say(new ExampleMessage.NoBehaviorOfThatName(name)).build();

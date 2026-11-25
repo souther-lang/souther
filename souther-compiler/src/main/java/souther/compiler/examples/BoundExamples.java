@@ -54,11 +54,11 @@ public final class BoundExamples {
         List<RecordedRow> found = new ArrayList<>();
         for (Prepared.Example block : forExamples.examples()) {
             Hir.Example written = block.read();
-            if (!bound.contains(written.target())) {
+            if (!bound.contains(written.named())) {
                 continue;
             }
             for (Hir.ExampleRow row : written.rows()) {
-                found.add(new RecordedRow(this, written.target(), row));
+                found.add(new RecordedRow(this, written.named(), row));
             }
         }
         return found;

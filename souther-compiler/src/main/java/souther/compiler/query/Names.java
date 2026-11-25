@@ -1631,12 +1631,13 @@ public final class Names {
 
     /**
      * The value the cursor is on at {@code at}: the one a name there denotes, or — when the cursor
-     * is on a binding — the binding itself.
+     * is on a binding or on the name a declaration declares — that binding or declaration.
      *
      * <p>{@link TypeAt} for the value namespace, and for the same reason: a reader asking about a
-     * binding is asking from one end or the other, and the two ends are one question. Answering
-     * only where a name is read would put a local within reach from its uses and out of reach from
-     * the {@code let} that binds it.
+     * name is asking from one end or the other, and the two ends are one question. Answering only
+     * where a name is read would put a local within reach from its uses and out of reach from the
+     * {@code let} that binds it, and a behavior within reach from a call and out of reach from its
+     * own {@code behavior} line.
      */
     public record ValueAt(SourcePos at) implements Key<ValueName> {
         @Override
@@ -1664,6 +1665,10 @@ public final class Names {
                     return Answer.of(local);
                 }
             }
+            ValueName declared = declaredAt(db, name, at);
+            if (declared != null) {
+                return Answer.of(declared);
+            }
             Resolve.ValueUse use = db.ask(new ValueDenotedAt(at)).value();
             if (use == null) {
                 return Answer.absent();
@@ -1673,6 +1678,35 @@ public final class Names {
                 return Answer.absent();
             }
             return Answer.of(use.denotes());
+        }
+
+        /**
+         * The value whose own declaration writes its name at {@code at} — a {@code behavior} line,
+         * or a {@code let} that implements a behavior or defines a helper — or null where none does.
+         *
+         * <p>What the module's scope reaches by that name, which is the table resolution answers a
+         * use from. So a declaration and its uses are one identity: a behavior's {@code let} is the
+         * behavior and not a helper of its name, because the scope says so and not because this
+         * works it out again.
+         */
+        private static ValueName declaredAt(Db db, String module, SourcePos at) {
+            Ast.Module m = db.ask(new Front.Available(module)).value();
+            Answer<Scoping.Scoped> scope = db.ask(new ModuleScope(module));
+            if (m == null || !scope.present()) {
+                return null;
+            }
+            Map<String, ValueName> reached = scope.value().values().reachable().byName();
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                if (spans(b.written(), at)) {
+                    return reached.get(b.name());
+                }
+            }
+            for (Ast.FnDef fn : m.fns()) {
+                if (spans(fn.written(), at)) {
+                    return reached.get(fn.name());
+                }
+            }
+            return null;
         }
 
         /**

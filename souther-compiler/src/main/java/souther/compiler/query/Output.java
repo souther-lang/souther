@@ -1522,12 +1522,12 @@ public final class Output {
             for (souther.compiler.check.Prepared.Example block
                     : prepared.forExamplesWrittenIn(sourceId).examples()) {
                 souther.compiler.ast.Hir.Example written = block.read();
-                List<ReadRow> mine = into.computeIfAbsent(written.target(),
+                List<ReadRow> mine = into.computeIfAbsent(written.named(),
                         _ -> new ArrayList<>());
-                named.add(written.target());
+                named.add(written.named());
                 for (souther.compiler.ast.Hir.ExampleRow row : written.rows()) {
                     souther.compiler.observe.RowOutcome came = observed == null ? null
-                            : among(observed.rows(), written.target(), row);
+                            : among(observed.rows(), written.named(), row);
                     if (came != null) {
                         mine.add(new ReadRow.Ran(came, inputDefinitions(prepared, row),
                                 standInDefinitions(prepared, row, came),
@@ -1535,17 +1535,17 @@ public final class Output {
                         continue;
                     }
                     mine.add(new ReadRow.NotRun(row.identity(), row.pos(),
-                            whyNothingCameBack(written.target(), row, observed, sourceId)));
+                            whyNothingCameBack(written.named(), row, observed, sourceId)));
                     if (observed == null) {
                         // Nothing came back for this row and the row is known, so what the measure
                         // is short of is this row. The reason its reading recorded is elsewhere in
                         // the observation and is filed by the caller; this one the observation
                         // never said, because there was no observation to say it.
-                        stopped.computeIfAbsent(written.target(), _ -> new ArrayList<>())
+                        stopped.computeIfAbsent(written.named(), _ -> new ArrayList<>())
                                 .add(souther.compiler.observe.Incompleteness.ofRow(
                                         souther.compiler.observe.Incompleteness.Code
                                                 .OBSERVATION_ABSENT,
-                                        written.target(), row.identity(), row.pos()));
+                                        written.named(), row.identity(), row.pos()));
                     }
                 }
             }

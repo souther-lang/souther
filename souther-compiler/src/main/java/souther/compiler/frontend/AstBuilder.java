@@ -193,10 +193,8 @@ public final class AstBuilder {
                             .fnDef(n, declared));
                 }
                 case EXAMPLE_DEF -> {
-                    SyntaxToken target = exampleTarget(n);
-                    String named = target == null ? "" : ident(target);
-                    examples.add(reading(new WrittenOwner.Examples(text, moduleName, named))
-                            .example(n, target, named));
+                    WrittenName target = exampleTarget(n);
+                    examples.add(reading(examplesOf(target)).example(n, target));
                 }
                 case FAKE_DEF -> {
                     fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameIn(n)))
@@ -233,10 +231,8 @@ public final class AstBuilder {
         for (SyntaxNode n : file.childNodes()) {
             switch (n.kind()) {
                 case EXAMPLE_DEF -> {
-                    SyntaxToken exampled = exampleTarget(n);
-                    String named = exampled == null ? "" : ident(exampled);
-                    examples.add(reading(new WrittenOwner.Examples(text, moduleName, named))
-                            .example(n, exampled, named));
+                    WrittenName exampled = exampleTarget(n);
+                    examples.add(reading(examplesOf(exampled)).example(n, exampled));
                 }
                 case FAKE_DEF -> {
                     fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameIn(n)))
@@ -349,11 +345,16 @@ public final class AstBuilder {
         return out;
     }
 
-    /** Which token names the behavior an {@code example} block writes rows for; where the parser
+    /** The name of the behavior an {@code example} block writes rows for; where the parser
      *  recovered from a block with no target there is none. */
-    private SyntaxToken exampleTarget(SyntaxNode n) {
+    private WrittenName exampleTarget(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        return idents.isEmpty() ? null : idents.getFirst();
+        return idents.isEmpty() ? null : nameOf(idents.getFirst());
+    }
+
+    /** What an {@code example} block is written by: the rows of the behavior its target names. */
+    private WrittenOwner.Examples examplesOf(WrittenName target) {
+        return new WrittenOwner.Examples(text, moduleName, target == null ? "" : target.canonical());
     }
 
     // --- who a top-level item is written by ---
@@ -1743,16 +1744,17 @@ public final class AstBuilder {
 
     // --- example rows and stand-ins ---
 
-    /** {@code example <target> | rows...}, read for the owner the target names. Which token that is
-     *  was settled where the owner was, so the name and the place a report about the block is sent
-     *  are one reading of one token. */
-    private Ast.Example example(SyntaxNode n, SyntaxToken target, String named) {
-        SourcePos pos = target == null ? pos(n) : posOf(target);
+    /** {@code example <target> | rows...}, read for the owner the target names. Which name that is
+     *  was settled where the owner was, so the owner, the name and the place a report about the
+     *  block is sent are one reading of one token. */
+    private Ast.Example example(SyntaxNode n, WrittenName target) {
+        Ast.Var exampled = target == null
+                ? Ast.Var.desugared("", pos(n), reference()) : Ast.Var.written(target, reference());
         List<Ast.ExampleRow> rows = new ArrayList<>();
         for (SyntaxNode row : n.childNodes(SyntaxKind.EXAMPLE_ROW)) {
             rows.add(exampleRow(row));
         }
-        return new Ast.Example(named, rows, pos);
+        return new Ast.Example(exampled, rows, exampled.pos());
     }
 
     /** {@code [ "name" : ] ( inputs ) -> expected}. The name is a leading string token; the inputs are

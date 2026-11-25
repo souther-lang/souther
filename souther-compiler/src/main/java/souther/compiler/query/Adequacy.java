@@ -7788,7 +7788,7 @@ public final class Adequacy {
             // position on its own — and it is the set they reached for, which is what makes a row
             // written against it read as one column moved.
             for (Hir.Example block : prepared.examples()) {
-                if (!block.target().equals(spec.name())) {
+                if (!block.named().equals(spec.name())) {
                     continue;
                 }
                 for (Hir.ExampleRow row : block.rows()) {
@@ -9934,9 +9934,9 @@ public final class Adequacy {
                 owed.put(behavior.name(), new ArrayList<>());
             }
             for (Hir.Example example : prepared.value().module().examples()) {
-                List<RowObligation> of = owed.get(example.target());
+                List<RowObligation> of = owed.get(example.named());
                 // A block naming something this module does not declare is reported where the
-                // names are resolved. The account is of the behaviors there are.
+                // rows are run. The account is of the behaviors there are.
                 if (of == null) {
                     continue;
                 }
@@ -9949,7 +9949,7 @@ public final class Adequacy {
                         continue;
                     }
                     of.add(new RowObligation(
-                            RowRef.of(example.target(), row.pos(), row.identity()),
+                            RowRef.of(example.named(), row.pos(), row.identity()),
                             row.pos(), stands));
                 }
             }

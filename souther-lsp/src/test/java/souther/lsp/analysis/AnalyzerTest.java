@@ -277,18 +277,27 @@ class AnalyzerTest {
             + "behavior use : (t: Thing) -> String\n"
             + "let use (t) = t.id\n";
 
+    private static final String RESOLVE_URI = "file:///demo.sou";
+
+    private Optional<Hover> resolveHover(int line, int character) {
+        return analyzer.hover(RESOLVE_URI, RESOLVE_SRC, new Position(line, character),
+                ModuleGraph.of(Map.of(RESOLVE_URI, RESOLVE_SRC)));
+    }
+
     @Test
     void definitionResolvesATypeReferenceToItsDeclaration() {
         // the `Thing` reference in the behavior signature is at line 2, character 19
-        Optional<Range> target = analyzer.definition(RESOLVE_SRC, new Position(2, 19));
+        Optional<Location> target = analyzer.definition(RESOLVE_URI, new Position(2, 19),
+                ModuleGraph.of(Map.of(RESOLVE_URI, RESOLVE_SRC)));
         assertTrue(target.isPresent(), "expected a definition");
-        assertEquals(1, target.get().start().line(), "the `data Thing` declaration is on line 1");
-        assertEquals(5, target.get().start().character(), "at the name `Thing`");
+        assertEquals(1, target.get().range().start().line(),
+                "the `data Thing` declaration is on line 1");
+        assertEquals(5, target.get().range().start().character(), "at the name `Thing`");
     }
 
     @Test
     void hoverShowsTheSignatureLine() {
-        Optional<Hover> hover = analyzer.hover(RESOLVE_SRC, new Position(1, 5));   // over `Thing`
+        Optional<Hover> hover = resolveHover(1, 5);   // over `Thing`
         assertTrue(hover.isPresent());
         assertTrue(hover.get().contents().contains("data Thing"), hover.get().contents());
     }
@@ -296,7 +305,7 @@ class AnalyzerTest {
     @Test
     void hoverOnAFieldShowsItsDeclaredType() {
         // the field name `id` in `data Thing = { id: String }` is at line 1, character 15
-        Optional<Hover> hover = analyzer.hover(RESOLVE_SRC, new Position(1, 15));
+        Optional<Hover> hover = resolveHover(1, 15);
         assertTrue(hover.isPresent());
         assertTrue(hover.get().contents().contains("id: String"), hover.get().contents());
     }
