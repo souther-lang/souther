@@ -4509,7 +4509,11 @@ public final class Adequacy {
                             nearestNearness = nearness;
                         }
                     }
-                    if (!from.leftAt().isEmpty()) {
+                    // Only the looking having no search for a way in front of it ends the walk over
+                    // the pairs: a figure some search ran out of inside is that search's, and the
+                    // next pair may need none of what it ran out of. What either left is said
+                    // below, apart from whether to go on.
+                    if (ways.hasNext()) {
                         break;
                     }
                 }
@@ -4575,7 +4579,13 @@ public final class Adequacy {
      */
     static List<Generator.BoundaryAttempt> besideWhatTheLookingLeft(
             List<Generator.BoundaryAttempt> chosen, String label, LookingForARow.Mark from) {
-        Set<CompositionBudget> left = from.leftAt();
+        // A figure an attempt chosen already says it stopped at is not said a second time.
+        Set<CompositionBudget> left = new HashSet<>(from.leftAt());
+        for (Generator.BoundaryAttempt each : chosen) {
+            if (each instanceof Generator.BoundaryAttempt.Stopped stopped) {
+                left.removeAll(stopped.met().figures());
+            }
+        }
         if (left.isEmpty()) {
             return List.copyOf(chosen);
         }
@@ -8029,24 +8039,21 @@ public final class Adequacy {
             //
             // The ways are as many as the dependencies' cases multiply, and each is a whole search:
             // one looking for the plan's rows spends a search on each, and asks for the next way
-            // only where it has one to spend. The ways it had none for are said as a run that came
-            // to that figure, so the answer joined over the ways searched is not read as one over
-            // every way there is.
+            // only where it has one to spend. What it left undone is what the answer joined over
+            // the ways searched also met ({@link FillResult#alsoMet}), so that answer is not read
+            // as one over every way there is.
             LookingForARow looking = new LookingForARow();
+            LookingForARow.Mark from = looking.from();
             List<souther.compiler.partition.FillResult> searched = new ArrayList<>();
             Iterator<souther.compiler.partition.StandInAttempt> ways = stood.iterator();
-            while (ways.hasNext()) {
-                if (!looking.attempt()) {
-                    searched.add(souther.compiler.partition.FillResult.leftAt(asked,
-                            Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH)));
-                    break;
-                }
+            while (ways.hasNext() && looking.attempt()) {
                 // The outcome alone, because these are the answers of a way that asks nothing of
                 // them: there is no demand here for anything to have fallen short of.
                 searched.add(Generator.fill(asked, existing, check, met,
                         trial, baselines, ways.next().outcome(), holding, unanswered, budget));
             }
-            return souther.compiler.partition.FillResult.acrossRuns(searched);
+            return souther.compiler.partition.FillResult.acrossRuns(searched)
+                    .alsoMet(from.leftAt());
         }
 
     }

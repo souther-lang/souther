@@ -790,10 +790,10 @@ public enum CompositionBudget {
      *
      * <p>Counted in rows composed and not in runs, because a row that is composed again or does not
      * meet the requirement costs composing and no run, and a walk over every assignment of every
-     * parameter multiplies. Over every walk looking for the one row ({@link LookingForARow}), as
-     * the choice among them is one choice. It stops the walk before a row that answers was found,
-     * so the point is one this compiler stopped looking for a row at, and never one no row answers
-     * at.
+     * parameter multiplies. A walk's own figure: every row it hands is also a search of
+     * {@link #SEARCHES_A_ROW_IS_COMPOSED_THROUGH}, which bounds them over the whole looking for the
+     * row. It stops the walk before a row that answers was found, so the point is one this
+     * compiler stopped looking for a row at, and never one no row answers at.
      */
     ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
 

@@ -23,6 +23,12 @@ import java.util.Set;
  * and not read off the attempts, so an attempt that ran out inside itself, the last one allowed
  * included, is told as surely as one that was never made.
  *
+ * <p><b>Only a figure whose composing nothing else bounds is held here.</b> A figure of one walk
+ * whose every unit is also a search of the looking's — the rows a walk hands a preference, each
+ * of which the walk goes on to as one of {@link #searches} — is bounded over the looking by those
+ * searches already, and held here as well it would only take from each walk what another spent,
+ * so that fewer rows were tried at a point and the bound on the looking was no tighter.
+ *
  * <p>Which looking a row is is the caller's to say, and nothing here works it out. A caller that
  * makes one of these for each attempt has the figures of an attempt, which is what they were
  * before this held them.
@@ -30,8 +36,6 @@ import java.util.Set;
 public final class LookingForARow {
 
     private final Tries searches;
-    private final Tries rowsHanded =
-            new Tries(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW.maximum());
     private final Tries composedOnTheWay =
             new Tries(CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR.maximum());
 
@@ -47,19 +51,17 @@ public final class LookingForARow {
 
     /** Where the looking stands now, for asking afterwards what it left undone since. */
     public Mark from() {
-        return new Mark(searches.refusals(), rowsHanded.refusals(), composedOnTheWay.refusals());
+        return new Mark(searches.refusals(), composedOnTheWay.refusals());
     }
 
     /** A point in the looking, from which what it left undone is asked. */
     public final class Mark {
 
         private final int searchesRefused;
-        private final int rowsRefused;
         private final int composedRefused;
 
-        private Mark(int searchesRefused, int rowsRefused, int composedRefused) {
+        private Mark(int searchesRefused, int composedRefused) {
             this.searchesRefused = searchesRefused;
-            this.rowsRefused = rowsRefused;
             this.composedRefused = composedRefused;
         }
 
@@ -69,9 +71,6 @@ public final class LookingForARow {
             Set<CompositionBudget> out = EnumSet.noneOf(CompositionBudget.class);
             if (searches.refusals() > searchesRefused) {
                 out.add(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH);
-            }
-            if (rowsHanded.refusals() > rowsRefused) {
-                out.add(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW);
             }
             if (composedOnTheWay.refusals() > composedRefused) {
                 out.add(CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR);
@@ -102,12 +101,6 @@ public final class LookingForARow {
      *  ({@link CompositionBudget#SEARCHES_A_ROW_IS_COMPOSED_THROUGH}). */
     Tries searches() {
         return searches;
-    }
-
-    /** The rows a walk hands a preference the choice among
-     *  ({@link CompositionBudget#ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW}). */
-    Tries rowsHanded() {
-        return rowsHanded;
     }
 
     /** The assignments of the numbers the conditions on the way name that a row is composed for

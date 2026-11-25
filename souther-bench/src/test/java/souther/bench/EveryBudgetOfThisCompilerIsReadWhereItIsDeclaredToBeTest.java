@@ -777,27 +777,23 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LookingForARow$Mark#leftAt()Ljava/util/Set;",
                     "hands over the figures the looking left something undone at since the mark,"
                             + " for whatever put the stretch together to say beside what it chose"),
-            Map.entry("souther.compiler.partition.FillResult#noneComposed("
+            Map.entry("souther.compiler.partition.FillResult#noneComposedAt("
                             + "Lsouther/compiler/partition/CompositionShortfall;)"
                             + "Lsouther/compiler/partition/ReplacementDisposition;",
-                    "says a figure a run was left unmade at as a figure of the composing, at the"
-                            + " figure it stood at"),
+                    "says a figure the runs of a plan were left unmade at as a figure of the"
+                            + " composing, at the figure it stood at"),
+            Map.entry("souther.compiler.query.Coverages$3#lookedAlong("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
+                            + "Ljava/util/function/UnaryOperator;"
+                            + "Lsouther/compiler/partition/StandingAtAPoint$AtALine;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Ljava/util/Optional;Lsouther/compiler/partition/LookingForARow;)"
+                            + "Lsouther/compiler/query/Coverages$3$Looked;",
+                    "says the figure as a stage of its own where a way had no search left for"
+                            + " its first value"),
             // Where the looking for a row has no search left for what is in front of it: the ways
             // of standing in, the values of a point, the ways a plan is searched under. Each
             // stops making them there, and says the figure beside what was found.
-            Map.entry("souther.compiler.query.Adequacy$Generated#rowsFor("
-                            + "Lsouther/compiler/ast/Hir$SpecBehavior;Lsouther/compiler/check/Sig;"
-                            + "Lsouther/compiler/reading/CoverageRead$Read;"
-                            + "Lsouther/compiler/partition/GenerationPlan;Ljava/util/List;"
-                            + "Ljava/util/Optional;Lsouther/compiler/query/Adequacy$RowReading;"
-                            + "Lsouther/compiler/query/FixturesAtTheBoundary;"
-                            + "Lsouther/compiler/partition/Generator$Trial;Ljava/lang/Iterable;"
-                            + "Lsouther/compiler/partition/HeldOutcome$Of;"
-                            + "Lsouther/compiler/partition/WhereNothingIsAnswered;"
-                            + "Lsouther/compiler/partition/AdequacyPolicy$OfTheGeneration;)"
-                            + "Lsouther/compiler/partition/FillResult;",
-                    "says the figure as a run that looked for nothing, for the ways of standing in"
-                            + " it had no search left for"),
             Map.entry("souther.compiler.partition.Generator#probeFixing("
                             + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
                             + "Ljava/util/Map;Lsouther/compiler/partition/NumbersAskedFor;"

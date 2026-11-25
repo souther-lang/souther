@@ -46,18 +46,17 @@ class WhatALookingLeftUndoneIsAskedOverAStretchOfItTest {
         assertEquals(Set.of(SEARCHES), after.leftAt(), "and one more asked for is its own");
     }
 
-    /** Each figure the looking holds is told by its own name. */
+    /** Each figure the looking holds is told by its own name, and only the ones that ran out. */
     @Test
     void eachFigureTheLookingHoldsIsToldByItsName() {
         LookingForARow looking = new LookingForARow(1);
         LookingForARow.Mark from = looking.from();
-        while (looking.rowsHanded().spend()) {
-            continue;
-        }
+        int composed = 0;
         while (looking.composedOnTheWay().spend()) {
-            continue;
+            composed++;
         }
-        assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
-                CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR), from.leftAt());
+        assertEquals(CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR.maximum(), composed);
+        assertEquals(Set.of(CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR), from.leftAt(),
+                "the searches, untouched, left nothing");
     }
 }

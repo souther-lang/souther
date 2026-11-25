@@ -22,8 +22,10 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -201,6 +203,35 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
         assertEquals(new ArmDisposition.AcrossRuns.NoWayIn(List.of(NOTHING_ARRIVES)),
                 ArmDisposition.acrossRuns(List.of(
                         new ArmDisposition.NoWayIn(NOTHING_ARRIVES), read)));
+    }
+
+    /**
+     * Runs a figure left unmade are no run beside the ones made: the answer joined over the ones
+     * made keeps its word, and says the figure as something it met. Said as a run of their own,
+     * the word would differ from the made runs' and the join would be refused, as above.
+     */
+    @Test
+    void runsAFigureLeftUnmadeAreWhatTheJoinedAnswerMetAndNoWordOfTheirOwn() {
+        GenerationPlan asked = planOver(List.of(A_CLASS), 1);
+        Set<CompositionBudget> left = Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH);
+        FillResult joined = FillResult.acrossRuns(List.of(nothingCameOfIt(asked),
+                nothingCameOfIt(asked))).alsoMet(left);
+
+        ClassDisposition.Unresolved came = assertInstanceOf(ClassDisposition.Unresolved.class,
+                joined.discharge().at(A_CLASS));
+        assertEquals(NO_CANDIDATE.why(), came.came().why(), "the word the runs made gave");
+        assertEquals(left, came.came().met().figures(), "and the figure, as met");
+        assertEquals(joined, joined.alsoMet(Set.of()), "nothing left is nothing met");
+    }
+
+    /** At a replacement, the figure is said in the words a search for a rewrite says one in. */
+    @Test
+    void aFigureAtAReplacementIsAFigureOfTheComposing() {
+        CompositionBudget figure = CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH;
+        assertEquals(new ReplacementDisposition.NoneFound(Map.of(
+                        ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING,
+                        ReplacementDisposition.Met.at(Set.of(figure.figure())))),
+                FillResult.noneComposedAt(CompositionShortfall.of(Set.of(figure))));
     }
 
     /** A run of a plan owing one class, which composed nothing for it. */

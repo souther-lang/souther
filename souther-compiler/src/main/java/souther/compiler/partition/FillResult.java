@@ -331,47 +331,29 @@ public record FillResult(SequencedMap<RowId, FilledRow> composed,
                                                  List<GenerationReason> reasons) {
         // Nothing of this compiler's was met anywhere here, because nothing was looked for. A
         // figure is what a search ran into, and there was no search.
-        return nothingLookedFor(plan, why, reasons, CompositionShortfall.NONE);
-    }
-
-    /**
-     * The runs a figure left unmade: every obligation told it came to nothing at {@code figures},
-     * which a run that looked would have answered. Joined with the runs that were made
-     * ({@link #acrossRuns}), it keeps their answer about the model from being read as an answer
-     * over every way it was to be searched in.
-     */
-    public static FillResult leftAt(GenerationPlan plan, Set<CompositionBudget> figures) {
-        return nothingLookedFor(plan, Generator.UnresolvedCombination.Reason.wordFor(figures),
-                List.of(), CompositionShortfall.of(figures));
-    }
-
-    private static FillResult nothingLookedFor(GenerationPlan plan,
-                                               Generator.UnresolvedCombination.Reason why,
-                                               List<GenerationReason> reasons,
-                                               CompositionShortfall met) {
         List<GenerationAnswer> answers = new ArrayList<>();
         for (GenerationObligation obligation : plan.obligations()) {
             switch (obligation) {
                 case GenerationObligation.Class q -> answers.add(new GenerationAnswer.Class(q,
-                        new ClassDisposition.Unresolved(cameToNothing(met,
+                        new ClassDisposition.Unresolved(CameToNothing.metNothing(
                                 new Generator.UnresolvedCombination(
                                         List.of(Generator.labelOf(plan.subject(), q.target())),
                                         why)))));
                 case GenerationObligation.Arm q -> answers.add(new GenerationAnswer.Arm(q,
-                        new ArmDisposition.Unresolved(List.of(cameToNothing(met,
+                        new ArmDisposition.Unresolved(List.of(CameToNothing.metNothing(
                                 new Generator.UnresolvedCombination(List.of(), why))))));
                 case GenerationObligation.Pair q -> answers.add(new GenerationAnswer.Pair(q,
-                        new ClassDisposition.Unresolved(cameToNothing(met,
+                        new ClassDisposition.Unresolved(CameToNothing.metNothing(
                                 new Generator.UnresolvedCombination(
                                         q.target().classIdsInOrder(), why)))));
                 case GenerationObligation.Meeting q -> answers.add(new GenerationAnswer.Meeting(q,
-                        new ClassDisposition.Unresolved(cameToNothing(met,
+                        new ClassDisposition.Unresolved(CameToNothing.metNothing(
                                 new Generator.UnresolvedCombination(List.of(), why)))));
                 // Nothing was composed, which a search for a rewrite ends in as surely as one
-                // for an arm: the reasons say why nothing was — or, where a figure is why, the
-                // figure, in the words a search for a rewrite says one in.
+                // for an arm: the reasons say why nothing was.
                 case GenerationObligation.Replacement q -> answers.add(
-                        new GenerationAnswer.Replacement(q, noneComposed(met)));
+                        new GenerationAnswer.Replacement(q, new ReplacementDisposition.NoneFound(
+                                ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED)));
             }
         }
         return new FillResult(new LinkedHashMap<>(), List.of(), reasons,
@@ -379,26 +361,70 @@ public record FillResult(SequencedMap<RowId, FilledRow> composed,
     }
 
     /**
-     * What a run that looked for nothing came to at a replacement, having met {@code met}: nothing
-     * composed, or a figure of the composing where a figure is why, with the figure as it stood —
-     * the words a search for a rewrite says a figure in, so that what a reader would raise is
-     * told here as it is wherever such a search stops.
+     * This answer, as one that also met {@code figures} on the way: where the runs it joins were
+     * not every run there was to make, and a figure is why the rest were not made.
+     *
+     * <p>Said as what was met and never as a word. A run that was not made has nothing to say
+     * about the model, so it is no run beside the ones that were — a word of its own beside theirs
+     * would be two answers about one class, which is what the runs of a plan are held to not giving
+     * ({@link ClassDisposition#acrossRuns}). What a figure stopped is what every run's answer adds
+     * up as it goes ({@link CameToNothing#met}), and so is this. An obligation a row answers keeps
+     * the row: the runs not made could only have found another one.
      */
-    static ReplacementDisposition noneComposed(CompositionShortfall met) {
-        if (met.figures().isEmpty()) {
-            return new ReplacementDisposition.NoneFound(
-                    ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED);
+    public FillResult alsoMet(Set<CompositionBudget> figures) {
+        if (figures.isEmpty()) {
+            return this;
         }
+        CompositionShortfall met = CompositionShortfall.of(figures);
+        List<GenerationAnswer> answers = new ArrayList<>();
+        for (GenerationAnswer answer : discharge.answers().values()) {
+            answers.add(switch (answer) {
+                case GenerationAnswer.Class(var q, var disposition) ->
+                        new GenerationAnswer.Class(q, alsoMet(disposition, met));
+                case GenerationAnswer.Pair(var q, var disposition) ->
+                        new GenerationAnswer.Pair(q, alsoMet(disposition, met));
+                case GenerationAnswer.Meeting(var q, var disposition) ->
+                        new GenerationAnswer.Meeting(q, alsoMet(disposition, met));
+                case GenerationAnswer.Arm(var q, var disposition) ->
+                        new GenerationAnswer.Arm(q, switch (disposition) {
+                            case ArmDisposition.Unresolved(var why) -> new ArmDisposition.Unresolved(
+                                    why.stream().map(each -> alsoMet(each, met)).toList());
+                            // A row, or what the reading says of the ways into the arm, which no
+                            // run made or not made changes.
+                            case ArmDisposition.Built _, ArmDisposition.NoWayIn _ -> disposition;
+                        });
+                case GenerationAnswer.Replacement(var q, var disposition) ->
+                        new GenerationAnswer.Replacement(q,
+                                disposition instanceof ReplacementDisposition.NoneFound
+                                        ? ReplacementDisposition.together(disposition,
+                                                noneComposedAt(met))
+                                        : disposition);
+            });
+        }
+        return new FillResult(composed, unresolved, reasons, Discharge.of(discharge.plan(),
+                answers));
+    }
+
+    private static ClassDisposition alsoMet(ClassDisposition disposition,
+                                            CompositionShortfall met) {
+        return disposition instanceof ClassDisposition.Unresolved(var came)
+                ? new ClassDisposition.Unresolved(alsoMet(came, met)) : disposition;
+    }
+
+    private static CameToNothing alsoMet(CameToNothing came, CompositionShortfall met) {
+        return new CameToNothing(came.why(), came.met().and(met), came.planCut());
+    }
+
+    /**
+     * What a search for a rewrite says where a figure of the composing stopped it at
+     * {@code met}'s figures, each as it stood — the words such a search says a figure in
+     * wherever it stops, so that what a reader would raise is told here as it is there.
+     */
+    static ReplacementDisposition noneComposedAt(CompositionShortfall met) {
         return new ReplacementDisposition.NoneFound(Map.of(
                 ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING,
                 ReplacementDisposition.Met.at(met.figures().stream()
                         .map(CompositionBudget::figure).toList())));
-    }
-
-    /** What a run that looked for nothing came to at one obligation, having met {@code met}. */
-    private static CameToNothing cameToNothing(CompositionShortfall met,
-                                               Generator.UnresolvedCombination why) {
-        return new CameToNothing(why, met, Set.of());
     }
 
     /**

@@ -7289,16 +7289,15 @@ public final class Generator {
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
         // Every row composed here stands at the point, so each one meets what it is composed for.
         // Only where a row can be run: one nothing stands the dependencies in for is no row
-        // anything applies. The rows it is handed are handed out of what the looking for the row
-        // may hand, and not out of a figure of this walk's.
-        RowsHanded handed = new RowsHanded(looking.rowsHanded());
+        // anything applies. The rows it is handed are this walk's figure: every one of them is
+        // also a search of the looking's, which bounds them over the looking already
+        // ({@link LookingForARow}).
         RowPreference preferring =
                 stood.outcome() instanceof AnswersStoodIn.Stood(var answers, _)
                         ? judge.<RowPreference>map(each -> each.refusesAbsolutely()
-                                        ? new ReachingWhatIsJudged(each, answers, trial, handed)
-                                        : new TellingArmsApart(trial, answers, each, handed))
-                                .orElseGet(() -> new TellingArmsApart(trial, answers, null,
-                                        handed))
+                                        ? new ReachingWhatIsJudged(each, answers, trial)
+                                        : new TellingArmsApart(trial, answers, each))
+                                .orElseGet(() -> new TellingArmsApart(trial, answers))
                 : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
@@ -11944,7 +11943,7 @@ public final class Generator {
         /** How many rows that met the requirement were run and came to an answer. */
         private int answering;
         /** The rows a walk has handed here, ranked or not. */
-        private final RowsHanded handed;
+        private final RowsHanded handed = new RowsHanded();
 
         /** What a row's run is also held to, or null where it is held to nothing. */
         private final RowJudge judge;
@@ -11963,16 +11962,9 @@ public final class Generator {
          * against the others, since what it is taken for is to say where its run went.
          */
         TellingArmsApart(Trial trial, List<StoodInAnswer> answers, RowJudge judge) {
-            this(trial, answers, judge, new RowsHanded());
-        }
-
-        /** The same, handed rows out of {@code handed}. */
-        TellingArmsApart(Trial trial, List<StoodInAnswer> answers, RowJudge judge,
-                         RowsHanded handed) {
             this.trial = runningOnce(trial);
             this.answers = List.copyOf(answers);
             this.judge = judge;
-            this.handed = handed;
         }
 
         /**
@@ -12178,34 +12170,17 @@ public final class Generator {
         private static final CompositionBudget FIGURE =
                 CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
 
-        private final Tries left;
-        private boolean stopped;
+        private final Tries left = new Tries(FIGURE.maximum());
 
-        /** Under a figure of their own. */
-        RowsHanded() {
-            this(new Tries(FIGURE.maximum()));
-        }
-
-        /** Under {@code left}, which the looking for the row holds and every walk for it hands
-         *  rows out of ({@link LookingForARow#rowsHanded}). */
-        RowsHanded(Tries left) {
-            this.left = left;
-        }
-
-        /** Whether one more row may be handed; where it may not, this walk is stopped at the
+        /** Whether one more row may be handed; where it may not, the walk is stopped at the
          *  figure. */
         boolean oneMore() {
-            if (left.spend()) {
-                return true;
-            }
-            stopped = true;
-            return false;
+            return left.spend();
         }
 
-        /** Whether this walk was stopped at the figure: one it was handed rows in, and not
-         *  another walk that spent of the same figure. */
+        /** Whether the walk was stopped at the figure. */
         boolean stopped() {
-            return stopped;
+            return left.cutShort();
         }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
@@ -12272,19 +12247,12 @@ public final class Generator {
         private final Set<List<String>> putToTheJudge = new LinkedHashSet<>();
         private List<FixtureTemplate> taken;
         /** The rows the walk has handed here, judged or not. */
-        private final RowsHanded handed;
+        private final RowsHanded handed = new RowsHanded();
 
         ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers, Trial trial) {
-            this(judge, answers, trial, new RowsHanded());
-        }
-
-        /** The same, handed rows out of {@code handed}. */
-        ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers, Trial trial,
-                             RowsHanded handed) {
             this.judge = judge;
             this.answers = List.copyOf(answers);
             this.trial = runningOnce(trial);
-            this.handed = handed;
         }
 
         @Override

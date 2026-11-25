@@ -106,6 +106,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -2436,8 +2437,26 @@ final class Coverages {
                             ItemAssessment.Attempt.Reason.NO_CLASSES)), null, Optional.empty());
                 }
                 // One looking for the row at the point, whichever way it is looked along and
-                // whatever value it is asked at: every attempt for it spends of what it may.
+                // whatever value it is asked at: every attempt for it spends of what it may. What
+                // it left undone is said here, where the looking ends, beside what was chosen
+                // among the ways and values: anywhere below, the choosing above would drop it with
+                // whatever it passed over. A row standing at the point is what the looking was
+                // for, and is said alone.
                 LookingForARow theRow = new LookingForARow();
+                LookingForARow.Mark from = theRow.from();
+                Looked got = lookedFor(criterion, label, narrowing, rows, besideRows, theRow);
+                return got.witness().isPresent() ? got
+                        : new Looked(andWhatTheLookingLeft(got.outcomes(), label, from),
+                                got.composed(), got.witness());
+            }
+
+            /** What looking for a row at {@code criterion} came to, as {@link #looked}, every
+             *  attempt for it spending of {@code theRow}. */
+            private Looked lookedFor(Criterion criterion, String label,
+                                     UnaryOperator<SearchRegion> narrowing,
+                                     StandingAtAPoint.AtALine rows,
+                                     Optional<Generator.RowsBesideBudget> besideRows,
+                                     LookingForARow theRow) {
                 // A way no value takes: one position would have to take two of its cases, or a
                 // condition on it comes out the other way for every row. Said in that word and not
                 // in the one for a walk that tried what the rules leave and reached nothing:
@@ -2581,14 +2600,12 @@ final class Coverages {
                 // answers that.
                 int askings = quantity.searchGoalAt(criterion).askedAtMost();
                 int value = 0;
-                // What the looking for the row leaves undone is said as a stage of its own beside
-                // the values' outcomes ({@link #andWhatTheLookingLeft}): from here until the first
-                // value's outcomes are in, which say their own, and from then on, which are not
-                // kept and so say nothing.
-                LookingForARow.Mark from = theRow.from();
                 // Whether the looking had no search left for another value, which ends the asking
                 // without the count of values having run out. Asked before the value is, so no
-                // value is put to the point that nothing could be spent on.
+                // value is put to the point that nothing could be spent on. What it left is said
+                // where the looking ends ({@link #looked}); here only where no value was asked at
+                // all, since a way with no outcome beside ways that proved nothing reaches the
+                // point would be read as one more that proved it.
                 boolean outOfSearches = false;
                 do {
                     if (!theRow.left()) {
@@ -2618,7 +2635,6 @@ final class Coverages {
                     if (last == null) {
                         last = came.outcomes();
                         first = came.realized();
-                        from = theRow.from();
                     }
                     // Short of a population at this value that it is short of at every value: the
                     // next value is written as short, builds no row, and ends the asking with the
@@ -2654,17 +2670,21 @@ final class Coverages {
                     beside = stage.cameTo();
                 }
                 if (outOfSearches) {
-                    SearchOutcomes asked = last == null ? SearchOutcomes.none() : last;
-                    return new Looked(andWhatTheLookingLeft(asked.plus(beside), label, from),
-                            first, Optional.empty());
+                    Set<CompositionBudget> searches =
+                            Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH);
+                    SearchOutcomes asked = last != null ? last
+                            : SearchOutcomes.of(ItemAssessment.Attempt.ofAStageShortOf(
+                                    new Generator.UnresolvedCombination(List.of(label),
+                                            Generator.UnresolvedCombination.Reason.wordFor(
+                                                    searches)),
+                                    within, CompositionShortfall.of(searches)));
+                    return new Looked(asked.plus(beside), first, Optional.empty());
                 }
                 if (shortAtEveryValue) {
-                    return new Looked(andWhatTheLookingLeft(last.plus(beside), label, from), first,
-                            Optional.empty());
+                    return new Looked(last.plus(beside), first, Optional.empty());
                 }
                 if (nothingMoreAsked != null) {
-                    return new Looked(andWhatTheLookingLeft(
-                            endedBy(last, nothingMoreAsked).plus(beside), label, from), first,
+                    return new Looked(endedBy(last, nothingMoreAsked).plus(beside), first,
                             Optional.empty());
                 }
                 // The count ran out, and whether that is what ended the asking is the realizer's to
@@ -2674,25 +2694,40 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(andWhatTheLookingLeft(
-                        endedBy(last, realized(criterion, rows, able, region, tried)).plus(beside),
-                        label, from), first, Optional.empty());
+                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried))
+                        .plus(beside), first, Optional.empty());
             }
 
             /**
              * {@code outcomes}, and beside them a stage of their own short of what the looking for
-             * the row left undone since {@code from}, where it left anything
-             * ({@link ItemAssessment.Attempt#ofAStageShortOf}).
+             * the row left undone since {@code from} and none of them names, where it left
+             * anything ({@link ItemAssessment.Attempt#ofAStageShortOf}).
              *
-             * <p>Beside them, for the reason that stage's outcome is: written onto the outcomes of
-             * the first value, a row, a stop or a limit would each take it in its own way or take
-             * nothing, and the values after the first are not kept at all. Said where the asking
-             * ends and not where a value noticed it, so a looking that ran out inside the last
-             * value it was allowed is told as surely as one that had none left for the next.
+             * <p>Beside them, for the reason that stage's outcome is: written onto one of them, a
+             * row, a stop or a limit would each take it in its own way or take nothing, and the
+             * outcomes the choosing among values and ways passed over are not kept at all. Said
+             * where the looking ends and not where a value noticed it, so a looking that ran out
+             * inside the last value it was allowed is told as surely as one that had none left for
+             * the next. A figure an outcome kept already names is not said a second time.
              */
             private SearchOutcomes andWhatTheLookingLeft(SearchOutcomes outcomes, String label,
                                                          LookingForARow.Mark from) {
-                Set<CompositionBudget> left = from.leftAt();
+                Set<CompositionBudget> left = EnumSet.noneOf(CompositionBudget.class);
+                left.addAll(from.leftAt());
+                for (ItemAssessment.Attempt each : outcomes.each()) {
+                    switch (each) {
+                        case ItemAssessment.Attempt.Stopped it ->
+                                left.removeAll(it.stoppedBy().written());
+                        case ItemAssessment.Attempt.Limited it ->
+                                left.removeAll(it.limitedBy().written());
+                        case ItemAssessment.Attempt.Certified _,
+                             ItemAssessment.Attempt.Unverified _,
+                             ItemAssessment.Attempt.Unexhausted _,
+                             ItemAssessment.Attempt.Unplanned _,
+                             ItemAssessment.Attempt.Unresolved _,
+                             ItemAssessment.Attempt.Unavailable _ -> { }
+                    }
+                }
                 if (left.isEmpty()) {
                     return outcomes;
                 }
