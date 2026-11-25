@@ -65,8 +65,8 @@ public record Text(String at) implements Place {
 
     /** What makes two of these one line: the string. There is no second spelling of one to fold. */
     @Override
-    public String key() {
-        return at;
+    public Text key() {
+        return this;
     }
 
     /** The string, which is what a reader of one is shown and what tells two of them apart both. A

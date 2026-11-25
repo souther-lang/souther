@@ -208,12 +208,25 @@ public record Seam(CutPosition at, Level below, Level above) {
      * and nowhere else, so two spellings of one division stay one wherever the quantity has values
      * to be told apart by.
      */
-    public String key() {
+    public Key key() {
         if (below == null && above == null) {
-            return "@" + at.key();
+            return new Key(at.key(), null, null);
         }
-        return (below == null ? "" : below.key()) + "|" + (above == null ? "" : above.key());
+        return new Key(null, below == null ? null : below.key(),
+                above == null ? null : above.key());
     }
+
+    /**
+     * What {@link #key} answers: the keys of the last value below and the first above, or of the
+     * level written where neither side names one. Each a value, so that two divisions are one
+     * exactly where those are, and never for being written alike.
+     *
+     * @param written the key of the level the rule was written against, where neither side names
+     *                a value; null otherwise
+     * @param below   the key of the last value below, or null where there is none
+     * @param above   the key of the first value above, or null where there is none
+     */
+    public record Key(Object written, Object below, Object above) { }
 
     /**
      * This division's coordinates written out as text: the last value on one side and the first on

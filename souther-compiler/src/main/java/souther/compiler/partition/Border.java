@@ -1369,30 +1369,31 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * line — a rule cutting at a third beside a rule cutting at a fifth asked for a row anywhere at
      * all, twice — and the first knew both only because the axis happened to carry them.
      *
-     * @param alsoParted where the rules part each quantity, in the quantity's own units, by
-     *                   {@link QuantityKey#key}
+     * @param alsoParted where the rules part each quantity, in the quantity's own units, by the
+     *                   quantity ({@link BorderQuantity#identity})
      * @param apart      whether no row meets two lines at once ({@link ReachingCuts#neverTogether})
      * @param heldTo     what the declarations hold each quantity to besides where it runs
      *                   ({@link BorderQuantity#heldIn})
      */
-    public static List<Border> allOf(List<LineDrawn> drawn, Map<String, List<Parting>> alsoParted,
+    public static List<Border> allOf(List<LineDrawn> drawn,
+                                     Map<QuantityKey, List<Parting>> alsoParted,
                                      LinesRead read, BiPredicate<LineOrigin, LineOrigin> apart,
                                      Function<BorderQuantity, HeldValues> heldTo) {
         // Collected in the quantity's own units, because that is the only order the lines of one
         // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
         // are read as what they are a multiple of.
-        Map<String, List<Parting>> byQuantity = new LinkedHashMap<>();
+        Map<Object, List<Parting>> byQuantity = new LinkedHashMap<>();
         // A quantity one of whose lines has a place that was not worked out. Kept as the way it
         // was not, so that every border on the quantity can say so.
-        Map<String, UnheldNumber> notWorkedOut = new LinkedHashMap<>();
+        Map<Object, UnheldNumber> notWorkedOut = new LinkedHashMap<>();
         alsoParted.forEach((key, parted) ->
                 byQuantity.computeIfAbsent(key, _ -> new ArrayList<>()).addAll(parted));
         for (LineDrawn each : drawn) {
             // Every line as it was read. Two of them at one place are one place with two lines
             // against it, which the arrangement says and this does not: told apart here, whichever
             // was read first stood for the other and the second line was not written down anywhere.
-            String quantity = each.cuts().quantity();
+            Object quantity = each.cuts().quantity();
             switch (partedBy(each)) {
                 case ExactAnswer.Held<List<Parting>> held -> byQuantity
                         .computeIfAbsent(quantity, _ -> new ArrayList<>())

@@ -34,6 +34,7 @@ import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhyAConstructionStopIsNotShown;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -738,15 +739,38 @@ final class StopsOfABody {
             if (sites == null) {
                 continue;
             }
+            List<UndividedByARelation.IntOperation> met = operandsOf(step, each.reads());
             for (StopAssessment.Site site : sites) {
                 if (site instanceof StopAssessment.Site.PastItsEnds(var operation)
                         && !left.keepsWithinItsEnds(operation)) {
                     out.addAll(UndividedByARelation.everyRunStopsAt(operation, read,
-                            List.of(reaching.region())));
+                            List.of(reaching.region()), met));
                 }
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Each operand of {@code step}, as what it comes to ({@link #operand}) held to an
+     * {@code Int}: a value a run getting to the step holds, however it was worked out, so that
+     * the rows the step is said to stop at are rows a run gets there at.
+     */
+    private List<UndividedByARelation.IntOperation> operandsOf(Core step, InputReads at) {
+        List<UndividedByARelation.IntOperation> out = new ArrayList<>();
+        if (Core.withoutStanding(step) instanceof Core.Binary binary
+                && binary.type() == Type.INT) {
+            for (Core side : List.of(binary.left(), binary.right())) {
+                LinearForm<UndividedByARelation.IntOperand> form = operand(side, at);
+                if (form != null) {
+                    out.add(new UndividedByARelation.IntOperation(form,
+                            BigInteger.valueOf(Long.MIN_VALUE),
+                            BigInteger.valueOf(Long.MAX_VALUE), List.of(), true,
+                            new UndividedByARelation.IntOperation.Origin(side)));
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -1185,7 +1209,8 @@ final class StopsOfABody {
      * under, as the relations of numbers of the input a row meets for it on a list of one element
      * — the list a value looked for at the element is ({@link AValueOfTheInput#ofTheOnlyElement}):
      * that the container holds some element meeting something is that its one element meets it.
-     * Null where some part of it is no relation read so.
+     * Null where some part of it is no relation read so. That the container holds the one element
+     * at all is {@link #holdingAnElement}'s.
      */
     private List<TakenConstraint.Affine> madeOnTheElementAs(Proposition made) {
         List<TakenConstraint.Affine> out = new ArrayList<>();
@@ -1201,6 +1226,41 @@ final class StopsOfABody {
                 return null;
             }
             out.addAll(relations);
+        }
+        return out;
+    }
+
+    /**
+     * That each container {@code made} asks some element of holds one, as the relation of
+     * numbers of the input every run getting to the site meets: how many it holds is at least
+     * one. An application standing for every element is made only where there is an element, so
+     * a value no element of which is held gets to nothing inside it, whatever the site comes to.
+     *
+     * <p>At least one and not one. A value looked for at the element is written as a list of one
+     * ({@link AValueOfTheInput#ofTheOnlyElement}), and that is how it is written, not what a run
+     * getting there meets: where an element stands runs up to one below how many the list holds,
+     * and a way held to one element would say of every run what only the runs of a list of one
+     * meet — which a reading proving no run stops would take as proved of them all.
+     *
+     * <p>Of the container and of no element of it, so it is no statement of another element than
+     * the one the site is over. Null where a container is no list at a place of the input, which
+     * holds no count a row can be asked for.
+     */
+    private List<TakenConstraint.Affine> holdingAnElement(Proposition made) {
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (Proposition part : made instanceof Proposition.All(var all, var _, var _) ? all
+                : List.of(made)) {
+            if (!(part instanceof Proposition.Some(var container, var _, boolean holds, var _))
+                    || !holds) {
+                continue;
+            }
+            NumericTerm count = container instanceof DecisionSubject.AnInput(var at, var _)
+                    ? AValueOfTheInput.howMany(at, read) : null;
+            if (count == null) {
+                return null;
+            }
+            out.add(new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ONE.negated(),
+                    Map.of(count, ExactRatio.ONE)), Rel.GE));
         }
         return out;
     }
@@ -1245,28 +1305,46 @@ final class StopsOfABody {
                 ? any : List.of(stated);
         List<List<TakenConstraint.Affine>> out = new ArrayList<>();
         for (Proposition part : parts) {
-            List<TakenConstraint.Affine> relations = relationsOf(part);
-            if (relations == null) {
+            List<List<TakenConstraint.Affine>> ways = waysOf(part);
+            if (ways == null) {
                 return null;
             }
-            out.add(relations);
+            out.addAll(ways);
         }
         return out;
     }
 
-    /** {@code stated} as the relations of numbers of the input a row meets for it, or null where
-     *  it asks anything else of a row ({@link DemandReading#asked}). */
-    private List<TakenConstraint.Affine> relationsOf(Proposition stated) {
+    /**
+     * {@code stated} as the ways a row meets it: none where the source settles it false, which
+     * no row meets, and otherwise one, the relations of numbers of the input a row meets for it.
+     * Null where it asks anything else of a row ({@link DemandReading#asked}). A condition the
+     * source settles is read to the end, and is no condition this reading fell short on.
+     */
+    private List<List<TakenConstraint.Affine>> waysOf(Proposition stated) {
         List<TakenConstraint.Affine> out = new ArrayList<>();
         for (DemandReading.Read each : DemandReading.asked(stated, read)) {
             if (each instanceof DemandReading.Read.Demands(
                     RowDemand.Relational(TakenConstraint.Affine affine))) {
                 out.add(affine);
-            } else if (!(each instanceof DemandReading.Read.Settled(boolean thisWay) && thisWay)) {
+            } else if (each instanceof DemandReading.Read.Settled(boolean thisWay)) {
+                if (!thisWay) {
+                    return List.of();
+                }
+            } else {
                 return null;
             }
         }
-        return out;
+        return List.of(out);
+    }
+
+    /**
+     * {@code stated} as the relations of numbers of the input a row meets for it, or null where
+     * it asks anything else of a row, or no row meets it: a reader of relations held together
+     * says a statement no row meets by none of them, which is not what holding none says.
+     */
+    private List<TakenConstraint.Affine> relationsOf(Proposition stated) {
+        List<List<TakenConstraint.Affine>> ways = waysOf(stated);
+        return (ways == null || ways.isEmpty()) ? null : ways.getFirst();
     }
 
     /** {@code number} moved by {@code by}, or null where that is no number held exactly. */
@@ -1628,11 +1706,15 @@ final class StopsOfABody {
         // the way are, so that it is a statement of that element and not of another.
         List<TakenConstraint.Affine> made = List.of();
         if (reached.forEvery()) {
-            made = madeOnTheElementAs(reached.made());
-            if (made == null || !overTheNumbersOf(made, site, ways)) {
+            List<TakenConstraint.Affine> ofTheElement = madeOnTheElementAs(reached.made());
+            List<TakenConstraint.Affine> held = holdingAnElement(reached.made());
+            if (ofTheElement == null || held == null
+                    || !overTheNumbersOf(ofTheElement, site, ways)) {
                 return new StopAssessment.Judgement.Unresolved(site,
                         WhyAStopIsNotShown.A_CONDITION_NOT_READ);
             }
+            made = new ArrayList<>(ofTheElement);
+            made.addAll(held);
         }
         // A condition that came out one of several ways is got past along any of them, each way
         // read as one reading of the site ({@link WhatEveryWayShows}).

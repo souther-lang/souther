@@ -216,22 +216,19 @@ public record Count(BigDecimal at) implements Place {
     /**
      * What makes two counts one line: the number, and not how many places it was written to.
      *
-     * <p>Built from the two parts a decimal is held as once the trailing zeros are off it, which is
-     * one pair per number — so two counts with this name are one count, and the name costs what
-     * those parts cost. Spelled out instead, a bound at a decimal written at a wide scale is a
-     * character per place: the value is a single digit and a scale, and naming it wrote every place
-     * between them. What a reader sees is {@link #spelled}, and no line in the algebra is named by
-     * asking for that.
+     * <p>The count with the trailing zeros off it, which is one decimal per number — so two counts
+     * whose keys are equal are one count. What a reader sees is {@link #spelled}, and no line in
+     * the algebra is named by asking for that.
      *
-     * <p>Not {@link #equals}, which a record derives from {@link BigDecimal#equals} and which says
-     * {@code 0.00} and {@code 0} are two places. The derived equality is left alone rather than
-     * overridden so that a map keyed on counts keeps saying what a map keyed on {@code BigDecimal}
-     * said; every comparison in the algebra goes through {@link #compareTo} or {@link Place#sameAs}.
+     * <p>Not {@code equals} on the count itself, which a record derives from
+     * {@link BigDecimal#equals} and which says {@code 0.00} and {@code 0} are two places. The
+     * derived equality is left alone rather than overridden so that a map keyed on counts keeps
+     * saying what a map keyed on {@code BigDecimal} said; every comparison in the algebra goes
+     * through {@link #compareTo} or {@link Place#sameAs}.
      */
     @Override
-    public String key() {
-        BigDecimal canonical = ExactDecimals.leastDigits(at);
-        return canonical.unscaledValue() + ";" + canonical.scale();
+    public Count key() {
+        return new Count(ExactDecimals.leastDigits(at));
     }
 
     /** This count as the number it is. The trailing zeros are gone, so {@code 0.00} and {@code 0}

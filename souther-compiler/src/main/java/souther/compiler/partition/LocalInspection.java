@@ -140,7 +140,7 @@ final class LocalInspection {
         if (bounds == null || bounds.isEmpty()) {
             return List.of();
         }
-        Map<String, Cut> byValue = new LinkedHashMap<>();
+        Map<Place, Cut> byValue = new LinkedHashMap<>();
         // One side at a time, and everything about a side read from the side. Where the position
         // stops, where its own type stops, which of the reading's two answers is about it and which
         // end a bound placed are four answers to one choice, and a reader making that choice four
@@ -159,7 +159,7 @@ final class LocalInspection {
      *             at a time, and nowhere below: a bound records where it stops, and everything past
      *             this holds the range the rules leave rather than the end that made it
      */
-    private static void cut(Map<String, Cut> into, EndSide side, DeclaredBounds.End end,
+    private static void cut(Map<Place, Cut> into, EndSide side, DeclaredBounds.End end,
                             DeclaredBounds.End own, Carrier carrier, NarrowedBounds narrowed) {
         if (end == null) {
             return;
@@ -200,7 +200,7 @@ final class LocalInspection {
         }
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Place at,
+    private static void put(Map<Place, Cut> into, Carrier carrier, Place at,
                             LineOrigin.InvariantOrigin drawnBy, Endpoint cutAt,
                             MatchedEndAttribution took) {
         // The rule as the end already names it. Narrowing is the one thing said here, and it is

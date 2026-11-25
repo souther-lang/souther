@@ -3,15 +3,13 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
-import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
+import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * Two memberships in one set are two elements of it. What the first asks of the set is met by an
@@ -25,17 +23,18 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  */
 class ASecondMembershipInASetIsReadBesideTheFirstTest {
 
-    /** The places the report says nothing is read of. */
+    /** The places what {@code f} states is not read of, as the findings the report is written
+     *  from say them: a rule whose reading stopped, and not one read to the end that draws no
+     *  line, which the report says apart. */
     private static List<String> unread(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .filter(line -> line.contains("not read:"))
-                .map(line -> line.replaceAll(".*about `([^`]*)`.*", "$1"))
-                .sorted()
-                .toList();
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").notRead()
+                .stream()
+                .filter(each -> !(each instanceof PartitionEvidence.NotRead.ARule)
+                        || each.readingStopped())
+                .map(PartitionEvidence.NotRead::at).sorted().toList();
     }
 
     private static String ofNumbers(String body) {
@@ -95,7 +94,7 @@ class ASecondMembershipInASetIsReadBesideTheFirstTest {
      */
     @Test
     void aSetHeldToOneElementIsNotTakenForTwo() {
-        assertNotEquals(List.of(), unread("""
+        assertEquals(List.of("bag.a", "bag.hs[*]"), unread("""
                 module demo
 
                 data Bag = { hs: Set<Int>, a: Int } invariant Set.size(hs) <= 1

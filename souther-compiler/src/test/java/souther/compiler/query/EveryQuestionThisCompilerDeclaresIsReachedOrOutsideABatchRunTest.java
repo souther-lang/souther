@@ -117,7 +117,12 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             "how a sum or a behavior's answer union travels at a boundary, read by"
                     + " program.CheckedProgramAssembler for the snapshot an output outside this"
                     + " compiler reads — CheckedProgram.of has no caller among this project's own"
-                    + " operations, so nothing a batch run performs builds one");
+                    + " operations, so nothing a batch run performs builds one",
+            Output.SayingWhereRunsStop.class.getName(),
+            "the classes generated to say where each step that may end a run is written, for a"
+                    + " test that holds what a report says of a step to where the program stops."
+                    + " Nothing a batch compilation produces runs them: what it emits, ships or"
+                    + " evaluates is generated without saying");
 
     /** What the scan counted, worked out when a test first asks and kept for the rest: nothing it
      *  reads changes while the tests run, and each of them would otherwise scan again. */

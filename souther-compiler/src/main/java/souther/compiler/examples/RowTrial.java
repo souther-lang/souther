@@ -30,10 +30,6 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-import souther.runtime.ConstraintViolation;
-import souther.runtime.EnsuresFailure;
-import souther.runtime.InvariantFailure;
-import souther.runtime.UnreachableReached;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -405,7 +401,8 @@ public final class RowTrial {
                             new AnswerObservation.RanOut(RunLimits.figureOf(e, steps)),
                             Optional.empty()));
                 }
-                return Optional.of(new Applied(new AnswerObservation.NotAnswered(), stopOf(e)));
+                return Optional.of(new Applied(new AnswerObservation.NotAnswered(),
+                        RunStop.ofTheEndOf(e)));
             }
         } finally {
             EvaluationContext.end();
@@ -415,40 +412,6 @@ public final class RowTrial {
 
     /** What a run answered, and where it stopped where it stopped without answering. */
     private record Applied(AnswerObservation answer, Optional<RunStop> stopped) {}
-
-    /**
-     * Where {@code stopped} ended, read off the language's own ends among the causes the
-     * application wrapped it in: a {@link ConstraintViolation} — a construction refused, an
-     * {@code ensures} not kept, or an operation the language refuses to finish — or an
-     * {@link UnreachableReached}. None where it ended some other way.
-     */
-    private static Optional<RunStop> stopOf(InvocationFailure stopped) {
-        for (Throwable cause = stopped.getCause(); cause != null; cause = cause.getCause()) {
-            if (cause instanceof UnreachableReached reached) {
-                UnreachableReached.Site site = reached.site();
-                return Optional.of(new RunStop.AtAnUnreachable(String.valueOf(
-                        reached.getMessage()), site == null ? Optional.empty()
-                                : Optional.of(new RunStop.Site(site.module(), site.line(),
-                                        site.column()))));
-            }
-            if (cause instanceof ConstraintViolation violation) {
-                return Optional.of(switch (violation.failure()) {
-                    case InvariantFailure failed -> {
-                        ConstraintViolation.ConstructionSite site = violation.site();
-                        yield new RunStop.AtAConstruction(failed.declared().module(),
-                                failed.declared().type(), Optional.ofNullable(failed.clause()),
-                                failed.declared().ordinal(), site == null ? Optional.empty()
-                                        : Optional.of(new RunStop.Site(site.module(), site.line(),
-                                                site.column())));
-                    }
-                    case EnsuresFailure failed -> new RunStop.AtAnEnsures(failed.module(),
-                            failed.behavior(), Optional.ofNullable(failed.clause()));
-                    case null -> new RunStop.AtAnEnd(String.valueOf(violation.getMessage()));
-                });
-            }
-        }
-        return Optional.empty();
-    }
 
     private RowTrial() {}
 }

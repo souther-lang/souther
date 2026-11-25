@@ -3,14 +3,11 @@ package souther.compiler.check;
 import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -287,21 +284,32 @@ public record Choice(Kind kind, List<Arm> arms) {
         for (DefinitionCase<DeclaredArgument> one : DischargeRules.chosenBy(call)) {
             List<FormsStand> given = new ArrayList<>(one.given().size());
             for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
-                given.add(new FormsStand(atTheCall(stands.left(), call), stands.rel(),
-                        atTheCall(stands.right(), call)));
+                LinearForm<Core> left = atTheCall(stands.left(), call);
+                LinearForm<Core> right = atTheCall(stands.right(), call);
+                if (left == null || right == null) {
+                    return List.of();
+                }
+                given.add(new FormsStand(left, stands.rel(), right));
             }
-            out.add(new ADefinitionCase(atTheCall(one.answers(), call), given));
+            LinearForm<Core> answers = atTheCall(one.answers(), call);
+            if (answers == null) {
+                return List.of();
+            }
+            out.add(new ADefinitionCase(answers, given));
         }
         return out;
     }
 
-    /** {@code form}, each argument it names written as the value {@code call} was given there. */
+    /**
+     * {@code form}, each argument it names written as the value {@code call} was given there, as
+     * the form's own arithmetic puts it together ({@link LinearForm#over}): two arguments given
+     * one value are that value, weighed by their weights added, and none where those come to
+     * nought. Null where the arithmetic holds no number of it, and then no case of the definition
+     * is read at this call, as none can be read in part.
+     */
     private static LinearForm<Core> atTheCall(LinearForm<DeclaredArgument> form,
                                               Core.PreservedCall call) {
-        Map<Core, ExactRatio> values = new LinkedHashMap<>();
-        form.coefs().forEach((argument, weight) ->
-                values.put(CallArguments.of(argument, call), weight));
-        return new LinearForm<>(form.constant(), values);
+        return form.over(argument -> LinearForm.atom(CallArguments.of(argument, call)));
     }
 
     /**

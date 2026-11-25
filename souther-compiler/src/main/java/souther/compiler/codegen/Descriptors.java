@@ -306,6 +306,12 @@ final class Descriptors {
     /** {@code orThrow(Result, module, line, column)}: the same, naming the construction. */
     static final MethodTypeDesc MTD_orThrowAt = MethodTypeDesc.of(CD_Object, CD_Result, CD_String,
             ConstantDescs.CD_int, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_placedAt = MethodTypeDesc.of(CD_ConstraintViolation, CD_String,
+            ConstantDescs.CD_int, ConstantDescs.CD_int);
+    static final ClassDesc CD_StepsGotPast = ClassDesc.of("souther.compiler.execute.StepsGotPast");
+    static final MethodTypeDesc MTD_passed = MethodTypeDesc.of(ConstantDescs.CD_void, CD_String,
+            ConstantDescs.CD_int, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_left = MethodTypeDesc.of(ConstantDescs.CD_void);
     static final ClassDesc CD_StringBuilder = ClassDesc.of("java.lang.StringBuilder");
     static final MethodTypeDesc MTD_SB_appendString =
             MethodTypeDesc.of(CD_StringBuilder, CD_String);

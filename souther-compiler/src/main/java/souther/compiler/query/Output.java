@@ -583,6 +583,51 @@ public final class Output {
     }
 
     /**
+     * The classes of every module {@code name} reaches that this compilation generates, each saying
+     * where each step that may end a run is written ({@link Instrumentation#saysWhereRunsStop}):
+     * what a reader runs that holds what a report says of a step to what runs do at it.
+     *
+     * <p>Every module reached and not the one named alone. A step in an import that ended a run and
+     * said no place would leave the place to be said by the step the run was in when it left the
+     * import, which is another step. Neither counted nor measured: what these are run for is where
+     * runs stop, and nothing else is asked of them. Never stamped and never written out.
+     */
+    public record SayingWhereRunsStop(String name) implements Key<Map<String, ClassFileImage>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, ClassFileImage>> compute(Db db) {
+            List<String> generated = generatedReach(db, name);
+            if (generated == null) {
+                return Answer.absent();
+            }
+            Map<String, ClassFileImage> linked = new LinkedHashMap<>();
+            for (String reached : generated) {
+                Classes.Inputs in = Classes.inputs(db, reached, Classes.Elaboration.OBSERVABLE);
+                if (in == null) {
+                    return Answer.absent();
+                }
+                try {
+                    linked.putAll(Backend.generate(
+                            in.lowered(), in.scope(), in.published(), in.kinds(),
+                            in.scope().library().kernelSignatures(),
+                            in.typePackages(), in.sigs(),
+                            in.requirements(), in.checked(), in.compositions(),
+                            in.shapes(), in.checks(),
+                            in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage(),
+                            Instrumentation.NONE.sayingWhereRunsStop()).seal());
+                } catch (CompileException e) {
+                    return Answer.absent(e);
+                }
+            }
+            return Answer.of(Ordered.map(linked));
+        }
+    }
+
+    /**
      * What an evaluation of one module's rows loads: every module the rows can reach, counted, with
      * arms recorded in the one module a measurement is about.
      *

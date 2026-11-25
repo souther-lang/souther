@@ -222,7 +222,8 @@ class ATotalOfWhatAFilterKeepsIsHeldToTheListItKeepsFromTest {
     }
 
     /** Control: with each amount unbounded above the total of three passes an {@code Int}, and
-     *  the run that gets there is said to stop in the sum of the three amounts. */
+     *  a stop in the sum of the three amounts is said of the run that gets there, shown or not
+     *  resolved. */
     @Test
     void withTheAmountsUnboundedTheTotalIsSaidToStopInTheSumOfTheAmounts() {
         StopsTheReportSays.Said unbounded = said("", FILTERED_HERE, TOTAL + " / List.length(ms)");

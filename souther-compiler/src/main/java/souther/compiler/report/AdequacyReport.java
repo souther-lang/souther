@@ -7657,18 +7657,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (EveryRunStops stop : stops) {
             List<String> where = new ArrayList<>();
             for (EveryRunStops.Within within : stop.where()) {
+                String form = within.written();
                 where.add(page.say(
                         within.least() != null && within.least().equals(within.greatest())
-                                ? new ReportMessage.ItIs(within.form(),
-                                        String.valueOf(within.least()))
+                                ? new ReportMessage.ItIs(form, String.valueOf(within.least()))
                                 : within.least() != null && within.greatest() != null
-                                ? new ReportMessage.ItIsFromTo(within.form(),
+                                ? new ReportMessage.ItIsFromTo(form,
                                         String.valueOf(within.least()),
                                         String.valueOf(within.greatest()))
                                 : within.least() != null
-                                ? new ReportMessage.ItIsAtLeast(within.form(),
+                                ? new ReportMessage.ItIsAtLeast(form,
                                         String.valueOf(within.least()))
-                                : new ReportMessage.ItIsAtMost(within.form(),
+                                : new ReportMessage.ItIsAtMost(form,
                                         String.valueOf(within.greatest()))));
             }
             each.add(page.say(new ReportMessage.StopsIn(stop.operation(), both(page, where))));
@@ -8503,7 +8503,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // A quantity that is no form weighs no terms, and is the quantity it names itself as: how
         // many elements of which container meet what.
         if (!(quantity instanceof LinearQuantity form)) {
-            into.put("counted", quantity.identity());
+            into.put("counted", quantity.spelledWhole());
             return;
         }
         ArrayNode terms = into.putArray("terms");
@@ -8636,7 +8636,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("kind", "occurrences_in_every_container");
                 into.put("position", it.subjectPath().discriminated());
                 if (it.selection() != null) {
-                    into.put("kept_by", it.selection().key());
+                    into.put("kept_by", it.selection().spelling().toString());
                 }
             }
             // How often the value an input holds occurs among every occurrence of the place.
@@ -8680,7 +8680,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
                 elementComputation(into.putObject("computation"), it.value());
                 if (it.selection() != null) {
-                    into.put("kept_by", it.selection().key());
+                    into.put("kept_by", it.selection().spelling().toString());
                 }
             }
             // The same number for the key an input holds, which is the number of the elements of
@@ -11856,7 +11856,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ArrayNode where = one.putArray("where");
                 for (EveryRunStops.Within within : each.where()) {
                     ObjectNode bound = where.addObject();
-                    bound.put("form", within.form());
+                    bound.put("form", within.written());
                     if (within.least() != null) {
                         bound.put("least", within.least());
                     }

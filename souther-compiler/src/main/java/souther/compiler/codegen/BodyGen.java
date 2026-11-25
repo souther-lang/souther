@@ -9,6 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.DeclarationAccess;
@@ -18,6 +19,8 @@ import souther.compiler.check.FieldLayout;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.WhatARunMayEndFor;
+import souther.compiler.abort.AbortSet;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -855,6 +858,69 @@ final class BodyGen {
          * checker validated. Only the passthrough arms (if/let/match/call) forward it.
          */
         Type genExpr(Core e, Type expected) {
+            WhatARunMayEndFor.Endings ends = whatMayEndARunAt(e);
+            if (ends.endsNone()) {
+                return emitted(e, expected);
+            }
+            boolean itself = ends instanceof WhatARunMayEndFor.Endings.Known;
+            Label start = code.newLabel();
+            Label end = code.newLabel();
+            Label left = code.newLabel();
+            Label after = code.newLabel();
+            code.labelBinding(start);
+            Type out = emitted(e, expected);
+            code.labelBinding(end);
+            Optional<TextsOfModules.WrittenAt> at = ctx.writtenAt(e.pos());
+            if (itself && at.isPresent()) {
+                placed(at.get());
+                code.invokestatic(CD_StepsGotPast, "passed", MTD_passed);
+            }
+            code.goto_(after);
+            code.labelBinding(left);
+            if (itself) {
+                writtenAt(e.pos());
+            } else {
+                code.aconst_null();
+                code.loadConstant(0);
+                code.loadConstant(0);
+            }
+            code.invokevirtual(CD_ConstraintViolation, "placedAt", MTD_placedAt);
+            code.athrow();
+            code.exceptionCatch(start, end, left, CD_ConstraintViolation);
+            code.labelBinding(after);
+            return out;
+        }
+
+        /**
+         * What {@code e} itself may end a run for, where this generation says where runs stop; that
+         * it ends none where it does not say, or {@code e} is an {@code unreachable}, which says
+         * where it is reached.
+         *
+         * <p>Which steps may end a run is {@link WhatARunMayEndFor#itself}'s, read of the step and
+         * not of what it is made of: what it is made of is a step of its own, emitted inside this
+         * one, which says it ended the run first as the run leaves it. A step that ends a run for
+         * a reason that is known says where it is written, or that it is written nowhere this
+         * compilation holds laid out. One that may end a run for what is not known here — a call
+         * into another declaration's body, a function applied, a construction — says only that
+         * the run ended inside it, at a step it cannot name: the step was in code that may not say
+         * where it is, and it is not this one, which the run never finished working out. A
+         * construction's refusal carries its own place, and nothing said here moves it.
+         */
+        private WhatARunMayEndFor.Endings whatMayEndARunAt(Core e) {
+            return (!ctx.sayingWhereRunsStop() || Core.withoutStanding(e) instanceof Core.Unreachable)
+                    ? new WhatARunMayEndFor.Endings.Known(AbortSet.NONE)
+                    : WhatARunMayEndFor.itself(e);
+        }
+
+        /** Pushes the module, line and column of {@code at}. */
+        private void placed(TextsOfModules.WrittenAt at) {
+            code.loadConstant(at.module());
+            code.loadConstant(at.sits().line());
+            code.loadConstant(at.sits().column());
+        }
+
+        /** Emits {@code e} and yields its type, saying nothing of where a run stops. */
+        private Type emitted(Core e, Type expected) {
             if (e.type() == null) {
                 throw new IllegalStateException("this node reached the emitter untyped: "
                         + e.getClass().getSimpleName() + " at " + e.pos());
@@ -1022,11 +1088,9 @@ final class BodyGen {
          * place ({@link CodegenContext#writtenAt}), which the runtime reads as no place.
          */
         private void writtenAt(SourcePos place) {
-            Optional<CodegenContext.WrittenAt> at = ctx.writtenAt(place);
+            Optional<TextsOfModules.WrittenAt> at = ctx.writtenAt(place);
             if (at.isPresent()) {
-                code.loadConstant(at.get().module());
-                code.loadConstant(at.get().sits().line());
-                code.loadConstant(at.get().sits().column());
+                placed(at.get());
             } else {
                 code.aconst_null();
                 code.loadConstant(0);
@@ -1541,8 +1605,10 @@ final class BodyGen {
                     // entry, which is public and takes nothing, so no type the value is built from
                     // is named here; what its answer is taken as is what the entry offers.
                     LinkageProjection.Value entered = ctx.publishedValue(value);
+                    boolean inside = entering(call);
                     code.invokestatic(entered.entry().ownerClass(), entered.entry().method(),
                             entered.entry().methodType());
+                    left(inside);
                     castFromObject(code, entered.answers());
                 }
                 case Core.Reaches.AHelper _ -> {
@@ -1595,7 +1661,9 @@ final class BodyGen {
                 box(code, emitArgument(call, i));
             }
             reachedAsACall(call);
+            boolean entered = entering(call);
             invokeRecursiveHelper(call);
+            left(entered);
             castFromObject(code, call.type());
         }
 
@@ -1993,9 +2061,40 @@ final class BodyGen {
                 Type at = genExpr(arg);
                 box(code, at);
             }
+            boolean entered = entering(call);
             invoke(linked.apply());
+            left(entered);
             project(linked);
             castFromObject(code, linked.answers());
+        }
+
+        /**
+         * Records that a run entered what {@code call} calls, where this generation says where runs
+         * stop: with its arguments worked out, so a run that stopped working one out stopped at a
+         * step of the caller. A call written in no text this compilation holds laid out is entered
+         * all the same, with no place, so the calls a run ended inside are every one it was in.
+         * Answers whether it recorded one, for {@link #left}.
+         *
+         * <p>What a run stopped inside when it stopped at a step of another declaration's body: a
+         * finding of the caller names the call and not that step. Not a build of a value the
+         * module declares, run as a method though it is: the analysis goes through the value's
+         * template as part of the body that builds it ({@link ValueTemplates#builtBy}), so a step
+         * of the template is a step of that body, and a finding of it names that step.
+         */
+        private boolean entering(Core.Call call) {
+            if (!ctx.sayingWhereRunsStop() || call.fn() instanceof Core.Reached.OfValue) {
+                return false;
+            }
+            writtenAt(call.pos());
+            code.invokestatic(CD_StepsGotPast, "entering", MTD_passed);
+            return true;
+        }
+
+        /** Records that a run came back out of the call {@link #entering} recorded it entering. */
+        private void left(boolean entered) {
+            if (entered) {
+                code.invokestatic(CD_StepsGotPast, "left", MTD_left);
+            }
         }
 
         /** Emits the instruction {@code invocation} describes. */
@@ -2033,7 +2132,9 @@ final class BodyGen {
                 box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
                 keepForTheCheck(saved);
             }
+            boolean entered = entering(call);
             invoke(linked.apply());
+            left(entered);
             project(linked);
             CanonicalizeAtCrossing.emit(ctx, code, success);
             checkAtCrossing(callee, saved);

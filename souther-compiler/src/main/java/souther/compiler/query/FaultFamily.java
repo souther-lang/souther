@@ -104,8 +104,8 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
     }
 
     public Found others() {
-        Set<String> named = new LinkedHashSet<>();
-        named.add(wrote.key());
+        Set<QuantityKey> named = new LinkedHashSet<>();
+        named.add(wrote);
         List<QuantityKey> out = new ArrayList<>();
         boolean everyStepWasComposed = true;
         // In an order the terms settle rather than the one a direction happens to be held in. What
@@ -123,7 +123,7 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
                     continue;
                 }
                 QuantityKey other = found.line();
-                if (other != null && named.add(other.key())) {
+                if (other != null && named.add(other)) {
                     out.add(other);
                 }
             }

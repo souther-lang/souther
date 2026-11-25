@@ -14,6 +14,8 @@ import souther.compiler.report.AdequacyReport;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -658,37 +660,79 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
     @Test
     void aDecimalHeldAwayFromAValueItTakesLeavesTheOtherPlaceDividedByItBesideAnEquation()
             throws Exception {
-        List<String> wrong = new ArrayList<>();
-        for (String relation : List.of("p.x == p.k", "p.x /= p.k", "p.x >= p.k", "p.x < p.k")) {
-            String source = guardedDecimals("0.5m", relation);
-            BytesClassLoader loader =
-                    new BytesClassLoader(Compiler.compile(source), getClass().getClassLoader());
-            Object behavior = Emitted.behavior(loader, MODULE, "m").getConstructor().newInstance();
-            Set<String> settledK = new TreeSet<>();
-            for (BigDecimal fixed : INSIDE_THE_DECIMALS) {
-                Set<String> byK = new TreeSet<>();
-                for (BigDecimal other : DECIMALS) {
-                    Object row = Codecs.decoded(loader, MODULE + ".Pair",
-                            Map.of("x", other, "k", fixed));
-                    String answered = Codecs.apply(behavior, row).getClass().getSimpleName();
-                    if (!answered.equals("Skipped")) {
-                        byK.add(answered);
-                    }
-                }
-                if (byK.size() == 1) {
-                    settledK.add("k=" + fixed);
-                }
+        Map<String, Read> read = new LinkedHashMap<>();
+        for (String relation : RELATIONS) {
+            read.put(relation, undividedHeldToTheRuns(relation,
+                    guardedDecimals("0.5m", relation), List.of(DECIMALS),
+                    List.of(INSIDE_THE_DECIMALS)));
+        }
+        // Each relates p.k to a decimal held away from a value, which is not shown to reach every
+        // value of p.k, so that side is not read, and p.k is never left undivided.
+        assertEquals(Map.of(
+                "p.x >= p.k", new Read(Set.of("p.x"), true, List.of()),
+                "p.x < p.k", new Read(Set.of("p.x"), true, List.of()),
+                "p.x == p.k", new Read(Set.of("p.x"), true, List.of()),
+                "p.x /= p.k", new Read(Set.of("p.x"), true, List.of())), read);
+    }
+
+    /** An order and an equation between the two places, each way round. */
+    private static final List<String> RELATIONS =
+            List.of("p.x >= p.k", "p.x < p.k", "p.x == p.k", "p.x /= p.k");
+
+    /**
+     * What the report says of the two places of one relation, held to the runs.
+     *
+     * @param undivided the places it leaves undivided
+     * @param notRead   whether it says something is not read
+     * @param unsound   each place it leaves undivided that the runs settle at some value
+     */
+    private record Read(Set<String> undivided, boolean notRead, List<String> unsound) {}
+
+    /**
+     * What the report of {@code source}, whose behavior {@code m} holds {@code relation} past a
+     * value {@code p.x} is held away from, says of the places it leaves undivided, held to the
+     * runs of {@code values} at each place beside each of {@code inside} at the other: a place the
+     * runs settle at some value is none a claim of undivided is right about. What it says beside
+     * that is the caller's to hold, which is what keeps a report saying nothing from being taken
+     * for one saying nothing wrong.
+     */
+    private Read undividedHeldToTheRuns(String relation, String source, List<?> values,
+                                        List<?> inside) throws Exception {
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(source), getClass().getClassLoader());
+        Object behavior = Emitted.behavior(loader, MODULE, "m").getConstructor().newInstance();
+        Set<String> settledX = new TreeSet<>();
+        Set<String> settledK = new TreeSet<>();
+        for (Object fixed : inside) {
+            Set<String> byX = new TreeSet<>();
+            Set<String> byK = new TreeSet<>();
+            for (Object other : values) {
+                byX.add(answer(loader, behavior, fixed, other));
+                byK.add(answer(loader, behavior, other, fixed));
             }
-            Set<String> claimed = undivided(report(measured(source, Adequacy.Level.WITNESS)));
-            if (claimed.contains("p.k") && !settledK.isEmpty()) {
-                wrong.add(relation + ": p.k is left undivided and the runs settle " + settledK);
+            byX.remove("Skipped");
+            byK.remove("Skipped");
+            if (byX.size() == 1) {
+                settledX.add("x=" + fixed);
+            }
+            if (byK.size() == 1) {
+                settledK.add("k=" + fixed);
             }
         }
-        assertEquals(List.of(), wrong);
+        String report = report(measured(source, Adequacy.Level.WITNESS));
+        Set<String> claimed = undivided(report);
+        List<String> unsound = new ArrayList<>();
+        if (claimed.contains("p.x") && !settledX.isEmpty()) {
+            unsound.add(relation + ": p.x is left undivided and the runs settle " + settledX);
+        }
+        if (claimed.contains("p.k") && !settledK.isEmpty()) {
+            unsound.add(relation + ": p.k is left undivided and the runs settle " + settledK);
+        }
+        return new Read(claimed, somethingIsNotRead(report), unsound);
     }
 
     /** What running {@code m} on a row comes to, as the case it answers. */
-    private static String answer(BytesClassLoader loader, Object behavior, long x, long k)
+    private static String answer(BytesClassLoader loader, Object behavior, Object x, Object k)
             throws Exception {
         Object row = Codecs.decoded(loader, MODULE + ".Pair", Map.of("x", x, "k", k));
         return Codecs.apply(behavior, row).getClass().getSimpleName();
@@ -709,61 +753,20 @@ class AComparisonReadPastAStoppingOperationIsReadOverTheInputsThatGetPastItTest 
     @Test
     void aValueHeldAwayFromANumberLeavesAPlaceUndividedOnlyWhereTheRunsComeOutBothWays()
             throws Exception {
-        List<String> wrong = new ArrayList<>();
-        for (String relation : List.of("p.x >= p.k", "p.x < p.k", "p.x == p.k", "p.x /= p.k")) {
-            String source = guarded("0", relation);
-            BytesClassLoader loader =
-                    new BytesClassLoader(Compiler.compile(source), getClass().getClassLoader());
-            Object behavior = Emitted.behavior(loader, MODULE, "m").getConstructor().newInstance();
-            Set<String> settledX = new TreeSet<>();
-            Set<String> settledK = new TreeSet<>();
-            // The values the grid has others on both sides of. A value at the end of the grid is
-            // one nothing of the grid is past, and the ends of the type are not values a model
-            // divides.
-            for (long fixed : INSIDE) {
-                Set<String> byX = new TreeSet<>();
-                Set<String> byK = new TreeSet<>();
-                for (long other : VALUES) {
-                    String atX = answer(loader, behavior, fixed, other);
-                    String atK = answer(loader, behavior, other, fixed);
-                    if (!atX.equals("Skipped")) {
-                        byX.add(atX);
-                    }
-                    if (!atK.equals("Skipped")) {
-                        byK.add(atK);
-                    }
-                }
-                if (byX.size() == 1) {
-                    settledX.add("x=" + fixed);
-                }
-                if (byK.size() == 1) {
-                    settledK.add("k=" + fixed);
-                }
-            }
-            String report = report(measured(source, Adequacy.Level.WITNESS));
-            Set<String> claimed = undivided(report);
-            if (somethingIsNotRead(report)) {
-                wrong.add(relation + " is not read\n" + report);
-            }
-            // The grid holds both signs and the ends, so a place that is settled at any of its
-            // values is one a claim of undivided is wrong about.
-            if (claimed.contains("p.x") && !settledX.isEmpty()) {
-                wrong.add(relation + ": p.x is left undivided and the runs settle " + settledX);
-            }
-            if (claimed.contains("p.k") && !settledK.isEmpty()) {
-                wrong.add(relation + ": p.k is left undivided and the runs settle " + settledK);
-            }
-            // And where the runs settle no value of a place, an order says so.
-            boolean anOrder = relation.contains("<") || relation.contains(">");
-            if (anOrder && !claimed.equals(Set.of("p.k", "p.x"))) {
-                wrong.add(relation + ": the runs settle no value, and the places left undivided"
-                        + " are " + claimed);
-            }
-            if (!anOrder && !settledK.isEmpty() && claimed.contains("p.k")) {
-                wrong.add(relation + ": nought settles it for k");
-            }
+        Map<String, Read> read = new LinkedHashMap<>();
+        // The values the grid has others on both sides of. A value at the end of the grid is one
+        // nothing of the grid is past, and the ends of the type are not values a model divides.
+        List<Object> values = Arrays.stream(VALUES).boxed().map(Object.class::cast).toList();
+        List<Object> inside = Arrays.stream(INSIDE).boxed().map(Object.class::cast).toList();
+        for (String relation : RELATIONS) {
+            read.put(relation, undividedHeldToTheRuns(relation, guarded("0", relation), values,
+                    inside));
         }
-        assertEquals(List.of(), wrong);
+        assertEquals(Map.of(
+                "p.x >= p.k", new Read(Set.of("p.k", "p.x"), false, List.of()),
+                "p.x < p.k", new Read(Set.of("p.k", "p.x"), false, List.of()),
+                "p.x == p.k", new Read(Set.of("p.x"), false, List.of()),
+                "p.x /= p.k", new Read(Set.of("p.x"), false, List.of())), read);
         assertFalse(CASES.isEmpty());
     }
 }

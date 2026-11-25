@@ -1054,7 +1054,7 @@ public sealed interface Carrier extends ValueOrder {
         }
         // Open below one, and the empty string is under every other. The least there is, not one
         // this made up.
-        return high == null || !high.at().key().isEmpty()
+        return high == null || !high.at().spelled().isEmpty()
                 ? souther.compiler.numeric.Text.of("") : null;
     }
 

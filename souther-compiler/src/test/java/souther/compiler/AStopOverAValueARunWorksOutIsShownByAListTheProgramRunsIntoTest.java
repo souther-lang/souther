@@ -11,34 +11,31 @@ import souther.compiler.inputs.StepWhereARunMayStop;
 import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.inputs.WhyAStopIsNotShown;
-import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.runtime.ConstraintViolation;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A stop shown at an operation over a value a run works out, which no number of the input is, rests
- * on an input, and the program run on that input stops there.
+ * on an input, and the program run on that input stops there, as {@link StopsHeldToTheRuns} holds
+ * what is said of where a run stops to the runs.
  *
- * <p>The truth is the program run, and which input the stop is shown by is no claim: a search that
- * puts the value at another input that stops as well is as right. Each stop shown is built into an
- * input as it says — the lists of the length it names holding the element it names, and the numbers
- * at the places it names — and run, and it stops with an {@code Int} past its range. A run says that
- * and not where, so the place is held by a second run of the same input: the comparison with the
- * operation left out, which stops at nothing, so that the first run reached the operation and
- * stopped in it.
+ * <p>Which input the stop is shown by is no claim: a search that puts the value at another input
+ * that stops as well is as right. Each stop shown is built into an input as it says — the lists of
+ * the length it names holding the element it names, and the numbers at the places it names — and
+ * run, and the run stops first at the step the stop is shown at. A witness of a list longer than one
+ * is built of is held by no run, and is written down ({@link #TOO_LONG_TO_RUN}).
  *
  * <p>The other direction is held by the controls: a form no run stops in, and one whose stop is not
  * one a row of the way is shown to get, have no stop shown, nor has a list of elements no value
@@ -51,24 +48,36 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
 
     private static final Adequacy.Asked ASKED = new Adequacy.Asked(Adequacy.Level.OFF, false);
 
+    /** The input every form over numbers takes: a list of none and one of the greatest number,
+     *  and nought and the greatest number. */
+    private static final StopsHeldToTheRuns.Input INPUT = new StopsHeldToTheRuns.Input("demo", "In",
+            Map.of("ds", List.of(List.of(), List.of(Long.MAX_VALUE)),
+                    "q", List.of(0L, Long.MAX_VALUE)));
+
     /**
      * A comparison on {@code ds} and {@code q} a stop is shown of.
      *
-     * @param before    the comparison with the operation the stop is in left out, which stops at
-     *                  nothing that stop rests on; null where the form has no operation held
-     * @param operation the operation, as written, whose stop {@code before} leaves out; null
-     *                  where there is none held
+     * @param operation the operation, as written, a stop is to be shown in; null where any is
      */
-    private record Form(String comparison, String before, String operation) {
+    private record Form(String comparison, String operation) {
 
         Form(String comparison) {
-            this(comparison, null, null);
-        }
-
-        Form(String comparison, String before) {
-            this(comparison, before, null);
+            this(comparison, null);
         }
     }
+
+    /** The forms some claims of which no run is built to hold, each with how many for why. Any
+     *  other reason, or another claim for one of these, is refused. A size of a list past the
+     *  type is a list too long to build and run: its witness is one, and the rows every run stops
+     *  at weigh its length, which no run here is about. */
+    private static final Map<String, Map<StopsHeldToTheRuns.NotHeld, Integer>> TOO_LONG_TO_RUN =
+            Map.of("aSizeOfTheLongestAListCanBePassingTheType", Map.of(
+                    StopsHeldToTheRuns.NotHeld.A_WITNESS_LONGER_THAN_IS_RUN, 1,
+                    StopsHeldToTheRuns.NotHeld.ROWS_OVER_WHAT_IS_NOT_WEIGHED_HERE, 1));
+
+    /** The forms a run of the grid stops at a step of that is said not resolved, with why. */
+    private static final Map<String, Set<Enum<?>>> NOT_SHOWN_WHERE_A_RUN_STOPS =
+            new LinkedHashMap<>();
 
     /** Forms over a list of numbers, each a behavior of the one model of them. */
     private static final Map<String, Form> STOPPING = new LinkedHashMap<>();
@@ -109,40 +118,43 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
     static {
         // the element a call answers is the only one of a list of one, which is the greatest
         STOPPING.put("theElementOfAListOfOne", new Form(
-                "Option.withDefault(0, List.max(ds)) + 1 <= 10",
-                "Option.withDefault(0, List.max(ds)) <= 10"));
+                "Option.withDefault(0, List.max(ds)) + 1 <= 10"));
+        // a step on each element, the rows every run stops at being of the element itself
+        STOPPING.put("aStepOnEachElement", new Form("List.any(x -> x + 1 > 5, ds)"));
         // the greatest of a list written out is the element no other is past
         STOPPING.put("theGreatestOfAListWrittenOut", new Form(
-                "Option.withDefault(0, List.max([q, 3])) + 1 >= 3",
-                "Option.withDefault(0, List.max([q, 3])) >= 3"));
+                "Option.withDefault(0, List.max([q, 3])) + 1 >= 3"));
         // a value of the most ways a stop is looked for by is looked for by them all
         STOPPING.put("theMostWaysAStopIsLookedForBy", new Form(
-                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7])) + 1 >= 3",
-                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7])) >= 3"));
+                "Option.withDefault(0, List.max([q, 1, 2, 3, 4, 5, 6, 7])) + 1 >= 3"));
         // what makes up the list is worked out before the operation over its greatest: the stop in
         // the element is the one that is held to the run
         STOPPING.put("anElementOfAListWrittenOutWorkedOutFirst", new Form(
-                "Option.withDefault(0, List.max([q + 1, 3])) + 1 >= 3",
-                "Option.withDefault(0, List.max([q, 3])) >= 3", "i.q + 1"));
+                "Option.withDefault(0, List.max([q + 1, 3])) + 1 >= 3", "i.q + 1"));
+        // the operation over the greatest, which a run getting past the element stops in at a
+        // value no search tried
+        NOT_SHOWN_WHERE_A_RUN_STOPS.put("anElementOfAListWrittenOutWorkedOutFirst",
+                Set.of(WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED));
         // a walk over none comes to its seed
         STOPPING.put("theSeedOfAWalkOverNone", new Form(
-                "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) + 1 >= 3",
-                "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) >= 3"));
+                "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) + 1 >= 3"));
         // a walk over one comes to what its step answers of the seed and that element
         STOPPING.put("theElementOfAWalkWhoseStepChoosesAFewTimes", new Form(
-                stepOfChoices(2) + " + 1 <= 10", stepOfChoices(2) + " <= 10"));
-        STOPPING.put("theElementOfAWalkOverOne", new Form(WALK + " + 1 <= 10", WALK + " <= 10"));
+                stepOfChoices(2) + " + 1 <= 10"));
+        STOPPING.put("theElementOfAWalkOverOne", new Form(WALK + " + 1 <= 10"));
         // what a run works out first is got past: the sum of what the default comes to and
         // {@code q + 1} is worked out after {@code q + 1}, so a run is shown to stop in it at an
         // input where {@code q + 1} does not
         STOPPING.put("theOperationAfterOneWorkedOutFirst", new Form(
-                "Option.withDefault(0, List.max(ds)) + 1 + (q + 1) <= 10",
-                "(Option.withDefault(0, List.max(ds)) + 1) * 0 + (q + 1) * 0 <= 10",
-                "i.ds[*] + i.q + 2"));
+                "Option.withDefault(0, List.max(ds)) + 1 + (q + 1) <= 10", "i.ds[*] + i.q + 2"));
         // a list as long as the longest a size's passing the type is asked of, which is one a list
         // can be
         STOPPING.put("aSizeOfTheLongestAListCanBePassingTheType", new Form(
                 "List.length(ds) * 4294967300 >= 1"));
+        // a step every element is handed, past its type whatever the element is, is got to only
+        // where the list holds one: a list of none stops nowhere
+        STOPPING.put("aStepOfEveryElementPastItsTypeWhateverTheElement", new Form(
+                "List.length(List.map(x -> ((x - x) + 9223372036854775807) + 1, ds)) >= 1"));
 
         // a walk that keeps only what is below nought comes to a number the operation keeps
         // within the type, whichever arm of its step is taken
@@ -172,6 +184,9 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         static final Compilation COMPILED = ACompiledModel.measured(
                 modelOf("", "Int", FORMS), ASKED);
 
+        static final ClassLoader LOADER = COMPILED.loaderSayingWhereRunsStop("demo").orElseThrow(
+                () -> new AssertionError("the module is generated to say where runs stop"));
+
         static String behavior(String prefix, Form form) {
             return prefix + FORMS.indexOf(form);
         }
@@ -187,26 +202,93 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
 
     @ParameterizedTest
     @MethodSource("stopping")
-    void aStopShownRestsOnAnInputTheProgramRunsIntoItAt(String name) throws Exception {
+    void aStopShownRestsOnAnInputTheProgramRunsIntoItAt(String name) {
         Form form = STOPPING.get(name);
-        List<AStopShown> shown = shown(OverNumbers.COMPILED, OverNumbers.behavior("b", form));
-        assertFalse(shown.isEmpty(), "a stop is shown");
-        boolean theOneHeldIsShown = form.operation() == null;
-        for (AStopShown each : shown) {
-            theOneHeldIsShown |= each.operation().equals(form.operation());
-            if (theListIsTooLongToRun(each)) {
-                continue;
-            }
-            assertTrue(stoppedFor(OverNumbers.COMPILED, OverNumbers.behavior("b", form), each)
-                    .startsWith("Int overflow"), "the run of the input the stop rests on, " + each);
-            if (form.before() != null
-                    && (form.operation() == null || each.operation().equals(form.operation()))) {
-                assertEquals("no stop",
-                        stoppedFor(OverNumbers.COMPILED, OverNumbers.behavior("p", form), each),
-                        "what is worked out before the operation, on the same input, " + each);
+        String behavior = OverNumbers.behavior("b", form);
+        List<WhatIsShownOfAStop> said =
+                StopsHeldToTheRuns.saidOf(OverNumbers.COMPILED, "demo", behavior);
+        List<AStopShown> shown = shown(OverNumbers.COMPILED, behavior);
+        StopsHeldToTheRuns.Held held = StopsHeldToTheRuns.heldTo(said, new StopsHeldToTheRuns.Runs(
+                OverNumbers.COMPILED, OverNumbers.LOADER, INPUT, behavior, said));
+        assertAll(
+                () -> assertFalse(shown.isEmpty(), "a stop is shown"),
+                () -> assertTrue(form.operation() == null || shown.stream()
+                                .anyMatch(each -> each.operation().equals(form.operation())),
+                        "the stop in " + form.operation() + " is shown: " + shown),
+                () -> assertEquals(List.of(), held.unheld(),
+                        "what is said of a step is what the runs do there"),
+                () -> assertEquals(TOO_LONG_TO_RUN.getOrDefault(name, Map.of()),
+                        held.notHeldBecause(), "every claim is held to a run, but for the"
+                                + " reasons written down: " + held.notHeldTo()),
+                () -> assertEquals(NOT_SHOWN_WHERE_A_RUN_STOPS.getOrDefault(name, Set.of()),
+                        held.notShownBecause(), "a run stops at a step said not resolved, for"
+                                + " the reasons written down: " + held.notShown()),
+                () -> assertEquals(List.of(), held.notAbout(),
+                        "every claim of every run is about some run of the grid"));
+    }
+
+    /**
+     * A witness that names a list's length and not its element is held to every element the
+     * grid takes there, the grid as widened by the claims and not only what the input gives: the
+     * input gives the greatest number alone, and a list of one below it, which the rows every run
+     * stops at put in the grid, runs past the step. Said of the element, the stop is held.
+     */
+    @Test
+    void aWitnessNamingNoElementIsHeldToEveryElementTheGridTakes() {
+        String behavior = OverNumbers.behavior("b", STOPPING.get("aStepOnEachElement"));
+        List<WhatIsShownOfAStop> said =
+                StopsHeldToTheRuns.saidOf(OverNumbers.COMPILED, "demo", behavior);
+        List<WhatIsShownOfAStop> lengthOnly = new ArrayList<>();
+        boolean dropped = false;
+        for (WhatIsShownOfAStop each : said) {
+            if (each instanceof StepWhereARunMayStop stops && !stops.shown().isEmpty()) {
+                List<AStopShown> shown = new ArrayList<>();
+                for (AStopShown one : stops.shown()) {
+                    List<InputFact> structure = one.structure().stream()
+                            .filter(fact -> !(fact instanceof InputFact.ListElement)).toList();
+                    dropped |= structure.size() < one.structure().size();
+                    shown.add(new AStopShown(one.operation(), one.at(), structure));
+                }
+                lengthOnly.add(new StepWhereARunMayStop(stops.at(), shown, stops.constructions(),
+                        stops.everyRunStops(), stops.keeping()));
+            } else {
+                lengthOnly.add(each);
             }
         }
-        assertTrue(theOneHeldIsShown, "the stop in " + form.operation() + " is shown: " + shown);
+        assertTrue(dropped, "the witness names the element: " + said);
+        StopsHeldToTheRuns.Runs runs = new StopsHeldToTheRuns.Runs(OverNumbers.COMPILED,
+                OverNumbers.LOADER, INPUT, behavior, said);
+
+        assertEquals(Set.of(), StopsHeldToTheRuns.heldTo(said, runs).refused());
+        assertEquals(Set.of(StopsHeldToTheRuns.Claim.A_STOP_SHOWN),
+                StopsHeldToTheRuns.heldTo(lengthOnly, runs).refused());
+    }
+
+    /**
+     * A list whose elements a witness names nothing of comes to as many lists as each element's
+     * values multiplied, and past the most that are run it is held to none — counted so that no
+     * count of them is past what a long holds: sixty-three elements of two values each are two
+     * to the sixty-third lists, which a count that went round to below nought would take as few.
+     */
+    @Test
+    void aWitnessOfMoreListsThanAreRunIsHeldToNoneHoweverManyItComesTo() {
+        String behavior = OverNumbers.behavior("b", STOPPING.get("aStepOnEachElement"));
+        List<WhatIsShownOfAStop> said =
+                StopsHeldToTheRuns.saidOf(OverNumbers.COMPILED, "demo", behavior);
+        InputFact.ListLength length = said.stream()
+                .filter(StepWhereARunMayStop.class::isInstance)
+                .map(StepWhereARunMayStop.class::cast)
+                .flatMap(each -> each.shown().stream())
+                .flatMap(each -> each.structure().stream())
+                .filter(InputFact.ListLength.class::isInstance)
+                .map(InputFact.ListLength.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("a witness names a list: " + said));
+        StopsHeldToTheRuns.Runs runs = new StopsHeldToTheRuns.Runs(OverNumbers.COMPILED,
+                OverNumbers.LOADER, INPUT, behavior, said);
+
+        assertEquals(StopsHeldToTheRuns.NotHeld.A_WITNESS_COMPLETED_TO_MORE_THAN_ARE_RUN,
+                runs.completions(List.of(), List.of(new InputFact.ListLength(length.list(), 63)))
+                        .notBuilt());
     }
 
     @ParameterizedTest
@@ -243,13 +325,6 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         assertEquals(List.of(), shown(compilation, "b0"));
     }
 
-    /** Whether the list a stop rests on is too long to build and run. What is not run is held by
-     *  the stops of what stands beside it. */
-    private static boolean theListIsTooLongToRun(AStopShown shown) {
-        return shown.structure().stream().anyMatch(
-                fact -> fact instanceof InputFact.ListLength(var _, int length) && length > 1_000);
-    }
-
     /** The model of {@code forms} over a list of {@code element}, under {@code types}. */
     private static String modelOf(String types, String element, List<Form> forms) {
         StringBuilder model = new StringBuilder("module demo\n\n" + types
@@ -258,11 +333,6 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
             model.append("\nbehavior b").append(at).append(" : (i: In) -> Out constructs Out\n")
                     .append("let b").append(at).append(" (i) = Out { value = if ")
                     .append(onTheInput(forms.get(at).comparison())).append(" then 1 else 2 }\n");
-            if (forms.get(at).before() != null) {
-                model.append("behavior p").append(at).append(" : (i: In) -> Out constructs Out\n")
-                        .append("let p").append(at).append(" (i) = Out { value = if ")
-                        .append(onTheInput(forms.get(at).before())).append(" then 1 else 2 }\n");
-            }
         }
         return model.toString();
     }
@@ -273,10 +343,8 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
 
     /** Every stop shown of {@code behavior}. */
     private static List<AStopShown> shown(Compilation compilation, String behavior) {
-        Partitions.Partitioning divided =
-                compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
         List<AStopShown> out = new ArrayList<>();
-        for (WhatIsShownOfAStop each : divided.stopsShown()) {
+        for (WhatIsShownOfAStop each : StopsHeldToTheRuns.saidOf(compilation, "demo", behavior)) {
             if (each instanceof StepWhereARunMayStop stops) {
                 out.addAll(stops.shown());
             }
@@ -287,46 +355,12 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
     /** Why a stop of {@code behavior} is not shown, where it is one the report says is not. */
     private static List<WhyAStopIsNotShown> whyNotShown(Compilation compilation,
                                                          String behavior) {
-        Partitions.Partitioning divided =
-                compilation.db().ask(new Adequacy.Divided("demo", behavior)).value();
         List<WhyAStopIsNotShown> out = new ArrayList<>();
-        for (WhatIsShownOfAStop each : divided.stopsShown()) {
+        for (WhatIsShownOfAStop each : StopsHeldToTheRuns.saidOf(compilation, "demo", behavior)) {
             if (each instanceof StepWhereAStopIsNotShown open) {
                 open.notShown().forEach(one -> out.add(one.why()));
             }
         }
         return out;
-    }
-
-    /** What the run of the input {@code shown} rests on stops for in {@code behavior}, or that it
-     *  stops at nothing. */
-    private static String stoppedFor(Compilation compilation, String behavior, AStopShown shown)
-            throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(compilation.classes(),
-                AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest.class
-                        .getClassLoader());
-        Object run = Emitted.behavior(loader, "demo", behavior).getConstructor().newInstance();
-        long q = 0;
-        for (AStopShown.NumberAt number : shown.at()) {
-            q = number.number().longValueExact();
-        }
-        List<Long> ds = new ArrayList<>();
-        for (InputFact fact : shown.structure()) {
-            if (fact instanceof InputFact.ListLength(var _, int length)) {
-                ds = new ArrayList<>(Collections.nCopies(length, 0L));
-            }
-        }
-        for (InputFact fact : shown.structure()) {
-            if (fact instanceof InputFact.ListElement(var _, int index, BigInteger number)) {
-                ds.set(index, number.longValueExact());
-            }
-        }
-        Object in = Codecs.decoded(loader, "demo.In", Map.of("ds", ds, "q", q));
-        try {
-            Codecs.apply(run, in);
-            return "no stop";
-        } catch (ConstraintViolation stopped) {
-            return stopped.getMessage();
-        }
     }
 }

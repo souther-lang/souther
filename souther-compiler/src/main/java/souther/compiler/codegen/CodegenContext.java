@@ -146,39 +146,16 @@ final class CodegenContext {
     }
 
     /**
-     * Where a place is written, as data rather than as a line of a class: the module of the text
-     * it is quoted from, and where it sits in that text where this compilation holds it laid out.
+     * Where a place is written, as data rather than as a line of a class
+     * ({@link TextsOfModules#writtenAt}).
      *
      * <p>Beside {@link #sits} and not a looser {@code sits}. A line table can only name the class's
      * own text, so that one refuses every other; a construction's site is said to whoever reads a
      * run, which can be told a module and a place in its text, so this answers for any text this
      * compilation holds.
-     *
-     * <p>None where the place has no text, its text is no module's this compilation knows, or the
-     * text is not laid out: a place said as another module's, or as a module with no line, would
-     * be a place the reader of the run is told and the construction is not at.
      */
-    Optional<WrittenAt> writtenAt(SourcePos place) {
-        if (place == null) {
-            return Optional.empty();
-        }
-        Optional<String> module = layouts.moduleOf(place.quotedFrom());
-        PhysicalPos sits = module.isEmpty() ? null : layouts.resolve(place);
-        return sits == null ? Optional.empty() : Optional.of(new WrittenAt(module.get(), sits));
-    }
-
-    /**
-     * A place as {@link #writtenAt} says it.
-     *
-     * @param module the module whose text the place is in
-     * @param sits   where it sits in that text
-     */
-    record WrittenAt(String module, PhysicalPos sits) {
-
-        WrittenAt {
-            Objects.requireNonNull(module, "a place is in some module's text");
-            Objects.requireNonNull(sits, "a place sits somewhere in its text");
-        }
+    Optional<TextsOfModules.WrittenAt> writtenAt(SourcePos place) {
+        return layouts.writtenAt(place);
     }
 
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
@@ -355,6 +332,18 @@ final class CodegenContext {
 
     boolean counting() {
         return counting;
+    }
+
+    /** Whether this generation says where each step that may end a run is written
+     *  ({@link Instrumentation#saysWhereRunsStop}). */
+    private boolean sayingWhereRunsStop;
+
+    void setSayingWhereRunsStop(boolean saying) {
+        this.sayingWhereRunsStop = saying;
+    }
+
+    boolean sayingWhereRunsStop() {
+        return sayingWhereRunsStop;
     }
 
     /**

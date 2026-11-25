@@ -47,6 +47,10 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
 
     private static final int TOP = 12;
 
+    /** The least pack size, which the model's invariant declares and every run is held at from:
+     *  one value, so the grid and the model are of one range. */
+    private static final int LEAST_PACK = 1;
+
     /** A way, and a comparison after it, on {@code e} and {@code p}: {@code e} runs from nought
      *  to twelve, {@code p} from one. */
     private static final Map<String, String[]> FORMS = new LinkedHashMap<>();
@@ -113,7 +117,8 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         StringBuilder model = new StringBuilder("module demo\n\n"
                 + "data Eaches = Int\n" + (eLow < 0 ? ""
                         : "    invariant value >= " + eLow + " && value <= " + TOP + "\n")
-                + "data PackSize = Int\n    invariant value >= 1 && value <= " + TOP + "\n"
+                + "data PackSize = Int\n    invariant value >= " + LEAST_PACK + " && value <= "
+                + TOP + "\n"
                 + "data In = { e: Eaches, p: PackSize }\ndata Out = Int\n");
         for (int at = 0; at < names.size(); at++) {
             String[] form = forms.get(names.get(at));
@@ -589,7 +594,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 .getConstructor().newInstance();
         int[][] out = new int[TOP - eLow + 1][TOP + 1];
         for (int e = eLow; e <= TOP; e++) {
-            for (int p = 1; p <= TOP; p++) {
+            for (int p = LEAST_PACK; p <= TOP; p++) {
                 Object in = Codecs.decoded(loader, "demo.In", Map.of("e", (long) e, "p", (long) p));
                 try {
                     Object answer = Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
@@ -613,11 +618,11 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     private static void heldToTheProgram(String form, String place, List<int[]> classes,
                                          int[][] outcomes, int eLow) {
         boolean ofE = place.equals("i.e");
-        int low = ofE ? eLow : 1;
+        int low = ofE ? eLow : LEAST_PACK;
         int[] way = new int[TOP - low + 1];
         int[] comparison = new int[TOP - low + 1];
         for (int value = low; value <= TOP; value++) {
-            for (int other = ofE ? 1 : eLow; other <= TOP; other++) {
+            for (int other = ofE ? LEAST_PACK : eLow; other <= TOP; other++) {
                 int outcome = ofE ? outcomes[value - eLow][other] : outcomes[other - eLow][value];
                 assertTrue(outcome >= 0, form + ": a run stops at " + value + ", " + other);
                 way[value - low] |= outcome == 0 ? 2 : 1;

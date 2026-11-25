@@ -22,6 +22,8 @@ import souther.compiler.diag.Repair;
 import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WhereCodeIsWritten;
+import souther.compiler.codegen.TextsOfModules;
+import souther.compiler.execute.RunStop;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Today;
@@ -293,6 +295,29 @@ public final class Compilation {
     public ClassLoader loader() {
         Map<String, ClassFileImage> classes = classes();
         return loader.of(classes, () -> Output.loader(db, classes));
+    }
+
+    /**
+     * A loader over the classes of every module {@code module} reaches, each saying where each step
+     * that may end a run is written ({@link Output.SayingWhereRunsStop}), over the modules this was
+     * compiled against. None where they could not be generated.
+     *
+     * <p>A loader of its own each time it is asked: what is run through it is a test of where runs
+     * stop, which keeps the one it is handed for as long as it runs.
+     */
+    public Optional<ClassLoader> loaderSayingWhereRunsStop(String module) {
+        return Optional.ofNullable(db.ask(new Output.SayingWhereRunsStop(module)).value())
+                .map(classes -> Output.loader(db, classes));
+    }
+
+    /**
+     * Where {@code place} is written, as a run through classes that say where runs stop says it
+     * ({@link TextsOfModules#writtenAt}); none where this compilation holds no text laid out
+     * there.
+     */
+    public Optional<RunStop.Site> writtenAt(SourcePos place) {
+        return new TheTextsThisCompileHolds(db).writtenAt(place)
+                .map(at -> new RunStop.Site(at.module(), at.sits().line(), at.sits().column()));
     }
 
     /** A module as everything below the check reads it — derived, desugared, and carrying the

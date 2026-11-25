@@ -14,7 +14,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a rule cuts, told from how much of it the rule happened to write.
@@ -54,14 +53,14 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
      */
     @Test
     void aPositionAndAMultipleOfItAreOneQuantity() {
-        assertEquals(QuantityKey.of(form("n", "1")).key(), QuantityKey.of(form("n", "2")).key());
+        assertEquals(QuantityKey.of(form("n", "1")), QuantityKey.of(form("n", "2")));
     }
 
     /** And a form and a multiple of it, which is the same argument with more than one position. */
     @Test
     void aFormAndAMultipleOfItAreOneQuantity() {
-        assertEquals(QuantityKey.of(form("a", "1", "b", "2")).key(),
-                QuantityKey.of(form("a", "3", "b", "6")).key());
+        assertEquals(QuantityKey.of(form("a", "1", "b", "2")),
+                QuantityKey.of(form("a", "3", "b", "6")));
     }
 
     /**
@@ -73,27 +72,25 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
      */
     @Test
     void twoDirectionsAreTwoQuantities() {
-        assertNotEquals(QuantityKey.of(form("a", "1", "b", "1")).key(),
-                QuantityKey.of(form("a", "1", "b", "2")).key());
+        assertNotEquals(QuantityKey.of(form("a", "1", "b", "1")),
+                QuantityKey.of(form("a", "1", "b", "2")));
     }
 
     /**
-     * A quantity is named from the parts of its coefficients and never from their digits.
-     *
-     * <p>A form whose two coefficients stand a million places apart keeps that ratio however it is
-     * scaled, and a name that wrote it out was a character per place for telling two quantities
-     * apart.
+     * A form whose two coefficients stand a million places apart keeps that ratio however it is
+     * scaled, and is not the quantity it would be at a coefficient of one.
      */
     @Test
-    void aQuantityWhoseCoefficientsStandFarApartIsNamedWithoutWritingThemOut() {
+    void aQuantityWhoseCoefficientsStandFarApartIsItsOwnQuantity() {
         BigDecimal far = new BigDecimal(BigInteger.ONE, 1_000_000);
         LinearForm<NumericTerm> wide = new LinearForm<>(ExactRatio.ZERO, new LinkedHashMap<>(
                 Map.of(term("a"), ExactRatio.ONE, term("b"), ExactRatio.of(far))));
+        LinearForm<NumericTerm> widerStill = new LinearForm<>(ExactRatio.ZERO,
+                new LinkedHashMap<>(Map.of(term("a"), ExactRatio.of(2),
+                        term("b"), ExactRatio.of(far.add(far)))));
 
-        String key = QuantityKey.of(wide).key();
-
-        assertTrue(key.length() < 256, () -> "a name of " + key.length());
-        assertNotEquals(key, QuantityKey.of(form("a", "1", "b", "1")).key(),
+        assertEquals(QuantityKey.of(wide), QuantityKey.of(widerStill), "a multiple of it is it");
+        assertNotEquals(QuantityKey.of(wide), QuantityKey.of(form("a", "1", "b", "1")),
                 "and it is still not the quantity it would be at a coefficient of one");
     }
 

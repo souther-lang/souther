@@ -1,7 +1,11 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Where every run getting to a rule stops in one operation the rule is read through: the rows at
@@ -39,20 +43,41 @@ public record EveryRunStops(String operation, List<Within> where) {
     /**
      * A form over numbers of the input, between two ends.
      *
-     * @param form     the numbers weighed and a constant, as an author would write them
+     * <p>The form as the numbers it weighs, and written for an author only where it is said
+     * ({@link #written}): a reader that asks whether a row is among these weighs the row's numbers,
+     * and a form held as its words would leave it to read them back.
+     *
+     * @param form     the numbers of the input weighed, each read from one place, and no constant
      * @param least    the least value the form takes there, or null where nothing bounds it below
      * @param greatest the greatest, or null where nothing bounds it above
-     * @param alone    the one number the form is, where it is one, and null where it is a form of
-     *                 several
      */
-    public record Within(String form, BigInteger least, BigInteger greatest,
-                         NumericTerm.FromOnePosition alone) {
+    public record Within(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) {
 
         public Within {
             if (form == null || (least == null && greatest == null)
                     || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
                 throw new IllegalArgumentException("a form held to some end, and to values");
             }
+            if (form.coefs().isEmpty() || !form.constant().isZero() || !form.coefs().keySet()
+                    .stream().allMatch(NumericTerm.FromOnePosition.class::isInstance)) {
+                throw new IllegalArgumentException("a form weighs numbers of the input, each read"
+                        + " from one place, and no constant: " + form);
+            }
+        }
+
+        /** The form as an author would write it. */
+        public String written() {
+            return form.asAnAuthorWritesIt();
+        }
+
+        /** The one number the form is, where it is one number unweighed; none where it is a form
+         *  of several. */
+        public Optional<NumericTerm.FromOnePosition> alone() {
+            return form.coefs().size() == 1
+                    && form.coefs().values().iterator().next().equals(ExactRatio.ONE)
+                    ? Optional.of((NumericTerm.FromOnePosition) form.coefs().keySet().iterator()
+                            .next())
+                    : Optional.empty();
         }
     }
 }

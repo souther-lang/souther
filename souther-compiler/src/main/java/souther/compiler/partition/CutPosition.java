@@ -96,19 +96,15 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * What makes two positions one position: where the line falls, and not the units it was said in.
      *
      * <p>A third and two sixths are one place, which an exact ratio in lowest terms already says —
-     * so the ratio names itself here, by its own canonical parts and not by its digits. A line on a
-     * quantity written at a millionth is one this tells from every other; that is what a name is
-     * for, and spelling the millionth out is not part of it.
+     * so the ratio is the key here, as the value it is.
      *
-     * <p>An order with no numbers answers with its own value. Nothing scales such a quantity — a
-     * rule holding two strings apart writes the whole of it — so there is no fraction to reduce.
+     * <p>An order with no numbers answers with its own level's key. Nothing scales such a quantity
+     * — a rule holding two strings apart writes the whole of it — so there is no fraction to
+     * reduce.
      */
-    public String key() {
+    public Object key() {
         ExactRatio at = exactly();
-        if (at == null) {
-            return written.key();
-        }
-        return at.key();
+        return at == null ? written.key() : at;
     }
 
     /**

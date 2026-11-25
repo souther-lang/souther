@@ -21,6 +21,7 @@ import souther.compiler.types.TypeSymbols;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -174,7 +175,8 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         CutPosition line = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(3));
         CutPosition beside = new CutPosition(new Level.OfTheQuantity(aMillionth), ExactRatio.of(6));
 
-        assertTrue(line.key().length() < 128, () -> "a name of " + line.key().length());
+        assertEquals(ExactRatio.of(new BigDecimal(BigInteger.ONE, 1_000_000)).dividedBy(
+                ExactRatio.of(3)).orNull(), line.key(), "the key is the ratio itself");
         assertNotEquals(line.key(), beside.key(), "two lines, two names");
         assertEquals(line.key(), new CutPosition(
                         new Level.OfTheQuantity(aMillionth), ExactRatio.of(3)).key(),
@@ -203,15 +205,18 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         Level beside = new Level.OnACarrier(DECIMALS, new Count(wide.add(wide)));
         Level counted = new Level.OfTheQuantity(ExactRatio.of(wide));
 
-        assertEquals("1;1000000", line.key(), "the name is the two parts of the decimal");
+        assertEquals(new Count(wide), line.key(), "the key is the decimal at its fewest digits");
         assertNotEquals(line.key(), beside.key(), "two lines, two names");
-        assertEquals(line.key(), new Level.OnACarrier(DECIMALS, new Count(wide)).key(),
-                "and one line, one name");
-        assertEquals(ExactRatio.of(wide).key(), counted.key(),
-                "a number the quantity counts to is named by the ratio's own name");
-        assertTrue(HeldSeams.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
-                        .key().length() < 128,
-                "and the division that line makes is named from the same parts");
+        assertEquals(line.key(), new Level.OnACarrier(DECIMALS,
+                        new Count(wide.setScale(1_000_001))).key(),
+                "and one line, one name, however many places it was written to");
+        assertEquals(ExactRatio.of(wide), counted.key(),
+                "a number the quantity counts to is keyed by the ratio itself");
+        Seam.Key division = HeldSeams.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
+                .key();
+        assertTrue(Arrays.asList(division.below(), division.above())
+                        .contains(line.key()),
+                () -> "and the division that line makes is keyed by the same parts: " + division);
 
         assertEquals("1E-1000000", line.spelled(),
                 "past a thousand digits, a reader is shown the exponent and not every place of it");
@@ -280,8 +285,9 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         assertEquals(new Count(new BigDecimal("0.00")).key(), new Count(BigDecimal.ZERO).key());
         assertNotEquals(new Count(BigDecimal.ONE).key(), new Count(BigDecimal.TEN).key(),
                 "and two places are two names");
-        assertEquals("1;-1000000", new Count(new BigDecimal(BigInteger.ONE, -1_000_000)).key(),
-                "a decimal written as a multiple of a wide power of ten is named the same way");
+        assertEquals(new Count(new BigDecimal(BigInteger.ONE, -1_000_000)).key(),
+                new Count(new BigDecimal(BigInteger.TEN, -999_999)).key(),
+                "a decimal written as a multiple of a wide power of ten is keyed the same way");
     }
 
     /**
@@ -343,8 +349,10 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
 
         assertEquals("0.5|", belowOnly.spelled(), "a half is written as the decimal it is");
         assertEquals("@1/3", nowhere.spelled(), "a third has no decimal and is written as one over three");
-        assertNotEquals(belowOnly.spelled(), belowOnly.key(), "and neither is the name");
-        assertNotEquals(nowhere.spelled(), nowhere.key());
+        assertEquals(new Seam.Key(null, ExactRatio.of(new BigDecimal("0.5")), null),
+                belowOnly.key(), "and the key is the ratio below, as the value it is");
+        assertEquals(new Seam.Key(ExactRatio.of(1).dividedBy(ExactRatio.of(3)).orNull(), null,
+                null), nowhere.key(), "and the ratio written where neither side names one");
     }
 
     /** The run between two levels of {@code DECIMALS}, without the value it is named for. */

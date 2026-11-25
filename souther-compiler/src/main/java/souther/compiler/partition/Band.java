@@ -71,9 +71,16 @@ public record Band(BandEnd lower, BandEnd upper) {
      * it can never say different things about where it starts. An end the order itself supplies is
      * written as nothing, because there is no value there to name.
      */
-    public String key() {
-        return where(first()) + "|" + where(last());
+    public Key key() {
+        return new Key(first() == null ? null : first().key(),
+                last() == null ? null : last().key());
     }
+
+    /**
+     * What {@link #key} answers: the keys of the first value in the run and the last, null for an
+     * end the order supplies. Values, so that two runs are one exactly where those are.
+     */
+    public record Key(Object first, Object last) { }
 
     /**
      * The same two values as coordinates written out as text.
@@ -531,10 +538,6 @@ public record Band(BandEnd lower, BandEnd upper) {
     /** Whether a value of the quantity lies in this run. */
     public boolean holds(Level value) {
         return region().contains(value);
-    }
-
-    private static String where(Level at) {
-        return at == null ? "" : at.key();
     }
 
     private static String written(Level at) {

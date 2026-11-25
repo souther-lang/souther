@@ -3754,15 +3754,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * What this cuts, as a name a map can hold ({@link BorderQuantity#identity}).
+     * What this cuts, as a value a map can hold ({@link BorderQuantity#identity}).
      *
      * <p>Asked of the quantity rather than of which variant of quantity it is. A rule written
      * {@code 2 * n > 40} arrives as a form over twice a position and cuts the position, and a
      * reading that told those apart by the shape it was holding reported the model as drawing one
      * line through {@code n} where it draws two.
      */
-    String quantity() {
-        String named = of.identity();
+    Object quantity() {
+        Object named = of.identity();
         if (named == null) {
             throw new IllegalStateException(
                     "a quantity with no smallest form was taken as one a line is drawn on: " + of);

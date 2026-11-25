@@ -1996,27 +1996,31 @@ public sealed interface BorderQuantity
     void lookAt(Observation row);
 
     /**
-     * What makes two quantities one quantity, as a name a map can hold — or null where nothing
+     * What makes two quantities one quantity, as a value a map can hold — or null where nothing
      * does: a form whose coefficients over what they share no ratio holds has no smallest form to
      * be named by, and a line on it is refused where lines are drawn.
      *
-     * <p>A form is named by its smallest multiple ({@link QuantityKey}), since a form and its
-     * multiples order the rows the same way.
+     * <p>A value and not a name written out of one, so that two quantities are never one for
+     * being written alike. A form is its smallest multiple ({@link QuantityKey}), since a form and
+     * its multiples order the rows the same way; any other quantity is itself, as its own equality
+     * says; and a comparison read on its runs is the comparison of the model: two spelled alike
+     * are two numbers two runs work out.
      */
-    default String identity() {
+    default Object identity() {
         return switch (this) {
-            case LinearQuantity form -> {
-                QuantityKey key = QuantityKey.tryOf(form.direction());
-                yield key == null ? null : key.key();
-            }
-            case HowMany count -> count.left();
-            case RemainderOfAForm remainder -> remainder.left();
-            case RemainderOfAPair remainder -> remainder.left();
-            case ProductOfAPair product -> product.left();
-            // The comparison of the model, which is what one of these is: two comparisons
-            // spelled alike are two numbers two runs work out.
-            case ComparedOnARun run -> run.comparison().toString();
+            case LinearQuantity form -> QuantityKey.tryOf(form.direction());
+            case HowMany _, RemainderOfAForm _, RemainderOfAPair _, ProductOfAPair _ -> this;
+            case ComparedOnARun run -> run.comparison();
         };
+    }
+
+    /**
+     * What a report writes for this quantity where it names it as a whole: the comparison of the
+     * model for one read on its runs, and otherwise the side it is written as ({@link #left}).
+     * Written, and not which quantity it is: two quantities may be written alike.
+     */
+    default String spelledWhole() {
+        return this instanceof ComparedOnARun run ? run.comparison().toString() : left();
     }
 
     /**

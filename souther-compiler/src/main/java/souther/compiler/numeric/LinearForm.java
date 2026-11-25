@@ -10,7 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.function.Function;
 
 /**
@@ -42,8 +41,18 @@ import java.util.function.Function;
 public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
 
     /** The coefficients held as a copy in the order given: a form is held as long as what holds
-     *  it, and the table the arithmetic filled holds a slot table and an entry per term on top. */
+     *  it, and the table the arithmetic filled holds a slot table and an entry per term on top.
+     *  A nought coefficient is left out here, whoever made the table, so that no form is two
+     *  values for having been put together by hand. */
     public LinearForm {
+        for (ExactRatio weight : coefs.values()) {
+            if (weight.isZero()) {
+                Map<A, ExactRatio> weighing = new LinkedHashMap<>(coefs);
+                weighing.values().removeIf(ExactRatio::isZero);
+                coefs = weighing;
+                break;
+            }
+        }
         coefs = InTheOrderGiven.map(coefs);
     }
 
@@ -241,20 +250,42 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     }
 
     /**
+     * The form as an author would write it: each number weighed, by the name it is written as, in
+     * the order of the names, and the constant last where there is one or nothing else.
+     */
+    public String asAnAuthorWritesIt() {
+        StringBuilder out = new StringBuilder();
+        byName(String::valueOf).forEach(each -> {
+            ExactRatio weight = each.getValue();
+            boolean below = weight.signum() < 0;
+            ExactRatio size = below ? weight.negated() : weight;
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.equals(ExactRatio.ONE) ? "" : size.spelled() + " * ")
+                    .append(each.getKey());
+        });
+        if (!constant.isZero() || out.isEmpty()) {
+            boolean below = constant.signum() < 0;
+            ExactRatio size = below ? constant.negated() : constant;
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.spelled());
+        }
+        return out.toString();
+    }
+
+    /**
      * What {@link #toString} writes, as the pieces it is written from in order: the text around the
-     * positions, and each position as {@code named} names it — one entry for each name, in the order
-     * of the names. Named by {@link String#valueOf} the pieces write {@link #toString}; a reader that
-     * holds a position's name some other way that is ordered as its text is (a spelling held as
-     * pieces) is handed the same text without the names written out, and from the one definition of
-     * how a form is written.
+     * positions, and each position as {@code named} names it — one entry for each position, in the
+     * order of the names. Named by {@link String#valueOf} the pieces write {@link #toString}; a
+     * reader that holds a position's name some other way that is ordered as its text is (a spelling
+     * held as pieces) is handed the same text without the names written out, and from the one
+     * definition of how a form is written.
      */
     public <N extends Comparable<? super N>> List<Object> writtenAs(Function<? super A, N> named) {
-        Map<N, ExactRatio> byName = new TreeMap<>();
-        coefs.forEach((atom, coef) -> byName.put(named.apply(atom), coef));
+        List<Map.Entry<N, ExactRatio>> byName = byName(named);
         List<Object> out = new ArrayList<>(3 * byName.size() + 2);
         out.add("LinearForm[constant=" + constant.spelled() + ", coefs={");
         boolean first = true;
-        for (Map.Entry<N, ExactRatio> each : byName.entrySet()) {
+        for (Map.Entry<N, ExactRatio> each : byName) {
             if (!first) {
                 out.add(", ");
             }
@@ -263,6 +294,20 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
             first = false;
         }
         out.add("}]");
+        return out;
+    }
+
+    /**
+     * Each position this weighs, as {@code named} names it, with its weight, in the order of the
+     * names: one entry for each position, two positions of one name each kept. A name says how a
+     * position is written and not which it is, and a table keyed by it keeps one of any two written
+     * alike; those two are each said, in the order the form holds them.
+     */
+    private <N extends Comparable<? super N>> List<Map.Entry<N, ExactRatio>> byName(
+            Function<? super A, N> named) {
+        List<Map.Entry<N, ExactRatio>> out = new ArrayList<>(coefs.size());
+        coefs.forEach((atom, coef) -> out.add(Map.entry(named.apply(atom), coef)));
+        out.sort(Map.Entry.comparingByKey());
         return out;
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import souther.compiler.values.InOneOrder;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -262,20 +263,21 @@ public final class CanonicalForm<A> {
      *
      * <p>The map this holds is compared by its contents and iterated in whatever order it was built
      * with — which is the right way round for deciding that two writings are one rule, and the wrong
-     * way round for writing one out. Sorted by the name of the position for the same reason
-     * {@link souther.compiler.partition.QuantityKey#key} sorts: a form written {@code 6b + 3a} and
-     * one written {@code 3a + 6b} are one form and should read as one.
+     * way round for writing one out. Sorted by the name of the position: a form written
+     * {@code 6b + 3a} and one written {@code 3a + 6b} are one form and should read as one.
      */
     @Override
     public String toString() {
-        java.util.Map<String, ExactRatio> named = new java.util.TreeMap<>();
-        coefs.forEach((atom, coef) -> named.put(String.valueOf(atom), coef));
+        List<Map.Entry<String, ExactRatio>> named = new ArrayList<>(coefs.size());
+        coefs.forEach((atom, coef) -> named.add(Map.entry(String.valueOf(atom), coef)));
+        // Each position said, two written alike both: a name says how one is written, not which.
+        named.sort(Map.Entry.comparingByKey());
         StringBuilder out = new StringBuilder();
-        named.forEach((atom, coef) -> {
+        named.forEach(each -> {
             if (!out.isEmpty()) {
                 out.append(" + ");
             }
-            out.append(coef).append("·").append(atom);
+            out.append(each.getValue()).append("·").append(each.getKey());
         });
         return out.toString();
     }

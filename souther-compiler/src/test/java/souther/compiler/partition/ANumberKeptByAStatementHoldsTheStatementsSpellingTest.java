@@ -60,6 +60,6 @@ class ANumberKeptByAStatementHoldsTheStatementsSpellingTest {
             assertTrue(new DecisionAtom.OfTheInput(kept).spelling().holdsWithin(statement),
                     kept::toString);
         }
-        assertTrue(KEPT.spelling().holdsWithin(statement), KEPT::key);
+        assertTrue(KEPT.spelling().holdsWithin(statement), () -> KEPT.spelling().toString());
     }
 }

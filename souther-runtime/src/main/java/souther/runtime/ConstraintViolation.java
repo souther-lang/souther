@@ -26,33 +26,62 @@ public final class ConstraintViolation extends RuntimeException {
      *  for, which have a message and no constraint (a division by zero, a number past its range). */
     private final transient @Nullable ConstraintFailure failure;
 
-    /** The construction that was refused, where this is a refused construction whose place the
-     *  generated code knew; none otherwise. */
-    private final transient @Nullable ConstructionSite site;
+    /** Where the step that ended the run is written, where the generated code said; none
+     *  otherwise. */
+    private final transient @Nullable Site site;
+
+    /** Whether a step said it ended the run ({@link #placedAt}), whether or not it had a place to
+     *  say. A step that had none still ended it, and no step around it did. */
+    private final boolean placed;
 
     public ConstraintViolation(String message) {
-        this(message, null, null);
+        this(message, null, null, false);
     }
 
     private ConstraintViolation(String message, @Nullable ConstraintFailure failure,
-                                @Nullable ConstructionSite site) {
+                                @Nullable Site site, boolean placed) {
         super(message);
         this.failure = failure;
         this.site = site;
+        this.placed = placed;
     }
 
     /**
-     * Where a construction stands in the source: the module whose code wrote it, and the line and
+     * Where a step stands in the source: the module whose text it is written in, and the line and
      * column it starts at, both counted from one.
      */
-    public record ConstructionSite(String module, int line, int column) {}
+    public record Site(String module, int line, int column) {}
 
     /**
-     * The construction that was refused, or none where this ends a run some other way or the code
-     * that refused it was not told where it stands.
+     * Where the step that ended the run is written: a refused construction, said by the code that
+     * refused it, or an operation the language refuses to finish, said where the code was
+     * generated to say it ({@link #placedAt}). None where the code that ended the run was not told
+     * where it stands.
      */
-    public @Nullable ConstructionSite site() {
+    public @Nullable Site site() {
         return site;
+    }
+
+    /**
+     * This, said to have ended the run at the step written at {@code line} and {@code column} of
+     * {@code module}'s source — where it ended for an operation the language refuses to finish and
+     * no step has said so yet. A {@code module} of none, or a line of nought, is a step the code
+     * generator had no place for: the run ended there all the same, and the end names no place.
+     *
+     * <p>Where a step has said, or this is a broken constraint, this as it is. A step inside the
+     * one handed here said it first, as the run was leaving it, and that is the step the run ended
+     * at, whether or not it had a place to say; a constraint says its own place where it is
+     * refused. What generated code calls where it was generated to say where each step that may
+     * end a run is written.
+     */
+    public ConstraintViolation placedAt(@Nullable String module, int line, int column) {
+        if (placed || failure != null) {
+            return this;
+        }
+        ConstraintViolation said = new ConstraintViolation(String.valueOf(getMessage()), null,
+                (module != null && line > 0) ? new Site(module, line, column) : null, true);
+        said.setStackTrace(getStackTrace());
+        return said;
     }
 
     /**
@@ -74,7 +103,7 @@ public final class ConstraintViolation extends RuntimeException {
      * third origin is written, an overload it forgot would be an origin that aborts some other way.
      */
     public static ConstraintViolation notHeld(ConstraintFailure failure) {
-        return new ConstraintViolation(failure.toString(), failure, null);
+        return new ConstraintViolation(failure.toString(), failure, null, false);
     }
 
     /**
@@ -101,16 +130,16 @@ public final class ConstraintViolation extends RuntimeException {
      */
     public static Object orThrow(Result<?, ?> r, @Nullable String module, int line, int column) {
         return refused(r, module != null && line > 0
-                ? new ConstructionSite(module, line, column) : null);
+                ? new Site(module, line, column) : null);
     }
 
-    private static Object refused(Result<?, ?> r, @Nullable ConstructionSite site) {
+    private static Object refused(Result<?, ?> r, @Nullable Site site) {
         if (r instanceof Result.Ok<?, ?> ok) {
             return ok.value();
         }
         Object failed = ((Result.Err<?, ?>) r).error();
         if (failed instanceof ConstraintFailure broken) {
-            throw new ConstraintViolation(broken.toString(), broken, site);
+            throw new ConstraintViolation(broken.toString(), broken, site, false);
         }
         // Nothing generated reaches here: the only results handed over are `__construct`'s. Said
         // rather than cast, because a cast would report a caller this was not written for as a
