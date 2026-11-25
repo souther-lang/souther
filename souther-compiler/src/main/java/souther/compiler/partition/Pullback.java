@@ -9442,27 +9442,12 @@ final class Pullback {
 
     /** Whether {@code law} says the element is the same value as another. */
     private static boolean statesTheValueOfTheElement(LawProposition<DeclaredArgument> law) {
-        return switch (law) {
-            case LawProposition.Same<DeclaredArgument> _ -> true;
-            case LawProposition.All<DeclaredArgument> all -> all.parts().stream()
-                    .anyMatch(Pullback::statesTheValueOfTheElement);
-            case LawProposition.Any<DeclaredArgument> any -> any.parts().stream()
-                    .anyMatch(Pullback::statesTheValueOfTheElement);
-            case LawProposition.SomeElement<DeclaredArgument> some ->
-                    statesTheValueOfTheElement(some.ofTheElement());
-            case LawProposition.Always<DeclaredArgument> _,
-                 LawProposition.Compared<DeclaredArgument> _,
-                 LawProposition.Inside<DeclaredArgument> _,
-                 LawProposition.Observed<DeclaredArgument> _ -> false;
-        };
+        return law.anyStated(each -> each instanceof LawProposition.Same<DeclaredArgument>);
     }
 
     /** The closure {@code law} names what it answers of, or null where it names none. */
     private static DeclaredArgument closureIn(LawProposition<DeclaredArgument> law) {
-        return switch (law) {
-            case LawProposition.Always<DeclaredArgument> _,
-                 LawProposition.Inside<DeclaredArgument> _,
-                 LawProposition.Same<DeclaredArgument> _ -> null;
+        return law.firstStated(each -> switch (each) {
             case LawProposition.Compared<DeclaredArgument> compared -> {
                 for (LawNumber<DeclaredArgument> number : compared.form().coefs().keySet()) {
                     DeclaredArgument closure = closureIn(number);
@@ -9472,14 +9457,16 @@ final class Pullback {
                 }
                 yield null;
             }
-            case LawProposition.All<DeclaredArgument> all -> closureIn(all.parts());
-            case LawProposition.Any<DeclaredArgument> any -> closureIn(any.parts());
             case LawProposition.Observed<DeclaredArgument> observed ->
                     observed.of() instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
                             DeclaredArgument closure) ? closure : null;
-            case LawProposition.SomeElement<DeclaredArgument> some ->
-                    closureIn(some.ofTheElement());
-        };
+            case LawProposition.Always<DeclaredArgument> _,
+                 LawProposition.All<DeclaredArgument> _,
+                 LawProposition.Any<DeclaredArgument> _,
+                 LawProposition.SomeElement<DeclaredArgument> _,
+                 LawProposition.Inside<DeclaredArgument> _,
+                 LawProposition.Same<DeclaredArgument> _ -> null;
+        });
     }
 
     /** The closure {@code number} names what it answers of, or null where it names none. */
@@ -9502,25 +9489,14 @@ final class Pullback {
         };
     }
 
-    private static DeclaredArgument closureIn(List<LawProposition<DeclaredArgument>> parts) {
-        for (LawProposition<DeclaredArgument> part : parts) {
-            DeclaredArgument closure = closureIn(part);
-            if (closure != null) {
-                return closure;
-            }
-        }
-        return null;
-    }
-
     /** Whether {@code law} names an element of {@code container} anywhere in it. */
     private static boolean namesTheElement(LawProposition<DeclaredArgument> law,
                                            DeclaredArgument container) {
-        return switch (law) {
-            case LawProposition.Always<DeclaredArgument> _ -> false;
-            case LawProposition.All<DeclaredArgument> all -> all.parts().stream()
-                    .anyMatch(part -> namesTheElement(part, container));
-            case LawProposition.Any<DeclaredArgument> any -> any.parts().stream()
-                    .anyMatch(part -> namesTheElement(part, container));
+        return law.anyStated(each -> switch (each) {
+            case LawProposition.Always<DeclaredArgument> _,
+                 LawProposition.All<DeclaredArgument> _,
+                 LawProposition.Any<DeclaredArgument> _,
+                 LawProposition.SomeElement<DeclaredArgument> _ -> false;
             case LawProposition.Observed<DeclaredArgument> observed ->
                     observed.of().equals(new LawSubject.ElementOf<>(container));
             case LawProposition.Compared<DeclaredArgument> compared -> compared.form().coefs()
@@ -9538,15 +9514,13 @@ final class Pullback {
                                 namesTheElement(new LawProposition.Compared<>(
                                         LinearForm.atom(of), Rel.EQ), container);
                     });
-            case LawProposition.SomeElement<DeclaredArgument> some ->
-                    namesTheElement(some.ofTheElement(), container);
             case LawProposition.Same<DeclaredArgument> same ->
                     same.one().equals(new LawSubject.ElementOf<>(container))
                             || same.other().equals(new LawSubject.ElementOf<>(container));
             case LawProposition.Inside<DeclaredArgument> inside ->
                     inside.inner().equals(new LawSubject.ElementOf<>(container))
                             || inside.outer().equals(new LawSubject.ElementOf<>(container));
-        };
+        });
     }
 
 

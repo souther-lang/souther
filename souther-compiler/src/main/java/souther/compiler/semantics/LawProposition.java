@@ -5,6 +5,8 @@ import souther.compiler.numeric.Rel;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A statement over the arguments an operation was given, as a law of it states one.
@@ -26,6 +28,41 @@ public sealed interface LawProposition<A> {
 
     /** The other answer to the question this one answers. */
     LawProposition<A> denied();
+
+    /**
+     * What {@code at} first answers of this or of a statement this makes through its parts — the
+     * parts of a conjunction or a disjunction and what some element is said to meet — taken this
+     * first and then each part in turn, at every depth; null where it answers nothing of any.
+     *
+     * <p>The statements this makes and not the numbers it compares: a number counting the elements
+     * that meet something holds a statement too, and a reader that means that one says so where
+     * it is handed a comparison.
+     */
+    default <R> R firstStated(Function<LawProposition<A>, R> at) {
+        R here = at.apply(this);
+        if (here != null) {
+            return here;
+        }
+        List<LawProposition<A>> parts = switch (this) {
+            case All<A> all -> all.parts();
+            case Any<A> any -> any.parts();
+            case SomeElement<A> some -> List.of(some.ofTheElement());
+            case Always<A> _, Observed<A> _, Compared<A> _, Inside<A> _, Same<A> _ -> List.of();
+        };
+        for (LawProposition<A> part : parts) {
+            R found = part.firstStated(at);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code at} holds of this or of a statement this makes through its parts
+     *  ({@link #firstStated}). */
+    default boolean anyStated(Predicate<LawProposition<A>> at) {
+        return firstStated(each -> at.test(each) ? Boolean.TRUE : null) != null;
+    }
 
     /** A statement that comes out the same whatever the arguments are. */
     record Always<A>(boolean holds) implements LawProposition<A> {
