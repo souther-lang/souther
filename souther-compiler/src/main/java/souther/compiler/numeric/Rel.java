@@ -91,21 +91,26 @@ public enum Rel {
     }
 
     /**
-     * The relation a form stands in to nought once it is multiplied by {@code factor}, where this
-     * is the relation it stood in before: this for a factor above nought and {@link #turned} for
-     * one below.
+     * The relation a form stands in to nought once it is multiplied by a factor of sign
+     * {@code sign}, where this is the relation it stood in before: this for a factor above nought
+     * and {@link #turned} for one below.
+     *
+     * <p>The sign and not the factor, because the sign is all that decides it — and a relation
+     * crosses to an execution as the operator a comparison is written with, so what it is asked
+     * with crosses too: a number of the compiler's reasoning has no business there.
      *
      * <p>Nought is refused. A form multiplied by it is nought whatever the form was, so no
      * relation of the product says what this said of the form.
      *
-     * @throws IllegalArgumentException where {@code factor} is nought
+     * @param sign which way the factor stands to nought: negative below it, positive above it
+     * @throws IllegalArgumentException where {@code sign} is nought
      */
-    public Rel scaledBy(ExactRatio factor) {
-        if (factor.isZero()) {
+    public Rel scaledBySign(int sign) {
+        if (sign == 0) {
             throw new IllegalArgumentException(
                     "a relation is not carried over a product by nought");
         }
-        return factor.signum() < 0 ? turned() : this;
+        return sign < 0 ? turned() : this;
     }
 
     /** The operator the language writes this relation with. */

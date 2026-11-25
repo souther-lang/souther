@@ -437,50 +437,9 @@ final class StopAssessment {
      * The one figure a site is searched by ({@link #MOST_VALUES_TRIED}): every value tried is one
      * unit of it, and so is every way a stop is looked for by beyond the first, so what a site
      * costs is no product of the ways and the values.
-     *
-     * <p>Cut short is where a unit was asked for and there was none, and not where the last was
-     * spent and the search was done: that a search used all it was given says nothing of whether
-     * it left anything.
      */
-    static final class Tries {
-
-        private int left;
-        private boolean refused;
-
-        /** A site's figure. */
-        Tries() {
-            this(MOST_VALUES_TRIED);
-        }
-
-        /** Of {@code figure} units. */
-        Tries(int figure) {
-            this.left = figure;
-        }
-
-        /** Whether a unit is spent: one is, where there is one, and where there is none that is
-         *  asked for and refused. */
-        boolean spend() {
-            if (left <= 0) {
-                refused = true;
-                return false;
-            }
-            left--;
-            return true;
-        }
-
-        /** Whether none is left. */
-        boolean spent() {
-            return left <= 0;
-        }
-
-        /** That something was left undone for want of one. */
-        void leftSomethingUndone() {
-            refused = true;
-        }
-
-        boolean cutShort() {
-            return refused;
-        }
+    static Tries aSitesTries() {
+        return new Tries(MOST_VALUES_TRIED);
     }
 
     /**

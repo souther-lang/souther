@@ -13,6 +13,7 @@ import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeForm;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -1090,13 +1091,15 @@ public final class LevelRealizer {
         CompositionShortfall numbersShortOf =
                 congruent instanceof NumericWitness.Standing.NotFound(CompositionShortfall met)
                         ? met : CompositionShortfall.NONE;
+        WholeForm<NumericTerm> whole = over.dividend().overWholeNumbers();
+        if (whole == null) {
+            return notOfWholeNumbers(over.dividend(), numbersShortOf);
+        }
         LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
-        BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
-                .value();
+        BigInteger moved = whole.constant();
         Steps steps = new Steps();
         // What the coefficients reach: every multiple of the step they generate.
-        Congruences reached = new Congruences(BigInteger.ZERO,
-                wholeStepOf(over.dividend().coefs().values()));
+        Congruences reached = new Congruences(BigInteger.ZERO, whole.step());
         List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = targetsOf(form);
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         Set<CompositionCapacity> unheld = new HashSet<>();
@@ -1162,6 +1165,19 @@ public final class LevelRealizer {
     }
 
     /**
+     * What a walk of the values of {@code dividend} as a class of whole numbers says where it is no
+     * form of whole numbers the host writes: nothing walked, and so nothing settled — a part of one
+     * read as the whole number below it would be a class the form never comes round in, and a walk
+     * of it could prove there is no row where there is ({@link NumericWitness#notOfWholeNumbers}).
+     */
+    private static Realization notOfWholeNumbers(LinearForm<NumericTerm> dividend,
+                                                 CompositionShortfall earlier) {
+        return alsoShortOf(Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, Set.of(), Set.of(),
+                Set.of()), NumericWitness.notOfWholeNumbers(dividend).and(earlier));
+    }
+
+    /**
      * {@code made}, with what an earlier look at the same item fell short of said beside it where
      * it settles nothing. A row or a proof is the item's answer whatever the earlier look met:
      * what it fell short of is a reason a row may still be found, and there is one or there is
@@ -1174,10 +1190,10 @@ public final class LevelRealizer {
     /**
      * Where the numbers stand at a remainder the criterion offers, walked as the region leaves
      * them with the last held to the class the others leave it ({@link NumericWitness.Congruent}),
-     * a row composed with them — or null where the form is not of whole numbers, which a
-     * congruence is not held of and the class walk reads. Where none was found, the class walk of
-     * the form's values is asked after, and what this walk fell short of is said beside what that
-     * one meets.
+     * a row composed with them — or null where the form is no form of whole numbers the host
+     * writes, which a congruence is not held of, and which the class walk declines in turn. Where
+     * none was found, the class walk of the form's values is asked after, and what this walk fell
+     * short of is said beside what that one meets.
      *
      * <p>Asked first because it puts no value of the form ahead of its numbers. A value chosen
      * from the run the region leaves the form is one its numbers may come to only at places no
@@ -1187,8 +1203,8 @@ public final class LevelRealizer {
     private NumericWitness.Standing asACongruence(Standing.OfARemainder over,
                                                   SearchRegion within, WitnessSearch looking,
                                                   ValuesTried tried) {
-        if (!over.dividend().constant().isWhole()
-                || !over.dividend().coefs().values().stream().allMatch(ExactRatio::isWhole)) {
+        WholeForm<NumericTerm> whole = over.dividend().overWholeNumbers();
+        if (whole == null) {
             return null;
         }
         List<NumericTerm> terms = new ArrayList<>();
@@ -1201,7 +1217,7 @@ public final class LevelRealizer {
             if (asked != null && asked.wholeOrNull() instanceof BigInteger r
                     && r.signum() >= 0 && r.compareTo(over.divisor()) < 0
                     && over.remainders().holds(r)) {
-                congruents.add(new NumericWitness.Congruent(over.dividend(), over.divisor(), r));
+                congruents.add(new NumericWitness.Congruent(whole, over.divisor(), r));
             }
         }
         // An assignment a row was already built from is stepped past inside the walk, which then
@@ -1248,11 +1264,13 @@ public final class LevelRealizer {
                                              SearchRegion within,
                                              Map<NumericTerm, NumericDomain.Bounds> runs,
                                              ValuesTried tried) {
+        WholeForm<NumericTerm> whole = over.dividend().overWholeNumbers();
+        if (whole == null) {
+            return notOfWholeNumbers(over.dividend(), CompositionShortfall.NONE);
+        }
         LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
-        BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
-                .value();
-        Congruences reached = new Congruences(BigInteger.ZERO,
-                wholeStepOf(over.dividend().coefs().values()));
+        BigInteger moved = whole.constant();
+        Congruences reached = new Congruences(BigInteger.ZERO, whole.step());
         List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> dividendTerms = targetsOf(form);
         List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> addedTerms =
                 targetsOf(over.added());
@@ -1792,15 +1810,6 @@ public final class LevelRealizer {
             pair.put(1, second);
             return pair;
         }
-    }
-
-    /** The step a form's whole coefficients generate: the greatest number that divides them all. */
-    private static BigInteger wholeStepOf(Collection<ExactRatio> coefficients) {
-        BigInteger step = BigInteger.ZERO;
-        for (ExactRatio each : coefficients) {
-            step = step.gcd(((ExactAnswer.Held<BigInteger>) each.floor()).value());
-        }
-        return step.signum() == 0 ? BigInteger.ONE : step;
     }
 
     /**

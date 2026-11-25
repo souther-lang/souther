@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * The least whole number a lower end admits and the greatest an upper end admits, held to the
@@ -38,6 +39,22 @@ class TheWholeNumbersAnEndAdmitsAreTheOnesPastItTest {
                 assertEquals(cut, end.asCut(), () -> "the end's cut " + asked);
                 assertEquals(at, end.exactly(), () -> "the end's number " + asked);
             }
+        }
+    }
+
+    /** At either end of the scale. A whole number no host writes has no whole number past it to
+     *  answer with, and says so rather than throwing; the least positive power has nought below
+     *  it and one above, whichever way it is admitted. */
+    @Test
+    void anEndAtEitherEndOfTheScaleIsAnsweredOrSaysWhyNot() {
+        ExactRatio unwritten = ExactRatio.tenTo(Long.MAX_VALUE);
+        for (boolean inclusive : new boolean[] {true, false}) {
+            ExactCut far = new ExactCut(unwritten, inclusive);
+            assertInstanceOf(ExactAnswer.Unheld.class, far.leastWhole());
+            assertInstanceOf(ExactAnswer.Unheld.class, far.greatestWhole());
+            ExactCut near = new ExactCut(ExactRatio.tenTo(Long.MIN_VALUE), inclusive);
+            assertEquals(BigInteger.ONE, near.leastWhole().orNull());
+            assertEquals(BigInteger.ZERO, near.greatestWhole().orNull());
         }
     }
 

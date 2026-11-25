@@ -143,7 +143,7 @@ final class ResiduesAStatementLeaves {
                 return WholeNumberRuns.EVERY;
             }
             WholeNumberRuns standing = WholeNumberRuns.standing(
-                    affine.proposition().scaledBy(weight),
+                    affine.proposition().scaledBySign(weight.signum()),
                     level);
             if (standing == null) {
                 return WholeNumberRuns.EVERY;

@@ -68,7 +68,7 @@ record WholeNumbersLeft(BigInteger least, BigInteger most, Set<BigInteger> holes
                 || !(at.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger up))) {
             return null;
         }
-        return switch (rel.scaledBy(weight)) {
+        return switch (rel.scaledBySign(weight.signum())) {
             case LT -> below(up.subtract(BigInteger.ONE));
             case LE -> below(down);
             case GT -> above(down.add(BigInteger.ONE));

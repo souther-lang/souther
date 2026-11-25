@@ -1433,7 +1433,7 @@ final class ContainersAddingUp {
             }
             return new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
                     solved.constant(), false, null, null, null, new Where(at.get(),
-                            taken.scaledBy(tested.getValue())));
+                            taken.scaledBySign(tested.getValue().signum())));
         }
 
         /**

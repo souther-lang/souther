@@ -4,7 +4,9 @@ import souther.compiler.collect.InTheOrderGiven;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.math.BigInteger;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -279,6 +281,10 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
      * This form times {@code other}, where one of the two is a constant and the product is the
      * other scaled by it ({@link #times}) — or null where both weigh an atom, since a product of two
      * unknowns is no form over them.
+     *
+     * <p>Two answers that are not one: null is that the product is no form, which nothing about the
+     * numbers would change, and an unheld answer is that it is a form one of whose numbers the host
+     * could not hold. A reader saying why there is no form says which.
      */
     public ExactAnswer<LinearForm<A>> productWith(LinearForm<A> other) {
         if (coefs.isEmpty()) {
@@ -307,14 +313,16 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
      * {@code n <= c} as one statement about {@code c}. The constant of the answer, negated, is
      * where {@code atom} stands to the rest.
      *
-     * @throws IllegalArgumentException where this does not weigh {@code atom}
+     * @throws IllegalArgumentException where this does not weigh {@code atom}, or weighs it by
+     *         nought, which is weighing it by nothing: there is no statement about it to make
      */
     public ExactAnswer<Stated<A>> weighingOne(A atom, Rel rel) {
         ExactRatio weight = coefs.get(atom);
-        if (weight == null) {
+        if (weight == null || weight.isZero()) {
             throw new IllegalArgumentException(this + " does not weigh " + atom);
         }
-        return dividedBy(weight).map(scaled -> new Stated<>(scaled, rel.scaledBy(weight)));
+        return dividedBy(weight).map(scaled ->
+                new Stated<>(scaled, rel.scaledBySign(weight.signum())));
     }
 
     /**
@@ -325,6 +333,24 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
      */
     public record Stated<A>(LinearForm<A> form, Rel rel) {}
 
+    /** This form with every number of it a whole number the host writes, or null where one of
+     *  them is no whole number or one whose digits the host holds no place for. */
+    public WholeForm<A> overWholeNumbers() {
+        BigInteger whole = constant.wholeOrNull();
+        if (whole == null) {
+            return null;
+        }
+        Map<A, BigInteger> weights = new LinkedHashMap<>();
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            BigInteger weight = each.getValue().wholeOrNull();
+            if (weight == null) {
+                return null;
+            }
+            weights.put(each.getKey(), weight);
+        }
+        return new WholeForm<>(whole, weights);
+    }
+
     /** The one atom this weighs and what it weighs it by, or null where it weighs none or more
      *  than one. The constant is not asked about: {@code 2 * x + 3} weighs one atom. */
     public Map.Entry<A, ExactRatio> loneTerm() {
@@ -334,7 +360,8 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     /** The one atom this weighs, or null where it weighs none or more than one ({@link #loneTerm}
      *  without the weight). */
     public A loneAtom() {
-        return coefs.size() == 1 ? coefs.keySet().iterator().next() : null;
+        Map.Entry<A, ExactRatio> term = loneTerm();
+        return term == null ? null : term.getKey();
     }
 
     private ExactAnswer<LinearForm<A>> scaledBy(

@@ -568,7 +568,7 @@ public sealed interface Derivation {
         if (scale == null) {
             return false;
         }
-        Rel against = otherRel.scaledBy(scale);
+        Rel against = otherRel.scaledBySign(scale.signum());
         for (int sign = -1; sign <= 1; sign++) {
             if (rel.holds(sign) && against.holds(sign)) {
                 return false;

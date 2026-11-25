@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * The numbers of the input a statement about an answer turns on, put at values before the answer is
@@ -157,7 +156,7 @@ public final class InputNumbersAnAnswerTurnsOn {
         int mostLooked = lookedFigure.maximum();
         List<InputNumbersAnAnswerTurnsOn> out = new ArrayList<>();
         int[] looked = {0};
-        eachChoice(candidates, 0, new ArrayList<>(), choice -> {
+        EveryWayOfChoosing.each(candidates, choice -> {
             // The walk is bounded before a choice is looked at: one counted past the figure is one
             // that was never put to the way.
             if (looked[0] == mostLooked) {
@@ -253,32 +252,6 @@ public final class InputNumbersAnAnswerTurnsOn {
         return new InputNumbersAnAnswerTurnsOn(values, new Reachability.Reaching(region,
                 reaching.requirements(), reaching.truths(), cuts, reaching.ways(),
                 reaching.declined(), Optional.empty()));
-    }
-
-    /**
-     * Each way of choosing one value for every number, the first number changing slowest, handed
-     * to {@code visit} one at a time until it says to stop.
-     *
-     * <p>One at a time and never the product built first: how many ways there are is the figure of
-     * the search's to bound, and a list of every one would be the size of what it declines.
-     *
-     * @return whether every way was visited, which is false where {@code visit} stopped it
-     */
-    private static boolean eachChoice(List<List<ExactRatio>> candidates, int at,
-                                      List<ExactRatio> chosen,
-                                      Predicate<List<ExactRatio>> visit) {
-        if (at == candidates.size()) {
-            return visit.test(List.copyOf(chosen));
-        }
-        for (ExactRatio value : candidates.get(at)) {
-            chosen.add(value);
-            boolean more = eachChoice(candidates, at + 1, chosen, visit);
-            chosen.removeLast();
-            if (!more) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -389,7 +362,7 @@ public final class InputNumbersAnAnswerTurnsOn {
         int[] looked = {0};
         CompositionBudget lookedFigure = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT;
         int mostLooked = lookedFigure.maximum();
-        eachChoice(ends, 0, new ArrayList<>(), choice -> {
+        EveryWayOfChoosing.each(ends, choice -> {
             if (looked[0]++ == mostLooked) {
                 stoppedBy.add(lookedFigure);
                 return false;

@@ -1023,7 +1023,7 @@ final class MeaningAssumptions {
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
             return null;
         }
-        return WholeNumberRuns.standing(rel.scaledBy(weight), threshold);
+        return WholeNumberRuns.standing(rel.scaledBySign(weight.signum()), threshold);
     }
 
     /**

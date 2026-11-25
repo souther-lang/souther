@@ -134,6 +134,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.numeric.WholeForm;
 import souther.compiler.partition.ReadingState.Bindings;
 import souther.compiler.partition.ReadingState.Compared;
 import souther.compiler.partition.ReadingState.Members;
@@ -15765,14 +15766,15 @@ final class Pullback {
         if (form == null) {
             return remainderOverABoundValue(division);
         }
-        if (form.coefs().isEmpty() || !isWhole(form)) {
+        if (form.coefs().isEmpty()
+                || !(form.overWholeNumbers() instanceof WholeForm<NumericTerm> whole)) {
             return null;
         }
         // Its rows are made where the form is worked out, each sum on the way a part of it
         // ({@link UndividedByARelation}), and the divisor is a number above nought.
         tell(new Notice(false, Core.withoutStanding(division.call()), division.dividend()));
         return Quantity.RemainderOfADividend.ofTheInput(division.call().operation(),
-                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                new LinearForm<>(ExactRatio.of(whole.constant().mod(division.divisor())),
                         form.coefs()), division.divisor());
     }
 
@@ -15967,7 +15969,8 @@ final class Pullback {
         if (!(AffineForms.outcome(division.dividend(), division.at(), quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> form))
-                || form.coefs().isEmpty() || !isWhole(form)) {
+                || form.coefs().isEmpty()
+                || !(form.overWholeNumbers() instanceof WholeForm<Quantity> whole)) {
             return null;
         }
         for (Quantity each : form.coefs().keySet()) {
@@ -15979,7 +15982,7 @@ final class Pullback {
         }
         tell(new Notice(true, Core.withoutStanding(division.call()), division.dividend()));
         return new Quantity.RemainderOfADividend(division.call().operation(),
-                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                new LinearForm<>(ExactRatio.of(whole.constant().mod(division.divisor())),
                         form.coefs()), division.divisor());
     }
 
@@ -16173,17 +16176,6 @@ final class Pullback {
         Denotation stands = at.standing(factor, read.rules().symbols(), read.rules().newtypes());
         return InputNumber.of(stands.value(), read.domain(), stands.at(), read.rules(),
                 elementsMet.get()) instanceof NumericTerm.FromOnePosition term ? term : null;
-    }
-
-    /** Whether every number of {@code form}, its constant included, is a whole one. */
-    private static <A> boolean isWhole(LinearForm<A> form) {
-        return form.constant().isWhole()
-                && form.coefs().values().stream().allMatch(ExactRatio::isWhole);
-    }
-
-    /** The constant of a form every number of which is whole. */
-    private static <A> BigInteger constantOf(LinearForm<A> form) {
-        return ((ExactAnswer.Held<BigInteger>) form.constant().floor()).value();
     }
 
     /**

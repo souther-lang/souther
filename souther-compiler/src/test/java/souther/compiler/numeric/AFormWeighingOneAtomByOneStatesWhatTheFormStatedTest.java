@@ -61,6 +61,9 @@ class AFormWeighingOneAtomByOneStatesWhatTheFormStatedTest {
     void anAtomTheFormDoesNotWeighIsRefused() {
         assertThrows(IllegalArgumentException.class,
                 () -> FORMS.getFirst().weighingOne("b", Rel.GE));
+        assertThrows(IllegalArgumentException.class,
+                () -> new LinearForm<>(ExactRatio.ONE, Map.of("a", ExactRatio.ZERO))
+                        .weighingOne("a", Rel.GE));
     }
 
     @Test

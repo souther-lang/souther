@@ -7681,7 +7681,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return Optional.empty();
         }
         // How many it holds stands to the bound as the statement says of the count.
-        Rel asked = rel.scaledBy(weight);
+        Rel asked = rel.scaledBySign(weight.signum());
         boolean whole = bound.isWhole();
         return switch (asked) {
             case GE -> Optional.of(new HowManyAsked(up.max(BigInteger.ZERO), null));

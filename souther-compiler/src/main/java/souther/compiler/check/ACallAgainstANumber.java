@@ -92,7 +92,7 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
             }
             Rel stated = (callFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
-            Rel written = stated.scaledBy(side.scale());
+            Rel written = stated.scaledBySign(side.scale().signum());
             Core answered = Core.withoutStanding(side.call().value());
             AnOperationApplied applied = AnOperationApplied.of(answered);
             return new ACallAgainstANumber<>(applied, answered, factOf.apply(applied.operation()),

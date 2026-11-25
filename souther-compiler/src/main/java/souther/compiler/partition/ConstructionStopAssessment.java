@@ -499,7 +499,7 @@ final class ConstructionStopAssessment {
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, taken, first, ask, read));
         }
-        StopAssessment.Tries left = new StopAssessment.Tries(MOST_VALUES_TRIED);
+        Tries left = new Tries(MOST_VALUES_TRIED);
         Shown shown = TriedInTurn.first(List.copyOf(numbers), tried, left,
                 values -> (stopsAt(values, taken, first, ask)
                         && declared.get().tiesHoldAt(values))

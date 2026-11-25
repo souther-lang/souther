@@ -1071,7 +1071,7 @@ public sealed interface BorderQuantity
                         if (form == null && product != null) {
                             ExactRatio weight = affine.form().coefs().get(product);
                             yield product.spelled() + " "
-                                    + rel.scaledBy(weight).written() + " "
+                                    + rel.scaledBySign(weight.signum()).written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }

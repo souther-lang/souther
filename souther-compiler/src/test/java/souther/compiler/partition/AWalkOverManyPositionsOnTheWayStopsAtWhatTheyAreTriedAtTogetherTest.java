@@ -80,7 +80,7 @@ class AWalkOverManyPositionsOnTheWayStopsAtWhatTheyAreTriedAtTogetherTest {
         terms.forEach(term -> coefs.put(term, ExactRatio.ONE));
         List<NumericWitness.Congruent> congruents = new ArrayList<>();
         for (BigInteger r = BigInteger.ZERO; r.compareTo(divisor) < 0; r = r.add(BigInteger.ONE)) {
-            congruents.add(new NumericWitness.Congruent(
+            congruents.add(NumericWitness.Congruent.of(
                     new LinearForm<>(ExactRatio.ZERO, coefs), divisor, r));
         }
         return new Walked(NumericWitness.of(quantities.region(), terms, on,

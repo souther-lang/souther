@@ -3,9 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.ExactRatio;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Every way of putting some of the input's numbers at the values tried for each, asked in turn
@@ -14,11 +16,11 @@ import java.util.Map;
  * <p>The walk two searches for a value of the input a run stops at share: one looking past what is
  * worked out before an operation ({@link StopAssessment}), and one looking past what a
  * construction asks ({@link ConstructionStopAssessment}). Which values each number is tried at, and
- * what is asked of one way of putting them, are each search's own. How the figure is spent, and
- * what it means for the walk to have run out of it, are said here and in
- * {@link StopAssessment.Tries}: a way asked for spends one unit, and where a unit is wanted and
- * there is none, or the last is spent with values still to try, the walk is cut short. A walk that
- * spent its last unit on its last way left nothing, and says nothing more.
+ * what is asked of one way of putting them, are each search's own. The ways are
+ * {@link EveryWayOfChoosing}'s, and each one asked spends a unit of {@link Tries}: where a way is
+ * to be asked and no unit is left, the walk is cut short there. A walk that spent its last unit on
+ * its last way, or that had no way to ask because a number has no value to be tried at, left
+ * nothing.
  */
 final class TriedInTurn {
 
@@ -35,32 +37,23 @@ final class TriedInTurn {
      *  {@code tried} gives each, in the order of {@code numbers} and of the values, while
      *  {@code left} lasts — or null where none answers. */
     static <R> R first(List<NumericTerm> numbers, Map<NumericTerm, List<ExactRatio>> tried,
-                       StopAssessment.Tries left, Asking<R> ask) {
-        return each(numbers, 0, new LinkedHashMap<>(), tried, left, ask);
-    }
-
-    private static <R> R each(List<NumericTerm> numbers, int from,
-                              Map<NumericTerm, ExactRatio> values,
-                              Map<NumericTerm, List<ExactRatio>> tried, StopAssessment.Tries left,
-                              Asking<R> ask) {
-        if (from == numbers.size()) {
-            return left.spend() ? ask.at(values) : null;
+                       Tries left, Asking<R> ask) {
+        List<List<ExactRatio>> values = new ArrayList<>(numbers.size());
+        for (NumericTerm number : numbers) {
+            values.add(tried.get(number));
         }
-        List<ExactRatio> tryAt = tried.get(numbers.get(from));
-        for (int at = 0; at < tryAt.size(); at++) {
-            values.put(numbers.get(from), tryAt.get(at));
-            R found = each(numbers, from + 1, values, tried, left, ask);
-            if (found != null) {
-                return found;
+        AtomicReference<R> found = new AtomicReference<>();
+        EveryWayOfChoosing.each(values, chosen -> {
+            if (!left.spend()) {
+                return false;
             }
-            if (left.spent()) {
-                if (at < tryAt.size() - 1) {
-                    left.leftSomethingUndone();
-                }
-                return null;
+            Map<NumericTerm, ExactRatio> at = new LinkedHashMap<>();
+            for (int each = 0; each < numbers.size(); each++) {
+                at.put(numbers.get(each), chosen.get(each));
             }
-        }
-        values.remove(numbers.get(from));
-        return null;
+            found.set(ask.at(at));
+            return found.get() == null;
+        });
+        return found.get();
     }
 }

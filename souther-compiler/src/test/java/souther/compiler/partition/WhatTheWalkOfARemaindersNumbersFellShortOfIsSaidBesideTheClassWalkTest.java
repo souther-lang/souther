@@ -69,7 +69,29 @@ class WhatTheWalkOfARemaindersNumbersFellShortOfIsSaidBesideTheClassWalkTest {
                 new Criterion.AtTheLevel(Level.OfTheQuantity.of(30))));
     }
 
+    /**
+     * A form weighed by a half comes to no whole number a class is read off, so neither walk is
+     * made of it: not the walk of its numbers held to a class, and not the walk of its values class
+     * by class. Half of a number from nought to five comes to one and a half at three, and a walk
+     * that read the form as whole numbers would pass that level over and prove there is nothing
+     * at it. Nothing is proved, and the form is said to be of no whole numbers.
+     */
+    @Test
+    void aFormWeighedByAPartOfOneIsWalkedAsNoClassAndProvesNothing() {
+        ExactRatio half = ExactRatio.of(1).dividedBy(ExactRatio.of(2)).orNull();
+        ExactRatio oneAndAHalf = ExactRatio.of(3).dividedBy(ExactRatio.of(2)).orNull();
+        Realization.Unknown unknown = assertInstanceOf(Realization.Unknown.class, realized(1, half,
+                new Criterion.AtTheLevel(new Level.OfTheQuantity(oneAndAHalf))));
+        assertTrue(unknown.notAllOf().contains(
+                CompositionRepertoire.VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS),
+                unknown::toString);
+    }
+
     private static Realization realized(int numbers, Criterion where) {
+        return realized(numbers, ExactRatio.ONE, where);
+    }
+
+    private static Realization realized(int numbers, ExactRatio weight, Criterion where) {
         List<String> names = new ArrayList<>();
         for (int i = 0; i < numbers; i++) {
             names.add("n" + i);
@@ -81,7 +103,7 @@ class WhatTheWalkOfARemaindersNumbersFellShortOfIsSaidBesideTheClassWalkTest {
         for (int i = 0; i < numbers; i++) {
             NumericTerm term = new NumericTerm.ValueOf(TermPath.of(names.get(i)));
             paths[i] = TermPath.of(names.get(i));
-            sum.put(term, ExactRatio.ONE);
+            sum.put(term, weight);
             on.put(term, Carrier.WHOLE);
             region = region
                     .assuming(new LinearForm<>(ExactRatio.ZERO, Map.of(term, ExactRatio.ONE

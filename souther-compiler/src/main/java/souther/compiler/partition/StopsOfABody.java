@@ -704,7 +704,7 @@ final class StopsOfABody {
         }
         Ways ways = waysTo(step);
         // One figure for the question, spent along every way and every way of its values.
-        StopAssessment.Tries tries = new StopAssessment.Tries();
+        Tries tries = StopAssessment.aSitesTries();
         List<List<StopAssessment.Judgement>> byWay = new ArrayList<>();
         for (Reached each : ways.each()) {
             byWay.add(onAWay(step, each, within, tries));
@@ -788,7 +788,7 @@ final class StopsOfABody {
     /** What is shown of {@code step}'s operations by one way a run gets to it. */
     private List<StopAssessment.Judgement> onAWay(Core step, Reached reached,
                                                   List<TakenConstraint.Affine> within,
-                                                  StopAssessment.Tries tries) {
+                                                  Tries tries) {
         WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, reached.reach().way());
         if (left == null) {
             return List.of(new StopAssessment.Judgement.Safe(null,
@@ -1318,7 +1318,7 @@ final class StopsOfABody {
                         instanceof ExactAnswer.Held<ExactRatio>(var bound))) {
                     continue;
                 }
-                Rel rel = each.rel().scaledBy(coef);
+                Rel rel = each.rel().scaledBySign(coef.signum());
                 boolean oneIn = whole && bound.isWhole() && (rel == Rel.GT || rel == Rel.LT);
                 ExactRatio from = (oneIn && rel == Rel.GT) ? stepped(bound, 1) : bound;
                 ExactRatio to = (oneIn && rel == Rel.LT) ? stepped(bound, -1) : bound;
@@ -1588,7 +1588,7 @@ final class StopsOfABody {
     private StopAssessment.Judgement judgedOn(StopAssessment.Site site, Reached reached,
                                               WhatAWayLeavesOfAValue left,
                                               List<TakenConstraint.Affine> within,
-                                              StopAssessment.Tries tries) {
+                                              Tries tries) {
         switch (site) {
             case StopAssessment.Site.PastItsEnds(var operation) -> {
                 if (left.keepsWithinItsEnds(operation)) {
@@ -1678,7 +1678,7 @@ final class StopsOfABody {
     private StopAssessment.Judgement lookedForByEachWay(StopAssessment.Site site, GotPast gotPast,
                                                         WhatAWayLeavesOfAValue left,
                                                         List<TakenConstraint.Affine> way,
-                                                        StopAssessment.Tries tries) {
+                                                        Tries tries) {
         Map<NumericTerm, Attainments> worked = new LinkedHashMap<>();
         switch (site) {
             case StopAssessment.Site.PastItsEnds(var operation) ->
@@ -1699,8 +1699,7 @@ final class StopsOfABody {
         }
         List<NumericTerm> values = List.copyOf(worked.keySet());
         List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
-        boolean cutShort = !waysOf(values, 0, new LinkedHashMap<>(), new ArrayList<>(way), worked,
-                ways, new boolean[1]);
+        boolean cutShort = !waysOfEach(values, worked, way, ways);
         StopAssessment.Judgement safe = new StopAssessment.Judgement.Safe(site,
                 site instanceof StopAssessment.Site.ByNought
                         ? StopAssessment.WhyNone.DIVISOR_AWAY_FROM_NOUGHT
@@ -1912,6 +1911,33 @@ final class StopsOfABody {
     /** How many a list written out holds, where a divisor is over it, held as one number
      *  ({@link #heldAs}), with the ways a row makes it a number ({@link #ownCount}). */
     private final Map<NumericTerm, Attainments> countsHeld = new HashMap<>();
+
+    /**
+     * Every way of putting a way of each of {@code values} together under {@code way}, into
+     * {@code out} ({@link #waysOf}); false where some were left.
+     *
+     * <p>A value no way makes a number of leaves no way of putting them together, whatever the
+     * others have, so nothing is walked and nothing is left: the ways made of the others, and any
+     * they left unmade, meet nothing at it. Where no value is such but one has its ways left unmade
+     * at the figure, there are ways and none of them was made. Answered before the walk, which
+     * would otherwise go through every way of the values ahead of it and find none at the end.
+     */
+    private static boolean waysOfEach(List<NumericTerm> values, Map<NumericTerm, Attainments> worked,
+                                      List<TakenConstraint.Affine> way,
+                                      List<Map<NumericTerm, Attainment>> out) {
+        boolean leftUnmade = false;
+        for (NumericTerm value : values) {
+            Attainments ways = worked.get(value);
+            if (ways.ways().isEmpty()) {
+                if (!ways.leftUnmade()) {
+                    return true;
+                }
+                leftUnmade = true;
+            }
+        }
+        return !leftUnmade && waysOf(values, 0, new LinkedHashMap<>(), new ArrayList<>(way), worked,
+                out, new boolean[1]);
+    }
 
     /** Every way of putting a way of each of {@code values} from {@code at} on, after
      *  {@code sofar} under {@code holding}, into {@code out}, as many as

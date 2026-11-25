@@ -115,7 +115,8 @@ public record Endpoint(Place at, boolean inclusive) {
     /** This end as a cut of the exact numbers, admitting what it admits — or null where it stops
      *  at a place that is no number. */
     public ExactCut asCut() {
-        return at instanceof Count count ? new ExactCut(count.exactly(), inclusive) : null;
+        ExactRatio number = exactly();
+        return number == null ? null : new ExactCut(number, inclusive);
     }
 
     /**

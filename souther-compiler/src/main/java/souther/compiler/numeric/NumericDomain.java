@@ -2539,8 +2539,15 @@ public final class NumericDomain<A> {
             return max == null ? null : max.asCut();
         }
 
-        /** The least whole number this admits, or null where there is no lower end or it is no
-         *  number a whole number is worked out from ({@link Endpoint#wholeAdmitted}). */
+        /**
+         * The whole number the lower end admits first, or null where there is no lower end, where
+         * it stops at a place that is no number, or where the whole number is one the host could
+         * not hold ({@link Endpoint#wholeAdmitted}). A reader for whom the three differ asks the
+         * end itself.
+         *
+         * <p>Of the end alone: whether any whole number lies between the two ends is not said
+         * here, and is {@link #holdsAValue}'s to say over a carrier that steps.
+         */
         public BigInteger leastWhole() {
             return min == null ? null : min.wholeAdmitted(true);
         }

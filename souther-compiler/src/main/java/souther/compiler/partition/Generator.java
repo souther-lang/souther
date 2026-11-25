@@ -50,6 +50,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.WholeForm;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
@@ -8944,52 +8945,34 @@ public final class Generator {
             RowDemand.OnARemainder remainder, Function<NumericTerm, Carrier> on,
             WitnessSearch looking) {
         LinearForm<NumericTerm> dividend = remainder.dividend();
-        BigInteger moved = ((ExactAnswer.Held<BigInteger>) dividend.constant().floor()).value();
-        BigInteger divisor = remainder.remainder().divisor();
-        // A form weighed by what is not whole comes to no whole number a class is read off, so no
-        // value of its numbers is walked for; and a whole coefficient too wide to hold as one is a
-        // number this could not hold on the way.
-        BigInteger step = BigInteger.ZERO;
-        for (ExactRatio each : dividend.coefs().values()) {
-            if (!each.isWhole()) {
-                return new NumericWitness.Standing.NotFound(CompositionShortfall.writing(Set.of(
-                        CompositionRepertoire.VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS)));
-            }
-            switch (each.floor()) {
-                case ExactAnswer.Held<BigInteger>(BigInteger whole) -> step = step.gcd(whole);
-                case ExactAnswer.Unheld<BigInteger> notHeld -> {
-                    return new NumericWitness.Standing.NotFound(CompositionShortfall.of(Set.of(),
-                            Set.of(), Set.of(new CompositionCapacity(CompositionCapacity.Where
-                                    .VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO, notHeld.why()))));
-                }
-            }
+        WholeForm<NumericTerm> whole = dividend.overWholeNumbers();
+        if (whole == null) {
+            return new NumericWitness.Standing.NotFound(NumericWitness.notOfWholeNumbers(dividend));
         }
+        BigInteger moved = whole.constant();
+        BigInteger divisor = remainder.remainder().divisor();
         // What the form's coefficients reach, every multiple of the step they generate: a
         // remainder whose class holds none of those is one no value of the form leaves.
+        BigInteger step = whole.step();
         Congruences reached = new Congruences(BigInteger.ZERO,
                 step.signum() == 0 ? BigInteger.ONE : step);
         List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
         for (NumericTerm term : NumericTerms.inOrder(dividend.coefs().keySet())) {
             terms.add(term.atOnePosition());
         }
-        int left = CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum();
+        Tries left = new Tries(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT.maximum());
         List<NumericWitness.Congruent> tried = new ArrayList<>();
-        boolean cut = false;
         for (WholeNumberRuns.Run run : remainder.leaves().runs()) {
-            for (BigInteger r = run.from(); !cut && r.compareTo(run.to()) <= 0;
+            for (BigInteger r = run.from(); !left.cutShort() && r.compareTo(run.to()) <= 0;
                  r = r.add(BigInteger.ONE)) {
-                if (new Congruences(r.subtract(moved), divisor).meet(reached) == null) {
-                    continue;
-                }
-                if (left-- <= 0) {
-                    cut = true;
-                } else {
-                    tried.add(new NumericWitness.Congruent(dividend, divisor, r));
+                if (new Congruences(r.subtract(moved), divisor).meet(reached) != null
+                        && left.spend()) {
+                    tried.add(new NumericWitness.Congruent(whole, divisor, r));
                 }
             }
         }
         NumericWitness.Standing standing = NumericWitness.of(here, terms, on, looking, tried);
-        if (!cut || standing instanceof NumericWitness.Standing.Found) {
+        if (!left.cutShort() || standing instanceof NumericWitness.Standing.Found) {
             return standing;
         }
         CompositionShortfall met = standing instanceof NumericWitness.Standing.NotFound(

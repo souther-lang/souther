@@ -29,6 +29,15 @@ class AWholeNumberIsReadOffARatioOnlyWhereTheHostWritesOneTest {
     }
 
     @Test
+    void aWholeNumberIsTheOneItsFloorIsWhateverItsSizeAndSign() {
+        for (ExactRatio whole : new ExactRatio[] {ExactRatio.tenTo(40),
+                ExactRatio.tenTo(40).times(ExactRatio.of(-7)).orNull(),
+                ExactRatio.of(Long.MIN_VALUE), ExactRatio.of(Long.MAX_VALUE)}) {
+            assertEquals(whole.floor().orNull(), whole.wholeOrNull(), whole::toString);
+        }
+    }
+
+    @Test
     void aPartOfOneIsNoWholeNumber() {
         assertNull(ExactRatio.of(1).dividedBy(ExactRatio.of(3)).orNull().wholeOrNull());
         assertNull(ExactRatio.tenTo(-1).wholeOrNull());

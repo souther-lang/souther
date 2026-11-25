@@ -412,7 +412,7 @@ public final class ElementsApart {
         }
         // The form is the different values less the elements, weighed by one number; weighed
         // below nought it stands the other way round to them.
-        Rel rel = stated.rel().scaledBy(byDifferent);
+        Rel rel = stated.rel().scaledBySign(byDifferent.signum());
         return rel == Rel.EQ || rel == Rel.GE ? new Stated(stated.written().get(different.at()),
                 different.run(), stated.answersEverywhere()) : null;
     }

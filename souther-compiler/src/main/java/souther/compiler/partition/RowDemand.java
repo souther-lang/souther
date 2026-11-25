@@ -1208,7 +1208,7 @@ public sealed interface RowDemand {
                     instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
                 return null;
             }
-            return WholeNumberRuns.standing(met.scaledBy(weight), threshold)
+            return WholeNumberRuns.standing(met.scaledBySign(weight.signum()), threshold)
                     .and(WholeNumberRuns.one(BigInteger.ZERO,
                             remainder.divisor().subtract(BigInteger.ONE)));
         }

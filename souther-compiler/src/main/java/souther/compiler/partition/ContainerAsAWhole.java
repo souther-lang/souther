@@ -80,18 +80,6 @@ final class ContainerAsAWhole {
     private static final int MOST_VALUES_MOVED_TO =
             CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED.maximum();
 
-    /** How many more values the elements of one container may be tried moved to, and whether
-     *  the figure left some untried. */
-    private static final class Tries {
-
-        private int left;
-        private boolean cut;
-
-        private Tries(int left) {
-            this.left = left;
-        }
-    }
-
     /**
      * A total the row asks of the container, and the numbers it is tried at.
      *
@@ -690,7 +678,7 @@ final class ContainerAsAWhole {
                 // figure stopped the walk.
                 if (!placing(out.size() - 1, one.target(), options, reach, variant, one, turns,
                         parts, moved, apart, placed, tries)) {
-                    if (tries.cut) {
+                    if (tries.cutShort()) {
                         refused.add(CompositionBudget.VALUES_AN_ELEMENT_IS_MOVED_TO_TRIED);
                     } else {
                         unnamed.add(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT);
@@ -828,8 +816,7 @@ final class ContainerAsAWhole {
             for (int start = 0; start < of.size(); start++) {
                 Option option = of.get((start + variant) % of.size());
                 for (BigInteger at : candidates(option, reach.get(each), left, term, tries)) {
-                    if (tries.left-- <= 0) {
-                        tries.cut = true;
+                    if (!tries.spend()) {
                         return false;
                     }
                     ObservedValue element = realized(option, at, one, turns, parts, moved,
@@ -869,7 +856,7 @@ final class ContainerAsAWhole {
             }
             out.sort(Comparator.comparing(at -> at.subtract(option.at()).abs()));
             if (out.size() > MOST_VALUES_MOVED_TO) {
-                tries.cut = true;
+                tries.leftSomethingUndone();
             }
             return out.subList(0, Math.min(out.size(), MOST_VALUES_MOVED_TO));
         }
@@ -894,7 +881,7 @@ final class ContainerAsAWhole {
             }
             BigInteger past = BigInteger.valueOf(MOST_VALUES_MOVED_TO + 1L);
             if (span.holds(nearest.subtract(past)) || span.holds(nearest.add(past))) {
-                tries.cut = true;
+                tries.leftSomethingUndone();
             }
             return out;
         }

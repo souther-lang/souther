@@ -716,7 +716,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
-            Map.entry("souther.compiler.partition.NumericWitness$Tries#<init>()V",
+            Map.entry("souther.compiler.partition.NumericWitness#aQuestionsTries()"
+                            + "Lsouther/compiler/partition/Tries;",
                     "how many values the positions of one question on the way are tried at"
                             + " together"),
             Map.entry("souther.compiler.partition.NumericWitness#tryingAt("
