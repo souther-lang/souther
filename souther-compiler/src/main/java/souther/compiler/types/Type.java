@@ -4,8 +4,10 @@ import souther.compiler.SettledAnswer;
 import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
 import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.SequencedSet;
 import java.util.Set;
 
@@ -492,18 +494,18 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
      * which positions two values of one constructor line up at, which is {@link #atChildren}'s to
      * say for each of them.
      */
-    static java.util.List<Paired> paired(Type one, Type other) {
+    static List<Paired> paired(Type one, Type other) {
         if (!(one instanceof Compound) || one.getClass() != other.getClass()) {
             return null;
         }
-        java.util.List<Type> ones = new java.util.ArrayList<>();
-        java.util.List<Type> others = new java.util.ArrayList<>();
+        List<Type> ones = new ArrayList<>();
+        List<Type> others = new ArrayList<>();
         forEachChild(one, ones::add);
         forEachChild(other, others::add);
         if (ones.size() != others.size()) {
             return null;
         }
-        java.util.List<Paired> out = new java.util.ArrayList<>(ones.size());
+        List<Paired> out = new ArrayList<>(ones.size());
         for (int i = 0; i < ones.size(); i++) {
             out.add(new Paired(ones.get(i), others.get(i)));
         }
@@ -516,7 +518,7 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
      *
      * @throws IllegalArgumentException where {@code children} are not as many as {@code t} holds
      */
-    static Type withChildren(Type t, java.util.List<Type> children) {
+    static Type withChildren(Type t, List<Type> children) {
         int[] positions = {0};
         forEachChild(t, _ -> positions[0]++);
         if (positions[0] != children.size()) {

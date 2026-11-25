@@ -199,7 +199,7 @@ public final class ContainerCounts {
                 }
                 LinearForm<Count> form = (bin.op() == BinOp.ADD ? left.form().plus(right.form())
                         : left.form().minus(right.form())).orNull();
-                ComputedNumber.Range range = left.range() == null || right.range() == null ? null
+                ComputedNumber.Range range = (left.range() == null || right.range() == null) ? null
                         : left.range().operated(bin.op(), right.range());
                 yield form == null ? null
                         : step(bin.type(), form, range, left.answers() && right.answers());
@@ -210,8 +210,8 @@ public final class ContainerCounts {
                 ExactAnswer<LinearForm<Count>> product = right == null ? null
                         : left.form().productWith(right.form());
                 LinearForm<Count> form = product == null ? null : product.orNull();
-                ComputedNumber.Range range = form == null || left.range() == null
-                        || right.range() == null ? null
+                ComputedNumber.Range range = (form == null || left.range() == null
+                        || right.range() == null) ? null
                         : left.range().operated(bin.op(), right.range());
                 yield form == null ? null
                         : step(bin.type(), form, range, left.answers() && right.answers());

@@ -1265,7 +1265,7 @@ final class ContainersAddingUp {
             Endpoint other = lower ? run.max() : run.min();
             ExactCut near = end.asCut();
             ExactCut far = other == null ? null : other.asCut();
-            return near == null || (other != null && far == null) ? null
+            return (near == null || (other != null && far == null)) ? null
                     : DecimalPoints.within(near, far, lower);
         }
 

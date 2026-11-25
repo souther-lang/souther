@@ -5362,7 +5362,7 @@ public final class Generator {
             Map<String, Written> given = candidate.from().writtenAgainst(axes, candidate.delta(),
                     candidate.where(), references);
             written(candidate, given);
-            return !candidate.from().composes() && given.isEmpty() ? null : given;
+            return (!candidate.from().composes() && given.isEmpty()) ? null : given;
         }
 
         /** Takes in which of the parameters it states the candidate's origin could not write. */
