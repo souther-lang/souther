@@ -48,49 +48,21 @@ import java.util.function.Supplier;
  */
 final class ConditionNumbering {
 
-    /**
-     * One condition of this reading: the node a fold arrives at, under the names in force there.
-     *
-     * <p><b>The two halves are compared differently, and each for its own reason.</b> A site is
-     * which node the reading arrived at, which is an identity question: a node is the same site as
-     * itself and as nothing else, and asking a whole subtree whether it says what another says
-     * would make what it costs to name a condition grow with the tree the condition is in. Today
-     * either comparison would tell the nodes apart — a {@link Core} node carries where it stands —
-     * so what is settled here is which question a site is, not which nodes happen to be told apart.
-     *
-     * <p>The names in force are what they say and not which object says them: a {@code let} body
-     * reached by two folds is under two environments built the same way, and read as two sites the
-     * condition inside it would be named twice.
-     *
-     * <p>The node the fold arrives at, which is not the node it was handed. Bindings and a name
-     * standing for a truth are looked through on the way in, so a condition reached through one is
-     * the same condition as the one reached without.
-     */
-    private record Site(Core node, InputReads reads) {
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Site that && node == that.node && reads.equals(that.reads);
-        }
-
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(node) * 31 + reads.hashCode();
-        }
-    }
-
     private final String module;
     private final String behavior;
     /** Which reading of the body this is, which the names it hands out say beside their number. */
     private final ConditionOccurrence.Reading reading;
-    private final Map<Site, Condition> read = new HashMap<>();
+    /** Each condition of this reading by the node a fold arrives at, which is not the node it was
+     *  handed: bindings and a name standing for a truth are looked through on the way in, so a
+     *  condition reached through one is the same condition as the one reached without. */
+    private final Map<NodeRead, Condition> read = new HashMap<>();
     /** The name each arm of each fork goes by. Beside {@link #read} because an arm is not a fold of
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
     /** What entering each arm of each fork states, by the fork under the names in force there and
      *  which of its arms ({@link #walkedInto}, {@link #referredTo}). */
-    private final Map<Site, Map<Integer, Entered>> entered = new HashMap<>();
+    private final Map<NodeRead, Map<Integer, Entered>> entered = new HashMap<>();
 
     /**
      * What entering one arm states, and whether the walk has entered it yet or only a way that
@@ -148,12 +120,12 @@ final class ConditionNumbering {
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
      *  where it has not met it. */
     Condition alreadyRead(Core at, InputReads reads) {
-        return read.get(new Site(at, reads));
+        return read.get(new NodeRead(at, reads));
     }
 
     /** Files {@code condition} as what the condition at {@code at} under {@code reads} is. */
     void read(Core at, InputReads reads, Condition condition) {
-        read.put(new Site(at, reads), condition);
+        read.put(new NodeRead(at, reads), condition);
     }
 
     /** The name of the condition being recognised now, where no construct of the model is it. */
@@ -217,7 +189,7 @@ final class ConditionNumbering {
     ReachingCuts.Stating walkedInto(Core fork, int part, InputReads reads,
                                     Supplier<ReachingCuts.Stating> stating) {
         Map<Integer, Entered> made =
-                entered.computeIfAbsent(new Site(fork, reads), _ -> new HashMap<>());
+                entered.computeIfAbsent(new NodeRead(fork, reads), _ -> new HashMap<>());
         Entered already = made.get(part);
         if (already != null && already.walked()) {
             throw new IllegalStateException("this reading has already walked into arm " + part
@@ -240,7 +212,7 @@ final class ConditionNumbering {
     ReachingCuts.Stating referredTo(Core fork, int part, InputReads reads,
                                     Supplier<ReachingCuts.Stating> stating) {
         Map<Integer, Entered> made =
-                entered.computeIfAbsent(new Site(fork, reads), _ -> new HashMap<>());
+                entered.computeIfAbsent(new NodeRead(fork, reads), _ -> new HashMap<>());
         Entered already = made.get(part);
         if (already != null) {
             return already.stated();

@@ -464,7 +464,7 @@ final class Pullback {
     /** What entering each arm of a fork derives on this reading, by the fork and its names
      *  ({@link #keeping}). */
     @NoPartOfAReading(Why.CACHE)
-    private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
+    private final Map<NodeRead, List<Derivation>> entered = new HashMap<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
      *
@@ -833,8 +833,7 @@ final class Pullback {
                 yield holds ? stated : new Derivation.UnderADenial(stated, true);
             }
             case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) -> {
-                WhatConditionsState.ANode at = new WhatConditionsState.ANode(fork.value(),
-                        fork.at());
+                NodeRead at = new NodeRead(fork.value(), fork.at());
                 List<Derivation> arms = entered.get(at);
                 if (arms == null) {
                     arms = entering(fork.value(), fork.at());
