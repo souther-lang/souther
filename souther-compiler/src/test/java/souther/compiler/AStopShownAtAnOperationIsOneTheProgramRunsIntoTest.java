@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -243,13 +244,27 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 .stopsShown();
     }
 
+    /** The runs of each form's behavior, made once for every test that holds a claim to them. */
+    private static final Map<String, Runs> RUNS = new ConcurrentHashMap<>();
+
+    /** The runs of {@code form}'s behavior over the grid of what is said of it. */
+    private static Runs runsOf(String form) {
+        return RUNS.computeIfAbsent(form, name -> {
+            try {
+                return Runs.of(name, saidOf(name));
+            } catch (Exception e) {
+                throw new AssertionError("the behavior of " + name + " runs", e);
+            }
+        });
+    }
+
     /** One form is one behavior of the one module, which is as much as the claim about it asks. */
     @ParameterizedTest
     @MethodSource("forms")
     void whatIsSaidOfAStepIsWhatTheProgramDoesThere(String name) throws Exception {
         Form form = FORMS.get(name);
         List<WhatIsShownOfAStop> said = saidOf(name);
-        Runs runs = Runs.of(name, said);
+        Runs runs = runsOf(name);
         boolean shown = said.stream().anyMatch(StepWhereARunMayStop.class::isInstance);
         boolean everyRunOfTheWayStops = form.required() && everyRunOfTheWayStops(runs);
         assertAll(
@@ -275,7 +290,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         int keeping = 0;
         for (String name : FORMS.keySet()) {
             List<WhatIsShownOfAStop> said = saidOf(name);
-            Oracle.Held held = Oracle.heldTo(said, Runs.of(name, said));
+            Oracle.Held held = Oracle.heldTo(said, runsOf(name));
             rows += held.rowsHeldTo();
             keeping += held.keepingHeldTo();
         }
@@ -291,7 +306,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
     void aClaimMovedOffItsStepIsRefusedThoughItsRunStopsForTheSameReason() throws Exception {
         String name = "oneOperationWrittenAtTwoPlaces";
         List<WhatIsShownOfAStop> said = saidOf(name);
-        Runs runs = Runs.of(name, said);
+        Runs runs = runsOf(name);
         StepWhereARunMayStop stop = said.stream().filter(StepWhereARunMayStop.class::isInstance)
                 .map(StepWhereARunMayStop.class::cast).findFirst()
                 .orElseThrow(() -> new AssertionError("a stop is shown of " + said));
@@ -319,7 +334,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                     || said.stream().noneMatch(StepWhereARunMayStop.class::isInstance)) {
                 continue;
             }
-            Runs runs = Runs.of(name, said);
+            Runs runs = runsOf(name);
             List<WhatIsShownOfAStop> without = said.stream()
                     .filter(each -> !(each instanceof StepWhereARunMayStop)).toList();
             assertEquals(List.of(), Oracle.unheld(said, runs), name);
@@ -343,7 +358,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 .filter(each -> !each.everyRunStops().isEmpty()).findFirst()
                 .orElseThrow(() -> new AssertionError("the rows every run stops at are said of "
                         + said));
-        Runs runs = Runs.of(name, said);
+        Runs runs = runsOf(name);
         EveryRunStops first = stop.everyRunStops().getFirst();
         EveryRunStops everywhere = new EveryRunStops(first.operation(), first.where().stream()
                 .map(within -> new EveryRunStops.Within(within.form(),
@@ -370,7 +385,7 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 .filter(each -> each.keeping().isPresent()).findFirst()
                 .orElseThrow(() -> new AssertionError("what keeps every run going is said of "
                         + said));
-        Runs runs = Runs.of(name, said);
+        Runs runs = runsOf(name);
         WhatKeepsEveryRunGoing kept = stop.keeping().orElseThrow();
         Set<ABoundThatKeepsEveryRunGoing> letOut = new LinkedHashSet<>();
         for (ABoundThatKeepsEveryRunGoing bound : kept.bounds()) {
@@ -454,40 +469,52 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
      * The runs of one behavior: every run of the grid, and a run of any input asked for, with
      * where each step the report names is written.
      */
-    record Runs(Object behavior, List<Run> grid, Function<SourcePos, Optional<RunStop.Site>> placed) {
+    record Runs(Object behavior, Map<Map<String, Long>, Run> held, List<Run> grid,
+                Function<SourcePos, Optional<RunStop.Site>> placed) {
 
         /**
-         * The runs of {@code form}'s behavior over the grid of {@code said}: {@link #WHOLE}, and
-         * each end a claim of every run names, with the number either side of it, at every place.
-         * An end is where a claim of every run turns, and a grid without it holds no run the
-         * claim is about where every run it holds stops before the step.
+         * The runs of {@code form}'s behavior over the grid of {@code said}: at each place,
+         * {@link #WHOLE} and each end a claim of every run names of that place, with the number
+         * either side of it. An end is where a claim of every run turns, and a grid without it
+         * holds no run the claim is about where every run it holds stops before the step; a place
+         * the claim does not weigh is not where it turns.
          */
         static Runs of(String form, List<WhatIsShownOfAStop> said) throws Exception {
             Object behavior = Emitted.behavior(Module.LOADER, "demo", behaviorOf(form))
                     .getConstructor().newInstance();
-            Set<Long> values = new LinkedHashSet<>(WHOLE);
-            for (BigInteger end : endsNamedBy(said)) {
-                for (BigInteger near : List.of(end.subtract(BigInteger.ONE), end,
-                        end.add(BigInteger.ONE))) {
-                    if (near.bitLength() < Long.SIZE) {
-                        values.add(near.longValueExact());
+            Map<String, Set<Long>> values = new LinkedHashMap<>();
+            PLACES.forEach(place -> values.put(place, new LinkedHashSet<>(WHOLE)));
+            endsNamedBy(said).forEach((place, ends) -> {
+                for (BigInteger end : ends) {
+                    for (BigInteger near : List.of(end.subtract(BigInteger.ONE), end,
+                            end.add(BigInteger.ONE))) {
+                        if (near.bitLength() < Long.SIZE) {
+                            values.get(place).add(near.longValueExact());
+                        }
+                    }
+                }
+            });
+            Map<Map<String, Long>, Run> held = new LinkedHashMap<>();
+            for (long e : values.get("e")) {
+                for (long p : values.get("p")) {
+                    for (long q : values.get("q")) {
+                        Map<String, Long> in = Map.of("e", e, "p", p, "q", q);
+                        held.put(in, run(behavior, in));
                     }
                 }
             }
-            List<Run> grid = new ArrayList<>();
-            for (long e : values) {
-                for (long p : values) {
-                    for (long q : values) {
-                        grid.add(run(behavior, Map.of("e", e, "p", p, "q", q)));
-                    }
-                }
-            }
-            return new Runs(behavior, grid, Module.COMPILED::writtenAt);
+            return new Runs(behavior, new ConcurrentHashMap<>(held), List.copyOf(held.values()),
+                    Module.COMPILED::writtenAt);
         }
 
-        /** Every end a claim of every run in {@code said} names. */
-        private static List<BigInteger> endsNamedBy(List<WhatIsShownOfAStop> said) {
-            List<BigInteger> out = new ArrayList<>();
+        /**
+         * Every end a claim of every run in {@code said} names, by the place of the input it is an
+         * end of: each place a form of the rows weighs, and the place a bound is declared on. A
+         * place none of this input's is no place of the grid, and the oracle says it cannot weigh
+         * it.
+         */
+        private static Map<String, List<BigInteger>> endsNamedBy(List<WhatIsShownOfAStop> said) {
+            Map<String, List<BigInteger>> out = new LinkedHashMap<>();
             for (WhatIsShownOfAStop each : said) {
                 List<EveryRunStops> stops = switch (each) {
                     case StepWhereARunMayStop it -> it.everyRunStops();
@@ -499,22 +526,38 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                 };
                 for (EveryRunStops stop : stops) {
                     for (EveryRunStops.Within within : stop.where()) {
-                        Stream.of(within.least(), within.greatest())
-                                .filter(end -> end != null).forEach(out::add);
+                        for (NumericTerm term : within.form().coefs().keySet()) {
+                            if (term instanceof NumericTerm.ValueOf(TermPath place)
+                                    && PLACES.contains(Oracle.fieldOf(place))) {
+                                Stream.of(within.least(), within.greatest())
+                                        .filter(end -> end != null)
+                                        .forEach(out.computeIfAbsent(Oracle.fieldOf(place),
+                                                _ -> new ArrayList<>())::add);
+                            }
+                        }
                     }
                 }
-                kept.ifPresent(region -> region.bounds().forEach(bound -> out.add(bound.at())));
+                kept.ifPresent(region -> region.bounds().forEach(bound -> {
+                    if (bound.holder().named().steps().size() == 1
+                            && PLACES.contains(bound.holder().named().steps().getFirst())) {
+                        out.computeIfAbsent(bound.holder().named().steps().getFirst(),
+                                _ -> new ArrayList<>()).add(bound.at());
+                    }
+                }));
             }
             return out;
         }
 
-        /** The run of {@code in}. */
+        /** The run of {@code in}: the grid's, where the grid holds it. */
         Run of(Map<String, Long> in) {
-            try {
-                return run(behavior, in);
-            } catch (Exception e) {
-                throw new AssertionError("the input " + in + " is one the behavior takes", e);
-            }
+            return held.computeIfAbsent(in, asked -> {
+                try {
+                    return run(behavior, asked);
+                } catch (Exception e) {
+                    throw new AssertionError("the input " + asked + " is one the behavior takes",
+                            e);
+                }
+            });
         }
 
         private static Run run(Object behavior, Map<String, Long> in) throws Exception {
