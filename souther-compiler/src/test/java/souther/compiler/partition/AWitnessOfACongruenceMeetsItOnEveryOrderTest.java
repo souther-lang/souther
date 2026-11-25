@@ -63,7 +63,7 @@ class AWitnessOfACongruenceMeetsItOnEveryOrderTest {
                 Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
                 coefs.put(s, ExactRatio.of(-1));
                 coefs.put(d, ExactRatio.ONE);
-                NumericWitness.Congruent congruent = new NumericWitness.Congruent(
+                NumericWitness.Congruent congruent = NumericWitness.Congruent.of(
                         new LinearForm<>(ExactRatio.of(shift), coefs), seven,
                         BigInteger.valueOf(residue));
                 List<Map<NumericTerm, Place>> offered = new ArrayList<>();

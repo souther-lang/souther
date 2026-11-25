@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -173,7 +174,7 @@ public final class ContainerCounts {
         LinearForm<Count> form = law.over(number -> reading.lawNumber(applied, number));
         // The call, the closures it is handed and everything they work out: what its law states
         // is what it answers, and it answers wherever none of that ends a run.
-        return form == null ? null : new Stated(form, positive ? states : states.denied(),
+        return form == null ? null : new Stated(form, states.whenHolding(positive),
                 WhatARunMayEndFor.endsNoneBeneath(call), reading.written);
     }
 
@@ -196,21 +197,22 @@ public final class ContainerCounts {
                 if (right == null) {
                     yield null;
                 }
-                boolean adds = bin.op() == BinOp.ADD;
-                LinearForm<Count> form = (adds ? left.form().plus(right.form())
+                LinearForm<Count> form = (bin.op() == BinOp.ADD ? left.form().plus(right.form())
                         : left.form().minus(right.form())).orNull();
-                ComputedNumber.Range range = left.range() == null || right.range() == null ? null
-                        : left.range().plus(adds ? right.range() : right.range().negated());
+                ComputedNumber.Range range = (left.range() == null || right.range() == null) ? null
+                        : left.range().operated(bin.op(), right.range());
                 yield form == null ? null
                         : step(bin.type(), form, range, left.answers() && right.answers());
             }
             case Core.Binary bin when bin.op() == BinOp.MUL -> {
                 Number left = number(bin.left());
                 Number right = left == null ? null : number(bin.right());
-                LinearForm<Count> form = right == null ? null
-                        : product(left.form(), right.form());
-                ComputedNumber.Range range = form == null || left.range() == null
-                        || right.range() == null ? null : left.range().times(right.range());
+                ExactAnswer<LinearForm<Count>> product = right == null ? null
+                        : left.form().productWith(right.form());
+                LinearForm<Count> form = product == null ? null : product.orNull();
+                ComputedNumber.Range range = (form == null || left.range() == null
+                        || right.range() == null) ? null
+                        : left.range().operated(bin.op(), right.range());
                 yield form == null ? null
                         : step(bin.type(), form, range, left.answers() && right.answers());
             }
@@ -261,14 +263,6 @@ public final class ContainerCounts {
             }
         }
         return low == null && high == null ? null : new ComputedNumber.Range(low, high);
-    }
-
-    /** {@code left} times {@code right}, which is a form only where one of them is a constant. */
-    private static LinearForm<Count> product(LinearForm<Count> left, LinearForm<Count> right) {
-        if (left.coefs().isEmpty()) {
-            return right.times(left.constant()).orNull();
-        }
-        return right.coefs().isEmpty() ? left.times(right.constant()).orNull() : null;
     }
 
     /** What {@code e} counts the elements of, or null where it is no such count. */

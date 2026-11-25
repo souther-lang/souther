@@ -361,6 +361,81 @@ public record FillResult(SequencedMap<RowId, FilledRow> composed,
     }
 
     /**
+     * This answer, as one that also met {@code figures} on the way: where the runs it joins were
+     * not every run there was to make, and a figure is why the rest were not made.
+     *
+     * <p>Said as what was met and never as a word of its own. A run that was not made has nothing
+     * to say about the model, so it is no run beside the ones that were — a word of its own beside
+     * theirs would be two answers about one class, which is what the runs of a plan are held to not
+     * giving ({@link ClassDisposition#acrossRuns}). What a figure stopped is what every run's
+     * answer adds up as it goes, and the answer's word is then the figure's
+     * ({@link CameToNothing#alsoMet}).
+     *
+     * <p><b>Except where the runs made settled the obligation.</b> A row answers it, and the runs
+     * not made could only have found another. And a class's answer is the one every run gives —
+     * the law the runs of a plan are joined by, since what a class comes to is read off the model
+     * and not off what a run stood the dependencies in with — so a proof the runs made gave is the
+     * proof every run would give, and stands. An arm's answer is not held to agreeing, so a proof
+     * the runs made gave of an arm is about those runs, and is no proof over the ones not made.
+     *
+     * <p>{@link #unresolved} is left as it is: it is the places a row was looked for, and the runs
+     * not made looked nowhere. What the plan's obligations came to is the discharge, which this
+     * changes.
+     */
+    public FillResult alsoMet(Set<CompositionBudget> figures) {
+        if (figures.isEmpty()) {
+            return this;
+        }
+        CompositionShortfall met = CompositionShortfall.of(figures);
+        List<GenerationAnswer> answers = new ArrayList<>();
+        for (GenerationAnswer answer : discharge.answers().values()) {
+            answers.add(switch (answer) {
+                case GenerationAnswer.Class(var q, var disposition) ->
+                        new GenerationAnswer.Class(q, alsoMet(disposition, met));
+                case GenerationAnswer.Pair(var q, var disposition) ->
+                        new GenerationAnswer.Pair(q, alsoMet(disposition, met));
+                case GenerationAnswer.Meeting(var q, var disposition) ->
+                        new GenerationAnswer.Meeting(q, alsoMet(disposition, met));
+                case GenerationAnswer.Arm(var q, var disposition) ->
+                        new GenerationAnswer.Arm(q, switch (disposition) {
+                            case ArmDisposition.Unresolved(var why) -> new ArmDisposition.Unresolved(
+                                    why.stream().map(each -> each.alsoMet(met)).toList());
+                            // A row, or what the reading says of the ways into the arm, which no
+                            // run made or not made changes.
+                            case ArmDisposition.Built _, ArmDisposition.NoWayIn _ -> disposition;
+                        });
+                case GenerationAnswer.Replacement(var q, var disposition) ->
+                        new GenerationAnswer.Replacement(q,
+                                disposition instanceof ReplacementDisposition.NoneFound
+                                        ? ReplacementDisposition.together(disposition,
+                                                noneComposedAt(met))
+                                        : disposition);
+            });
+        }
+        return new FillResult(composed, unresolved, reasons, Discharge.of(discharge.plan(),
+                answers));
+    }
+
+    private static ClassDisposition alsoMet(ClassDisposition disposition,
+                                            CompositionShortfall met) {
+        return disposition instanceof ClassDisposition.Unresolved(var came)
+                && !came.proves()
+                ? new ClassDisposition.Unresolved(came.alsoMet(met)) : disposition;
+    }
+
+    /**
+     * What a search for a rewrite says where a figure of the composing stopped it at
+     * {@code met}'s figures, each as it stood — the words such a search says a figure in
+     * wherever it stops, so that what a reader would raise is told here as it is there.
+     */
+    static ReplacementDisposition noneComposedAt(CompositionShortfall met) {
+        return new ReplacementDisposition.NoneFound(Map.of(
+                ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING,
+                ReplacementDisposition.Met.at(met.figures().stream()
+                        .map(CompositionBudget::figure).toList())));
+    }
+
+    /**
      * The rows a reader is offered, each carrying what it was composed for.
      *
      * <p>Read off the discharge rather than kept beside the row, so a row that answers two

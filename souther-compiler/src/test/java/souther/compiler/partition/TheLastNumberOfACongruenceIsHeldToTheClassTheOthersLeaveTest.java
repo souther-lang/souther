@@ -60,7 +60,7 @@ class TheLastNumberOfACongruenceIsHeldToTheClassTheOthersLeaveTest {
         }
         coefs.put(Y, ExactRatio.of(wy == 0 ? 1 : wy));
         long weightOfY = wy == 0 ? 1 : wy;
-        NumericWitness.Congruent congruent = new NumericWitness.Congruent(
+        NumericWitness.Congruent congruent = NumericWitness.Congruent.of(
                 new LinearForm<>(ExactRatio.of(constant), coefs), BigInteger.valueOf(divisor),
                 BigInteger.valueOf(residue));
         Map<NumericTerm, Place> standing = Map.of(Y, Count.of(y));
@@ -81,7 +81,7 @@ class TheLastNumberOfACongruenceIsHeldToTheClassTheOthersLeaveTest {
     /** A number standing at no whole number leaves the last one no value. */
     @Test
     void aNumberAtNoWholeNumberLeavesNoValue() {
-        NumericWitness.Congruent congruent = new NumericWitness.Congruent(
+        NumericWitness.Congruent congruent = NumericWitness.Congruent.of(
                 new LinearForm<>(ExactRatio.ZERO, Map.of(X, ExactRatio.ONE, Y, ExactRatio.ONE)),
                 BigInteger.TEN, BigInteger.ZERO);
         assertInstanceOf(HeldClass.NoValue.class, congruent.leavesTheLast(X, Map.of()));

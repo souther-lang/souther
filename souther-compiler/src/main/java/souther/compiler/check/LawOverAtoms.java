@@ -399,7 +399,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 yield true;
             }
             case Holding.Stands(LinearForm<FactSubject> form, Rel rel) -> {
-                out.add(new NumericConstraint(form, positive ? rel : rel.denied()));
+                out.add(new NumericConstraint(form, rel.whenHolding(positive)));
                 yield true;
             }
             case Holding.Not(Holding denied) -> certain(denied, !positive, out);

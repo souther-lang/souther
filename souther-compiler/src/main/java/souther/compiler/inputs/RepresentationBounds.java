@@ -148,8 +148,8 @@ public final class RepresentationBounds {
             ExactRatio weight = each.getValue();
             ended |= mostOf(each.getKey()) != null;
             NumericDomain.Bounds reach = each.getKey().reachBounds();
-            ExactRatio least = numberAt(reach.min());
-            ExactRatio most = numberAt(reach.max());
+            ExactRatio least = reach.minNumber();
+            ExactRatio most = reach.maxNumber();
             ExactRatio lowest = weight.signum() >= 0 ? least : most;
             ExactRatio highest = weight.signum() >= 0 ? most : least;
             lowHeld &= lowest != null;
@@ -186,11 +186,6 @@ public final class RepresentationBounds {
     private static ExactRatio sum(ExactRatio soFar, ExactRatio weight, ExactRatio by) {
         ExactRatio product = weight.times(by).orNull();
         return product == null ? null : soFar.plus(product).orNull();
-    }
-
-    /** The number {@code end} stands at, or null where there is no end or it is at no count. */
-    private static ExactRatio numberAt(Endpoint end) {
-        return end != null && end.at() instanceof Count count ? count.exactly() : null;
     }
 
     private static NumericDomain.Bounds atMost(long most) {

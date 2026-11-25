@@ -102,7 +102,7 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
     @Test
     void aRefusedRowStandsOnlyWhereEveryWayUnderTheCasesWasTried() {
         assertTrue(Generator.aRefusedRowStands(
-                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED, SearchShortfall.NONE, false));
+                DepthFirst.Walked.EVERY_END_REACHED, SearchShortfall.NONE, false));
     }
 
     /**
@@ -113,7 +113,7 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
     @Test
     void aRefusedRowDoesNotHideAParameterWhoseSearchWasNotLookedAtWhole() {
         assertFalse(Generator.aRefusedRowStands(
-                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED, SearchShortfall.NONE, true));
+                DepthFirst.Walked.EVERY_END_REACHED, SearchShortfall.NONE, true));
     }
 
     @Test
@@ -139,13 +139,13 @@ class ARowAJudgeRefusedIsNotWhereASearchStopsTest {
                 Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)));
 
         assertFalse(Generator.aRefusedRowStands(
-                ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE, figure, false));
+                DepthFirst.Walked.CUT_SHORT, figure, false));
     }
 
     @Test
     void aRefusedRowDoesNotHideAWayUnderACaseNobodyRead() {
         assertFalse(Generator.aRefusedRowStands(
-                ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
+                DepthFirst.Walked.EVERY_END_REACHED,
                 SearchShortfall.NONE.unreadWhere(true), false));
     }
 

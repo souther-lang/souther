@@ -149,8 +149,7 @@ public sealed interface ConstantComparison {
     /** The literals that are {@code n}: an Int where an Int says it, then a decimal where one does. */
     static List<Core> literalsOf(ExactRatio n, SourcePos pos) {
         List<Core> out = new ArrayList<>();
-        if (n.isWhole() && n.floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
-                && whole.bitLength() <= Long.SIZE - 1) {
+        if (n.wholeOrNull() instanceof BigInteger whole && whole.bitLength() <= Long.SIZE - 1) {
             out.add(new Core.Int(whole.longValueExact(), Type.INT, pos));
         }
         if (n.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written)

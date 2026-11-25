@@ -1593,9 +1593,7 @@ public sealed interface AnotherLineTheRowsAllow {
                 boolean stillMeets(RowDemand.OnARemainder remainder) {
                     return OrderedAffineBoundary.at(remainder.dividend(), at)
                             instanceof ExactAnswer.Held<ExactRatio>(ExactRatio comes)
-                            && comes.isWhole()
-                            && comes.floor() instanceof ExactAnswer.Held<BigInteger>(
-                                    BigInteger whole)
+                            && comes.wholeOrNull() instanceof BigInteger whole
                             && remainder.leaves().holds(
                                     whole.mod(remainder.remainder().divisor()));
                 }

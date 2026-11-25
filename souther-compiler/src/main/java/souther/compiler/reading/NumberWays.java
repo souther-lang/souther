@@ -200,7 +200,7 @@ final class NumberWays implements ComparisonWays {
         if (apart == null) {
             return PairsLeft.NONE;
         }
-        Rel needed = want ? claim.statedRelation() : claim.statedRelation().denied();
+        Rel needed = claim.statedRelation().whenHolding(want);
         for (int sign = -1; sign <= 1; sign++) {
             if (needed.holds(sign) && standThatWay(one, other, sign)
                     && differsThatWay(apart, sign)) {
@@ -315,8 +315,7 @@ final class NumberWays implements ComparisonWays {
      * that way.
      */
     private boolean ruledOut(ComparedNumber.DrawnLine drawn, boolean want) {
-        Rel stated = drawn.claim().statedRelation();
         return WhatTheDeclarationsLeave.ruledOutByBounds(quantities.runsBetween(drawn.term()),
-                want ? stated : stated.denied(), drawn.at());
+                drawn.claim().statedRelation().whenHolding(want), drawn.at());
     }
 }

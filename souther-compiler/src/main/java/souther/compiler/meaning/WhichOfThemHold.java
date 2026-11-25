@@ -62,9 +62,7 @@ final class WhichOfThemHold {
      */
     static WhichOfThemHold of(Relation relation) {
         if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
-                || form.coefs().size() != 1
-                || !(form.coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyHold(List<Proposition> each))) {
+                || !(form.loneAtom() instanceof Quantity.HowManyHold(List<Proposition> each))) {
             return null;
         }
         Map<Spelling, Proposition> once = new LinkedHashMap<>();

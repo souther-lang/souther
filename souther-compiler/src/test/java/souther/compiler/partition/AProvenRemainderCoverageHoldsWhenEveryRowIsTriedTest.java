@@ -223,17 +223,16 @@ class AProvenRemainderCoverageHoldsWhenEveryRowIsTriedTest {
             BigInteger out = BigInteger.ZERO;
             for (Map.Entry<NumericTerm, ExactRatio> each : dividend.coefs().entrySet()) {
                 BigInteger value = at.getOrDefault(each.getKey(), BigInteger.ZERO);
-                out = out.add(UndividedByARelation.wholeNumberOf(each.getValue())
-                        .multiply(value));
+                out = out.add(each.getValue().wholeOrNull().multiply(value));
             }
             return out;
         }
 
         private static boolean holds(TakenConstraint.Affine constraint,
                                      Map<NumericTerm, BigInteger> at) {
-            BigInteger value = UndividedByARelation.wholeNumberOf(constraint.form().constant());
+            BigInteger value = constraint.form().constant().wholeOrNull();
             for (Map.Entry<NumericTerm, ExactRatio> each : constraint.form().coefs().entrySet()) {
-                value = value.add(UndividedByARelation.wholeNumberOf(each.getValue())
+                value = value.add(each.getValue().wholeOrNull()
                         .multiply(at.getOrDefault(each.getKey(), BigInteger.ZERO)));
             }
             return constraint.rel() == Rel.LE ? value.signum() <= 0 : value.signum() >= 0;

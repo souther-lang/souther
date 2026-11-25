@@ -1,6 +1,5 @@
 package souther.compiler.values;
 
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
@@ -270,9 +269,7 @@ public sealed interface ValueSet {
         if (!(value instanceof Value.Number(BigDecimal number))) {
             return null;
         }
-        ExactRatio exactly = ExactRatio.of(number);
-        return exactly.isWhole() && exactly.floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
-                ? whole : null;
+        return ExactRatio.of(number).wholeOrNull();
     }
 
     /**

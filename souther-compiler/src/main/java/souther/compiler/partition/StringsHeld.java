@@ -5,9 +5,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.RepresentationBounds;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
@@ -318,27 +315,17 @@ final class StringsHeld {
         BigInteger least = null;
         BigInteger most = null;
         if (bounds.min() != null) {
-            least = fewestFrom(bounds.min());
+            least = bounds.min().wholeAdmitted(true);
             if (least == null) {
                 return null;
             }
         }
         if (bounds.max() != null) {
-            most = HowManyAPlaceHolds.mostUpTo(bounds.max());
+            most = bounds.max().wholeAdmitted(false);
             if (most == null) {
                 return null;
             }
         }
         return new LengthsPastTheWay.Lengths(least, most);
-    }
-
-    /** The fewest code points the end lets a string have, or null where it is no count. */
-    private static BigInteger fewestFrom(Endpoint end) {
-        if (!(end.at() instanceof Count count)
-                || !(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
-                        BigInteger whole))) {
-            return null;
-        }
-        return count.exactly().isWhole() && !end.inclusive() ? whole.add(BigInteger.ONE) : whole;
     }
 }

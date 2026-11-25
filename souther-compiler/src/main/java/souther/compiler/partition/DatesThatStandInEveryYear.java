@@ -59,11 +59,10 @@ final class DatesThatStandInEveryYear {
 
         /** How many numbers this part can be, which are one to that many. */
         int howManyThereAre() {
-            return switch (which) {
-                case MONTH -> 12;
-                case DAY -> 31;
-                case YEAR -> throw new IllegalStateException("not a part of this kind");
-            };
+            if (which == TakenAs.DatePart.YEAR) {
+                throw new IllegalStateException("not a part of this kind");
+            }
+            return which.greatest();
         }
 
         /** Every number this part can be, as the bits of those numbers. */

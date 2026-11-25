@@ -2128,7 +2128,7 @@ public final class NumericDomain<A> {
         Reach reach = Reach.of(rule.form().coefs(), ExactRatio.ZERO, atom -> {
             Bounds run = runs.get(atom);
             return run == null ? Reach.ANYWHERE
-                    : Reach.between(cutOf(run.min()), cutOf(run.max()));
+                    : Reach.between(run.minCut(), run.maxCut());
         });
         ExactCut least = reach.least();
         ExactCut most = reach.most();
@@ -2162,11 +2162,6 @@ public final class NumericDomain<A> {
         }
         int order = value.compareTo(most.at());
         return order > 0 || (order == 0 && !most.inclusive());
-    }
-
-    private static ExactCut cutOf(Endpoint end) {
-        return end != null && end.at() instanceof Count count
-                ? new ExactCut(count.exactly(), end.inclusive()) : null;
     }
 
     private static <A> long weighedAtoms(AffineConstraint.HalfSpace<A> half) {
@@ -2516,11 +2511,50 @@ public final class NumericDomain<A> {
         public BigInteger holdsOneWholeNumber() {
             if (min == null || max == null || !min.inclusive() || !max.inclusive()
                     || !(min.at() instanceof Count low) || !(max.at() instanceof Count high)
-                    || !low.exactly().equals(high.exactly()) || !low.exactly().isWhole()
-                    || !(low.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
+                    || !low.exactly().equals(high.exactly())) {
                 return null;
             }
-            return whole.value();
+            return low.exactly().wholeOrNull();
+        }
+
+        /** The number the lower end stops at, or null where there is no lower end or it stops at
+         *  a place that is no number. */
+        public ExactRatio minNumber() {
+            return min == null ? null : min.exactly();
+        }
+
+        /** The number the upper end stops at, read as {@link #minNumber} reads the lower. */
+        public ExactRatio maxNumber() {
+            return max == null ? null : max.exactly();
+        }
+
+        /** The lower end as a cut of the exact numbers, or null where there is none or it stops
+         *  at a place that is no number. */
+        public ExactCut minCut() {
+            return min == null ? null : min.asCut();
+        }
+
+        /** The upper end as a cut of the exact numbers, read as {@link #minCut} reads the lower. */
+        public ExactCut maxCut() {
+            return max == null ? null : max.asCut();
+        }
+
+        /**
+         * The whole number the lower end admits first, or null where there is no lower end, where
+         * it stops at a place that is no number, or where the whole number is one the host could
+         * not hold ({@link Endpoint#wholeAdmitted}). A reader for whom the three differ asks the
+         * end itself.
+         *
+         * <p>Of the end alone: whether any whole number lies between the two ends is not said
+         * here, and is {@link #holdsAValue}'s to say over a carrier that steps.
+         */
+        public BigInteger leastWhole() {
+            return min == null ? null : min.wholeAdmitted(true);
+        }
+
+        /** The greatest whole number this admits, read as {@link #leastWhole} reads the least. */
+        public BigInteger greatestWhole() {
+            return max == null ? null : max.wholeAdmitted(false);
         }
 
         /** The values this and {@code other} both hold. Each end is the tighter of the two, which
@@ -2753,7 +2787,7 @@ public final class NumericDomain<A> {
             if (admits(ExactRatio.ZERO)) {
                 return ExactRatio.ZERO;
             }
-            ExactRatio low = numberAt(min);
+            ExactRatio low = minNumber();
             return aValueNearestItsEnd(low == null || low.signum() < 0, spacing);
         }
 
@@ -2768,7 +2802,7 @@ public final class NumericDomain<A> {
          */
         public ExactRatio aValueNearestItsEnd(boolean greatest, Granularity spacing) {
             Endpoint end = greatest ? max : min;
-            ExactRatio at = numberAt(end);
+            ExactRatio at = greatest ? maxNumber() : minNumber();
             if (spacing == null || at == null) {
                 return null;
             }
@@ -2780,7 +2814,7 @@ public final class NumericDomain<A> {
                     if (end.inclusive()) {
                         yield at;
                     }
-                    ExactRatio other = numberAt(greatest ? min : max);
+                    ExactRatio other = greatest ? minNumber() : maxNumber();
                     ExactRatio width = other == null ? null : other.minus(at).orNull();
                     ExactRatio step = width == null || width.abs().compareTo(ExactRatio.ONE) > 0
                             ? ExactRatio.ONE
@@ -2795,11 +2829,6 @@ public final class NumericDomain<A> {
             }
             return taken != null && admits(taken)
                     && (spacing != Granularity.DENSE || taken.fitsWrittenDecimal()) ? taken : null;
-        }
-
-        /** The number an end stands at, or null where there is no end or it is no number. */
-        private static ExactRatio numberAt(Endpoint end) {
-            return end != null && end.at() instanceof Count count ? count.exactly() : null;
         }
 
         private boolean everyValueStands(Rel rel, Count against) {

@@ -148,7 +148,7 @@ final class CardinalityTransfer {
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written
             // on the name are about what the value holds, and the value is at no path of its own.
-            Type representation = fields.get("value");
+            Type representation = NewtypeInners.innerOf(data);
             return representation == null ? Cardinality.UNKNOWN
                     : at(RuleKey.THE_VALUE, upperAt(representation, RuleKey.THE_VALUE,
                             counts, values, source, answers, granted, new HashSet<>(Set.of(named))));
@@ -275,7 +275,7 @@ final class CardinalityTransfer {
         if (granted.contains(named) || !(def instanceof Hir.Data data) || !data.newtype()) {
             return Unwrapping.stoppingAt(count);
         }
-        Type representation = TypeOps.fieldTypes(data, source.symbols()).get("value");
+        Type representation = NewtypeInners.innerOf(data);
         if (representation == null) {
             return Unwrapping.stoppingAt(count);
         }

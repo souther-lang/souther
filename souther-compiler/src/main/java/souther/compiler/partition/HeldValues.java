@@ -129,9 +129,9 @@ public sealed interface HeldValues {
                 return true;
             }
             ExactRatio number = level.asANumber();
-            return class_.countsOn(on) && number != null && number.isWhole()
-                    && number.floor() instanceof ExactAnswer.Held<BigInteger> whole
-                    && !class_.holds(whole.value());
+            return class_.countsOn(on) && number != null
+                    && number.wholeOrNull() instanceof BigInteger whole
+                    && !class_.holds(whole);
         }
 
         /**

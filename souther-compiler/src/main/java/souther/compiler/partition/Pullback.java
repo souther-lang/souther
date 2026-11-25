@@ -134,6 +134,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.numeric.WholeForm;
 import souther.compiler.partition.ReadingState.Bindings;
 import souther.compiler.partition.ReadingState.Compared;
 import souther.compiler.partition.ReadingState.Members;
@@ -464,7 +465,7 @@ final class Pullback {
     /** What entering each arm of a fork derives on this reading, by the fork and its names
      *  ({@link #keeping}). */
     @NoPartOfAReading(Why.CACHE)
-    private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
+    private final Map<NodeRead, List<Derivation>> entered = new HashMap<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
      *
@@ -833,8 +834,7 @@ final class Pullback {
                 yield holds ? stated : new Derivation.UnderADenial(stated, true);
             }
             case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) -> {
-                WhatConditionsState.ANode at = new WhatConditionsState.ANode(fork.value(),
-                        fork.at());
+                NodeRead at = new NodeRead(fork.value(), fork.at());
                 List<Derivation> arms = entered.get(at);
                 if (arms == null) {
                     arms = entering(fork.value(), fork.at());
@@ -9443,27 +9443,12 @@ final class Pullback {
 
     /** Whether {@code law} says the element is the same value as another. */
     private static boolean statesTheValueOfTheElement(LawProposition<DeclaredArgument> law) {
-        return switch (law) {
-            case LawProposition.Same<DeclaredArgument> _ -> true;
-            case LawProposition.All<DeclaredArgument> all -> all.parts().stream()
-                    .anyMatch(Pullback::statesTheValueOfTheElement);
-            case LawProposition.Any<DeclaredArgument> any -> any.parts().stream()
-                    .anyMatch(Pullback::statesTheValueOfTheElement);
-            case LawProposition.SomeElement<DeclaredArgument> some ->
-                    statesTheValueOfTheElement(some.ofTheElement());
-            case LawProposition.Always<DeclaredArgument> _,
-                 LawProposition.Compared<DeclaredArgument> _,
-                 LawProposition.Inside<DeclaredArgument> _,
-                 LawProposition.Observed<DeclaredArgument> _ -> false;
-        };
+        return law.anyStated(each -> each instanceof LawProposition.Same<DeclaredArgument>);
     }
 
     /** The closure {@code law} names what it answers of, or null where it names none. */
     private static DeclaredArgument closureIn(LawProposition<DeclaredArgument> law) {
-        return switch (law) {
-            case LawProposition.Always<DeclaredArgument> _,
-                 LawProposition.Inside<DeclaredArgument> _,
-                 LawProposition.Same<DeclaredArgument> _ -> null;
+        return law.firstStated(each -> switch (each) {
             case LawProposition.Compared<DeclaredArgument> compared -> {
                 for (LawNumber<DeclaredArgument> number : compared.form().coefs().keySet()) {
                     DeclaredArgument closure = closureIn(number);
@@ -9473,14 +9458,16 @@ final class Pullback {
                 }
                 yield null;
             }
-            case LawProposition.All<DeclaredArgument> all -> closureIn(all.parts());
-            case LawProposition.Any<DeclaredArgument> any -> closureIn(any.parts());
             case LawProposition.Observed<DeclaredArgument> observed ->
                     observed.of() instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
                             DeclaredArgument closure) ? closure : null;
-            case LawProposition.SomeElement<DeclaredArgument> some ->
-                    closureIn(some.ofTheElement());
-        };
+            case LawProposition.Always<DeclaredArgument> _,
+                 LawProposition.All<DeclaredArgument> _,
+                 LawProposition.Any<DeclaredArgument> _,
+                 LawProposition.SomeElement<DeclaredArgument> _,
+                 LawProposition.Inside<DeclaredArgument> _,
+                 LawProposition.Same<DeclaredArgument> _ -> null;
+        });
     }
 
     /** The closure {@code number} names what it answers of, or null where it names none. */
@@ -9503,25 +9490,14 @@ final class Pullback {
         };
     }
 
-    private static DeclaredArgument closureIn(List<LawProposition<DeclaredArgument>> parts) {
-        for (LawProposition<DeclaredArgument> part : parts) {
-            DeclaredArgument closure = closureIn(part);
-            if (closure != null) {
-                return closure;
-            }
-        }
-        return null;
-    }
-
     /** Whether {@code law} names an element of {@code container} anywhere in it. */
     private static boolean namesTheElement(LawProposition<DeclaredArgument> law,
                                            DeclaredArgument container) {
-        return switch (law) {
-            case LawProposition.Always<DeclaredArgument> _ -> false;
-            case LawProposition.All<DeclaredArgument> all -> all.parts().stream()
-                    .anyMatch(part -> namesTheElement(part, container));
-            case LawProposition.Any<DeclaredArgument> any -> any.parts().stream()
-                    .anyMatch(part -> namesTheElement(part, container));
+        return law.anyStated(each -> switch (each) {
+            case LawProposition.Always<DeclaredArgument> _,
+                 LawProposition.All<DeclaredArgument> _,
+                 LawProposition.Any<DeclaredArgument> _,
+                 LawProposition.SomeElement<DeclaredArgument> _ -> false;
             case LawProposition.Observed<DeclaredArgument> observed ->
                     observed.of().equals(new LawSubject.ElementOf<>(container));
             case LawProposition.Compared<DeclaredArgument> compared -> compared.form().coefs()
@@ -9539,15 +9515,13 @@ final class Pullback {
                                 namesTheElement(new LawProposition.Compared<>(
                                         LinearForm.atom(of), Rel.EQ), container);
                     });
-            case LawProposition.SomeElement<DeclaredArgument> some ->
-                    namesTheElement(some.ofTheElement(), container);
             case LawProposition.Same<DeclaredArgument> same ->
                     same.one().equals(new LawSubject.ElementOf<>(container))
                             || same.other().equals(new LawSubject.ElementOf<>(container));
             case LawProposition.Inside<DeclaredArgument> inside ->
                     inside.inner().equals(new LawSubject.ElementOf<>(container))
                             || inside.outer().equals(new LawSubject.ElementOf<>(container));
-        };
+        });
     }
 
 
@@ -15792,14 +15766,15 @@ final class Pullback {
         if (form == null) {
             return remainderOverABoundValue(division);
         }
-        if (form.coefs().isEmpty() || !isWhole(form)) {
+        if (form.coefs().isEmpty()
+                || !(form.overWholeNumbers() instanceof WholeForm<NumericTerm> whole)) {
             return null;
         }
         // Its rows are made where the form is worked out, each sum on the way a part of it
         // ({@link UndividedByARelation}), and the divisor is a number above nought.
         tell(new Notice(false, Core.withoutStanding(division.call()), division.dividend()));
         return Quantity.RemainderOfADividend.ofTheInput(division.call().operation(),
-                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                new LinearForm<>(ExactRatio.of(whole.constant().mod(division.divisor())),
                         form.coefs()), division.divisor());
     }
 
@@ -15994,7 +15969,8 @@ final class Pullback {
         if (!(AffineForms.outcome(division.dividend(), division.at(), quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> form))
-                || form.coefs().isEmpty() || !isWhole(form)) {
+                || form.coefs().isEmpty()
+                || !(form.overWholeNumbers() instanceof WholeForm<Quantity> whole)) {
             return null;
         }
         for (Quantity each : form.coefs().keySet()) {
@@ -16006,7 +15982,7 @@ final class Pullback {
         }
         tell(new Notice(true, Core.withoutStanding(division.call()), division.dividend()));
         return new Quantity.RemainderOfADividend(division.call().operation(),
-                new LinearForm<>(ExactRatio.of(constantOf(form).mod(division.divisor())),
+                new LinearForm<>(ExactRatio.of(whole.constant().mod(division.divisor())),
                         form.coefs()), division.divisor());
     }
 
@@ -16200,17 +16176,6 @@ final class Pullback {
         Denotation stands = at.standing(factor, read.rules().symbols(), read.rules().newtypes());
         return InputNumber.of(stands.value(), read.domain(), stands.at(), read.rules(),
                 elementsMet.get()) instanceof NumericTerm.FromOnePosition term ? term : null;
-    }
-
-    /** Whether every number of {@code form}, its constant included, is a whole one. */
-    private static <A> boolean isWhole(LinearForm<A> form) {
-        return form.constant().isWhole()
-                && form.coefs().values().stream().allMatch(ExactRatio::isWhole);
-    }
-
-    /** The constant of a form every number of which is whole. */
-    private static <A> BigInteger constantOf(LinearForm<A> form) {
-        return ((ExactAnswer.Held<BigInteger>) form.constant().floor()).value();
     }
 
     /**
@@ -17006,7 +16971,7 @@ final class Pullback {
             return ArmsLeft.BOTH;
         }
         SearchRegion here = onTheWay.get() != null ? onTheWay.get() : read.quantities().region();
-        Rel holding = holds ? relation : relation.denied();
+        Rel holding = relation.whenHolding(holds);
         // Where the form runs on the way here, worked out once for both arms: an arm whose
         // condition the run leaves no value for is one no run takes, and only an arm that is read
         // has the way narrowed to it.

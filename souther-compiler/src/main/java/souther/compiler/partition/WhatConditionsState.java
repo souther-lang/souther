@@ -66,14 +66,14 @@ final class WhatConditionsState {
 
     private final InputReading read;
     private final Map<AComparison, Pullback.OnTheInput> comparisons = new HashMap<>();
-    private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
-    private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
-    private final Map<ANode, Pullback.Pulled> holdings = new HashMap<>();
-    private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
-    private final Map<ANode, List<Pullback.OfAClause>> constructions = new HashMap<>();
-    private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
-    private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
-    private final Map<ANode, Pullback.OperatorsAnswer> operatorsAnswerOfTheRelation =
+    private final Map<NodeRead,Pullback.Pulled> truths = new HashMap<>();
+    private final Map<NodeRead,Pullback.Pulled> presences = new HashMap<>();
+    private final Map<NodeRead,Pullback.Pulled> holdings = new HashMap<>();
+    private final Map<NodeRead,List<Pullback.Pulled>> arms = new HashMap<>();
+    private final Map<NodeRead,List<Pullback.OfAClause>> constructions = new HashMap<>();
+    private final Map<NodeRead,Optional<DividedInput>> dividedInputs = new HashMap<>();
+    private final Map<NodeRead,Pullback.OperatorsAnswer> operatorsAnswer = new HashMap<>();
+    private final Map<NodeRead,Pullback.OperatorsAnswer> operatorsAnswerOfTheRelation =
             new HashMap<>();
     private final Map<ANodeLeavingOut, Pullback.OperatorsAnswer> operatorsAnswerLeavingOut =
             new HashMap<>();
@@ -122,20 +122,6 @@ final class WhatConditionsState {
         }
     }
 
-    /** A truth, or a fork whose arms are entered, by the node it is, under names. */
-    record ANode(Core value, InputReads reads) {
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof ANode that && value == that.value && reads.equals(that.reads);
-        }
-
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(value) * 31 + reads.hashCode();
-        }
-    }
-
     /** What {@code comparison} states with its names as {@code reads} has them, under
      *  {@code read}. */
     Pullback.OnTheInput comparison(StatedComparison comparison, InputReads reads,
@@ -153,7 +139,7 @@ final class WhatConditionsState {
     Pullback.OperatorsAnswer whereItsOperatorsAnswer(Core body, InputReads reads,
                                                      InputReading read) {
         heldTo(read);
-        return kept(operatorsAnswer, new ANode(body, reads),
+        return kept(operatorsAnswer, new NodeRead(body, reads),
                 () -> Pullback.whereItsOperatorsAnswer(body, reads, read));
     }
 
@@ -162,7 +148,7 @@ final class WhatConditionsState {
     Pullback.OperatorsAnswer whereTheRelationsOwnOperatorsAnswer(Core body, InputReads reads,
                                                                  InputReading read) {
         heldTo(read);
-        return kept(operatorsAnswerOfTheRelation, new ANode(body, reads),
+        return kept(operatorsAnswerOfTheRelation, new NodeRead(body, reads),
                 () -> Pullback.whereTheRelationsOwnOperatorsAnswer(body, reads, read));
     }
 
@@ -202,7 +188,7 @@ final class WhatConditionsState {
      *  {@code read}. */
     Pullback.Pulled truth(Core truth, InputReads reads, InputReading read) {
         heldTo(read);
-        return kept(truths, new ANode(truth, reads),
+        return kept(truths, new NodeRead(truth, reads),
                 () -> Pullback.ofATruth(truth, reads, read, Optional.empty()));
     }
 
@@ -210,7 +196,7 @@ final class WhatConditionsState {
      *  under {@code read}. */
     Pullback.Pulled presence(Core optional, InputReads reads, InputReading read) {
         heldTo(read);
-        return kept(presences, new ANode(optional, reads),
+        return kept(presences, new NodeRead(optional, reads),
                 () -> Pullback.ofAPresence(optional, reads, read, Optional.empty()));
     }
 
@@ -218,21 +204,21 @@ final class WhatConditionsState {
      *  under {@code read}. */
     Pullback.Pulled holdingSomething(Core container, InputReads reads, InputReading read) {
         heldTo(read);
-        return kept(holdings, new ANode(container, reads),
+        return kept(holdings, new NodeRead(container, reads),
                 () -> Pullback.ofHoldingSomething(container, reads, read, Optional.empty()));
     }
 
     /** What a run getting past {@code construction} states of each clause it is held to, with its
      *  names as {@code reads} has them ({@link Pullback#ofAConstruction}). */
     List<Pullback.OfAClause> constructed(Core.Construct construction, InputReads reads) {
-        return kept(constructions, new ANode(construction, reads),
+        return kept(constructions, new NodeRead(construction, reads),
                 () -> Pullback.ofAConstruction(construction, reads, read));
     }
 
     /** What a run entering arm {@code part} of {@code fork} states with its names as {@code reads}
      *  has them ({@link Pullback#ofTheArms}). */
     Pullback.Pulled arm(Core fork, int part, InputReads reads) {
-        return kept(arms, new ANode(fork, reads),
+        return kept(arms, new NodeRead(fork, reads),
                 () -> Pullback.ofTheArms(fork, reads, read, Optional.empty())).get(part);
     }
 
@@ -267,7 +253,7 @@ final class WhatConditionsState {
      * about.
      */
     Optional<DividedInput> inputDividedBy(Core.Match fork, InputReads reads) {
-        return kept(dividedInputs, new ANode(fork, reads), () -> divide(fork, reads));
+        return kept(dividedInputs, new NodeRead(fork, reads), () -> divide(fork, reads));
     }
 
     private Optional<DividedInput> divide(Core.Match fork, InputReads reads) {

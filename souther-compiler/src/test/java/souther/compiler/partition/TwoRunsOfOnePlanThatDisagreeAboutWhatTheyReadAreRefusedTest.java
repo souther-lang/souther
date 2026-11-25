@@ -22,8 +22,10 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -52,6 +54,13 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     private static final CameToNothing NO_CANDIDATE =
             CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
                     Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
+
+    private static final CameToNothing PROVED =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE));
+
+    private static final Set<CompositionBudget> LEFT =
+            Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH);
 
     private static final CameToNothing NOTHING_COMPOSES_ONE =
             CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
@@ -203,13 +212,57 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                         new ArmDisposition.NoWayIn(NOTHING_ARRIVES), read)));
     }
 
+    /**
+     * Runs a figure left unmade are no run beside the ones made: the answer over the ones made
+     * says the figure as something it met, in the figure's word. Said as a run of their own, the
+     * word would differ from the made runs' and the join would be refused, as above.
+     */
+    @Test
+    void runsAFigureLeftUnmadeAreWhatTheAnswerMetAndNoRunOfTheirOwn() {
+        GenerationPlan asked = planOver(List.of(A_CLASS), 1);
+        FillResult made = nothingCameOfIt(asked, NO_CANDIDATE);
+
+        CameToNothing came = assertInstanceOf(ClassDisposition.Unresolved.class,
+                made.alsoMet(LEFT).discharge().at(A_CLASS)).came();
+        assertEquals(Generator.UnresolvedCombination.Reason.wordFor(LEFT), came.why().reason());
+        assertEquals(LEFT, came.met().figures(), "and the figure, as met");
+        assertEquals(made, made.alsoMet(Set.of()), "nothing left is nothing met");
+    }
+
+    /**
+     * A class's answer is the one every run gives whatever it stood the dependencies in with, so
+     * a proof the runs made gave is the one the runs not made would give, and stands.
+     */
+    @Test
+    void aClassTheRunsMadeProvedIsProvedOverTheRunsNotMade() {
+        GenerationPlan asked = planOver(List.of(A_CLASS), 1);
+        FillResult made = nothingCameOfIt(asked, PROVED);
+
+        assertEquals(made, made.alsoMet(LEFT));
+    }
+
+    /** At a replacement, the figure is said in the words a search for a rewrite says one in. */
+    @Test
+    void aFigureAtAReplacementIsAFigureOfTheComposing() {
+        CompositionBudget figure = CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH;
+        assertEquals(new ReplacementDisposition.NoneFound(Map.of(
+                        ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING,
+                        ReplacementDisposition.Met.at(Set.of(figure.figure())))),
+                FillResult.noneComposedAt(CompositionShortfall.of(Set.of(figure))));
+    }
+
     /** A run of a plan owing one class, which composed nothing for it. */
     private static FillResult nothingCameOfIt(GenerationPlan asked) {
+        return nothingCameOfIt(asked, NO_CANDIDATE);
+    }
+
+    /** A run of a plan owing one class, which composed nothing for it and said {@code came}. */
+    private static FillResult nothingCameOfIt(GenerationPlan asked, CameToNothing came) {
         ClassOfAPosition owed = asked.classesOwed().getFirst();
         return new FillResult(new LinkedHashMap<>(), List.of(), List.of(),
                 Discharge.of(asked, List.of(new GenerationAnswer.Class(
                         new GenerationObligation.Class(owed),
-                        new ClassDisposition.Unresolved(NO_CANDIDATE)))));
+                        new ClassDisposition.Unresolved(came)))));
     }
 
     /**

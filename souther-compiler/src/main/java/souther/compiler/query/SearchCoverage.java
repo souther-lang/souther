@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.BorderObligationPointAssessment.Reading;
 
@@ -50,14 +51,64 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
          * <p>The reading's reason and not the line's. What a search of one position came to is a
          * fact about that position — the rules reaching it, the values its decoder took — and a
          * line is what its readings agree about rather than what one of them found.
+         *
+         * <p>Every search of the reading, held as they came back and never as one of them or as
+         * words taken off them. A reading may be searched more than once, and what the searches
+         * come to together is their owner's to say ({@link SearchOutcomes#provesInfeasible}): kept
+         * as one search's words, the reading would be whichever search the walk took last, and
+         * taken down to words, what a search met or was cut short by would be gone from whatever
+         * reads them next.
+         *
+         * @param outcomes every search of the reading, one of which at least ran
          */
-        record Attempted(Generator.UnresolvedCombination why) implements ReadingSearch {
+        record Attempted(SearchOutcomes outcomes) implements ReadingSearch {
 
             public Attempted {
-                if (why == null) {
-                    throw new IllegalArgumentException("a search that ran came to something");
+                if (outcomes == null || outcomes.each().stream()
+                        .allMatch(ItemAssessment.Attempt.Unplanned.class::isInstance)) {
+                    throw new IllegalArgumentException("a reading searched is one a search ran at");
                 }
             }
+
+            /** Whether every search of the reading showed the rules leave nothing there. */
+            public boolean proves() {
+                return outcomes.provesInfeasible();
+            }
+
+            /**
+             * What the searches of {@code reading} that came to nothing came back with, a word once
+             * with all it met ({@link CameToNothing#joined}). A search that ran with nothing to run
+             * against says so in the words the generator does, named by the reading, which is what
+             * has a name for the quantity — a comparison in a body names nothing.
+             */
+            public List<CameToNothing> came(Reading reading) {
+                List<CameToNothing> each = new ArrayList<>();
+                for (ItemAssessment.Attempt attempt : outcomes.each()) {
+                    if (attempt instanceof ItemAssessment.Attempt.Unavailable) {
+                        each.add(CameToNothing.metNothing(new Generator.UnresolvedCombination(
+                                List.of(reading.target().label()),
+                                Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST)));
+                    } else {
+                        CameToNothing came = ARowTellingTheLinesApart.cameToNothing(attempt);
+                        if (came != null) {
+                            each.add(came);
+                        }
+                    }
+                }
+                return CameToNothing.joined(each);
+            }
+        }
+
+        /**
+         * What every search of a reading came to, as the reading's part of a coverage: searched
+         * where any search ran at it, and one with no answer to give where none did — a reading
+         * nobody looked at taking part in what the readings establish would be this compiler's
+         * shortfall read as the model's answer.
+         */
+        static ReadingSearch of(SearchOutcomes outcomes) {
+            return outcomes.each().stream()
+                    .allMatch(ItemAssessment.Attempt.Unplanned.class::isInstance)
+                    ? new Unavailable() : new Attempted(outcomes);
         }
 
         /**
@@ -111,11 +162,11 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
     /** What each reading that was walked came to, in the order they were walked. */
     public List<Generator.UnresolvedCombination> attempted() {
         List<Generator.UnresolvedCombination> out = new ArrayList<>();
-        for (ReadingSearch each : came.values()) {
-            if (each instanceof ReadingSearch.Attempted(var why)) {
-                out.add(why);
+        came.forEach((reading, each) -> {
+            if (each instanceof ReadingSearch.Attempted searched) {
+                searched.came(reading).forEach(it -> out.add(it.why()));
             }
-        }
+        });
         return List.copyOf(out);
     }
 
@@ -133,11 +184,11 @@ public record SearchCoverage(List<Reading> readings, SequencedMap<Reading, Readi
      * things, so an answer that named one would be picking which reading stands for the line — and
      * a reader wanting what each of them said has them all in {@link #attempted}.
      *
-     * <p>Asked of the reason rather than matched against a word, which is where that decision
-     * already lives ({@link Generator.UnresolvedCombination.Reason#provesInfeasible}).
+     * <p>Asked of what each search's outcome answered, which is where that decision lives
+     * ({@link ItemAssessment.Attempt#proves}), and never of its word alone.
      */
     public boolean provesTheLineCannotBeWritten() {
-        return walkedEveryReading()
-                && attempted().stream().allMatch(why -> why.reason().provesInfeasible());
+        return walkedEveryReading() && came.values().stream().allMatch(each ->
+                each instanceof ReadingSearch.Attempted searched && searched.proves());
     }
 }

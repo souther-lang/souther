@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
@@ -46,6 +47,38 @@ public record CameToNothing(Generator.UnresolvedCombination why, CompositionShor
                     + " what cut its plan short, or that there was none: " + why);
         }
         planCut = Set.copyOf(planCut);
+    }
+
+    /**
+     * Whether this shows the rules leave nothing: a word that proves, over everything there was.
+     *
+     * <p>The one place that is asked, and never the word alone. A proof is the rules leaving
+     * nothing over everything the point had, and two things beside the word say the search did
+     * not have that. What it met of this compiler's on the way is a search that did not finish.
+     * A plan cut short is a search over less than the point had, whose word is kept as that
+     * search's own answer about the part it was handed — which a reader is told, and which is no
+     * proof about the point. A reader asking the word alone is told a proof about whichever of
+     * these it forgot.
+     */
+    public boolean proves() {
+        return why.reason() != null && why.reason().provesInfeasible() && met.nothing()
+                && planCut.isEmpty();
+    }
+
+    /**
+     * This, as a search that also met {@code more} on the way: what it met added up, and the word
+     * for all of it, which is the figures' where figures were met
+     * ({@link SearchShortfall#wordFor}, the rule every search's word is given by).
+     */
+    public CameToNothing alsoMet(CompositionShortfall more) {
+        if (more.nothing()) {
+            return this;
+        }
+        CompositionShortfall all = met.and(more);
+        return new CameToNothing(new Generator.UnresolvedCombination(why.classes(),
+                new SearchShortfall(all, why.beside().shortOf(), false, false, Optional.empty(),
+                        Optional.empty()).wordFor(why.reason()),
+                why.detail(), why.told(), why.beside()), all, planCut);
     }
 
     /**

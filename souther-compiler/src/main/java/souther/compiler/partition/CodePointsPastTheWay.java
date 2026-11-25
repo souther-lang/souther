@@ -2,12 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.semantics.CodePointClass;
-import souther.compiler.values.TextExtents;
 
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.PatternMeaning;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,23 +37,12 @@ record CodePointsPastTheWay(CodePointClass counted, LengthsPastTheWay.Lengths co
 
     @Override
     public PatternPlan strings() {
-        if (isEmpty() || counts.least().bitLength() >= Integer.SIZE - 1) {
-            return null;
-        }
-        return PatternPlan.of(holding(counts.least().intValueExact(), ceiling()));
+        return counts.holding(this::holding);
     }
 
     @Override
     public PatternPlan stringsOutside() {
-        if (isEmpty()) {
-            return null;
-        }
-        PatternPlan below = fewerThan();
-        PatternPlan above = moreThan();
-        if (counts.least().signum() > 0 && below == null) {
-            return null;
-        }
-        return below == null ? above : above == null ? below : below.or(above);
+        return counts.holdingOtherwise(this::holding);
     }
 
     /** The strings no run gets to the relation with, which are those of the other counts: those
@@ -76,31 +63,13 @@ record CodePointsPastTheWay(CodePointClass counted, LengthsPastTheWay.Lengths co
 
     /** The strings holding fewer than the least, or null where no string does. */
     PatternPlan fewerThan() {
-        if (isEmpty() || counts.least().signum() == 0
-                || counts.least().bitLength() >= Integer.SIZE - 1) {
-            return null;
-        }
-        return PatternPlan.of(holding(0, counts.least().intValueExact() - 1));
+        return counts.fewerThan(this::holding);
     }
 
-    /** The strings holding more than the most, or null where no string does. */
+    /** The strings holding more than the most, or null where no string does: only a string
+     *  longer than the most holds more of the class than that. */
     PatternPlan moreThan() {
-        if (isEmpty() || !countsPastTheMost() || counts.most().bitLength() >= Integer.SIZE - 1) {
-            return null;
-        }
-        return PatternPlan.of(holding(counts.most().intValueExact() + 1,
-                PatternMeaning.Repeated.NO_CEILING));
-    }
-
-    /** Whether a string can hold more of the class than the most: only a string that is
-     *  longer than that has. */
-    private boolean countsPastTheMost() {
-        return counts.most().compareTo(BigInteger.valueOf(TextExtents.LONGEST_STRING)) < 0;
-    }
-
-    private int ceiling() {
-        return countsPastTheMost() && counts.most().bitLength() < Integer.SIZE - 1
-                ? counts.most().intValueExact() : PatternMeaning.Repeated.NO_CEILING;
+        return counts.moreThan(this::holding);
     }
 
     private PatternMeaning holding(int least, int most) {

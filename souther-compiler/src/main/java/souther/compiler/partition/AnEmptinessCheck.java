@@ -147,7 +147,7 @@ final class AnEmptinessCheck {
      */
     private static boolean addedUp(Denotation e, Standing standing, SizesAddedUp into) {
         Core value = Core.withoutStanding(e.value());
-        if (!into.visited.add(new Visited(value, e.at()))) {
+        if (!into.visited.add(new NodeRead(value, e.at()))) {
             return true;
         }
         if (value instanceof Core.Binary sum && sum.op() == BinOp.ADD) {
@@ -170,30 +170,11 @@ final class AnEmptinessCheck {
      * many times a size is added is not asked of it.
      */
     private static final class SizesAddedUp {
-        private final Set<Visited> visited = new HashSet<>();
+        private final Set<NodeRead> visited = new HashSet<>();
         private final List<Size> sizes = new ArrayList<>();
         private boolean ofASum;
     }
 
-    /**
-     * A value in the reading it stands in. The object identifies a node of the tree and not what
-     * it means under a reading, which is what {@link Standing} answers, so two visits are
-     * interchangeable only where both the node and the reading are the same. The node is by
-     * identity and not by what it equals: equality over a tree that shares its parts walks every
-     * path to them.
-     */
-    private record Visited(Core value, InputReads at) {
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Visited that && that.value == value && that.at.equals(at);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * System.identityHashCode(value) + at.hashCode();
-        }
-    }
 
     /**
      * Whether {@code relation} against {@code against} comes out the same at every size above

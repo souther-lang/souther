@@ -387,31 +387,45 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
          * so running out of a figure, or not reading something, is never a proof here.
          */
         public boolean leavesNone(List<OnTheWay> more) {
-            return taken == null || leavesNone(taken, more);
-        }
-
-        private boolean leavesNone(Numbered so, List<OnTheWay> more) {
-            if (more.isEmpty()) {
-                return false;
-            }
-            OnTheWay first = more.getFirst();
-            List<OnTheWay> rest = more.subList(1, more.size());
-            List<List<OnTheWay>> ways = vocabulary.alternatives(first);
-            if (ways != null) {
-                for (List<OnTheWay> one : ways) {
-                    List<OnTheWay> along = new ArrayList<>(one);
-                    along.addAll(rest);
-                    if (!leavesNone(so, along)) {
-                        return false;
-                    }
-                }
+            if (taken == null) {
                 return true;
             }
-            return switch (vocabulary.with(so, first)) {
-                case Step.Closed<Numbered, NoInputTakesIt> _ -> true;
-                case Step.Held<Numbered, NoInputTakesIt>(var held) -> leavesNone(held, rest);
+            // Walked a choice at a time: each alternative of an entry that comes out one of several
+            // ways, and an entry that does not taken in beside what is already. A way that closes
+            // is an end, and so is one that takes everything in and is still open — which is a row
+            // left, and ends the walk. A proof only where every end was reached and each closed:
+            // a walk the figure stopped proves nothing closed
+            // ({@link CompositionBudget#CHOICES_ON_A_WAY_LOOKED_AT}).
+            return DepthFirst.walk(new Left(taken, more),
+                    new Tries(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum()),
+                    this::past, open -> false) == DepthFirst.Walked.EVERY_END_REACHED;
+        }
+
+        /** Each way past {@code at} of its first entry still to take in: the way of each of its
+         *  alternatives, or of it taken in, and none where taking it in closes the way. Null where
+         *  everything was taken in. */
+        private Iterable<Left> past(Left at) {
+            if (at.more().isEmpty()) {
+                return null;
+            }
+            OnTheWay first = at.more().getFirst();
+            List<OnTheWay> rest = at.more().subList(1, at.more().size());
+            List<List<OnTheWay>> ways = vocabulary.alternatives(first);
+            if (ways != null) {
+                return () -> ways.stream().map(one -> {
+                    List<OnTheWay> along = new ArrayList<>(one);
+                    along.addAll(rest);
+                    return new Left(at.so(), along);
+                }).iterator();
+            }
+            return switch (vocabulary.with(at.so(), first)) {
+                case Step.Closed<Numbered, NoInputTakesIt> _ -> List.of();
+                case Step.Held<Numbered, NoInputTakesIt>(var held) -> List.of(new Left(held, rest));
             };
         }
+
+        /** What a way took in so far, and what is still to take in beside it. */
+        private record Left(Numbered so, List<OnTheWay> more) {}
     }
 
     /** Whether every position {@code entry} asks about is one value of a run's own, outside every

@@ -107,6 +107,18 @@ public record Endpoint(Place at, boolean inclusive) {
         return order < 0 || (low.inclusive() && high.inclusive());
     }
 
+    /** The number this end stops at, or null where it stops at a place that is no number. */
+    public ExactRatio exactly() {
+        return at instanceof Count count ? count.exactly() : null;
+    }
+
+    /** This end as a cut of the exact numbers, admitting what it admits — or null where it stops
+     *  at a place that is no number. */
+    public ExactCut asCut() {
+        ExactRatio number = exactly();
+        return number == null ? null : new ExactCut(number, inclusive);
+    }
+
     /**
      * The whole number nearest this end that it admits, from inside: the end itself where it is a
      * whole number it includes, one inside it where it is a whole number it excludes, and the next
@@ -115,15 +127,7 @@ public record Endpoint(Place at, boolean inclusive) {
      * @param lower whether this is the lower end, which says which way is inward
      */
     public BigInteger wholeAdmitted(boolean lower) {
-        if (!(at instanceof Count count)) {
-            return null;
-        }
-        ExactAnswer<BigInteger> whole = lower ? count.exactly().ceiling() : count.exactly().floor();
-        if (!(whole instanceof ExactAnswer.Held<BigInteger> held)) {
-            return null;
-        }
-        boolean excluded = count.exactly().isWhole() && !inclusive;
-        return excluded ? held.value().add(lower ? BigInteger.ONE : BigInteger.ONE.negate())
-                : held.value();
+        ExactCut cut = asCut();
+        return cut == null ? null : (lower ? cut.leastWhole() : cut.greatestWhole()).orNull();
     }
 }

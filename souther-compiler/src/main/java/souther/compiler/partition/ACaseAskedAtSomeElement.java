@@ -127,14 +127,12 @@ final class ACaseAskedAtSomeElement {
                     && compared.relation() instanceof Relation.Affine affine
                     && affine.proposition() == Rel.EQ
                     && affine.form().constant().signum() == 0
-                    && affine.form().coefs().size() == 1
-                    && affine.form().coefs().keySet().iterator().next()
-                            instanceof Quantity.RemainderOfADividend remainder
+                    && affine.form().loneAtom() instanceof Quantity.RemainderOfADividend remainder
                     && remainder.dividend().coefs().get(element) instanceof ExactRatio weight
-                    && whole(weight) != null) {
+                    && weight.wholeOrNull() instanceof BigInteger whole) {
                 LinearForm<NumericTerm> rest = theRestOf(remainder.dividend(), element);
                 if (rest != null) {
-                    return new Turn(whole(weight), rest, remainder.divisor());
+                    return new Turn(whole, rest, remainder.divisor());
                 }
             }
         }
@@ -145,7 +143,7 @@ final class ACaseAskedAtSomeElement {
      *  null where it weighs anything else, or anything by a part of one. */
     private static LinearForm<NumericTerm> theRestOf(LinearForm<Quantity> dividend,
                                                      Quantity.OfABinding element) {
-        if (whole(dividend.constant()) == null) {
+        if (dividend.constant().wholeOrNull() == null) {
             return null;
         }
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
@@ -154,18 +152,12 @@ final class ACaseAskedAtSomeElement {
                 continue;
             }
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _))
-                    || whole(each.getValue()) == null) {
+                    || each.getValue().wholeOrNull() == null) {
                 return null;
             }
             coefs.put(term, each.getValue());
         }
         return new LinearForm<>(dividend.constant(), coefs);
-    }
-
-    /** {@code ratio} as a whole number, or null where it is none. */
-    private static BigInteger whole(ExactRatio ratio) {
-        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(var held)
-                ? held : null;
     }
 
     /** Whether the case holds at {@code row} with the element at some value the row's list
@@ -259,9 +251,8 @@ final class ACaseAskedAtSomeElement {
             }
         }
         return switch (sum) {
-            case ExactAnswer.Held<ExactRatio>(ExactRatio held) when held.isWhole()
-                    && held.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole) ->
-                    whole;
+            case ExactAnswer.Held<ExactRatio>(ExactRatio held)
+                    when held.wholeOrNull() instanceof BigInteger whole -> whole;
             case ExactAnswer.Held<ExactRatio> _ -> {
                 why.add(ReadingGap.NO_VALUE);
                 yield null;

@@ -237,7 +237,7 @@ final class AValueOfTheInput {
     /** The constant a fold reads for the whole number {@code number} of a place of {@code prim},
      *  or null where it is not a whole number that fits. */
     private static Object constantOf(ExactRatio number, Type.Prim prim) {
-        BigInteger whole = number.isWhole() ? number.ceiling().orNull() : null;
+        BigInteger whole = number.wholeOrNull();
         if (whole == null) {
             return null;
         }

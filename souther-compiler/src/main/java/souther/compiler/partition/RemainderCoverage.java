@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.UndividedByARelation.WholeEnds;
@@ -165,7 +166,7 @@ final class RemainderCoverage {
         // A pivot weighing more than one steps the form by more than one, and the values of it in
         // the window are as many as the window is wide only for some remainders of the rest: it
         // is not asked.
-        BigInteger weight = UndividedByARelation.wholeNumberOf(dividend.coefs().get(pivot));
+        BigInteger weight = wholeWeight(dividend, pivot);
         if (weight == null || weight.abs().compareTo(BigInteger.ONE) != 0 || moves.isEmpty()) {
             return Optional.empty();
         }
@@ -211,12 +212,19 @@ final class RemainderCoverage {
         return Optional.of(new Proof(universal.keySet(), met));
     }
 
+    /** What {@code form} weighs {@code term} by, as a whole number — or null where it weighs it
+     *  by nothing or by a part of one. */
+    private static BigInteger wholeWeight(LinearForm<NumericTerm> form, NumericTerm term) {
+        ExactRatio weight = form.coefs().get(term);
+        return weight == null ? null : weight.wholeOrNull();
+    }
+
     /** The form's numbers sorted by what is done with them. */
     private record Form(NumericTerm pivot, LinearForm<NumericTerm> dividend,
                         Set<NumericTerm> universal, Set<NumericTerm> atNought) {
 
         private BigInteger weightOf(NumericTerm term) {
-            return UndividedByARelation.wholeNumberOf(dividend.coefs().get(term));
+            return wholeWeight(dividend, term);
         }
 
         /** The least and the greatest the universal numbers weigh together, or null. */
@@ -252,7 +260,7 @@ final class RemainderCoverage {
                     continue;
                 }
                 BigInteger lambda = ratioToTheDividend(affine.form(), universal);
-                BigInteger constant = UndividedByARelation.wholeNumberOf(affine.form().constant());
+                BigInteger constant = affine.form().constant().wholeOrNull();
                 if (lambda == null || constant == null) {
                     continue;
                 }
@@ -274,7 +282,7 @@ final class RemainderCoverage {
         BigInteger ratioToTheDividend(LinearForm<NumericTerm> form, Set<NumericTerm> terms) {
             BigInteger lambda = null;
             for (NumericTerm term : terms) {
-                BigInteger onTerm = UndividedByARelation.wholeNumberOf(form.coefs().get(term));
+                BigInteger onTerm = wholeWeight(form, term);
                 BigInteger inDividend = weightOf(term);
                 if (onTerm == null || inDividend == null || inDividend.signum() == 0) {
                     return null;
@@ -303,8 +311,8 @@ final class RemainderCoverage {
                                 !term.equals(pivot) && !atNought.contains(term))) {
                     continue;
                 }
-                BigInteger by = UndividedByARelation.wholeNumberOf(form.coefs().get(pivot));
-                BigInteger constant = UndividedByARelation.wholeNumberOf(form.constant());
+                BigInteger by = wholeWeight(form, pivot);
+                BigInteger constant = form.constant().wholeOrNull();
                 if (by == null || constant == null || by.abs().compareTo(BigInteger.ONE) != 0
                         || (rel != Rel.LE && rel != Rel.GE)) {
                     return null;
@@ -350,7 +358,7 @@ final class RemainderCoverage {
                                         && !universal.contains(term))) {
                     return null;
                 }
-                BigInteger constant = UndividedByARelation.wholeNumberOf(form.constant());
+                BigInteger constant = form.constant().wholeOrNull();
                 if (constant == null) {
                     return null;
                 }
@@ -358,8 +366,7 @@ final class RemainderCoverage {
                     BigInteger[] range = new BigInteger[] {constant, constant};
                     for (NumericTerm term : universal) {
                         BigInteger by = form.coefs().containsKey(term)
-                                ? UndividedByARelation.wholeNumberOf(form.coefs().get(term))
-                                : BigInteger.ZERO;
+                                ? wholeWeight(form, term) : BigInteger.ZERO;
                         WholeEnds at = ends.get(term);
                         if (by == null) {
                             return null;

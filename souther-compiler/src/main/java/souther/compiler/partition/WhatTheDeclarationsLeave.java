@@ -338,7 +338,7 @@ public final class WhatTheDeclarationsLeave {
      * ({@link #runsOfTheRemainders}).
      */
     private static AWayThrough leaves(Relation relation, boolean holds, Quantities declared) {
-        Rel asked = holds ? relation.proposition() : relation.proposition().denied();
+        Rel asked = relation.proposition().whenHolding(holds);
         return switch (relation) {
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term, var _), var at,
                                   Rel _) ->

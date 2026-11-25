@@ -615,15 +615,8 @@ public sealed interface ElementValue {
             if (first == null) {
                 return new Compared(form, relation);
             }
-            ExactRatio lead = form.coefs().get(first);
-            if (!(ExactRatio.ONE.dividedBy(lead.abs()) instanceof ExactAnswer.Held<ExactRatio>(
-                    ExactRatio per))) {
-                return null;
-            }
-            ExactRatio by = lead.signum() < 0 ? per.negated() : per;
-            return form.times(by) instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(
-                    var scaled) ? new Compared(scaled, lead.signum() < 0 ? relation.turned()
-                            : relation) : null;
+            LinearForm.Stated<ElementProjection> one = form.weighingOne(first, relation).orNull();
+            return one == null ? null : new Compared(one.form(), one.rel());
         }
 
         /** The fields of the element this reads. */

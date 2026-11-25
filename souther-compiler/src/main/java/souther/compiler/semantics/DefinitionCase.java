@@ -66,7 +66,7 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
                 // `a < b` and `b > a` are one relation, and `a >= b` is its denial.
                 String spelled = spelling(apart);
                 String turned = spelling(apart.negate());
-                Rel rel = spelled.compareTo(turned) <= 0 ? stands.rel() : turnedRound(stands.rel());
+                Rel rel = spelled.compareTo(turned) <= 0 ? stands.rel() : stands.rel().turned();
                 String relation = (spelled.compareTo(turned) <= 0 ? spelled : turned) + " "
                         + rel.orItsDenial();
                 int truth = truths.computeIfAbsent(relation, _ -> truths.size());
@@ -105,17 +105,5 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
         Map<String, String> terms = new TreeMap<>();
         form.coefs().forEach((atom, weight) -> terms.put(String.valueOf(atom), weight.toString()));
         return terms + " " + form.constant();
-    }
-
-    /** {@code rel} with its two sides swapped: {@code a < b} is {@code b > a}. */
-    private static Rel turnedRound(Rel rel) {
-        return switch (rel) {
-            case LT -> Rel.GT;
-            case LE -> Rel.GE;
-            case GT -> Rel.LT;
-            case GE -> Rel.LE;
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-        };
     }
 }

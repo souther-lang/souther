@@ -797,8 +797,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * form leave it — a class of values of the form and no line on it, so a rule about it is a line
      * on the remainder and never on the form.
      *
-     * <p>Whole numbers throughout. A form that weighs a number by a fraction, or is moved by one, is
-     * no dividend of a remainder, and nothing here reads it as one.
+     * <p>Not held to whole numbers. A form that weighs a number by a fraction, or is moved by one,
+     * stands between whole numbers, and a reader working the remainder out in whole numbers asks
+     * whether the form is one it can ({@link LinearForm#overWholeNumbers}) and reads nothing of it
+     * where it is not.
      *
      * <p>The dividend may be over a value read off a binding — the element of a list of every
      * whole number between two — as well as over the input's numbers. Which values a row puts at

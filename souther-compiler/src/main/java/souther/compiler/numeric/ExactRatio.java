@@ -699,6 +699,18 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     /**
+     * This as a whole number, or null where it is none — or is one whose digits the host holds no
+     * place for.
+     *
+     * <p>For a caller that has nothing to say about the second answer apart from the first: both
+     * leave it without a whole number to work with. A caller that has to tell them apart asks
+     * {@link #isWhole} first.
+     */
+    public BigInteger wholeOrNull() {
+        return isWhole() ? wholeNumber().orNull() : null;
+    }
+
+    /**
      * The part of the denominator a finite decimal cannot divide by, which is one exactly where this
      * value is a finite decimal.
      *

@@ -6638,7 +6638,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ItemAssessment.Attempt.Unresolved it -> {
                 String said = page.say(GeneratedRows.beside(saidOrWhy(it.why()), it.why(), page,
                         places));
-                String word = it.why().reason().provesInfeasible() ? said
+                String word = it.proves() ? said
                         : page.say(new ReportMessage.NothingComposedOne(said));
                 String leftOut =
                         whatTheRegionLeftOut(it.unaccountedFor(), shown, page, declaredIn);

@@ -14,6 +14,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.UsualPlace;
+import souther.compiler.numeric.WholeForm;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigInteger;
@@ -118,7 +119,7 @@ final class NumericWitness {
         if (leavesTheQuestionNothing(within, terms)) {
             return new Standing.ProvedImpossible();
         }
-        return walked(within, terms, on, looking, composing, null, new Tries());
+        return walked(within, terms, on, looking, composing, null, aQuestionsTries());
     }
 
     /**
@@ -165,7 +166,7 @@ final class NumericWitness {
         nearFirst.addAll(rest);
         boolean proved = true;
         CompositionShortfall met = CompositionShortfall.NONE;
-        Tries tries = new Tries();
+        Tries tries = aQuestionsTries();
         for (Congruent congruent : congruents) {
             // Every value the question may be tried at has been tried, so the congruences after
             // this one are left at the figure and not walked: a walk now would work out what the
@@ -204,21 +205,60 @@ final class NumericWitness {
     }
 
     /**
+     * Why no value of the numbers of {@code dividend} is walked for as one of a class of whole
+     * numbers, where it is no form of whole numbers the host writes
+     * ({@link LinearForm#overWholeNumbers}): a number of it is not whole, and the form comes to no
+     * whole number a class is read off
+     * ({@link CompositionRepertoire#VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS}) — or one
+     * is whole and too wide to hold, which is a number this could not hold on the way.
+     *
+     * <p>Said where a remainder is walked as a class, by every walk that does, so that a form one
+     * of them declines is declined by all of them in the same words, and none of them reads a part
+     * of one as the whole number below it.
+     */
+    static CompositionShortfall notOfWholeNumbers(LinearForm<NumericTerm> dividend) {
+        List<ExactRatio> numbers = new ArrayList<>(dividend.coefs().values());
+        numbers.add(dividend.constant());
+        for (ExactRatio each : numbers) {
+            if (!each.isWhole()) {
+                return CompositionShortfall.writing(Set.of(
+                        CompositionRepertoire.VALUES_AT_A_REMAINDER_OF_A_FORM_NOT_OF_WHOLE_NUMBERS));
+            }
+            if (each.floor() instanceof ExactAnswer.Unheld<BigInteger> notHeld) {
+                return CompositionShortfall.of(Set.of(), Set.of(), Set.of(new CompositionCapacity(
+                        CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                        notHeld.why())));
+            }
+        }
+        throw new IllegalArgumentException(dividend + " is a form of whole numbers the host writes");
+    }
+
+    /**
      * That a form of whole numbers leaves {@code residue} divided by {@code divisor}.
      *
-     * @param form    the form, its constant included, every coefficient a whole number
+     * <p>Held as the whole numbers the arithmetic below works on, and not as a form whose numbers
+     * are said to be whole: what is worked out modulo the divisor needs each of them written, and
+     * a form one of whose numbers the host has no place for is no congruence this can work with
+     * ({@link LinearForm#overWholeNumbers}).
+     *
+     * @param form    the form, its constant included
      * @param divisor what it is divided by, above nought
      * @param residue what it leaves
      */
-    record Congruent(LinearForm<NumericTerm> form, BigInteger divisor, BigInteger residue) {
+    record Congruent(WholeForm<NumericTerm> form, BigInteger divisor, BigInteger residue) {
 
         Congruent {
-            if (form == null || divisor == null || divisor.signum() <= 0 || residue == null
-                    || !form.constant().isWhole()
-                    || !form.coefs().values().stream().allMatch(ExactRatio::isWhole)) {
+            if (form == null || divisor == null || divisor.signum() <= 0 || residue == null) {
                 throw new IllegalArgumentException("a form of whole numbers leaving a remainder by"
                         + " a divisor above nought: " + form + " by " + divisor);
             }
+        }
+
+        /** That {@code form} leaves {@code residue} divided by {@code divisor}, or null where a
+         *  number of the form is no whole number the host writes. */
+        static Congruent of(LinearForm<NumericTerm> form, BigInteger divisor, BigInteger residue) {
+            WholeForm<NumericTerm> whole = form.overWholeNumbers();
+            return whole == null ? null : new Congruent(whole, divisor, residue);
         }
 
         /**
@@ -229,22 +269,19 @@ final class NumericWitness {
          * that is every value or none, as the others bring the form to the residue or not.
          */
         HeldClass leavesTheLast(NumericTerm last, Map<NumericTerm, Place> standing) {
-            ExactRatio weight = form.coefs().getOrDefault(last, ExactRatio.ZERO);
-            BigInteger right = residue.subtract(whole(form.constant()));
-            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            BigInteger right = residue.subtract(form.constant());
+            for (Map.Entry<NumericTerm, BigInteger> each : form.weights().entrySet()) {
                 if (each.getKey().equals(last)) {
                     continue;
                 }
                 Place at = standing.get(each.getKey());
                 if (!(at instanceof Count count)
-                        || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
-                                BigInteger value))
-                        || !count.whole()) {
+                        || !(count.exactly().wholeOrNull() instanceof BigInteger value)) {
                     return HeldClass.NO_VALUE;
                 }
-                right = right.subtract(whole(each.getValue()).multiply(value));
+                right = right.subtract(each.getValue().multiply(value));
             }
-            BigInteger a = whole(weight).mod(divisor);
+            BigInteger a = form.weightOf(last).mod(divisor);
             BigInteger shared = a.gcd(divisor);
             if (right.mod(shared).signum() != 0) {
                 return HeldClass.NO_VALUE;
@@ -261,21 +298,16 @@ final class NumericWitness {
         /** Whether every number of the form stands at {@code standing} at a whole number that
          *  brings the form to the residue. */
         boolean metBy(Map<NumericTerm, Place> standing) {
-            BigInteger sum = whole(form.constant());
-            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            BigInteger sum = form.constant();
+            for (Map.Entry<NumericTerm, BigInteger> each : form.weights().entrySet()) {
                 Place at = standing.get(each.getKey());
-                if (at == null || !(Count.number(at).exactly().floor()
-                        instanceof ExactAnswer.Held<BigInteger>(BigInteger value))
-                        || !Count.number(at).exactly().isWhole()) {
+                if (at == null || !(Count.number(at).exactly().wholeOrNull()
+                        instanceof BigInteger value)) {
                     return false;
                 }
-                sum = sum.add(whole(each.getValue()).multiply(value));
+                sum = sum.add(each.getValue().multiply(value));
             }
             return sum.mod(divisor).equals(residue);
-        }
-
-        private static BigInteger whole(ExactRatio ratio) {
-            return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
         }
     }
 
@@ -367,23 +399,8 @@ final class NumericWitness {
      * position and every congruence it is asked under
      * ({@link CompositionBudget#VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT}).
      */
-    private static final class Tries {
-
-        private int left = CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT.maximum();
-
-        /** Whether another value may be tried, counting it where it may. */
-        boolean another() {
-            if (left == 0) {
-                return false;
-            }
-            left--;
-            return true;
-        }
-
-        /** Whether no more values may be tried. */
-        boolean spent() {
-            return left == 0;
-        }
+    private static Tries aQuestionsTries() {
+        return new Tries(CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT.maximum());
     }
 
     /**
@@ -784,7 +801,7 @@ final class NumericWitness {
                                     Function<NumericTerm, Carrier> on, WitnessSearch looking,
                                     Composing composing, Congruent congruent,
                                     SequencedMap<NumericTerm, Place> standing, Met met) {
-        if (!met.tries.another()) {
+        if (!met.tries.spend()) {
             met.leftUnwalked = true;
             met.figures.add(CompositionBudget.VALUES_THE_POSITIONS_ON_THE_WAY_ARE_TRIED_AT);
             return false;

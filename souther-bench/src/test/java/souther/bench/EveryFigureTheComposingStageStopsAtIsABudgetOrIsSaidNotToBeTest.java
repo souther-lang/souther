@@ -46,14 +46,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
      * beside the code that stops.
      */
     private static final Map<String, String> NOT_A_BUDGET = new LinkedHashMap<>(Map.ofEntries(
-            // How far a part of a date runs, which is the calendar's and not this compiler's. A
-            // walk over every one of them is what makes an answer of nothing a statement about
-            // dates, so raising either would be writing down a month no year has.
-            Map.entry("souther.compiler.partition.TermRealizations.MONTHS_A_YEAR_HAS",
-                    "how many months a year has, which is what a month may stand at"),
-            Map.entry("souther.compiler.partition.TermRealizations.DAYS_THE_LONGEST_MONTH_HAS",
-                    "how far the days run in the longest month, which is as far as a day runs"),
-
             // The calendar's cycle and the stretch of years a proof about it is made over: what has
             // to be looked at for an answer to hold of every year, not how far a search goes.
             Map.entry("souther.compiler.partition.PartsOfADateOverACycle.YEARS_OF_A_CYCLE",

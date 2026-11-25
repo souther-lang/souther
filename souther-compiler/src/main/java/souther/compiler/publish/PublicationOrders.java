@@ -381,6 +381,8 @@ public final class PublicationOrders {
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     // Beside it: the rows that walk composes, as the choice of one is handed them.
                     CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                    // And the searches the walk goes through to compose them.
+                    CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH,
                     CompositionBudget.PIECES_A_STRING_IS_PUT_TOGETHER_OF,
                     CompositionBudget.STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
                     CompositionBudget.ELEMENTS_A_SIDE_IS_SEARCHED_OVER,

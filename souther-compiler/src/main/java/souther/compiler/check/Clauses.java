@@ -775,25 +775,8 @@ final class Clauses {
         private static ClauseAffineMeaning.Comparison canonical(LinearForm<RuleKey> form, Rel rel) {
             RuleKey first = form.coefs().keySet().stream()
                     .min(Comparator.comparing(key -> String.join(".", key.steps()))).orElseThrow();
-            ExactRatio weight = form.coefs().get(first);
-            LinearForm<RuleKey> scaled = form.dividedBy(weight.abs()).orNull();
-            if (scaled == null) {
-                return null;
-            }
-            return weight.signum() < 0
-                    ? new ClauseAffineMeaning.Comparison(scaled.negate(), turnedAround(rel))
-                    : new ClauseAffineMeaning.Comparison(scaled, rel);
-        }
-
-        /** The relation that holds of the negation of a value where {@code rel} holds of it. */
-        private static Rel turnedAround(Rel rel) {
-            return switch (rel) {
-                case GE -> Rel.LE;
-                case GT -> Rel.LT;
-                case LE -> Rel.GE;
-                case LT -> Rel.GT;
-                case EQ, NE -> rel;
-            };
+            LinearForm.Stated<RuleKey> one = form.weighingOne(first, rel).orNull();
+            return one == null ? null : new ClauseAffineMeaning.Comparison(one.form(), one.rel());
         }
 
         /** Where {@code e} is in the value, where it is one of its fields or a chain read off one. */

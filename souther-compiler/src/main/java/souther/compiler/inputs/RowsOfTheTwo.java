@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.IntSum;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Operations;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.WholeDivision;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -125,9 +126,9 @@ final class RowsOfTheTwo {
         BigInteger onPartner = BigInteger.ZERO;
         for (Map.Entry<Object, ExactRatio> each : sum.coefs().entrySet()) {
             if (each.getKey().equals(asked)) {
-                onAsked = whole(each.getValue());
+                onAsked = each.getValue().wholeOrNull();
             } else if (each.getKey().equals(partner)) {
-                onPartner = whole(each.getValue());
+                onPartner = each.getValue().wholeOrNull();
             } else {
                 ExactRatio value = standing.get(each.getKey());
                 constant = value == null ? null
@@ -137,16 +138,12 @@ final class RowsOfTheTwo {
                 return null;
             }
         }
-        BigInteger put = whole(constant);
+        BigInteger put = constant.wholeOrNull();
         if (put == null || onPartner.abs().compareTo(BigInteger.ONE) > 0) {
             return null;
         }
         return new Operation(onAsked, onPartner, sum.least().subtract(put),
                 sum.greatest().subtract(put));
-    }
-
-    private static BigInteger whole(ExactRatio number) {
-        return number.isWhole() ? number.floor().orNull() : null;
     }
 
     /**
@@ -248,15 +245,8 @@ final class RowsOfTheTwo {
     private static Span atMost(BigInteger by, BigInteger bound) {
         return switch (by.signum()) {
             case 0 -> bound.signum() >= 0 ? Span.ANY : new Span(BigInteger.ONE, BigInteger.ZERO);
-            case 1 -> new Span(null, floorDiv(bound, by));
-            default -> new Span(floorDiv(bound, by.negate()).negate(), null);
+            case 1 -> new Span(null, WholeDivision.floorOf(bound, by));
+            default -> new Span(WholeDivision.floorOf(bound, by.negate()).negate(), null);
         };
-    }
-
-    private static BigInteger floorDiv(BigInteger number, BigInteger by) {
-        BigInteger[] quotientAndRemainder = number.divideAndRemainder(by);
-        return quotientAndRemainder[1].signum() != 0
-                && quotientAndRemainder[1].signum() != by.signum()
-                ? quotientAndRemainder[0].subtract(BigInteger.ONE) : quotientAndRemainder[0];
     }
 }

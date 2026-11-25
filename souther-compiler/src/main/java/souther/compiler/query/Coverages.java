@@ -22,6 +22,7 @@ import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
+import souther.compiler.partition.LookingForARow;
 import souther.compiler.partition.ReachWitnesses;
 import souther.compiler.partition.RuleReachNumbering;
 import souther.compiler.publish.CanonicalSelection;
@@ -105,6 +106,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -1133,14 +1135,17 @@ final class Coverages {
          *                 line asks nothing of them, and a rule of the decision asks what the body
          *                 read. Held by the probe, a search would compose its row under whatever
          *                 the behavior answers generally and be run under what it actually needs
+         * @param looking  the looking for a row this is one attempt of, which every attempt for
+         *                 the same row spends of: made by whoever starts looking for it, and
+         *                 never here
          */
         default java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> attempt(
                 String label,
                 Map<souther.compiler.partition.RealizationTarget, Place> fixing,
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
-                souther.compiler.partition.AnswersDemanded demands) {
-            return attempt(label, fixing, asking, reaching, demands, java.util.Optional.empty());
+                souther.compiler.partition.AnswersDemanded demands, LookingForARow looking) {
+            return attempt(label, fixing, asking, reaching, demands, Optional.empty(), looking);
         }
 
         /**
@@ -1155,7 +1160,7 @@ final class Coverages {
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands,
-                java.util.Optional<souther.compiler.partition.Generator.RowJudge> judge);
+                Optional<Generator.RowJudge> judge, LookingForARow looking);
 
         /**
          * A composed row built and run, so that what it turned out to be can be asked.
@@ -2431,6 +2436,27 @@ final class Coverages {
                     return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unavailable(
                             ItemAssessment.Attempt.Reason.NO_CLASSES)), null, Optional.empty());
                 }
+                // One looking for the row at the point, whichever way it is looked along and
+                // whatever value it is asked at: every attempt for it spends of what it may. What
+                // it left undone is said here, where the looking ends, beside what was chosen
+                // among the ways and values: anywhere below, the choosing above would drop it with
+                // whatever it passed over. A row standing at the point is what the looking was
+                // for, and is said alone.
+                LookingForARow theRow = new LookingForARow();
+                LookingForARow.Mark from = theRow.from();
+                Looked got = lookedFor(criterion, label, narrowing, rows, besideRows, theRow);
+                return got.witness().isPresent() ? got
+                        : new Looked(andWhatTheLookingLeft(got.outcomes(), label, from),
+                                got.composed(), got.witness());
+            }
+
+            /** What looking for a row at {@code criterion} came to, as {@link #looked}, every
+             *  attempt for it spending of {@code theRow}. */
+            private Looked lookedFor(Criterion criterion, String label,
+                                     UnaryOperator<SearchRegion> narrowing,
+                                     StandingAtAPoint.AtALine rows,
+                                     Optional<Generator.RowsBesideBudget> besideRows,
+                                     LookingForARow theRow) {
                 // A way no value takes: one position would have to take two of its cases, or a
                 // condition on it comes out the other way for every row. Said in that word and not
                 // in the one for a walk that tried what the rules leave and reached nothing:
@@ -2457,7 +2483,7 @@ final class Coverages {
                 // way whole came to: one of them coming to nothing says nothing of the others, and
                 // the way whole is the account every one of them is inside.
                 if (able.along().isEmpty()) {
-                    return lookedAlong(criterion, label, narrowing, rows, able, besideRows);
+                    return lookedAlong(criterion, label, narrowing, rows, able, besideRows, theRow);
                 }
                 // Past the figure the way whole is looked along first where a condition it was not
                 // split at is composed against whole there — a statement the elements of one
@@ -2467,7 +2493,7 @@ final class Coverages {
                 Looked whole = null;
                 if (able.ways() instanceof Reachability.Ways.Whole past
                         && past.composedAgainstWhole(line.quantity().behavior())) {
-                    whole = lookedAlong(criterion, label, narrowing, rows, able, besideRows);
+                    whole = lookedAlong(criterion, label, narrowing, rows, able, besideRows, theRow);
                     if (whole.witness().isPresent()) {
                         return whole;
                     }
@@ -2485,7 +2511,7 @@ final class Coverages {
                         continue;
                     }
                     Looked one = lookedAlong(criterion, label, narrowing, rows, along,
-                            besideRows);
+                            besideRows, theRow);
                     if (one.witness().isPresent()) {
                         return one;
                     }
@@ -2500,7 +2526,7 @@ final class Coverages {
                     return new Looked(alongEach, null, Optional.empty());
                 }
                 return whole != null ? whole
-                        : lookedAlong(criterion, label, narrowing, rows, able, besideRows);
+                        : lookedAlong(criterion, label, narrowing, rows, able, besideRows, theRow);
             }
 
             /**
@@ -2537,7 +2563,8 @@ final class Coverages {
                                        UnaryOperator<SearchRegion> narrowing,
                                        StandingAtAPoint.AtALine rows,
                                        Reachability.Reaching able,
-                                       Optional<Generator.RowsBesideBudget> besideRows) {
+                                       Optional<Generator.RowsBesideBudget> besideRows,
+                                       LookingForARow theRow) {
                 // A reading of the line under a case this way does not take. A line at a name the
                 // cases of a sum share is read under each case, and a way split at the cases a
                 // narrowing leaves is looked along each of them, so no row along this one is the
@@ -2573,8 +2600,20 @@ final class Coverages {
                 // answers that.
                 int askings = quantity.searchGoalAt(criterion).askedAtMost();
                 int value = 0;
+                // Whether the looking had no search left for another value, which ends the asking
+                // without the count of values having run out. Asked before the value is, so no
+                // value is put to the point that nothing could be spent on. What it left is said
+                // where the looking ends ({@link #looked}); here only where no value was asked at
+                // all, since a way with no outcome beside ways that proved nothing reaches the
+                // point would be read as one more that proved it.
+                boolean outOfSearches = false;
                 do {
-                    Searching came = searchingWith(criterion, label, rows, able, region, tried);
+                    if (!theRow.left()) {
+                        outOfSearches = true;
+                        break;
+                    }
+                    Searching came = searchingWith(criterion, label, rows, able, region, tried,
+                            theRow);
                     if (came.witness().isPresent()) {
                         return new Looked(came.outcomes(), came.realized(), came.witness());
                     }
@@ -2630,6 +2669,17 @@ final class Coverages {
                     }
                     beside = stage.cameTo();
                 }
+                if (outOfSearches) {
+                    Set<CompositionBudget> searches =
+                            Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH);
+                    SearchOutcomes asked = last != null ? last
+                            : SearchOutcomes.of(ItemAssessment.Attempt.ofAStageShortOf(
+                                    new Generator.UnresolvedCombination(List.of(label),
+                                            Generator.UnresolvedCombination.Reason.wordFor(
+                                                    searches)),
+                                    within, CompositionShortfall.of(searches)));
+                    return new Looked(asked.plus(beside), first, Optional.empty());
+                }
                 if (shortAtEveryValue) {
                     return new Looked(last.plus(beside), first, Optional.empty());
                 }
@@ -2646,6 +2696,45 @@ final class Coverages {
                 // Nothing is put to the point here, so no value is tried and none is charged for.
                 return new Looked(endedBy(last, realized(criterion, rows, able, region, tried))
                         .plus(beside), first, Optional.empty());
+            }
+
+            /**
+             * {@code outcomes}, and beside them a stage of their own short of what the looking for
+             * the row left undone since {@code from} and none of them names, where it left
+             * anything ({@link ItemAssessment.Attempt#ofAStageShortOf}).
+             *
+             * <p>Beside them, for the reason that stage's outcome is: written onto one of them, a
+             * row, a stop or a limit would each take it in its own way or take nothing, and the
+             * outcomes the choosing among values and ways passed over are not kept at all. Said
+             * where the looking ends and not where a value noticed it, so a looking that ran out
+             * inside the last value it was allowed is told as surely as one that had none left for
+             * the next. A figure an outcome kept already names is not said a second time.
+             */
+            private SearchOutcomes andWhatTheLookingLeft(SearchOutcomes outcomes, String label,
+                                                         LookingForARow.Mark from) {
+                Set<CompositionBudget> left = EnumSet.noneOf(CompositionBudget.class);
+                left.addAll(from.leftAt());
+                for (ItemAssessment.Attempt each : outcomes.each()) {
+                    switch (each) {
+                        case ItemAssessment.Attempt.Stopped it ->
+                                left.removeAll(it.stoppedBy().written());
+                        case ItemAssessment.Attempt.Limited it ->
+                                left.removeAll(it.limitedBy().written());
+                        case ItemAssessment.Attempt.Certified _,
+                             ItemAssessment.Attempt.Unverified _,
+                             ItemAssessment.Attempt.Unexhausted _,
+                             ItemAssessment.Attempt.Unplanned _,
+                             ItemAssessment.Attempt.Unresolved _,
+                             ItemAssessment.Attempt.Unavailable _ -> { }
+                    }
+                }
+                if (left.isEmpty()) {
+                    return outcomes;
+                }
+                return outcomes.plus(SearchOutcomes.of(ItemAssessment.Attempt.ofAStageShortOf(
+                        new Generator.UnresolvedCombination(List.of(label),
+                                Generator.UnresolvedCombination.Reason.wordFor(left)),
+                        within, CompositionShortfall.of(left))));
             }
 
             /**
@@ -2946,7 +3035,7 @@ final class Coverages {
             private Searching searchingWith(Criterion criterion, String label,
                     StandingAtAPoint.AtALine rows,
                     souther.compiler.partition.Reachability.Reaching able,
-                    SearchRegion region, ValuesTried tried) {
+                    SearchRegion region, ValuesTried tried, LookingForARow theRow) {
                 Realization answered = realized(criterion, rows, able, region, tried);
                 return switch (answered) {
                     case Realization.Found found -> {
@@ -2964,7 +3053,9 @@ final class Coverages {
                         java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> made =
                                 probe.attempt(label, found.fixing(),
                                         quantity.asksOfEachTerm(criterion), able,
-                                        souther.compiler.partition.AnswersDemanded.NOTHING);                        // Nothing was tried at all, which is the classes not linking. An empty
+                                        souther.compiler.partition.AnswersDemanded.NOTHING,
+                                        theRow);
+                        // Nothing was tried at all, which is the classes not linking. An empty
                         // answer would say the point was searched and nothing happened. Not a value
                         // this point was tried with either: nothing was built, so there is nothing
                         // to leave out of the next asking and nothing another value would fix.

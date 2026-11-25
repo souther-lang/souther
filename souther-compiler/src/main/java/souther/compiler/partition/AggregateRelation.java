@@ -102,7 +102,7 @@ record AggregateRelation(TermPath container, SequencedMap<Quantity.HowManyMeet, 
         if (counts.size() == 1 && sizeWeight.signum() == 0) {
             return null;
         }
-        Rel rel = holds ? affine.proposition() : affine.proposition().denied();
+        Rel rel = affine.proposition().whenHolding(holds);
         return new AggregateRelation(container, counts, sizeWeight, affine.form().constant(), rel);
     }
 

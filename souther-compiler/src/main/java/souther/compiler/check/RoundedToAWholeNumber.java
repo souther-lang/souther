@@ -173,7 +173,7 @@ public final class RoundedToAWholeNumber {
             TheSignOfAnOrder.Sides<E> sides) {
         Core scaleAt = rounding.applied().argument(rounds.scale());
         ExactRatio scale = scaleAt == null ? null : sides.constant(scaleAt, rounding.at());
-        BigInteger places = scale == null || !scale.isWhole() ? null : scale.floor().orNull();
+        BigInteger places = scale == null ? null : scale.wholeOrNull();
         ConstantComparison statement = places == null ? null
                 : statementAtAScale(way, rounding.written(), rounding.against(), places);
         return statement == null ? null
@@ -198,7 +198,7 @@ public final class RoundedToAWholeNumber {
         if (inSteps == null) {
             return null;
         }
-        BigInteger onAStep = inSteps.isWhole() ? inSteps.floor().orNull() : null;
+        BigInteger onAStep = inSteps.wholeOrNull();
         if (inSteps.isWhole() && onAStep == null) {
             return null;
         }

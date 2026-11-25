@@ -2670,7 +2670,7 @@ final class DemandReading {
      */
     private static Read ofARelation(Proposition.Compared compared, InputReading read) {
         Rel proposition = compared.relation().proposition();
-        Rel met = compared.holds() ? proposition : proposition.denied();
+        Rel met = proposition.whenHolding(compared.holds());
         return switch (compared.relation()) {
             // How many elements meet a statement against a number, which is no number a row
             // writes and is composed for: the count is held against the one number the form
@@ -2778,21 +2778,18 @@ final class DemandReading {
     private static Read soManyAgainstNumbers(Proposition.Compared compared,
                                              Relation.Affine affine, Rel met, InputReading read) {
         Quantity count = countAndNumbers(affine, read);
-        ExactRatio weight = affine.form().coefs().get(count);
-        if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
-                ExactRatio scale))
-                || !(affine.form().times(scale) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
-                        LinearForm<Quantity> scaled))) {
+        if (!(affine.form().weighingOne(count, met)
+                instanceof ExactAnswer.Held<LinearForm.Stated<Quantity>>(var one))) {
             return forTheRun(compared, RowDemand.NoComposer.A_COUNT_AGAINST_A_NUMBER_NOT_HELD);
         }
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
-        scaled.coefs().forEach((quantity, by) -> {
+        one.form().coefs().forEach((quantity, by) -> {
             if (quantity instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 added.put(term, by);
             }
         });
         return new Read.Demands(new RowDemand.SoMany(count,
-                scale.signum() < 0 ? met.turned() : met, scaled.constant().negated(),
+                one.rel(), one.form().constant().negated(),
                 new LinearForm<>(ExactRatio.ZERO, added),
                 anElementMeeting(AStatementAtARow.elementsOf(count), read)));
     }
@@ -2805,9 +2802,7 @@ final class DemandReading {
      */
     private static RowDemand.OnARemainder onARemainderAlone(Relation.Affine affine, Rel met,
                                                             InputReading read) {
-        if (affine.form().coefs().size() != 1
-                || !(affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.RemainderOfADividend remainder)
+        if (!(affine.form().loneAtom() instanceof Quantity.RemainderOfADividend remainder)
                 || !(remainder.overTheInput() instanceof LinearForm<NumericTerm> dividend)
                 || !(dividend.constant().floor() instanceof ExactAnswer.Held<?>)) {
             return null;

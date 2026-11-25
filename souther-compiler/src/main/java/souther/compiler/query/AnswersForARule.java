@@ -11,6 +11,7 @@ import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.DemandGap;
+import souther.compiler.partition.EveryWayOfChoosing;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.MeasuredInput;
@@ -21,6 +22,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -95,8 +97,14 @@ record AnswersForARule(RequiredDependencies requires,
      * dependencies each left open are answered by a row apiece, and a walk pairing them off would
      * search some of the rows a way admits and report about the model as though it had searched
      * them all.
+     *
+     * <p>A behavior requiring nothing has one way of answering nothing, which is what the product
+     * of no lists is. Written as no way, a row of such a behavior would be a row nothing composes.
+     *
+     * <p>Each made as it is asked for, so a caller held to a figure asks whether it may spend on
+     * one more before it asks for it.
      */
-    List<StandInAttempt> of(AnswersDemanded demanded) {
+    Iterable<StandInAttempt> of(AnswersDemanded demanded) {
         return of(demanded, Map.of());
     }
 
@@ -104,7 +112,7 @@ record AnswersForARule(RequiredDependencies requires,
      * The same, for a row that writes {@code pinned} at the numbers of the input a way's statement
      * about an answer names: what the answer has to be turns on them.
      */
-    List<StandInAttempt> of(AnswersDemanded demanded, Map<NumericTerm, ExactRatio> pinned) {
+    Iterable<StandInAttempt> of(AnswersDemanded demanded, Map<NumericTerm, ExactRatio> pinned) {
         Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> asked = byDependency(
                 demanded.byAnswer());
         List<List<Alternative>> apiece = new ArrayList<>();
@@ -123,22 +131,34 @@ record AnswersForARule(RequiredDependencies requires,
             withoutARow = withoutARow.and(((StandingIn.Any) here).whereNoRowIsChosen());
             apiece.add(((StandingIn.Any) here).alternatives());
         }
-        List<StandInAttempt> out = new ArrayList<>();
-        for (List<Alternative> combination : everyCombinationOf(apiece)) {
-            // What this row met, and not what was tried for it. A union answer is composed case by
-            // case and a case that came to nothing is not what the row carries — read as the row's
-            // shortfall, a row composed against everything the way asks would be reported as short
-            // of it.
-            List<StoodInAnswer> stood = new ArrayList<>();
-            Evidence evidence = Evidence.NOTHING;
-            for (Alternative each : combination) {
-                stood.add(each.stood());
-                evidence = evidence.and(each.evidence());
+        // Made a way at a time, as the caller asks for them: the ways are as many as the
+        // dependencies' alternatives multiply, and a caller bounded by a figure takes only as many
+        // as it can spend on ({@link EveryWayOfChoosing}).
+        Iterable<List<Alternative>> ways = EveryWayOfChoosing.inTurn(apiece);
+        return () -> new Iterator<>() {
+            private final Iterator<List<Alternative>> next = ways.iterator();
+
+            @Override
+            public boolean hasNext() {
+                return next.hasNext();
             }
-            out.add(new StandInAttempt(new AnswersStoodIn.Stood(stood, answering()),
-                    account(demanded, evidence)));
-        }
-        return List.copyOf(out);
+
+            @Override
+            public StandInAttempt next() {
+                // What this row met, and not what was tried for it. A union answer is composed
+                // case by case and a case that came to nothing is not what the row carries — read
+                // as the row's shortfall, a row composed against everything the way asks would be
+                // reported as short of it.
+                List<StoodInAnswer> stood = new ArrayList<>();
+                Evidence evidence = Evidence.NOTHING;
+                for (Alternative each : next.next()) {
+                    stood.add(each.stood());
+                    evidence = evidence.and(each.evidence());
+                }
+                return new StandInAttempt(new AnswersStoodIn.Stood(stood, answering()),
+                        account(demanded, evidence));
+            }
+        };
     }
 
     /**
@@ -243,31 +263,6 @@ record AnswersForARule(RequiredDependencies requires,
     private static boolean named(List<DemandGap> said, AnswerDemand demand) {
         return said.stream().anyMatch(gap -> gap instanceof DemandGap.Uncomposed(
                 AnswerDemand of, var _) && of.equals(demand));
-    }
-
-    /**
-     * One list per way of answering every dependency, in the order the alternatives are enumerated
-     * in.
-     *
-     * <p>A behavior requiring nothing has one way of answering nothing, which is what the product of
-     * no lists is. Written as an empty list of ways, a row of such a behavior would be a row nothing
-     * composes.
-     */
-    private static List<List<Alternative>> everyCombinationOf(List<List<Alternative>> apiece) {
-        List<List<Alternative>> out = new ArrayList<>();
-        out.add(List.of());
-        for (List<Alternative> alternatives : apiece) {
-            List<List<Alternative>> wider = new ArrayList<>();
-            for (List<Alternative> already : out) {
-                for (Alternative each : alternatives) {
-                    List<Alternative> both = new ArrayList<>(already);
-                    both.add(each);
-                    wider.add(List.copyOf(both));
-                }
-            }
-            out = wider;
-        }
-        return out;
     }
 
     /**

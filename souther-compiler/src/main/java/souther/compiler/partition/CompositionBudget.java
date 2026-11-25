@@ -245,8 +245,10 @@ public enum CompositionBudget {
      *  walked to the end at any length. */
     STEPS_A_SEARCH_MAY_TAKE(200_000),
 
-    /** How many assignments of one parameter's positions a search composes. A bound on the search
-     *  and not on any one position. */
+    /** How many assignments of one parameter's positions a search reaches, and positions it finds
+     *  nothing to choose at after the ones before them: each is an end of the walk, whether it is
+     *  composed or already known ({@link DepthFirst}). A bound on the search and not on any one
+     *  position. */
     ASSIGNMENTS_A_SEARCH_COMPOSES(256),
 
     /** How many values of a progression nothing bounds are tried. */
@@ -788,10 +790,29 @@ public enum CompositionBudget {
      *
      * <p>Counted in rows composed and not in runs, because a row that is composed again or does not
      * meet the requirement costs composing and no run, and a walk over every assignment of every
-     * parameter multiplies. It stops the walk before a row that answers was found, so the point is
-     * one this compiler stopped looking for a row at, and never one no row answers at.
+     * parameter multiplies. A walk's own figure: every row it hands is also a search of
+     * {@link #SEARCHES_A_ROW_IS_COMPOSED_THROUGH}, which bounds them over the whole looking for the
+     * row. It stops the walk before a row that answers was found, so the point is one this
+     * compiler stopped looking for a row at, and never one no row answers at.
      */
     ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
+
+    /**
+     * How many searches looking for one row goes through: each attempt made for it, each time a
+     * walk across the row's parameters goes on to the search for one of them under the values the
+     * ones before it took, and each whole row it hands on. And looking for the rows of one plan,
+     * the search of it under each way of standing the dependencies in.
+     *
+     * <p>Each of those is bounded ({@link #ASSIGNMENTS_A_SEARCH_COMPOSES} for a parameter's), and
+     * their number is not. Each value a parameter's search hands on starts the next parameter's
+     * afresh, so a walk whose last parameter comes to nothing under every value of the ones before
+     * it goes through as many searches as their values multiply; and a row for a point is attempted
+     * along each way, at each value, for each pair of the input's numbers and each way of standing
+     * the dependencies in. Spent over all of them ({@link LookingForARow}), so splitting the
+     * looking is no way past it. It stops the looking before a row was found, so the point is one
+     * this compiler stopped looking for a row at, and never one no row answers at.
+     */
+    SEARCHES_A_ROW_IS_COMPOSED_THROUGH(4096),
 
     /**
      * How many pieces a string is put together of when a body parts it and builds a newtype of the
@@ -1000,6 +1021,8 @@ public enum CompositionBudget {
             case RUNS_REPAIRING_A_ROW -> new SearchMessage.RunsRepairingARow();
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
                     new SearchMessage.RowsAWalkHandsTheChoiceOfARow();
+            case SEARCHES_A_ROW_IS_COMPOSED_THROUGH ->
+                    new SearchMessage.SearchesARowIsComposedThrough();
             case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
                     new SearchMessage.PiecesAStringIsPutTogetherOf();
             case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
@@ -1080,6 +1103,7 @@ public enum CompositionBudget {
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                  RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                 SEARCHES_A_ROW_IS_COMPOSED_THROUGH,
                  PIECES_A_STRING_IS_PUT_TOGETHER_OF,
                  STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
                  ELEMENTS_A_SIDE_IS_SEARCHED_OVER,

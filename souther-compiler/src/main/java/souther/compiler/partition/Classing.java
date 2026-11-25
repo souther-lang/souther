@@ -7,7 +7,6 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.WholeNumberRuns;
@@ -179,9 +178,7 @@ final class Classing {
 
     /** The whole number {@code place} is, or null where it is none. */
     private static BigInteger wholeOf(Place place) {
-        return place instanceof Count count && count.exactly().isWhole()
-                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
-                ? whole : null;
+        return place instanceof Count count ? count.exactly().wholeOrNull() : null;
     }
 
     /**

@@ -29,6 +29,18 @@ public sealed interface ReplacementOwed {
     /** Which rewrite this is, apart from where it is looked for and what it would answer. */
     Replacement replacement();
 
+    /** {@code replacing} held in the order of the sites it names, as a copy nothing writes to:
+     *  what a rewrite asks at each site, whichever rewrite it is. */
+    private static <V> SequencedMap<Integer, V> inTheOrderOfTheSites(
+            SequencedMap<Integer, V> replacing) {
+        return Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
+    }
+
+    /** {@code seenThrough} held as a copy nothing writes to, row by row. */
+    private static List<List<ObservedValue>> heldRowByRow(List<List<ObservedValue>> seenThrough) {
+        return seenThrough.stream().map(List::copyOf).toList();
+    }
+
     /**
      * Arm {@code part} of {@code fork} answering as its sibling {@code with} does.
      *
@@ -54,8 +66,8 @@ public sealed interface ReplacementOwed {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
             Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             occurrences = List.copyOf(occurrences);
-            replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
-            seenThrough = seenThrough.stream().map(List::copyOf).toList();
+            replacing = inTheOrderOfTheSites(replacing);
+            seenThrough = heldRowByRow(seenThrough);
             if (occurrences.isEmpty() || replacing.isEmpty() || seenThrough.isEmpty()) {
                 throw new IllegalArgumentException("a replacement of an arm is looked for where a run"
                         + " through the arm is recorded, from the rows seen going through it, and"
@@ -123,8 +135,8 @@ public sealed interface ReplacementOwed {
             dependencies = List.copyOf(dependencies);
             over = List.copyOf(over);
             occurrences = List.copyOf(occurrences);
-            replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
-            seenThrough = seenThrough.stream().map(List::copyOf).toList();
+            replacing = inTheOrderOfTheSites(replacing);
+            seenThrough = heldRowByRow(seenThrough);
             if (occurrences.isEmpty() || replacing.isEmpty() || seenThrough.isEmpty()) {
                 throw new IllegalArgumentException("a rewrite of a walk is looked for from the rows"
                         + " seen entering it, and asked for where the classes carry it");

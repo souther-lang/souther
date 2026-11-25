@@ -35,6 +35,7 @@ import souther.compiler.values.ValueSet;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.ProjectionCertification;
 import souther.compiler.semantics.AnswerAspect;
@@ -2641,9 +2642,8 @@ public final class FieldDomains {
                 && admits(path).approximation() instanceof ValueSet.Finite named
                 && named.values().stream().noneMatch(each -> each instanceof Value.Number number
                         && Count.of(number.value()).exactly() instanceof ExactRatio at
-                        && at.isWhole()
-                        && at.floor() instanceof ExactAnswer.Held<BigInteger> whole
-                        && held.holds(whole.value()))) {
+                        && at.wholeOrNull() instanceof BigInteger whole
+                        && held.holds(whole))) {
             return HeldClass.NO_VALUE;
         }
         return held;
@@ -2799,8 +2799,7 @@ public final class FieldDomains {
             case AffineConstraint.Disequality<FactSubject> _ -> null;
             case AffineConstraint.Equality<FactSubject> at ->
                     (at.at().dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
-                            ExactRatio day) && day.isWhole()
-                            && day.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))
+                            ExactRatio day) && day.wholeOrNull() instanceof BigInteger whole)
                             ? new DaysBetween(whole, whole) : null;
             case AffineConstraint.HalfSpace<FactSubject> half -> {
                 if (!(half.bound().at().dividedBy(weight)
@@ -2808,11 +2807,8 @@ public final class FieldDomains {
                     yield null;
                 }
                 boolean below = weight.signum() > 0;
-                BigInteger end = below
-                        ? (half.bound().inclusive() ? at.floor().orNull()
-                                : at.ceiling().map(day -> day.subtract(BigInteger.ONE)).orNull())
-                        : (half.bound().inclusive() ? at.ceiling().orNull()
-                                : at.floor().map(day -> day.add(BigInteger.ONE)).orNull());
+                ExactCut day = new ExactCut(at, half.bound().inclusive());
+                BigInteger end = (below ? day.greatestWhole() : day.leastWhole()).orNull();
                 if (end == null) {
                     yield null;
                 }

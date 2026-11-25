@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -61,16 +62,14 @@ public record LevelInterval(Bound low, Bound high) {
         BigInteger most = null;
         if (low != null) {
             ExactRatio at = low.at().exactly();
-            least = at == null ? null : low.inclusive() ? at.ceiling().orNull()
-                    : at.floor().map(whole -> whole.add(BigInteger.ONE)).orNull();
+            least = at == null ? null : new ExactCut(at, low.inclusive()).leastWhole().orNull();
             if (least == null) {
                 return null;
             }
         }
         if (high != null) {
             ExactRatio at = high.at().exactly();
-            most = at == null ? null : high.inclusive() ? at.floor().orNull()
-                    : at.ceiling().map(whole -> whole.subtract(BigInteger.ONE)).orNull();
+            most = at == null ? null : new ExactCut(at, high.inclusive()).greatestWhole().orNull();
             if (most == null) {
                 return null;
             }

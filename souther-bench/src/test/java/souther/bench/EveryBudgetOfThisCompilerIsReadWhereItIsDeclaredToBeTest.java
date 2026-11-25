@@ -381,6 +381,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/function/BooleanSupplier;)Ljava/util/Optional;",
                     "hands both figures to the walk, and a walk stopped at either is no proof:"
                             + " the way is kept"),
+            Map.entry("souther.compiler.partition.WayToTheBorder$Assuming#leavesNone("
+                            + "Ljava/util/List;)Z",
+                    "swallows it: a walk of what more would leave that the figure stopped proves"
+                            + " nothing closed, and answers that something is left"),
             Map.entry("souther.compiler.partition.ElementsWrittenAlike#of("
                             + "Lsouther/compiler/partition/Reachability$Reaching;)"
                             + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",
@@ -498,11 +502,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // passed over included.
             Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#tryEach("
                             + "Ljava/util/function/Predicate;)"
-                            + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;",
+                            + "Lsouther/compiler/partition/DepthFirst$Walked;",
                     "stops handing over ways under the cases with some left, and answers that it"
                             + " stopped at the figure rather than that every way was tried"),
             Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#foundOut("
-                            + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;)"
+                            + "Lsouther/compiler/partition/DepthFirst$Walked;)"
                             + "Lsouther/compiler/partition/SearchShortfall;",
                     "hands the figure over in what the walk found out about the ways it did not"
                             + " try, where it stopped there"),
@@ -716,7 +720,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/partition/NumericWitness$Met;)Z",
                     "stops trying values of a position on the way and says which figure"),
-            Map.entry("souther.compiler.partition.NumericWitness$Tries#<init>()V",
+            Map.entry("souther.compiler.partition.NumericWitness#aQuestionsTries()"
+                            + "Lsouther/compiler/partition/Tries;",
                     "how many values the positions of one question on the way are tried at"
                             + " together"),
             Map.entry("souther.compiler.partition.NumericWitness#tryingAt("
@@ -746,18 +751,72 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/NumericWitness$Composed;",
                     "stops composing for the values of the numbers on the way and says which"
                             + " figure"),
+            Map.entry("souther.compiler.partition.Generator$CutPlacing#placed("
+                            + "Lsouther/compiler/inputs/Requirements;)"
+                            + "Lsouther/compiler/partition/Generator$Placed;",
+                    "stops placing a condition's numbers at the point's allowance and says it as"
+                            + " the figure the walk for its positions was stopped by"),
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),
-            // The rows a walk hands the choice among rows. The budget is held here as the figure
-            // the walk is stopped at, and handed over from here as what it left untried.
-            Map.entry("souther.compiler.partition.Generator$TellingArmsApart#<clinit>()V",
+            // The rows a walk hands the choice among rows, for each preference a walk hands them
+            // to. The budget is held here as the figure the walk is stopped at, and handed over
+            // from here as what it left untried.
+            Map.entry("souther.compiler.partition.Generator$RowsHanded#<clinit>()V",
+                    "names the figure a walk is stopped at where it hands too many rows"),
+            Map.entry("souther.compiler.partition.Generator$RowsHanded#<init>()V",
                     "how many rows a walk composing a row for a point hands the choice of a row,"
                             + " and the figure it names where it stopped there"),
-            // The same figure, for the walk that holds each row to a run: held as the figure the
-            // walk is stopped at, and handed over from here as what it left untried.
-            Map.entry("souther.compiler.partition.Generator$ReachingWhatIsJudged#<clinit>()V",
-                    "how many rows a walk composing a row for a point hands the choice of a row,"
-                            + " and the figure it names where it stopped there"),
+            // What looking for one row may spend: made once by whoever starts looking for it,
+            // handed to every attempt for it, and said where one of them stopped there.
+            Map.entry("souther.compiler.partition.LookingForARow#<init>()V",
+                    "how many searches looking for a row goes through, held for every attempt for"
+                            + " it"),
+            Map.entry("souther.compiler.partition.LookingForARow#<init>(I)V",
+                    "how many rows a walk hands a preference and how many assignments on the way"
+                            + " are composed for, held for every attempt for the row"),
+            Map.entry("souther.compiler.partition.LookingForARow$Mark#leftAt()Ljava/util/Set;",
+                    "hands over the figures the looking left something undone at since the mark,"
+                            + " for whatever put the stretch together to say beside what it chose"),
+            Map.entry("souther.compiler.partition.FillResult#noneComposedAt("
+                            + "Lsouther/compiler/partition/CompositionShortfall;)"
+                            + "Lsouther/compiler/partition/ReplacementDisposition;",
+                    "says a figure the runs of a plan were left unmade at as a figure of the"
+                            + " composing, at the figure it stood at"),
+            Map.entry("souther.compiler.query.Coverages$3#lookedAlong("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
+                            + "Ljava/util/function/UnaryOperator;"
+                            + "Lsouther/compiler/partition/StandingAtAPoint$AtALine;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Ljava/util/Optional;Lsouther/compiler/partition/LookingForARow;)"
+                            + "Lsouther/compiler/query/Coverages$3$Looked;",
+                    "says the figure as a stage of its own where a way had no search left for"
+                            + " its first value"),
+            // Where the looking for a row has no search left for what is in front of it: the ways
+            // of standing in, the values of a point, the ways a plan is searched under. Each
+            // stops making them there, and says the figure beside what was found.
+            Map.entry("souther.compiler.partition.Generator#probeFixing("
+                            + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
+                            + "Ljava/util/Map;Lsouther/compiler/partition/NumbersAskedFor;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/StandInAttempt;"
+                            + "Lsouther/compiler/partition/Generator$Trial;Ljava/util/Optional;"
+                            + "Lsouther/compiler/partition/LookingForARow;)"
+                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
+                    "says the figure as what stopped an attempt the looking had no search left"
+                            + " for"),
+            Map.entry("souther.compiler.partition.Generator#probeFixingAlong("
+                            + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
+                            + "Ljava/util/Map;Lsouther/compiler/partition/NumbersAskedFor;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/StandInAttempt;"
+                            + "Lsouther/compiler/partition/Generator$Trial;Z"
+                            + "Lsouther/compiler/partition/CompositionBudget;Ljava/util/Optional;"
+                            + "Lsouther/compiler/partition/LookingForARow;)"
+                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
+                    "says the figure as what the walk left untried where the searches across the"
+                            + " parameters stopped it"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
                             + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/Map;"
                             + "Ljava/util/Map;"
@@ -766,7 +825,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the assignments a descent composes, marked where the bound is reached"),
             Map.entry("souther.compiler.partition.Generator#over("
-                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/Generator$Composing;"
                             + "Lsouther/compiler/partition/Generator$ValueTaking;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
@@ -1201,7 +1260,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " answer apart from there being no number"),
             Map.entry("souther.compiler.partition.RemainderSolutions#choicesOf("
                             + "Lsouther/compiler/partition/RemainderSolutions$Demand;"
-                            + "Ljava/math/BigInteger;Lsouther/compiler/check/Carrier;)"
+                            + "Ljava/math/BigInteger;Lsouther/compiler/check/Carrier;[II)"
                             + "Lsouther/compiler/partition/RemainderSolutions$Choices;",
                     "holds how many of a demand's remainders are tried, and says whether they were"
                             + " every one it admits, which is what the answer above says it stopped"

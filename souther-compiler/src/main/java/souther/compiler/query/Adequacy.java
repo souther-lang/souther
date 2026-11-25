@@ -202,6 +202,7 @@ import souther.compiler.partition.StatementsOfAnInput;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.LookingForARow;
 import souther.compiler.partition.WhatStopsMeasuring;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -220,6 +221,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -3512,7 +3514,8 @@ public final class Adequacy {
                     RuleRequirement.Excluded out = unreached.onTheWay(ruled);
                     yield out != null ? RuleSettlement.read(out)
                             : everyRowAborts ? null
-                            : whatASearchFinds(ruled, probe, taken, reaching);
+                            : whatASearchFinds(ruled, probe, taken, reaching,
+                                    new LookingForARow());
                 }
             };
         }
@@ -3758,13 +3761,14 @@ public final class Adequacy {
         private static RuleSettlement whatASearchFinds(
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
                 RunPlacement taken,
-                souther.compiler.partition.Reachability.Reaching reaching) {
+                souther.compiler.partition.Reachability.Reaching reaching,
+                LookingForARow looking) {
             // Where a condition on the way came out one of several ways, a row is composed along
             // each of them first. A row of one that the run places at the rule is a witness of it;
             // anything else one of them comes to says nothing of the others, so the rule is then
-            // answered as the way whole answers it.
+            // answered as the way whole answers it. Each is the one row for the rule looked for.
             for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
-                RuleSettlement one = whatASearchFinds(ruled, probe, taken, along);
+                RuleSettlement one = whatASearchFinds(ruled, probe, taken, along, looking);
                 if (one.requirement() instanceof RuleRequirement.Required) {
                     return one;
                 }
@@ -3787,7 +3791,7 @@ public final class Adequacy {
             });
             List<Generator.BoundaryAttempt> ways = probe.attempt("a rule of the decision", Map.of(),
                     souther.compiler.partition.NumbersAskedFor.ANYTHING,
-                    reaching, ruled.demands(), Optional.of(atTheRule));
+                    reaching, ruled.demands(), Optional.of(atTheRule), looking);
             // The proof, where every way of standing the dependencies in came back with one. Asked
             // of the ways together and before the fold below: what that fold joins on is how much
             // one way established about the rule, and a proof is not more of that — it is the one
@@ -4210,11 +4214,12 @@ public final class Adequacy {
                 }
                 return false;
             };
+            LookingForARow looking = new LookingForARow();
             for (souther.compiler.partition.Reachability.Reaching along
                     : reaching.waysToTryForARow()) {
                 building.probe().attempt("a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
-                        Optional.of(rewrittenIntoTheCase));
+                        Optional.of(rewrittenIntoTheCase), looking);
                 if (found[0] != null) {
                     return found[0];
                 }
@@ -4247,12 +4252,13 @@ public final class Adequacy {
                 return ranAtTheRule(setting, read, ruled)
                         && cases.casesSeenBy(read.asRun(), ruled.rule()).contains(way.which());
             };
+            LookingForARow looking = new LookingForARow();
             for (souther.compiler.partition.Reachability.Reaching along
                     : reaching.waysToTryForARow()) {
                 for (Generator.BoundaryAttempt made : building.probe().attempt(
                         "a case of a statement of the decision", Map.of(),
                         NumbersAskedFor.ANYTHING, along, ruled.demands(),
-                        Optional.of(inTheCase))) {
+                        Optional.of(inTheCase), looking)) {
                     // Every row built was accepted by the judge, which is the only way the walk
                     // takes one.
                     if (made instanceof Generator.BoundaryAttempt.Built built) {
@@ -4457,7 +4463,7 @@ public final class Adequacy {
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands,
-                Optional<Generator.RowJudge> judge) {
+                Optional<Generator.RowJudge> judge, LookingForARow looking) {
             Generator.CandidateCheck check = checkAgainst(building, sig);
             try {
                 // One per way of standing the dependencies in. Which of them answers what was asked
@@ -4470,6 +4476,9 @@ public final class Adequacy {
                 // composed for in every demand is the one taken, with every way of standing the
                 // dependencies in that came with it: a row built whole is a row, and another way
                 // of standing in that came to nothing beside it takes nothing from it.
+                // What the looking for the row leaves undone from here on is said beside what is
+                // chosen below, as an attempt of its own ({@link #besideWhatTheLookingLeft}).
+                LookingForARow.Mark from = looking.from();
                 List<Generator.BoundaryAttempt> nearest = null;
                 Nearness nearestNearness = null;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
@@ -4477,36 +4486,52 @@ public final class Adequacy {
                                 ofTheRow);
                 for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
                     List<Generator.BoundaryAttempt> out = new ArrayList<>();
-                    for (souther.compiler.partition.StandInAttempt stood
-                            : answers.of(demands, pinned.values())) {
+                    // Asked before a way is made, so no way is made that nothing could be spent
+                    // on, and none after the first it could not.
+                    Iterator<souther.compiler.partition.StandInAttempt> ways =
+                            answers.of(demands, pinned.values()).iterator();
+                    while (ways.hasNext() && looking.left()) {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
-                                pinned.reaching(), check, stood, trial, judge));
+                                pinned.reaching(), check, ways.next(), trial, judge, looking));
                     }
+                    // A row built whole is what this was for, and whether it stands where it was
+                    // asked to is the caller's to find by running it: the ways left beside it may
+                    // be what it turns out to need.
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
-                        return List.copyOf(out);
+                        return besideWhatTheLookingLeft(out, label, from);
                     }
                     // The pair that came nearest is the one with the most rows built that no judge
                     // refused, and then the most rows built: a refused row says where its run went
                     // and is no row the search was for.
-                    Nearness nearness = Nearness.of(out);
-                    if (nearest == null || nearness.compareTo(nearestNearness) > 0) {
-                        nearest = out;
-                        nearestNearness = nearness;
+                    if (!out.isEmpty()) {
+                        Nearness nearness = Nearness.of(out);
+                        if (nearest == null || nearness.compareTo(nearestNearness) > 0) {
+                            nearest = out;
+                            nearestNearness = nearness;
+                        }
+                    }
+                    // Only the looking having no search for a way in front of it ends the walk over
+                    // the pairs: a figure some search ran out of inside is that search's, and the
+                    // next pair may need none of what it ran out of. What either left is said
+                    // below, apart from whether to go on.
+                    if (ways.hasNext()) {
+                        break;
                     }
                 }
                 // No pair composed a row whole. What the pair that came nearest built stays, since
                 // the run of a row built short may still say something, and where a figure ended
-                // the walk with some left unlooked at that is said of the demands that were not
-                // composed against, in the account that goes with each attempt: what was built is
-                // not replaced by the stop, and the stop is not hidden by what was built.
-                if (!pairs.someLeftUntried()) {
-                    return List.copyOf(nearest);
+                // the walk over the pairs with some left unlooked at that is said of the demands
+                // that were not composed against, in the account that goes with each attempt: what
+                // was built is not replaced by the stop, and the stop is not hidden by what was
+                // built.
+                List<Generator.BoundaryAttempt> chosen = new ArrayList<>();
+                if (nearest != null) {
+                    for (Generator.BoundaryAttempt each : nearest) {
+                        chosen.add(pairs.someLeftUntried()
+                                ? endedBy(each, label, pairs.stoppedBy()) : each);
+                    }
                 }
-                List<Generator.BoundaryAttempt> out = new ArrayList<>();
-                for (Generator.BoundaryAttempt each : nearest) {
-                    out.add(endedBy(each, label, pairs.stoppedBy()));
-                }
-                return List.copyOf(out);
+                return besideWhatTheLookingLeft(chosen, label, from);
             } catch (LinkageError e) {
                 // There is no runtime to link the generated classes against, so nothing can be built
                 // to find out what a model admits. Nothing was tried, which is not the same as
@@ -4542,6 +4567,36 @@ public final class Adequacy {
         }
     }
 
+
+    /**
+     * {@code chosen}, and beside it one attempt that stopped at what the looking for the row left
+     * undone since {@code from}, where it left anything.
+     *
+     * <p>Beside them and not written onto them. What was chosen is one of several attempts, and a
+     * figure written onto it would be lost with every attempt a choosing above passes over; a
+     * proof among them is a proof over the ways looked at, and the stop beside it is what keeps it
+     * from being taken for one over the ways that were not. One, for the whole of what was left:
+     * the ways left are not each an attempt.
+     */
+    static List<Generator.BoundaryAttempt> besideWhatTheLookingLeft(
+            List<Generator.BoundaryAttempt> chosen, String label, LookingForARow.Mark from) {
+        // A figure an attempt chosen already says it stopped at is not said a second time.
+        Set<CompositionBudget> left = new HashSet<>(from.leftAt());
+        for (Generator.BoundaryAttempt each : chosen) {
+            if (each instanceof Generator.BoundaryAttempt.Stopped stopped) {
+                left.removeAll(stopped.met().figures());
+            }
+        }
+        if (left.isEmpty()) {
+            return List.copyOf(chosen);
+        }
+        List<Generator.BoundaryAttempt> out = new ArrayList<>(chosen);
+        out.add(new Generator.BoundaryAttempt.Stopped(
+                new Generator.UnresolvedCombination(List.of(label),
+                        Generator.UnresolvedCombination.Reason.wordFor(left)),
+                CompositionShortfall.of(left), CompositionAccount.NOTHING));
+        return List.copyOf(out);
+    }
 
     /**
      * {@code attempt} with a figure said to be why the statements that name a number of the input
@@ -7113,7 +7168,7 @@ public final class Adequacy {
          * a row carries decides which of the body's ways it goes down. Each is searched with, and
          * what the search comes to is what all of them came to together.
          */
-        private static List<souther.compiler.partition.StandInAttempt> supplying(
+        private static Iterable<souther.compiler.partition.StandInAttempt> supplying(
                 Db db, String module, String behavior,
                 souther.compiler.partition.MeasuredInput subject) {
             AnswersForARule answers = answering(db, module, behavior, subject);
@@ -7390,27 +7445,42 @@ public final class Adequacy {
                         new GenerationOutcome.Generated(List.of(composed.rowFor(row)));
                 case ReplacementDisposition.NoneFound none -> {
                     List<CameToNothing> why = new ArrayList<>();
-                    for (ReplacementDisposition.Ended each : none.ways()) {
-                        why.add(CameToNothing.metNothing(new Generator.UnresolvedCombination(
-                                List.of(), switch (each) {
-                                    case EVERY_ROW_ANSWERED_ALIKE ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .NO_CERTIFIED_WITNESS;
-                                    case RUNS_A_REWRITE_MAY_TAKE, A_FIGURE_OF_THE_COMPOSING,
-                                         A_RUN_DID_NOT_COME_BACK, A_RULE_REFUSED_A_CANDIDATE ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
-                                    case ROWS_A_BLOCK_MAY_HOLD ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE;
-                                    case NOTHING_WAS_COMPOSED, NOTHING_RAN ->
-                                            Generator.UnresolvedCombination.Reason
-                                                    .NOTHING_COMPOSES_ONE;
-                                })));
-                    }
+                    none.ended().forEach((each, met) -> why.add(cameToNothing(each, met)));
                     yield new GenerationOutcome.CannotGenerate(why);
                 }
             };
+        }
+
+        /**
+         * One way a search for a rewrite ended, with what was met there, in the words every other
+         * search's answer is written in: the figures of this compiler's it met are what an author
+         * raises, and are held as met beside the word ({@link CameToNothing#alsoMet}). A figure that
+         * is no budget of the composing — how far a run went — is no number of this compiler's to
+         * raise, and is the word's alone.
+         */
+        static CameToNothing cameToNothing(ReplacementDisposition.Ended each,
+                                           ReplacementDisposition.Met met) {
+            Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
+            for (Figure figure : met.figures()) {
+                if (figure instanceof Figure.Budget(var budget, var _)) {
+                    budgets.add(budget);
+                }
+            }
+            return CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of(),
+                    switch (each) {
+                        case EVERY_ROW_ANSWERED_ALIKE ->
+                                Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS;
+                        case RUNS_A_REWRITE_MAY_TAKE, A_FIGURE_OF_THE_COMPOSING,
+                             A_RUN_DID_NOT_COME_BACK, A_RULE_REFUSED_A_CANDIDATE ->
+                                Generator.UnresolvedCombination.Reason
+                                        .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                        case ROWS_A_BLOCK_MAY_HOLD ->
+                                Generator.UnresolvedCombination.Reason
+                                        .THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE;
+                        case NOTHING_WAS_COMPOSED, NOTHING_RAN ->
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+                    })).alsoMet(budgets.isEmpty() ? CompositionShortfall.NONE
+                    : CompositionShortfall.of(budgets));
         }
 
 
@@ -7933,7 +8003,7 @@ public final class Adequacy {
                 List<Generator.Baseline> baselines,
                 Optional<SiteNumbering> numbering, RowReading observed,
                 FixturesAtTheBoundary building,
-                Generator.Trial trial, List<souther.compiler.partition.StandInAttempt> stood,
+                Generator.Trial trial, Iterable<souther.compiler.partition.StandInAttempt> stood,
                 HeldOutcome.Of holding, WhereNothingIsAnswered unanswered,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
@@ -7982,14 +8052,24 @@ public final class Adequacy {
             // leaves open about a union answer is part of what is searched: a case decides which of
             // the body's ways a candidate goes down, so a search of one case answers about the model
             // only where the model has one case to answer about.
+            //
+            // The ways are as many as the dependencies' cases multiply, and each is a whole search:
+            // one looking for the plan's rows spends a search on each, and asks for the next way
+            // only where it has one to spend. What it left undone is what the answer joined over
+            // the ways searched also met ({@link FillResult#alsoMet}), so that answer is not read
+            // as one over every way there is.
+            LookingForARow looking = new LookingForARow();
+            LookingForARow.Mark from = looking.from();
             List<souther.compiler.partition.FillResult> searched = new ArrayList<>();
-            for (souther.compiler.partition.StandInAttempt each : stood) {
+            Iterator<souther.compiler.partition.StandInAttempt> ways = stood.iterator();
+            while (ways.hasNext() && looking.attempt()) {
                 // The outcome alone, because these are the answers of a way that asks nothing of
                 // them: there is no demand here for anything to have fallen short of.
                 searched.add(Generator.fill(asked, existing, check, met,
-                        trial, baselines, each.outcome(), holding, unanswered, budget));
+                        trial, baselines, ways.next().outcome(), holding, unanswered, budget));
             }
-            return souther.compiler.partition.FillResult.acrossRuns(searched);
+            return souther.compiler.partition.FillResult.acrossRuns(searched)
+                    .alsoMet(from.leftAt());
         }
 
     }
@@ -9965,7 +10045,7 @@ public final class Adequacy {
                 switch (composed.discharge().at(each)) {
                     case ClassDisposition.Built _ -> exist.add(each);
                     case ClassDisposition.Unresolved unresolved -> {
-                        if (unresolved.why().reason().provesInfeasible()) {
+                        if (unresolved.came().proves()) {
                             none.add(each);
                         }
                     }

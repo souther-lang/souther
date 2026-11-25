@@ -392,7 +392,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
      * sum the names cross, each is a row composed whole, and the first that composes is the one a
      * row is written as. So they are handed to whoever composes them as they are reached, in the
      * order the model declares the cases, and the walk is held to a figure
-     * ({@link CompositionBudget#WAYS_UNDER_THE_CASES_TRIED}).
+     * ({@link CompositionBudget#WAYS_UNDER_THE_CASES_TRIED}), each way handed over and each name
+     * left no place beside the ones before it a unit of it ({@link DepthFirst}).
      *
      * <p>Only ways a row can be at once: two names of one sum are written under one case, and a way
      * that put them under two would be a value that is both.
@@ -416,16 +417,6 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
             written = List.copyOf(written);
         }
 
-        /** How far handing the ways over went. */
-        enum Walked {
-            /** One of them composed, and none after it was handed over. */
-            COMPOSED,
-            /** Every way there was was handed over and none composed. */
-            EVERY_WAY_TRIED,
-            /** The figure was reached with ways still to hand over. */
-            STOPPED_AT_THE_FIGURE
-        }
-
         /**
          * One way of writing the row under the cases.
          *
@@ -444,59 +435,65 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
         }
 
         /**
-         * Hands each way to {@code composes}, until it answers that one composed or the figure is
-         * reached.
+         * Hands each way to {@code composes}, until it answers that one composed
+         * ({@link DepthFirst.Walked#TAKEN}) or the figure is reached.
          */
-        Walked tryEach(Predicate<Way> composes) {
-            int[] left = {CompositionBudget.WAYS_UNDER_THE_CASES_TRIED.maximum()};
-            return from(0, trying, new LinkedHashMap<>(), composes, left);
+        DepthFirst.Walked tryEach(Predicate<Way> composes) {
+            Tries left = new Tries(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED.maximum());
+            return DepthFirst.walk(new Chosen(0, trying, Map.of()), left,
+                    at -> at.next() == named.size() ? null : placesOf(at),
+                    way -> !composes.test(written(way.taken(), way.at())));
         }
 
-        private Walked from(int next, Requirements taken, Map<TermPath, TermPath> at,
-                            Predicate<Way> composes, int[] left) {
-            if (next == named.size()) {
-                if (left[0] == 0) {
-                    return Walked.STOPPED_AT_THE_FIGURE;
-                }
-                left[0]--;
-                List<Asked> under = new ArrayList<>();
-                for (Asked each : asked.asked()) {
-                    under.add(new Asked(at.get(each.container()), each.value().placedAs(at::get),
-                            each.holding(), each.ofTheKey(), each.valueIn(),
-                            each.around().map(around ->
-                                    new Around(at.get(around.container()), around.some(),
-                                            around.from(), around.below()))));
-                }
-                // Two positions are one value or two wherever this way writes them; a pair a case
-                // puts under no field a value is read at is no pair a row is held to here.
-                List<RowDemand.OneValueAtBoth> related = new ArrayList<>();
-                for (RowDemand.OneValueAtBoth each : asked.related()) {
-                    RowDemand.OneValueAtBoth written = RowDemand.OneValueAtBoth.of(
-                            at.get(each.one()), at.get(each.other()), each.same());
-                    if (written != null) {
-                        related.add(written);
-                    }
-                }
-                List<Reads> readsAt = new ArrayList<>();
-                for (Reads each : asked.reads()) {
-                    readsAt.add(new Reads(at.get(each.container()), at.get(each.value())));
-                }
-                return composes.test(new Way(new ContentsAsked(under, related, readsAt), taken, at))
-                        ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
+        /** Where the names before {@code next} stand, and what the row is taken to be to write
+         *  them there. */
+        private record Chosen(int next, Requirements taken, Map<TermPath, TermPath> at) {}
+
+        /** Each place the name at {@code at.next()} may stand in beside the ones before it: none
+         *  that takes the row to be two things at once. */
+        private Iterable<Chosen> placesOf(Chosen at) {
+            TermPath name = named.get(at.next());
+            return () -> written.get(at.next()).places().stream()
+                    .map(place -> at.taken().merge(place.taken())
+                            instanceof Requirements.Merge.Merged(Requirements both)
+                            ? new Chosen(at.next() + 1, both, with(at.at(), name, place.position()))
+                            : null)
+                    .filter(Objects::nonNull)
+                    .iterator();
+        }
+
+        private static Map<TermPath, TermPath> with(Map<TermPath, TermPath> at, TermPath name,
+                                                    TermPath position) {
+            Map<TermPath, TermPath> out = new LinkedHashMap<>(at);
+            out.put(name, position);
+            return out;
+        }
+
+        /** The way written where {@code at} puts each of {@link #named}. */
+        private Way written(Requirements taken, Map<TermPath, TermPath> at) {
+            List<Asked> under = new ArrayList<>();
+            for (Asked each : asked.asked()) {
+                under.add(new Asked(at.get(each.container()), each.value().placedAs(at::get),
+                        each.holding(), each.ofTheKey(), each.valueIn(),
+                        each.around().map(around ->
+                                new Around(at.get(around.container()), around.some(),
+                                        around.from(), around.below()))));
             }
-            for (WhereANameIsWritten.Place place : written.get(next).places()) {
-                if (!(taken.merge(place.taken())
-                        instanceof Requirements.Merge.Merged(Requirements both))) {
-                    continue;
-                }
-                at.put(named.get(next), place.position());
-                Walked walked = from(next + 1, both, at, composes, left);
-                at.remove(named.get(next));
-                if (walked != Walked.EVERY_WAY_TRIED) {
-                    return walked;
+            // Two positions are one value or two wherever this way writes them; a pair a case
+            // puts under no field a value is read at is no pair a row is held to here.
+            List<RowDemand.OneValueAtBoth> related = new ArrayList<>();
+            for (RowDemand.OneValueAtBoth each : asked.related()) {
+                RowDemand.OneValueAtBoth written = RowDemand.OneValueAtBoth.of(
+                        at.get(each.one()), at.get(each.other()), each.same());
+                if (written != null) {
+                    related.add(written);
                 }
             }
-            return Walked.EVERY_WAY_TRIED;
+            List<Reads> readsAt = new ArrayList<>();
+            for (Reads each : asked.reads()) {
+                readsAt.add(new Reads(at.get(each.container()), at.get(each.value())));
+            }
+            return new Way(new ContentsAsked(under, related, readsAt), taken, at);
         }
 
         /**
@@ -507,8 +504,8 @@ record ContentsAsked(List<Asked> asked, List<RowDemand.OneValueAtBoth> related,
          * composed them, which knows what they came to ({@link WhatTheAlternativesCameTo}). Both
          * halves in the one value, so that neither travels beside it where a carrier may drop it.
          */
-        SearchShortfall foundOut(Walked walked) {
-            return SearchShortfall.of(walked == Walked.STOPPED_AT_THE_FIGURE
+        SearchShortfall foundOut(DepthFirst.Walked walked) {
+            return SearchShortfall.of(walked == DepthFirst.Walked.CUT_SHORT
                             ? CompositionShortfall.of(
                                     Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))
                             : CompositionShortfall.NONE)

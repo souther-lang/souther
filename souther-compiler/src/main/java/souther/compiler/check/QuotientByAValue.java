@@ -99,7 +99,7 @@ public final class QuotientByAValue {
             }
             Rel stated = (quotientFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
-            Rel written = side.scale().signum() < 0 ? stated.turned() : stated;
+            Rel written = stated.scaledBySign(side.scale().signum());
             Core dividend = side.quotient().left();
             Core divisor = side.quotient().right();
             StatedComparison answers =

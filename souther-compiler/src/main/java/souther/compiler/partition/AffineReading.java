@@ -409,9 +409,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return new OfAComparison.CutsNothing(named, whole.constant(),
                             told.workedOut().noLine());
                 }
-                if (productsAreNumbers && whole.coefs().size() == 1
-                        && whole.coefs().keySet().iterator().next()
-                        instanceof NumericTerm.ProductOf) {
+                if (productsAreNumbers && whole.loneAtom() instanceof NumericTerm.ProductOf) {
                     return null;
                 }
                 AffineReading here = new AffineReading(

@@ -1740,39 +1740,13 @@ final class OperationFactBinder {
             case Type.Var l when right instanceof Type.Var r ->
                     r.name().equals(paired.computeIfAbsent(l.name(), _ -> r.name()))
                             && l.name().equals(back.computeIfAbsent(r.name(), _ -> l.name()));
-            case Type.ListOf l when right instanceof Type.ListOf r ->
-                    sameShape(l.element(), r.element(), paired, back);
-            case Type.SetOf l when right instanceof Type.SetOf r ->
-                    sameShape(l.element(), r.element(), paired, back);
-            case Type.OptionOf l when right instanceof Type.OptionOf r ->
-                    sameShape(l.element(), r.element(), paired, back);
-            case Type.MapOf l when right instanceof Type.MapOf r ->
-                    sameShape(l.key(), r.key(), paired, back)
-                            && sameShape(l.value(), r.value(), paired, back);
-            case Type.FnOf l when right instanceof Type.FnOf r ->
-                    sameShapes(l.params(), r.params(), paired, back)
-                            && sameShape(l.result(), r.result(), paired, back);
-            case Type.TupleOf l when right instanceof Type.TupleOf r ->
-                    sameShapes(l.elements(), r.elements(), paired, back);
+            case Type.Compound _ -> Type.everyPaired(left, right,
+                    (one, other) -> sameShape(one, other, paired, back));
             // Everything else a declaration can hold stands for itself: a primitive, a declaration,
             // a union of them, and a variable that did not pair with one above. Being the same
             // shape is being the same type.
             case Type.Leaf _ -> left.equals(right);
-            default -> false;
         };
-    }
-
-    private static boolean sameShapes(List<Type> left, List<Type> right, Map<String, String> paired,
-                                      Map<String, String> back) {
-        if (left.size() != right.size()) {
-            return false;
-        }
-        for (int i = 0; i < left.size(); i++) {
-            if (!sameShape(left.get(i), right.get(i), paired, back)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**

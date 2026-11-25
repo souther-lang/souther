@@ -552,37 +552,14 @@ public final class TypeOps {
             return true;   // nothing arrives from there, so nothing of the wrong shape can
         }
         return switch (declared) {
-            case Type.ListOf l -> actual instanceof Type.ListOf a
-                    && admits(l.element(), a.element(), kinds, sums);
-            case Type.SetOf s -> actual instanceof Type.SetOf a
-                    && admits(s.element(), a.element(), kinds, sums);
-            case Type.OptionOf o -> actual instanceof Type.OptionOf a
-                    && admits(o.element(), a.element(), kinds, sums);
-            case Type.MapOf m -> actual instanceof Type.MapOf a
-                    && admits(m.key(), a.key(), kinds, sums)
-                    && admits(m.value(), a.value(), kinds, sums);
-            case Type.TupleOf t -> actual instanceof Type.TupleOf a
-                    && t.elements().size() == a.elements().size()
-                    && admitsEach(t.elements(), a.elements(), kinds, sums);
-            case Type.FnOf f -> actual instanceof Type.FnOf a
-                    && f.params().size() == a.params().size()
-                    && admitsEach(f.params(), a.params(), kinds, sums)
-                    && admits(f.result(), a.result(), kinds, sums);
+            // Every compound, a function's parameters and result among them, position by position.
+            case Type.Compound _ -> Type.everyPaired(declared, actual,
+                    (d, a) -> admits(d, a, kinds, sums));
             // Nothing inside it to weigh position by position, so what is left is the ordinary
             // question. It answers a variable the declaration wrote too, which is not an
             // application's to decide and stands for whatever each use of it makes it.
             case Type.Leaf _ -> assignable(actual, declared, kinds, sums);
         };
-    }
-
-    private static boolean admitsEach(List<Type> declared, List<Type> actual,
-                                      DeclarationKinds kinds, SumCases sums) {
-        for (int i = 0; i < declared.size(); i++) {
-            if (!admits(declared.get(i), actual.get(i), kinds, sums)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
@@ -609,28 +586,11 @@ public final class TypeOps {
         // immutable collections are element-covariant: A <: S makes a List/Map/Option of A
         // assignable to one of S. Sound because they cannot be mutated (spec §collections), so no write can
         // smuggle a sibling case in — the same reason Scala's immutable List and Kotlin's read-only
-        // List are covariant, and Java's mutable arrays are not.
-        if (from instanceof Type.ListOf a && to instanceof Type.ListOf b) {
-            return assignable(a.element(), b.element(), kinds, sums);
-        }
-        if (from instanceof Type.MapOf a && to instanceof Type.MapOf b) {
-            return assignable(a.key(), b.key(), kinds, sums)
-                    && assignable(a.value(), b.value(), kinds, sums);
-        }
-        if (from instanceof Type.SetOf a && to instanceof Type.SetOf b) {
-            return assignable(a.element(), b.element(), kinds, sums);
-        }
-        if (from instanceof Type.OptionOf a && to instanceof Type.OptionOf b) {
-            return assignable(a.element(), b.element(), kinds, sums);
-        }
-        if (from instanceof Type.TupleOf a && to instanceof Type.TupleOf b
-                && a.elements().size() == b.elements().size()) {
-            for (int i = 0; i < a.elements().size(); i++) {
-                if (!assignable(a.elements().get(i), b.elements().get(i), kinds, sums)) {
-                    return false;
-                }
-            }
-            return true;
+        // List are covariant, and Java's mutable arrays are not. A tuple is read the same way, each
+        // position on its own. A function is not gone inside: one is assigned where it is the type
+        // expected and nowhere else.
+        if (!(from instanceof Type.FnOf) && Type.ofOneShape(from, to)) {
+            return Type.everyPaired(from, to, (f, t) -> assignable(f, t, kinds, sums));
         }
         List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, kinds, sums);
         List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, kinds, sums);
@@ -668,34 +628,10 @@ public final class TypeOps {
         if (b instanceof Type.Never) {
             return a;
         }
-        if (a instanceof Type.ListOf la && b instanceof Type.ListOf lb) {
-            Type e = join(la.element(), lb.element());
-            return e == null ? null : Type.list(e);
-        }
-        if (a instanceof Type.SetOf sa && b instanceof Type.SetOf sb) {
-            Type e = join(sa.element(), sb.element());
-            return e == null ? null : Type.set(e);
-        }
-        if (a instanceof Type.OptionOf oa && b instanceof Type.OptionOf ob) {
-            Type e = join(oa.element(), ob.element());
-            return e == null ? null : Type.option(e);
-        }
-        if (a instanceof Type.MapOf ma && b instanceof Type.MapOf mb) {
-            Type k = join(ma.key(), mb.key());
-            Type v = join(ma.value(), mb.value());
-            return k == null || v == null ? null : Type.map(k, v);
-        }
-        if (a instanceof Type.TupleOf ta && b instanceof Type.TupleOf tb
-                && ta.elements().size() == tb.elements().size()) {
-            List<Type> elements = new ArrayList<>();
-            for (int i = 0; i < ta.elements().size(); i++) {
-                Type e = join(ta.elements().get(i), tb.elements().get(i));
-                if (e == null) {
-                    return null;
-                }
-                elements.add(e);
-            }
-            return Type.tuple(elements);
+        // The constructors assignable goes inside, and no others: two functions join only where
+        // they are one type.
+        if (!(a instanceof Type.FnOf) && Type.ofOneShape(a, b)) {
+            return Type.zipped(a, b, TypeOps::join);
         }
         if (isDataLike(a) && isDataLike(b)) {
             // In the order the cases were met, because a report quotes this type back to the author
@@ -788,41 +724,16 @@ public final class TypeOps {
                     return new Fit.Disagrees(bound, arg);
                 }
             }
-            case Type.ListOf p when arg instanceof Type.ListOf a -> {
-                return unify(p.element(), a.element(), bindings, kinds, sums, refusing);
-            }
-            case Type.MapOf p when arg instanceof Type.MapOf a -> {
-                Fit key = unify(p.key(), a.key(), bindings, kinds, sums, refusing);
-                if (key instanceof Fit.Disagrees) {
-                    return key;
+            case Type.Compound p when Type.ofOneShape(p, arg) -> {
+                Fit[] disagreed = {null};
+                Type.everyPaired(p, arg, (one, other) -> {
+                    Fit at = unify(one, other, bindings, kinds, sums, refusing);
+                    disagreed[0] = at instanceof Fit.Disagrees ? at : null;
+                    return disagreed[0] == null;
+                });
+                if (disagreed[0] != null) {
+                    return disagreed[0];
                 }
-                return unify(p.value(), a.value(), bindings, kinds, sums, refusing);
-            }
-            case Type.SetOf p when arg instanceof Type.SetOf a -> {
-                return unify(p.element(), a.element(), bindings, kinds, sums, refusing);
-            }
-            case Type.OptionOf p when arg instanceof Type.OptionOf a -> {
-                return unify(p.element(), a.element(), bindings, kinds, sums, refusing);
-            }
-            case Type.TupleOf p when arg instanceof Type.TupleOf a
-                    && p.elements().size() == a.elements().size() -> {
-                for (int i = 0; i < p.elements().size(); i++) {
-                    Fit at = unify(p.elements().get(i), a.elements().get(i), bindings, kinds,
-                            sums, refusing);
-                    if (at instanceof Fit.Disagrees) {
-                        return at;
-                    }
-                }
-            }
-            case Type.FnOf p when arg instanceof Type.FnOf a && p.params().size() == a.params().size() -> {
-                for (int i = 0; i < p.params().size(); i++) {
-                    Fit at = unify(p.params().get(i), a.params().get(i), bindings, kinds,
-                            sums, refusing);
-                    if (at instanceof Fit.Disagrees) {
-                        return at;
-                    }
-                }
-                return unify(p.result(), a.result(), bindings, kinds, sums, refusing);
             }
             default -> {
                 if (refusing && !assignable(arg, param, kinds, sums)) {
@@ -1518,12 +1429,9 @@ public final class TypeOps {
     }
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
-     * a newtype — the implicit inner field is {@code value}. */
+     * a newtype ({@link NewtypeInners#innerOf}). */
     public static Type newtypeInner(TypeSymbol name, Symbols symbols) {
-        if (symbols.declaredNode(name) instanceof Hir.Data d && d.newtype()) {
-            return fieldTypes(d, symbols).get("value");
-        }
-        return null;
+        return symbols.declaredNode(name) instanceof Hir.Data d ? NewtypeInners.innerOf(d) : null;
     }
 
     /**
@@ -1920,10 +1828,7 @@ public final class TypeOps {
     /** What a single-value newtype directly wraps (one level, so a newtype over a newtype answers
      * with that newtype), or {@code null} for anything that is not one. */
     static Type wrapped(Type t, Symbols symbols) {
-        if (isSingleValueNewtype(t, symbols)) {
-            return fieldTypes((Hir.Data) symbols.declaredNode(((Type.Ref) t).name()), symbols).get("value");
-        }
-        return null;
+        return t instanceof Type.Ref ref ? newtypeInner(ref.name(), symbols) : null;
     }
 
     /** The Int or Decimal that a single-value newtype directly wraps (one level), or {@code null}

@@ -82,7 +82,7 @@ public final class BooleanMeaning {
                                                          Function<Core, Optional<Object>> folded,
                                                          Predicate<Core> subject) {
         Rel states = comparison.claim().statedRelation();
-        Rel met = holding ? states : states.denied();
+        Rel met = states.whenHolding(holding);
         if (met != Rel.EQ && met != Rel.NE) {
             return Optional.empty();
         }

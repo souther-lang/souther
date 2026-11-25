@@ -1046,15 +1046,14 @@ final class WorkedOutToReachIt {
             }
             case Proposition.Compared(Relation.Affine affine, boolean holds, var _, var _)
                     // A relation of one number of the input, weighed against nought.
-                    when affine.form().coefs().size() == 1
-                    && affine.form().coefs().keySet().iterator().next()
+                    when affine.form().loneAtom()
                             instanceof DecisionAtom.OfTheInput(NumericTerm weighed, var _)
                     && weighed.equals(term) -> {
                 // weight * term + constant against nought, which is term against what the
                 // constant comes to over the weight: a relation faces one way, so the weight of
                 // its one term is above nought.
                 ExactRatio weight = affine.form().coefs().values().iterator().next();
-                Rel met = holds ? affine.proposition() : affine.proposition().denied();
+                Rel met = affine.proposition().whenHolding(holds);
                 yield affine.form().constant().negated().dividedBy(weight)
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
                         ? range.heldTo(met, level)

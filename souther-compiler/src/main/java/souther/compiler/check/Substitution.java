@@ -116,55 +116,14 @@ final class Substitution {
         }
         // Position by position where the two shapes line up. Where they do not there is no variable
         // here to decide, and whether they agree is {@link #fits}'s question.
-        switch (left) {
-            case Type.ListOf l -> {
-                if (right instanceof Type.ListOf a) {
-                    return decide(l.element(), a.element(), kinds, sums);
-                }
-            }
-            case Type.SetOf s -> {
-                if (right instanceof Type.SetOf a) {
-                    return decide(s.element(), a.element(), kinds, sums);
-                }
-            }
-            case Type.OptionOf o -> {
-                if (right instanceof Type.OptionOf a) {
-                    return decide(o.element(), a.element(), kinds, sums);
-                }
-            }
-            case Type.MapOf m -> {
-                if (right instanceof Type.MapOf a) {
-                    Fit key = decide(m.key(), a.key(), kinds, sums);
-                    return key instanceof Fit.Disagrees ? key
-                            : decide(m.value(), a.value(), kinds, sums);
-                }
-            }
-            case Type.TupleOf t -> {
-                if (right instanceof Type.TupleOf a
-                        && t.elements().size() == a.elements().size()) {
-                    for (int i = 0; i < t.elements().size(); i++) {
-                        Fit at = decide(t.elements().get(i), a.elements().get(i), kinds, sums);
-                        if (at instanceof Fit.Disagrees) {
-                            return at;
-                        }
-                    }
-                }
-            }
-            case Type.FnOf f -> {
-                if (right instanceof Type.FnOf a && f.params().size() == a.params().size()) {
-                    for (int i = 0; i < f.params().size(); i++) {
-                        Fit at = decide(f.params().get(i), a.params().get(i), kinds, sums);
-                        if (at instanceof Fit.Disagrees) {
-                            return at;
-                        }
-                    }
-                    return decide(f.result(), a.result(), kinds, sums);
-                }
-            }
-            // Nothing inside it to descend into, so nothing here decides a variable.
-            case Type.Leaf _ -> { }
-        }
-        return Fit.FITS;
+        // A leaf holds nothing to descend into, so nothing here decides a variable.
+        Fit[] disagreed = {null};
+        Type.everyPaired(left, right, (one, other) -> {
+            Fit at = decide(one, other, kinds, sums);
+            disagreed[0] = at instanceof Fit.Disagrees ? at : null;
+            return disagreed[0] == null;
+        });
+        return disagreed[0] != null ? disagreed[0] : Fit.FITS;
     }
 
     /** {@code t} with every variable this has decided written into it. One still open is left

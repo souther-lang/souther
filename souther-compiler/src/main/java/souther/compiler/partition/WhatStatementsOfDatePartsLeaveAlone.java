@@ -34,7 +34,7 @@ final class WhatStatementsOfDatePartsLeaveAlone {
     static final int MOST_DATES_A_WAY_IS_ASKED_OF = 2;
 
     /** The days in the longest month, which is as far as a part of a date runs. */
-    private static final long GREATEST_PART = 31;
+    private static final long GREATEST_PART = TakenAs.DatePart.DAY.greatest();
 
     private WhatStatementsOfDatePartsLeaveAlone() {
     }

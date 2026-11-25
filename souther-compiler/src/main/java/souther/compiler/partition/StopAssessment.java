@@ -437,50 +437,9 @@ final class StopAssessment {
      * The one figure a site is searched by ({@link #MOST_VALUES_TRIED}): every value tried is one
      * unit of it, and so is every way a stop is looked for by beyond the first, so what a site
      * costs is no product of the ways and the values.
-     *
-     * <p>Cut short is where a unit was asked for and there was none, and not where the last was
-     * spent and the search was done: that a search used all it was given says nothing of whether
-     * it left anything.
      */
-    static final class Tries {
-
-        private int left;
-        private boolean refused;
-
-        /** A site's figure. */
-        Tries() {
-            this(MOST_VALUES_TRIED);
-        }
-
-        /** Of {@code figure} units. */
-        Tries(int figure) {
-            this.left = figure;
-        }
-
-        /** Whether a unit is spent: one is, where there is one, and where there is none that is
-         *  asked for and refused. */
-        boolean spend() {
-            if (left <= 0) {
-                refused = true;
-                return false;
-            }
-            left--;
-            return true;
-        }
-
-        /** Whether none is left. */
-        boolean spent() {
-            return left <= 0;
-        }
-
-        /** That something was left undone for want of one. */
-        void leftSomethingUndone() {
-            refused = true;
-        }
-
-        boolean cutShort() {
-            return refused;
-        }
+    static Tries aSitesTries() {
+        return new Tries(MOST_VALUES_TRIED);
     }
 
     /**
@@ -619,7 +578,7 @@ final class StopAssessment {
             if (!stopsAtTheSite(site, form.constant())) {
                 return null;
             }
-            return tryingEach(numbers, 0, new LinkedHashMap<>(), tried, left,
+            return TriedInTurn.first(numbers, tried, left,
                     values -> stopsAt(site, before, values) ? new Shown(site, values) : null);
         }
         for (boolean above : new boolean[] {true, false}) {
@@ -634,7 +593,7 @@ final class StopAssessment {
                 NumericTerm free = frees.get(which);
                 List<NumericTerm> rest = numbers.stream().filter(each -> !each.equals(free))
                         .toList();
-                Shown found = tryingEach(rest, 0, new LinkedHashMap<>(), tried, left, values -> {
+                Shown found = TriedInTurn.first(rest, tried, left, values -> {
                     ExactRatio put = whereItTakes(form, free, past, above, values);
                     FormRange ends = FormRange.endsOf(free, read);
                     if (put == null || ends == null || !within(put, ends)) {
@@ -657,39 +616,6 @@ final class StopAssessment {
                 }
             }
         }
-        return null;
-    }
-
-    /** What is asked of one value of every number but one. */
-    @FunctionalInterface
-    private interface Asking {
-        Shown at(Map<NumericTerm, ExactRatio> values);
-    }
-
-    /** {@code ask} of each way of putting {@code rest} from {@code from} on at the values tried
-     *  for each, while {@code left} lasts, until it answers. */
-    private static Shown tryingEach(List<NumericTerm> rest, int from,
-                                    Map<NumericTerm, ExactRatio> values,
-                                    Map<NumericTerm, List<ExactRatio>> tried, Tries left,
-                                    Asking ask) {
-        if (from == rest.size()) {
-            return left.spend() ? ask.at(values) : null;
-        }
-        List<ExactRatio> tryAt = tried.get(rest.get(from));
-        for (int at = 0; at < tryAt.size(); at++) {
-            values.put(rest.get(from), tryAt.get(at));
-            Shown found = tryingEach(rest, from + 1, values, tried, left, ask);
-            if (found != null) {
-                return found;
-            }
-            if (left.spent()) {
-                if (at < tryAt.size() - 1) {
-                    left.leftSomethingUndone();
-                }
-                return null;
-            }
-        }
-        values.remove(rest.get(from));
         return null;
     }
 

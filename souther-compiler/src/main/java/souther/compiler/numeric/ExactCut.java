@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import java.math.BigInteger;
+
 /**
  * Where a constraint stops, exactly, and whether the value it stops at is one it admits.
  *
@@ -89,6 +91,21 @@ public record ExactCut(ExactRatio at, boolean inclusive) {
             return a.inclusive ? b : a;
         }
         return order < 0 ? a : b;
+    }
+
+    /**
+     * The least whole number this admits as a lower bound, or which way the arithmetic could not
+     * hold it: the ceiling where the value is admitted, and the whole number above the floor where
+     * it is not — which is the ceiling again unless the value is itself whole.
+     */
+    public ExactAnswer<BigInteger> leastWhole() {
+        return inclusive ? at.ceiling() : at.floor().map(below -> below.add(BigInteger.ONE));
+    }
+
+    /** The greatest whole number this admits as an upper bound, or which way the arithmetic could
+     *  not hold it: {@link #leastWhole} read from the other side. */
+    public ExactAnswer<BigInteger> greatestWhole() {
+        return inclusive ? at.floor() : at.ceiling().map(above -> above.subtract(BigInteger.ONE));
     }
 
     @Override

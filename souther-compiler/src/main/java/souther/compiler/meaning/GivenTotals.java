@@ -120,7 +120,7 @@ public final class GivenTotals {
                 return ExactAnswer.unheld(why);
             }
         }
-        Rel stated = compared.holds() ? rel : rel.denied();
+        Rel stated = rel.whenHolding(compared.holds());
         if (given.coefs().isEmpty()) {
             return ExactAnswer.held(new Proposition.Always(
                     stated.holds(given.constant().signum())));

@@ -81,6 +81,38 @@ public enum Rel {
         };
     }
 
+    /**
+     * This where a statement of it {@code holds}, and its denial where the statement is that it
+     * does not: what a comparison claims, read off the relation it was written with and which way
+     * it was asked.
+     */
+    public Rel whenHolding(boolean holds) {
+        return holds ? this : denied();
+    }
+
+    /**
+     * The relation a form stands in to nought once it is multiplied by a factor of sign
+     * {@code sign}, where this is the relation it stood in before: this for a factor above nought
+     * and {@link #turned} for one below.
+     *
+     * <p>The sign and not the factor, because the sign is all that decides it — and a relation
+     * crosses to an execution as the operator a comparison is written with, so what it is asked
+     * with crosses too: a number of the compiler's reasoning has no business there.
+     *
+     * <p>Nought is refused. A form multiplied by it is nought whatever the form was, so no
+     * relation of the product says what this said of the form.
+     *
+     * @param sign which way the factor stands to nought: negative below it, positive above it
+     * @throws IllegalArgumentException where {@code sign} is nought
+     */
+    public Rel scaledBySign(int sign) {
+        if (sign == 0) {
+            throw new IllegalArgumentException(
+                    "a relation is not carried over a product by nought");
+        }
+        return sign < 0 ? turned() : this;
+    }
+
     /** The operator the language writes this relation with. */
     public String written() {
         return switch (this) {

@@ -15,6 +15,7 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.FieldLayout;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ReqSig;
 import souther.compiler.types.BinOp;
@@ -318,9 +319,9 @@ final class BodyGen {
         private Type unwrapNewtypeValue(Type t) {
             if (t instanceof Type.Ref ref
                     && symbols.declaredNode(ref.name()) instanceof Hir.Data d && d.newtype()) {
-                Type inner = fieldTypes(d).get("value");
+                Type inner = fieldTypes(d).get(NewtypeInners.THE_ONE_VALUE);
                 if (inner != null) {
-                    emitFieldRead(code, ref.name(), "value", inner);
+                    emitFieldRead(code, ref.name(), NewtypeInners.THE_ONE_VALUE, inner);
                     return unwrapNewtypeValue(inner);
                 }
             }

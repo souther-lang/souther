@@ -3123,8 +3123,8 @@ final class TermRealizations {
                                              ValueSet admits) {
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
-        BigInteger target = named instanceof Count count && count.exactly().isWhole()
-                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+        BigInteger target = named instanceof Count count
+                && count.exactly().wholeOrNull() instanceof BigInteger whole
                 ? whole : BigInteger.ZERO;
         // A set small enough to name each member is walked member by member, nearest where the
         // number is usually near first: what none of them builds is a class the rules leave
@@ -4945,7 +4945,7 @@ final class TermRealizations {
 
         /** How many numbers the part takes in any round, which is the most a round has. */
         static int most(TakenAs.DatePart part) {
-            return part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS : DAYS_THE_LONGEST_MONTH_HAS;
+            return part.greatest();
         }
 
         /** The first day of the round that the day {@code day} is in. */
@@ -4957,7 +4957,7 @@ final class TermRealizations {
 
         /** How many numbers this round takes. */
         int numbers() {
-            return part == TakenAs.DatePart.MONTH ? MONTHS_A_YEAR_HAS : first.lengthOfMonth();
+            return part == TakenAs.DatePart.MONTH ? part.greatest() : first.lengthOfMonth();
         }
 
         /** How many days this round has. */
@@ -5206,7 +5206,7 @@ final class TermRealizations {
             return new Search(dateInOneCycle(put, today), true);
         }
         Tried years = wholeNumbers(lead.wanted(), observed,
-                LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
+                TakenAs.DatePart.YEAR.least(), TakenAs.DatePart.YEAR.greatest(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), UsualPlaces.ofAYear(today));
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
@@ -5318,13 +5318,6 @@ final class TermRealizations {
                     notWhole);
         }
     }
-
-    /** How far the months run, which is what a month may stand at whatever the rules leave it. */
-    private static final int MONTHS_A_YEAR_HAS = 12;
-
-    /** How far the days run in the longest month there is, which is as far as a day of any date
-     *  runs. Which of them a date has is the date's, read off it where it is walked to. */
-    private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
 
     /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
      *  are leap years. */

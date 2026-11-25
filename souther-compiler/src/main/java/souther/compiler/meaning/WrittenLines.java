@@ -347,7 +347,7 @@ public final class WrittenLines {
             case Relation.Affine affine -> affine.proposition();
             case Relation.Ordered ordered -> ordered.proposition();
         };
-        return ComparisonClaim.stating(stated.holds() ? rel : rel.denied());
+        return ComparisonClaim.stating(rel.whenHolding(stated.holds()));
     }
 
     /**

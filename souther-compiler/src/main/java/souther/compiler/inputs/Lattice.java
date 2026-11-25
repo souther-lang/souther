@@ -59,8 +59,7 @@ final class Lattice {
      */
     static Point least(Granularity spacing, ExactCut lower) {
         if (spacing == Granularity.DISCRETE) {
-            BigInteger whole = lower.inclusive() ? lower.at().ceiling().orNull()
-                    : lower.at().floor().map(below -> below.add(BigInteger.ONE)).orNull();
+            BigInteger whole = lower.leastWhole().orNull();
             return whole == null ? null : new Point(ExactRatio.of(whole), 0, Snap.NONE);
         }
         if (!lower.at().fitsWrittenDecimal()) {
@@ -75,8 +74,7 @@ final class Lattice {
      */
     static Point greatest(Granularity spacing, ExactCut upper) {
         if (spacing == Granularity.DISCRETE) {
-            BigInteger whole = upper.inclusive() ? upper.at().floor().orNull()
-                    : upper.at().ceiling().map(above -> above.subtract(BigInteger.ONE)).orNull();
+            BigInteger whole = upper.greatestWhole().orNull();
             return whole == null ? null : new Point(ExactRatio.of(whole), 0, Snap.NONE);
         }
         if (!upper.at().fitsWrittenDecimal()) {

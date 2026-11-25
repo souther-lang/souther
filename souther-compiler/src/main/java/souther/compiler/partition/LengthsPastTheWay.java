@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeDivision;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
@@ -118,10 +119,7 @@ final class LengthsPastTheWay {
          * pattern counts.
          */
         PatternPlan strings() {
-            if (isEmpty() || least.bitLength() >= Integer.SIZE - 1) {
-                return null;
-            }
-            return PatternPlan.of(PatternMeaning.ofAnySymbols(least.intValueExact(), ceiling()));
+            return holding(PatternMeaning::ofAnySymbols);
         }
 
         /**
@@ -129,25 +127,63 @@ final class LengthsPastTheWay {
          * what a pattern counts.
          */
         PatternPlan stringsOutside() {
+            return holdingOtherwise(PatternMeaning::ofAnySymbols);
+        }
+
+        /** What a string holding from {@code least} to {@code most} of something is, as a
+         *  pattern; {@code most} is {@link PatternMeaning.Repeated#NO_CEILING} where it holds no
+         *  most. */
+        @FunctionalInterface
+        interface Holding {
+            PatternMeaning of(int least, int most);
+        }
+
+        /**
+         * The strings holding as many of what {@code counted} counts as these say, or null where
+         * there are none or the least is past what a pattern counts.
+         */
+        PatternPlan holding(Holding counted) {
+            if (isEmpty() || least.bitLength() >= Integer.SIZE - 1) {
+                return null;
+            }
+            return PatternPlan.of(counted.of(least.intValueExact(), ceiling()));
+        }
+
+        /**
+         * The strings holding any other number of what {@code counted} counts, fewer than the
+         * least or more than the most — or null where there are none, or where fewer than the
+         * least are past what a pattern counts. More than a most past what a pattern counts are
+         * left out, and the fewer are what is said.
+         */
+        PatternPlan holdingOtherwise(Holding counted) {
             if (isEmpty()) {
                 return null;
             }
-            PatternPlan below = null;
-            if (least.signum() > 0) {
-                if (least.bitLength() >= Integer.SIZE - 1) {
-                    return null;
-                }
-                below = PatternPlan.of(PatternMeaning.ofAnySymbols(0, least.intValueExact() - 1));
+            PatternPlan below = fewerThan(counted);
+            if (least.signum() > 0 && below == null) {
+                return null;
             }
-            PatternPlan above = null;
-            if (most.compareTo(LONGEST) < 0) {
-                if (most.bitLength() >= Integer.SIZE - 1) {
-                    return below;
-                }
-                above = PatternPlan.of(PatternMeaning.ofAnySymbols(most.intValueExact() + 1,
-                        PatternMeaning.Repeated.NO_CEILING));
-            }
+            PatternPlan above = moreThan(counted);
             return below == null ? above : above == null ? below : below.or(above);
+        }
+
+        /** The strings holding fewer of what {@code counted} counts than the least, or null where
+         *  no string does or the least is past what a pattern counts. */
+        PatternPlan fewerThan(Holding counted) {
+            if (isEmpty() || least.signum() == 0 || least.bitLength() >= Integer.SIZE - 1) {
+                return null;
+            }
+            return PatternPlan.of(counted.of(0, least.intValueExact() - 1));
+        }
+
+        /** The strings holding more of what {@code counted} counts than the most, or null where
+         *  no string does or the most is past what a pattern counts. */
+        PatternPlan moreThan(Holding counted) {
+            if (isEmpty() || most.compareTo(LONGEST) >= 0 || most.bitLength() >= Integer.SIZE - 1) {
+                return null;
+            }
+            return PatternPlan.of(counted.of(most.intValueExact() + 1,
+                    PatternMeaning.Repeated.NO_CEILING));
         }
 
         /**
@@ -301,10 +337,10 @@ final class LengthsPastTheWay {
                     return new Lengths(BigInteger.ONE, BigInteger.ZERO);
                 }
             } else if (weight.signum() > 0) {
-                BigInteger from = UndividedByARelation.ceilingOf(each.constant().negate(), weight);
+                BigInteger from = WholeDivision.ceilingOf(each.constant().negate(), weight);
                 least = least == null ? from : least.max(from);
             } else {
-                BigInteger to = UndividedByARelation.floorOf(each.constant(), weight.negate());
+                BigInteger to = WholeDivision.floorOf(each.constant(), weight.negate());
                 most = most == null ? to : most.min(to);
             }
         }
@@ -313,13 +349,13 @@ final class LengthsPastTheWay {
 
     /** {@code form} as an inequality, or null where a weight or the constant is no whole number. */
     private static Inequality inequalityOf(LinearForm<NumericTerm> form) {
-        BigInteger constant = UndividedByARelation.wholeOf(form.constant());
+        BigInteger constant = form.constant().wholeOrNull();
         if (constant == null) {
             return null;
         }
         Map<NumericTerm, BigInteger> weights = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            BigInteger weight = UndividedByARelation.wholeOf(each.getValue());
+            BigInteger weight = each.getValue().wholeOrNull();
             if (weight == null) {
                 return null;
             }

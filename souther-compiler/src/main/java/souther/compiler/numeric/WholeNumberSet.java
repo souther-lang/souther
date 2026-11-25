@@ -221,11 +221,11 @@ public record WholeNumberSet(List<Part> parts) {
             BigInteger from;
             BigInteger to;
             if (weightThere.signum() > 0) {
-                from = smallest == null ? null : ceilDivided(smallest, weightThere);
-                to = largest == null ? null : floorDivided(largest, weightThere);
+                from = smallest == null ? null : WholeDivision.ceilingOf(smallest, weightThere);
+                to = largest == null ? null : WholeDivision.floorOf(largest, weightThere);
             } else {
-                from = largest == null ? null : ceilDivided(largest, weightThere);
-                to = smallest == null ? null : floorDivided(smallest, weightThere);
+                from = largest == null ? null : WholeDivision.ceilingOf(largest, weightThere);
+                to = smallest == null ? null : WholeDivision.floorOf(smallest, weightThere);
             }
             if (from != null && to != null && from.compareTo(to) > 0) {
                 continue;
@@ -455,18 +455,6 @@ public record WholeNumberSet(List<Part> parts) {
             next = leastAtOrAbove(next.add(BigInteger.ONE));
         }
         return members;
-    }
-
-    private static BigInteger floorDivided(BigInteger number, BigInteger by) {
-        BigInteger[] both = number.divideAndRemainder(by);
-        return both[1].signum() != 0 && (both[1].signum() != by.signum())
-                ? both[0].subtract(BigInteger.ONE) : both[0];
-    }
-
-    private static BigInteger ceilDivided(BigInteger number, BigInteger by) {
-        BigInteger[] both = number.divideAndRemainder(by);
-        return both[1].signum() != 0 && (both[1].signum() == by.signum())
-                ? both[0].add(BigInteger.ONE) : both[0];
     }
 
     private static BigInteger later(BigInteger one, BigInteger other) {

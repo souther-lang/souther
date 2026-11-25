@@ -14,11 +14,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,14 +63,21 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
      * name, and a class used is taken to run its initializer. That over-reaches, which is what the
      * list below is for; it does not follow a call through an interface or a method an override
      * replaces, which no check over what the code names can.
+     *
+     * <p>Asked of the classes {@code loaded} admits, and followed through everything
+     * {@code reading} holds.
      */
-    private static Map<String, String> loadedRunningWhatAsks(Compiled.Reading reading) {
-        Map<String, List<Compiled.Site>> doing = new TreeMap<>();
-        Map<String, Set<String>> methodsNamed = new TreeMap<>();
+    private static Map<String, String> loadedRunningWhatAsks(Compiled.Reading reading,
+                                                             Predicate<String> loaded) {
+        // Keyed by hash: which order the methods are kept in decides nothing, as what is found is
+        // put in order below and a walk goes in the order of each method's sites.
+        Map<String, List<Compiled.Site>> doing = new HashMap<>();
+        Map<String, Map<String, Set<String>>> methodsNamed = new HashMap<>();
         for (Compiled.Site site : reading.sites()) {
-            doing.computeIfAbsent(site.at(), _ -> new ArrayList<>()).add(site);
-            methodsNamed.computeIfAbsent(site.from() + "#" + site.method(), _ -> new TreeSet<>())
-                    .add(site.at());
+            String at = site.at();
+            doing.computeIfAbsent(at, _ -> new ArrayList<>()).add(site);
+            methodsNamed.computeIfAbsent(site.from(), _ -> new HashMap<>())
+                    .computeIfAbsent(site.method(), _ -> new TreeSet<>()).add(at);
         }
         Set<String> settable = new TreeSet<>();
         Allowances.SETTABLE.forEach(each -> settable.add(each.name()));
@@ -105,12 +115,15 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
         assertFalse(asking.isEmpty(), "some place asks for a figure, or this reads no call of it");
         asking.addAll(askingOfOneHandedIn);
 
+        Map<String, Set<String>> runs = runsOf(doing, methodsNamed);
+        Set<String> reachesAsking = reachingAny(runs, asking);
         Map<String, String> reaching = new TreeMap<>();
         for (String loading : doing.keySet()) {
-            if (!loading.contains("#<clinit>")) {
+            if (!loading.contains("#<clinit>") || !reachesAsking.contains(loading)
+                    || !loaded.test(loading.substring(0, loading.indexOf('#')))) {
                 continue;
             }
-            String found = firstAsking(loading, doing, methodsNamed, asking);
+            String found = firstAsking(loading, runs, reachesAsking, asking);
             if (found != null) {
                 reaching.put(loading.substring(0, loading.indexOf('#')), found);
             }
@@ -121,7 +134,7 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
     @Test
     void noClassLoadedRunsWhatAsksTheFigureInForce() {
         Map<String, String> reaching = loadedRunningWhatAsks(new Compiled.Reading(
-                Compiled.sites(), Compiled.invocations(), Compiled.staticReads()));
+                Compiled.sites(), Compiled.invocations(), Compiled.staticReads()), _ -> true);
 
         Set<String> unsaid = new TreeSet<>(reaching.keySet());
         unsaid.removeAll(LOADING_MAY_ASK.keySet());
@@ -178,8 +191,12 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
         List<Compiled.StaticRead> reads = new ArrayList<>(Compiled.staticReads());
         reads.addAll(fixtures.staticReads());
 
+        // Followed through the compiler, and asked of the three written for it alone: what is
+        // claimed is that each of them is found, and the compiler's own are the other test's.
+        Set<String> written = new TreeSet<>();
+        fixtureClasses.forEach(each -> written.add(each.getName()));
         Map<String, String> reaching = loadedRunningWhatAsks(
-                new Compiled.Reading(sites, fixtures.invocations(), reads));
+                new Compiled.Reading(sites, fixtures.invocations(), reads), written::contains);
 
         assertTrue(reaching.containsKey(AStopMadeWhenLoaded.class.getName()), () -> reaching.toString());
         assertTrue(reaching.containsKey(AFigureReadByAHelper.class.getName()), () -> reaching.toString());
@@ -232,12 +249,6 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
     private record Asks(Set<CompositionBudget> asks, String why) {}
 
     private static final Map<String, Asks> LOADING_MAY_ASK = Map.of(
-            "souther.compiler.partition.Generator$TellingArmsApart",
-            new Asks(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
-                    "copies the rows a walk hands the choice of a row among"),
-            "souther.compiler.partition.Generator$ReachingWhatIsJudged",
-            new Asks(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
-                    "copies the rows a walk hands the choice of a row among"),
             "souther.compiler.check.FieldDomains",
             new Asks(Set.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
                     "makes a concluding, which counts to the parts a derivation concludes with"),
@@ -245,10 +256,57 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
             new Asks(Set.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
                     "makes a concluding, which counts to the parts a derivation concludes with"));
 
-    /** The first method asking for a figure that {@code start} runs, or null where it runs none. */
-    private static String firstAsking(String start, Map<String, List<Compiled.Site>> doing,
-                                      Map<String, Set<String>> methodsNamed, Set<String> asking) {
-        Set<String> seen = new TreeSet<>();
+    /** What each method runs, in the order its sites name them: every method of the class a
+     *  call names under that name, and the initializer of a class used. */
+    private static Map<String, Set<String>> runsOf(Map<String, List<Compiled.Site>> doing,
+                                                   Map<String, Map<String, Set<String>>>
+                                                           methodsNamed) {
+        Map<String, Set<String>> runs = new HashMap<>();
+        doing.forEach((method, sites) -> {
+            Set<String> run = new LinkedHashSet<>();
+            for (Compiled.Site site : sites) {
+                if (site.how() == Compiled.How.ASKS || site.how() == Compiled.How.NAMES) {
+                    continue;
+                }
+                Map<String, Set<String>> ofTheOwner =
+                        methodsNamed.getOrDefault(site.owner(), Map.of());
+                run.addAll(ofTheOwner.getOrDefault(site.member(), Set.of()));
+                run.addAll(ofTheOwner.getOrDefault("<clinit>", Set.of()));
+            }
+            runs.put(method, run);
+        });
+        return runs;
+    }
+
+    /** The methods from which something {@code runs} leads to one of {@code asking}, those
+     *  included: walked once, backwards from them. */
+    private static Set<String> reachingAny(Map<String, Set<String>> runs, Set<String> asking) {
+        Map<String, List<String>> runBy = new HashMap<>();
+        runs.forEach((method, run) -> run.forEach(each ->
+                runBy.computeIfAbsent(each, _ -> new ArrayList<>()).add(method)));
+        Set<String> reaching = new HashSet<>(asking);
+        Deque<String> next = new ArrayDeque<>(asking);
+        while (!next.isEmpty()) {
+            for (String by : runBy.getOrDefault(next.poll(), List.of())) {
+                if (reaching.add(by)) {
+                    next.add(by);
+                }
+            }
+        }
+        return reaching;
+    }
+
+    /**
+     * The first of {@code asking} a walk from {@code start} through what each method
+     * {@code runs} meets, breadth first, or null where it meets none.
+     *
+     * <p>Walked through {@code reaching} alone. A method outside it leads to none of them, so
+     * passing it by changes nothing about which is met first: every method that does lead to one
+     * is reached from one that does too.
+     */
+    private static String firstAsking(String start, Map<String, Set<String>> runs,
+                                      Set<String> reaching, Set<String> asking) {
+        Set<String> seen = new HashSet<>();
         Deque<String> next = new ArrayDeque<>();
         next.add(start);
         seen.add(start);
@@ -257,18 +315,9 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
             if (asking.contains(method)) {
                 return method;
             }
-            for (Compiled.Site site : doing.getOrDefault(method, List.of())) {
-                if (site.how() == Compiled.How.ASKS || site.how() == Compiled.How.NAMES) {
-                    continue;
-                }
-                List<String> runs = new ArrayList<>();
-                runs.addAll(methodsNamed.getOrDefault(site.owner() + "#" + site.member(),
-                        Set.of()));
-                runs.addAll(methodsNamed.getOrDefault(site.owner() + "#<clinit>", Set.of()));
-                for (String each : runs) {
-                    if (seen.add(each)) {
-                        next.add(each);
-                    }
+            for (String each : runs.getOrDefault(method, Set.of())) {
+                if (reaching.contains(each) && seen.add(each)) {
+                    next.add(each);
                 }
             }
         }
