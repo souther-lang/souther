@@ -98,9 +98,8 @@ public final class ResolvedImports {
             switch (resolved) {
                 case ResolvedImport.Brings(Scoping.Brought.ABehavior(ValueName.Behavior named),
                         var _) -> out.put(spelling, new Reach.Reaches(named));
-                case ResolvedImport.Brings(Scoping.Brought.AHelper(var leave), var _) ->
-                        out.put(spelling, new Reach.Reaches(
-                                new ValueName.Helper(leave.module(), leave.name())));
+                case ResolvedImport.Brings(Scoping.Brought.AHelper helper, var _) ->
+                        out.put(spelling, new Reach.Reaches(helper.named()));
                 case ResolvedImport.Brings(
                         Scoping.Brought.ALibraryOperation(ValueName.Stdlib named), var _) ->
                         out.put(spelling, new Reach.Reaches(named));

@@ -20,6 +20,7 @@ import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Scoping;
+import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Resolve;
@@ -1566,10 +1567,15 @@ public final class Names {
      * a declaration is named, is answered the same at a list entry as at a use, and nothing reads a
      * list's meaning off its spelling.
      *
-     * <p>An entry is answered with the declaration of that name in the module the line is about —
-     * this one for {@code exposing}, the one imported for an import — in each namespace that module
-     * declares it in, and with nothing where it declares none. A qualified {@code exposing} entry
-     * names nothing here: the clause is granular to the type, and one is refused.
+     * <p>An {@code exposing} entry is answered with this module's declaration of that name, in each
+     * namespace it declares it in, and with nothing where it declares none. A qualified one names
+     * nothing here: the clause is granular to the type, and one is refused.
+     *
+     * <p>An import entry is answered with what its line brings in under it — the claim
+     * {@link Scoping} settled for that entry, read and not worked out again — so a library
+     * operation is answered as a use of it is, and an entry its line could not bring in (a name
+     * the module does not declare, or declares and does not expose) names nothing, as a use of it
+     * does. That the entry is wrong is what the import's own report says.
      */
     public record Listings(String name) implements Key<Listed> {
         @Override
@@ -1580,7 +1586,8 @@ public final class Names {
         @Override
         public Answer<Listed> compute(Db db) {
             Ast.Module m = db.ask(new Front.Available(name)).value();
-            if (m == null) {
+            Answer<Scoping.Scoped> scope = db.ask(new ModuleScope(name));
+            if (m == null || !scope.present()) {
                 return Answer.absent();
             }
             List<Resolve.TypeUse> types = new ArrayList<>();
@@ -1588,34 +1595,47 @@ public final class Names {
             if (m.exposing() instanceof ExposingClause.Written written) {
                 for (WrittenName entry : written.entries()) {
                     if (!entry.canonical().contains(".")) {
-                        declaredUnder(db, name, entry, types, values);
+                        declaredHere(db, entry, scope.value(), types, values);
                     }
                 }
             }
-            for (Ast.Import line : m.imports()) {
+            for (Scoping.Claim claim : scope.value().claims()) {
+                if (!(claim instanceof Scoping.Claim.Stands(Ast.Import line, String asked,
+                        boolean written, Scoping.Brought what)) || !written) {
+                    continue;   // nothing brought in, or a name no list writes
+                }
                 for (Ast.ImportedName entry : line.importedNames()) {
-                    declaredUnder(db, line.module(), entry.written(), types, values);
+                    if (entry.pos() == null || !entry.text().equals(asked)) {
+                        continue;
+                    }
+                    switch (what) {
+                        case Scoping.Brought.ADeclaration(TypeSymbol type) ->
+                                types.add(new Resolve.TypeUse(entry.written(), type));
+                        case Scoping.Brought.ABehavior(ValueName.Behavior behavior) ->
+                                values.add(new Resolve.ValueUse(entry.written(), behavior));
+                        case Scoping.Brought.AHelper helper ->
+                                values.add(new Resolve.ValueUse(entry.written(), helper.named()));
+                        case Scoping.Brought.ALibraryOperation(ValueName.Stdlib operation) ->
+                                values.add(new Resolve.ValueUse(entry.written(), operation));
+                    }
                 }
             }
             return Answer.of(new Listed(List.copyOf(types), List.copyOf(values)));
         }
 
-        /** What {@code module} declares under the name {@code entry} writes, in either namespace,
+        /** What this module declares under the name {@code entry} writes, in either namespace,
          *  added as what that entry denotes. */
-        private static void declaredUnder(Db db, String module, WrittenName entry,
-                                          List<Resolve.TypeUse> types,
-                                          List<Resolve.ValueUse> values) {
-            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(module));
+        private void declaredHere(Db db, WrittenName entry, Scoping.Scoped scope,
+                                  List<Resolve.TypeUse> types, List<Resolve.ValueUse> values) {
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(name));
             Ast.Def def = defs.present()
                     ? defs.value().declarations().get(entry.canonical()) : null;
             if (def != null) {
                 types.add(new Resolve.TypeUse(entry,
                         writtenRegistry(db).identify(def.declaredKey())));
             }
-            Answer<Scoping.Scoped> scope = db.ask(new ModuleScope(module));
-            ValueName value = scope.present()
-                    ? scope.value().values().reachable().byName().get(entry.canonical()) : null;
-            if (value instanceof ValueName.OfAModule declared && declared.module().equals(module)) {
+            ValueName value = scope.values().reachable().byName().get(entry.canonical());
+            if (value instanceof ValueName.OfAModule declared && declared.module().equals(name)) {
                 values.add(new Resolve.ValueUse(entry, value));
             }
         }
@@ -1623,6 +1643,45 @@ public final class Names {
 
     /** The names a module's header lists, by namespace, each with what it denotes. */
     public record Listed(List<Resolve.TypeUse> types, List<Resolve.ValueUse> values) {}
+
+    /**
+     * Each parameter through which a module's {@code let}s take a behavior they depend on, with
+     * that behavior.
+     *
+     * <p>A local, and a name of the behavior as well. A use in the body denotes the parameter, as
+     * resolution says; the parameter is spelled as the behavior it injects is, and an
+     * implementation that spells it otherwise is refused (E1615). So whatever goes by the
+     * behavior's name — a rename above all — goes by this binding's too, and which parameter
+     * injects which behavior is {@link SpecImplementation}'s answer, read here and not matched by
+     * spelling.
+     */
+    public record Injections(String name)
+            implements Key<Map<ValueName.Local, ValueName.Behavior>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Local, ValueName.Behavior>> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Resolved(name));
+            if (!resolved.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Local, ValueName.Behavior> out = new LinkedHashMap<>();
+            for (SpecImplementation.Implemented implemented
+                    : SpecImplementation.implementationsOf(resolved.value()).values()) {
+                for (SpecImplementation.ParameterBinding binding : implemented.bindings()) {
+                    if (binding instanceof SpecImplementation.ParameterBinding.AnInjection(
+                            Hir.FnParam written, ValueName.Behavior behavior)) {
+                        out.put(new ValueName.Local(written.binder().name(),
+                                written.binder().id()), behavior);
+                    }
+                }
+            }
+            return Answer.of(Map.copyOf(out));
+        }
+    }
 
     /** Every place a module names {@code denoted}, wherever it was declared. */
     public record UsesOf(String name, TypeSymbol denoted) implements Key<List<Resolve.TypeUse>> {

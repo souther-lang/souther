@@ -52,6 +52,8 @@ class EveryNameACompilingModelWritesIsAnsweredTest {
 
             import lib as l ( Amount, scaled )
 
+            import List ( sum )
+
             data Order = { qty: Int, unit: l.Amount }
 
             data Accepted = { qty: Int }
@@ -89,7 +91,9 @@ class EveryNameACompilingModelWritesIsAnsweredTest {
 
             behavior decided = decide >-> said
 
-            let total (xs: List<Int>): Int = List.sum(xs)
+            let total (xs: List<Int>): Int = sum(xs)
+
+            let spelledOut (xs: List<Int>): Int = List.sum(xs)
             """;
 
     private static final String ATTACHED = """

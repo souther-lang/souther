@@ -90,7 +90,8 @@ public final class Scoping {
         Resolve.Values values = new Resolve.Values(
                 reachable(universe, subject, imports), new OfTheUniverse(universe));
         refused.addAll(oneSpellingTwice(subject, ownData));
-        return new Scoped(new Meanings(m.name(), denotations, aliases), values, imports, refused);
+        return new Scoped(new Meanings(m.name(), denotations, aliases), values, imports, claims,
+                refused);
     }
 
     /**
@@ -170,7 +171,13 @@ public final class Scoping {
          * that survives the contest is a leave the reader may redeem, so what may be taken from
          * that module afterwards is what was settled here — asked of the module again instead, the
          * answer would be what it publishes rather than what this module was left with. */
-        record AHelper(ModuleUniverse.InSight.Read.PublishedHelper leave) implements Brought {}
+        record AHelper(ModuleUniverse.InSight.Read.PublishedHelper leave) implements Brought {
+
+            /** What a use of it denotes. */
+            public ValueName.Helper named() {
+                return new ValueName.Helper(leave.module(), leave.name());
+            }
+        }
 
         /** An operation of the standard library, which an {@code import List ( map )} line lets a
          *  reader write without its qualifier. */
@@ -381,9 +388,16 @@ public final class Scoping {
      *
      * <p>{@link Meanings} is the part of it that is a value on its own, and a reader wanting only
      * to know what a name means here is handed that rather than this.
+     *
+     * @param imports what each spelling the import lines claim means once the claims are settled
+     *        against each other
+     * @param claims what each name an import line writes asks for, the library's lines among them,
+     *        in the order written — what that line brings under it, or that it brings nothing. What
+     *        an entry on a list itself names is this, and not the settled meaning of its spelling:
+     *        two lines bringing two things under one spelling each still name their own.
      */
     public record Scoped(Meanings meanings, Resolve.Values values,
-                         ResolvedImports imports, List<Refusal> refused) {
+                         ResolvedImports imports, List<Claim> claims, List<Refusal> refused) {
 
         /**
          * Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
@@ -395,6 +409,7 @@ public final class Scoping {
          * {@code EverythingAnAnswerHoldsMeansSomethingTest} keeps.
          */
         public Scoped {
+            claims = List.copyOf(claims);
             refused = List.copyOf(refused);
         }
 
