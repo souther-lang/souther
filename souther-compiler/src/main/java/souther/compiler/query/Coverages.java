@@ -2581,21 +2581,18 @@ final class Coverages {
                 // answers that.
                 int askings = quantity.searchGoalAt(criterion).askedAtMost();
                 int value = 0;
+                // What the looking for the row leaves undone is said as a stage of its own beside
+                // the values' outcomes ({@link #andWhatTheLookingLeft}): from here until the first
+                // value's outcomes are in, which say their own, and from then on, which are not
+                // kept and so say nothing.
+                LookingForARow.Mark from = theRow.from();
+                // Whether the looking had no search left for another value, which ends the asking
+                // without the count of values having run out. Asked before the value is, so no
+                // value is put to the point that nothing could be spent on.
+                boolean outOfSearches = false;
                 do {
-                    // The looking for the row has no search left for another value. That ends the
-                    // asking, and is what ended it: the values asked before keep what they came
-                    // to, and this is said beside them ({@link #endedBy}). Asked before the value
-                    // is, so no value is put to the point that nothing could be spent on.
                     if (!theRow.left()) {
-                        Realization.Unknown none = Realization.Unknown.leftOpen(
-                                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                                Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH),
-                                Set.of(), Set.of());
-                        if (last == null) {
-                            return new Looked(SearchOutcomes.of(whatAWalkLeft(label, within, none)),
-                                    null, Optional.empty());
-                        }
-                        nothingMoreAsked = none;
+                        outOfSearches = true;
                         break;
                     }
                     Searching came = searchingWith(criterion, label, rows, able, region, tried,
@@ -2621,6 +2618,7 @@ final class Coverages {
                     if (last == null) {
                         last = came.outcomes();
                         first = came.realized();
+                        from = theRow.from();
                     }
                     // Short of a population at this value that it is short of at every value: the
                     // next value is written as short, builds no row, and ends the asking with the
@@ -2655,11 +2653,18 @@ final class Coverages {
                     }
                     beside = stage.cameTo();
                 }
+                if (outOfSearches) {
+                    SearchOutcomes asked = last == null ? SearchOutcomes.none() : last;
+                    return new Looked(andWhatTheLookingLeft(asked.plus(beside), label, from),
+                            first, Optional.empty());
+                }
                 if (shortAtEveryValue) {
-                    return new Looked(last.plus(beside), first, Optional.empty());
+                    return new Looked(andWhatTheLookingLeft(last.plus(beside), label, from), first,
+                            Optional.empty());
                 }
                 if (nothingMoreAsked != null) {
-                    return new Looked(endedBy(last, nothingMoreAsked).plus(beside), first,
+                    return new Looked(andWhatTheLookingLeft(
+                            endedBy(last, nothingMoreAsked).plus(beside), label, from), first,
                             Optional.empty());
                 }
                 // The count ran out, and whether that is what ended the asking is the realizer's to
@@ -2669,8 +2674,32 @@ final class Coverages {
                 // between the point and another value has to say so.
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
-                return new Looked(endedBy(last, realized(criterion, rows, able, region, tried))
-                        .plus(beside), first, Optional.empty());
+                return new Looked(andWhatTheLookingLeft(
+                        endedBy(last, realized(criterion, rows, able, region, tried)).plus(beside),
+                        label, from), first, Optional.empty());
+            }
+
+            /**
+             * {@code outcomes}, and beside them a stage of their own short of what the looking for
+             * the row left undone since {@code from}, where it left anything
+             * ({@link ItemAssessment.Attempt#ofAStageShortOf}).
+             *
+             * <p>Beside them, for the reason that stage's outcome is: written onto the outcomes of
+             * the first value, a row, a stop or a limit would each take it in its own way or take
+             * nothing, and the values after the first are not kept at all. Said where the asking
+             * ends and not where a value noticed it, so a looking that ran out inside the last
+             * value it was allowed is told as surely as one that had none left for the next.
+             */
+            private SearchOutcomes andWhatTheLookingLeft(SearchOutcomes outcomes, String label,
+                                                         LookingForARow.Mark from) {
+                Set<CompositionBudget> left = from.leftAt();
+                if (left.isEmpty()) {
+                    return outcomes;
+                }
+                return outcomes.plus(SearchOutcomes.of(ItemAssessment.Attempt.ofAStageShortOf(
+                        new Generator.UnresolvedCombination(List.of(label),
+                                Generator.UnresolvedCombination.Reason.wordFor(left)),
+                        within, CompositionShortfall.of(left))));
             }
 
             /**

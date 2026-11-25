@@ -16,7 +16,10 @@ package souther.compiler.partition;
 final class Tries {
 
     private int left;
-    private boolean refused;
+
+    /** How many times work was left undone for want of a unit, so that a holder shared by several
+     *  searches can say which of them was cut short: one that saw this rise. */
+    private int refusals;
 
     /** Of {@code figure} units. */
     Tries(int figure) {
@@ -27,7 +30,7 @@ final class Tries {
      *  for and refused, which cuts the search short. */
     boolean spend() {
         if (left <= 0) {
-            refused = true;
+            refusals++;
             return false;
         }
         left--;
@@ -46,7 +49,7 @@ final class Tries {
         if (left > 0) {
             return true;
         }
-        refused = true;
+        refusals++;
         return false;
     }
 
@@ -57,12 +60,17 @@ final class Tries {
 
     /** That something was left undone for want of a unit. */
     void leftSomethingUndone() {
-        refused = true;
+        refusals++;
     }
 
     /** Whether the search was cut short: a unit was wanted and there was none, or something was
      *  said to be left undone. */
     boolean cutShort() {
-        return refused;
+        return refusals > 0;
+    }
+
+    /** How many times work was left undone for want of a unit so far. */
+    int refusals() {
+        return refusals;
     }
 }

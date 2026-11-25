@@ -6,6 +6,7 @@ import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.LookingForARow;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -99,6 +100,35 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
     void oneWayProvingItBesideASearchThatWasStoppedIsNotTheRulesAnswer() {
         assertNull(Adequacy.DecisionSearch.provedByEveryWay(List.of(proved(), stopped())),
                 "the other standing was not searched to the end, so nothing there was proved");
+    }
+
+    /**
+     * Every way that was looked at proving it, beside ways the looking for a row had no search
+     * left for, is not the rule's answer: what is left is said beside them as one attempt of its
+     * own, and that one proves nothing. With nothing left, they are the rule's answer as ever.
+     */
+    @Test
+    void waysProvingItBesideWaysTheLookingRanOutBeforeAreNotTheRulesAnswer() {
+        List<Generator.BoundaryAttempt> looked = List.of(proved(), proved());
+
+        LookingForARow whole = new LookingForARow();
+        List<Generator.BoundaryAttempt> nothingLeft = Adequacy.besideWhatTheLookingLeft(
+                looked, "a rule of the decision", whole.from());
+        assertEquals(looked, nothingLeft, "a looking that left nothing adds nothing");
+
+        LookingForARow ranOut = new LookingForARow();
+        LookingForARow.Mark from = ranOut.from();
+        int spent = 0;
+        while (ranOut.attempt()) {
+            spent++;
+        }
+        assertEquals(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH.maximum(), spent,
+                "every search the looking had, and one more it had none for");
+        List<Generator.BoundaryAttempt> withWhatWasLeft =
+                Adequacy.besideWhatTheLookingLeft(looked, "a rule of the decision", from);
+        assertEquals(looked.size() + 1, withWhatWasLeft.size(), "one attempt for what was left");
+        assertNull(Adequacy.DecisionSearch.provedByEveryWay(withWhatWasLeft),
+                "the ways the looking had no search for were never looked at");
     }
 
     /** A word about what this compiler managed is not a proof, under any standing. */

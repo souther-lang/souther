@@ -221,7 +221,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -4476,29 +4475,29 @@ public final class Adequacy {
                 // composed for in every demand is the one taken, with every way of standing the
                 // dependencies in that came with it: a row built whole is a row, and another way
                 // of standing in that came to nothing beside it takes nothing from it.
+                // What the looking for the row leaves undone from here on is said beside what is
+                // chosen below, as an attempt of its own ({@link #besideWhatTheLookingLeft}).
+                LookingForARow.Mark from = looking.from();
                 List<Generator.BoundaryAttempt> nearest = null;
                 Nearness nearestNearness = null;
                 InputNumbersAnAnswerTurnsOn.Pairs pairs =
                         InputNumbersAnAnswerTurnsOn.of(demands, reaching, answers::subjectOf,
                                 ofTheRow);
-                // Whether the looking for the row had nothing left for a way of standing in that
-                // was in front of it. Asked before the way is made, so no way is made that nothing
-                // could be spent on, and none after the first it could not.
-                boolean cutShort = false;
                 for (InputNumbersAnAnswerTurnsOn pinned : pairs.tried()) {
                     List<Generator.BoundaryAttempt> out = new ArrayList<>();
+                    // Asked before a way is made, so no way is made that nothing could be spent
+                    // on, and none after the first it could not.
                     Iterator<souther.compiler.partition.StandInAttempt> ways =
                             answers.of(demands, pinned.values()).iterator();
-                    while (ways.hasNext()) {
-                        if (!looking.left()) {
-                            cutShort = true;
-                            break;
-                        }
+                    while (ways.hasNext() && looking.left()) {
                         out.add(Generator.probeFixing(subject, label, fixing, asking,
                                 pinned.reaching(), check, ways.next(), trial, judge, looking));
                     }
+                    // A row built whole is what this was for, and whether it stands where it was
+                    // asked to is the caller's to find by running it: the ways left beside it may
+                    // be what it turns out to need.
                     if (out.stream().anyMatch(Adequacy::composedAgainstEverythingAsked)) {
-                        return List.copyOf(out);
+                        return besideWhatTheLookingLeft(out, label, from);
                     }
                     // The pair that came nearest is the one with the most rows built that no judge
                     // refused, and then the most rows built: a refused row says where its run went
@@ -4510,35 +4509,24 @@ public final class Adequacy {
                             nearestNearness = nearness;
                         }
                     }
-                    if (cutShort) {
+                    if (!from.leftAt().isEmpty()) {
                         break;
                     }
                 }
                 // No pair composed a row whole. What the pair that came nearest built stays, since
                 // the run of a row built short may still say something, and where a figure ended
-                // the walk with some left unlooked at that is said of the demands that were not
-                // composed against, in the account that goes with each attempt: what was built is
-                // not replaced by the stop, and the stop is not hidden by what was built. The
-                // looking for the row running out is one such figure, whichever pair it ran out at.
-                Set<CompositionBudget> leftBy = EnumSet.noneOf(CompositionBudget.class);
-                leftBy.addAll(pairs.stoppedBy());
-                if (cutShort) {
-                    leftBy.add(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH);
+                // the walk over the pairs with some left unlooked at that is said of the demands
+                // that were not composed against, in the account that goes with each attempt: what
+                // was built is not replaced by the stop, and the stop is not hidden by what was
+                // built.
+                List<Generator.BoundaryAttempt> chosen = new ArrayList<>();
+                if (nearest != null) {
+                    for (Generator.BoundaryAttempt each : nearest) {
+                        chosen.add(pairs.someLeftUntried()
+                                ? endedBy(each, label, pairs.stoppedBy()) : each);
+                    }
                 }
-                if (nearest == null) {
-                    return List.of(new Generator.BoundaryAttempt.Stopped(
-                            new Generator.UnresolvedCombination(List.of(label),
-                                    Generator.UnresolvedCombination.Reason.wordFor(leftBy)),
-                            CompositionShortfall.of(leftBy), CompositionAccount.NOTHING));
-                }
-                if (leftBy.isEmpty()) {
-                    return List.copyOf(nearest);
-                }
-                List<Generator.BoundaryAttempt> out = new ArrayList<>();
-                for (Generator.BoundaryAttempt each : nearest) {
-                    out.add(endedBy(each, label, leftBy));
-                }
-                return List.copyOf(out);
+                return besideWhatTheLookingLeft(chosen, label, from);
             } catch (LinkageError e) {
                 // There is no runtime to link the generated classes against, so nothing can be built
                 // to find out what a model admits. Nothing was tried, which is not the same as
@@ -4574,6 +4562,30 @@ public final class Adequacy {
         }
     }
 
+
+    /**
+     * {@code chosen}, and beside it one attempt that stopped at what the looking for the row left
+     * undone since {@code from}, where it left anything.
+     *
+     * <p>Beside them and not written onto them. What was chosen is one of several attempts, and a
+     * figure written onto it would be lost with every attempt a choosing above passes over; a
+     * proof among them is a proof over the ways looked at, and the stop beside it is what keeps it
+     * from being taken for one over the ways that were not. One, for the whole of what was left:
+     * the ways left are not each an attempt.
+     */
+    static List<Generator.BoundaryAttempt> besideWhatTheLookingLeft(
+            List<Generator.BoundaryAttempt> chosen, String label, LookingForARow.Mark from) {
+        Set<CompositionBudget> left = from.leftAt();
+        if (left.isEmpty()) {
+            return List.copyOf(chosen);
+        }
+        List<Generator.BoundaryAttempt> out = new ArrayList<>(chosen);
+        out.add(new Generator.BoundaryAttempt.Stopped(
+                new Generator.UnresolvedCombination(List.of(label),
+                        Generator.UnresolvedCombination.Reason.wordFor(left)),
+                CompositionShortfall.of(left), CompositionAccount.NOTHING));
+        return List.copyOf(out);
+    }
 
     /**
      * {@code attempt} with a figure said to be why the statements that name a number of the input

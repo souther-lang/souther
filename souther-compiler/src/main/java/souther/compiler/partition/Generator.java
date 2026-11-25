@@ -4346,6 +4346,7 @@ public final class Generator {
                     List<CameToNothing> each = new ArrayList<>();
                     Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
                     cutShort.addAll(way.cutShort());
+                    LookingForARow.Mark sinceThisWay = looking.from();
                     for (int choosing = 0; choosing < way.choices().size(); choosing++) {
                         List<HeldOutcome> choice = way.choices().get(choosing);
                         List<HeldOutcome> both = new ArrayList<>(held);
@@ -4410,7 +4411,10 @@ public final class Generator {
                     }
                     // A way some of whose choices a figure left unlooked at is cut short as much
                     // as one whose runs ran out: a row past none of those looked along may still
-                    // be past it. Every figure that did, since each is a number to raise.
+                    // be past it. Every figure that did, since each is a number to raise — what
+                    // the looking left undone holding the choices together included, the choices
+                    // passed over above among them.
+                    cutShort.addAll(sinceThisWay.leftAt());
                     List<CameToNothing> joined = CameToNothing.joined(each);
                     came[at] = cutShort.isEmpty() ? new RepairShortfall.WayPast.Searched(joined)
                             : new RepairShortfall.WayPast.CutShort(joined, cutShort);
@@ -11489,6 +11493,7 @@ public final class Generator {
                 composedFor.addAll(purpose);
                 // Every choice is a way to the one row looked for here.
                 LookingForARow looking = new LookingForARow();
+                LookingForARow.Mark from = looking.from();
                 for (List<HeldOutcome> choice : ways.choices()) {
                     HeldTogether together = heldTogether(axes.subject(), choice, check, looking);
                     if (!(together instanceof HeldTogether.Asked)) {
@@ -11503,6 +11508,9 @@ public final class Generator {
                         return attempts;
                     }
                 }
+                // What the looking left undone over every choice, the ones passed over above
+                // included, is said with the rest of what cut the search short.
+                cutShort.addAll(from.leftAt());
             }
         }
         if (!cutShort.isEmpty()) {

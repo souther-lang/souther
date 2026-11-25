@@ -368,14 +368,31 @@ public record FillResult(SequencedMap<RowId, FilledRow> composed,
                         new ClassDisposition.Unresolved(cameToNothing(met,
                                 new Generator.UnresolvedCombination(List.of(), why)))));
                 // Nothing was composed, which a search for a rewrite ends in as surely as one
-                // for an arm: the reasons say why nothing was.
+                // for an arm: the reasons say why nothing was — or, where a figure is why, the
+                // figure, in the words a search for a rewrite says one in.
                 case GenerationObligation.Replacement q -> answers.add(
-                        new GenerationAnswer.Replacement(q, new ReplacementDisposition.NoneFound(
-                                ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED)));
+                        new GenerationAnswer.Replacement(q, noneComposed(met)));
             }
         }
         return new FillResult(new LinkedHashMap<>(), List.of(), reasons,
                 Discharge.of(plan, answers));
+    }
+
+    /**
+     * What a run that looked for nothing came to at a replacement, having met {@code met}: nothing
+     * composed, or a figure of the composing where a figure is why, with the figure as it stood —
+     * the words a search for a rewrite says a figure in, so that what a reader would raise is
+     * told here as it is wherever such a search stops.
+     */
+    static ReplacementDisposition noneComposed(CompositionShortfall met) {
+        if (met.figures().isEmpty()) {
+            return new ReplacementDisposition.NoneFound(
+                    ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED);
+        }
+        return new ReplacementDisposition.NoneFound(Map.of(
+                ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING,
+                ReplacementDisposition.Met.at(met.figures().stream()
+                        .map(CompositionBudget::figure).toList())));
     }
 
     /** What a run that looked for nothing came to at one obligation, having met {@code met}. */
