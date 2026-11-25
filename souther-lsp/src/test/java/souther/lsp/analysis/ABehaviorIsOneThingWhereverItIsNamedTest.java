@@ -33,8 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>The rest is what a match on spelling gets wrong: another module declaring {@code find} with
  * another signature, a parameter spelled like a behavior, and an {@code example} of a behavior an
- * import brings in, which names nothing. A file the compile cannot read is where spelling is all
- * there is, and a rename asked where the compiler answers still reaches it.
+ * import brings in, which names nothing. In a file the compile cannot read, only an import entry
+ * says what it names — it writes the module and the name — and a rename reaches that entry, and
+ * starts from it, and touches nothing else there.
  *
  * <p>Every question about the workspace is asked of one analyzer, so it is compiled once. Nothing
  * here needs a row run, and no diagnose is asked for.
@@ -195,11 +196,11 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
 
     /** Every place a rename of `find` rewrites, once each — the parameter `let f` is injected with
      *  it through and the body's use of that, which must go on being spelled as the behavior; not
-     *  `other`'s `find`, being another thing; and in the file the compile cannot read, what its
-     *  spelling there names. */
+     *  `other`'s `find`, being another thing; and in the file the compile cannot read, only the
+     *  import entry, which names `m` and `find` both. Its body's `find` is a spelling, which could
+     *  be a field or a binding spelled alike, and a rename does not write over a guess. */
     private static final List<String> FIND_IS_WRITTEN = List.of(
             "broken.sou: import m ( [find] )",
-            "broken.sou: let g (d) = [find](d)",
             "m.examples.sou: fake [find]",
             "m.sou:     depends on [find], look",
             "m.sou: behavior [find] : (d: D) -> D",
@@ -233,6 +234,7 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
                         FIND_IS_WRITTEN),
                 new Renamed(new Named(USER_URI, "import m ( [find] )", FIND), FIND_IS_WRITTEN),
                 new Renamed(new Named(MODEL_URI, "= look([find](d))", FIND), FIND_IS_WRITTEN),
+                new Renamed(new Named(BROKEN_URI, "import m ( [find] )", FIND), FIND_IS_WRITTEN),
                 new Renamed(new Named(ATTACHED_URI, "example [f]", F), F_IS_WRITTEN),
                 new Renamed(new Named(MODEL_URI, "let [f] (d, find, look)", F), F_IS_WRITTEN));
     }
@@ -254,10 +256,23 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
         assertEquals(renamed.rewrites(), rewrites);
     }
 
+    /** In a file the compile cannot read, a name in a body is a spelling and nothing more, so a
+     *  rename asked there is refused rather than guessed. */
+    @Test
+    void aRenameAskedWhereOnlyASpellingIsReadRenamesNothing() {
+        assertEquals(Map.of(), ANALYZER.renameEdits(BROKEN_URI,
+                at(BROKEN, "let g (d) = [find](d)"), GRAPH, "renamed"));
+    }
+
     /**
      * The edits a rename answers are what to write as well as where: written over the files the
-     * compile read, they leave a workspace that compiles. One rename, because what it holds is how
-     * an edit is made, which every rename shares; which places a rename reaches is the test above.
+     * compile read, they leave a workspace that type-checks. One rename, because what it holds is
+     * how an edit is made, which every rename shares; which places a rename reaches is the test
+     * above.
+     *
+     * <p>Checked and not run: a name left behind is a name that does not resolve, or an injected
+     * parameter spelled otherwise than its behavior (E1615), and both are said by the check of the
+     * module. Running the rows would say nothing about the names.
      */
     @Test
     void aRenameWrittenOverTheWorkspaceLeavesItCompiling() {
@@ -269,7 +284,7 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
             renamed.put(uri, applied(TEXTS.get(uri), edits.getOrDefault(uri, List.of())));
         }
 
-        ACompiledModel.compiles(Compilation.ofDocuments(renamed, Set.of(), ModulePath.EMPTY));
+        ACompiledModel.checks(Compilation.ofDocuments(renamed, Set.of(), ModulePath.EMPTY));
         assertEquals("fake seek", renamed.get(ATTACHED_URI).lines().toList().get(2));
     }
 
@@ -277,8 +292,8 @@ class ABehaviorIsOneThingWhereverItIsNamedTest {
     private static String applied(String text, List<TextEdit> edits) {
         List<String> lines = new ArrayList<>(text.lines().toList());
         List<TextEdit> lastFirst = new ArrayList<>(edits);
-        lastFirst.sort(Comparator.comparing((TextEdit e) -> e.range().start().line())
-                .thenComparing(e -> e.range().start().character()).reversed());
+        lastFirst.sort(Comparator.comparingInt((TextEdit e) -> e.range().start().line())
+                .thenComparingInt(e -> e.range().start().character()).reversed());
         for (TextEdit edit : lastFirst) {
             Range r = edit.range();
             String line = lines.get(r.start().line());

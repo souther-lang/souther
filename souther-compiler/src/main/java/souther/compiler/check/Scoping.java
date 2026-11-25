@@ -115,20 +115,29 @@ public final class Scoping {
     };
 
     /**
-     * One import line asking for one spelling.
+     * One entry of an import line asking for one spelling.
      *
      * <p>Written down before anything is decided, because deciding needs all of them. A spelling
      * two lines ask for is settled by what the two would bring and not by which was read first —
      * read first-wins, the same two lines in the other order give one mistaken program two
      * meanings, and every pass below reads whichever meaning the order happened to give.
+     *
+     * <p>About the entry and not only its spelling. One line may write a name twice, and each
+     * entry is a place an author wrote it; a reader asking what the name at a place means is
+     * answered by the claim for that place, and nothing has to find the place again by spelling.
      */
     public sealed interface Claim {
 
         /** The line this was written on. */
         Ast.Import imp();
 
+        /** The entry of that line this is the claim of. */
+        Ast.ImportedName entry();
+
         /** The spelling it asks for. */
-        String name();
+        default String name() {
+            return entry().text();
+        }
 
         /** Whether an author wrote this name on an import list.
          *
@@ -137,16 +146,17 @@ public final class Scoping {
          * record the dependency. It claims no bare spelling: the reference names its module, so
          * there is nothing for it to be ambiguous with, and a contest it took part in would be
          * reported on a line nobody wrote. */
-        boolean written();
+        default boolean written() {
+            return entry().written().authored();
+        }
 
         /** The line asked, and the module it names hands this over. */
-        record Stands(Ast.Import imp, String name, boolean written, Brought what)
-                implements Claim {}
+        record Stands(Ast.Import imp, Ast.ImportedName entry, Brought what) implements Claim {}
 
         /** The line asked, and there is nothing to hand over — the claim does not stand at all.
          *  Told apart from a claim that stands and is not adopted, which is a decision between
          *  claims rather than a fact about this one. */
-        record DoesNot(Ast.Import imp, String name, boolean written) implements Claim {}
+        record DoesNot(Ast.Import imp, Ast.ImportedName entry) implements Claim {}
     }
 
     /**
@@ -238,33 +248,31 @@ public final class Scoping {
     private static Claim claim(Ast.Import imp, Ast.ImportedName named,
                                ModuleUniverse.InSight.Read there, List<Refusal> refused) {
         String imported = named.text();
-        boolean written = named.pos() != null;
         // Declared, then published, in the order the two questions depend on each other: what a
         // module publishes is taken from what it declares, so a name it never declared is a
         // mistake about what is there and not about what it keeps (spec
         // §a-reached-name-is-declared-by-its-module).
         if (!there.declares(imported)) {
             refused.add(new Refusal.NoSuchName(imp, imported));
-            return new Claim.DoesNot(imp, imported, written);
+            return new Claim.DoesNot(imp, named);
         }
         if (!there.exposes(imported)) {
             refused.add(new Refusal.NotExposed(imp, imported));
-            return new Claim.DoesNot(imp, imported, written);
+            return new Claim.DoesNot(imp, named);
         }
         Ast.Def declared = there.declaration(imported);
         if (declared != null) {
-            return new Claim.Stands(imp, imported, written,
+            return new Claim.Stands(imp, named,
                     new Brought.ADeclaration(TypeSymbols.declared(declared.declaredKey())));
         }
         if (there.declaresBehavior(imported)) {
-            return new Claim.Stands(imp, imported, written,
+            return new Claim.Stands(imp, named,
                     new Brought.ABehavior(new ValueName.Behavior(imp.module(), imported)));
         }
         java.util.Optional<ModuleUniverse.InSight.Read.PublishedHelper> published =
                 there.publishedHelper(imported);
         if (published.isPresent()) {
-            return new Claim.Stands(imp, imported, written,
-                    new Brought.AHelper(published.get()));
+            return new Claim.Stands(imp, named, new Brought.AHelper(published.get()));
         }
         // A value declared and exposed with nothing to hand over. Nothing is wrong with the line and
         // nothing arrived, so no claim is made on the spelling at all — it is not in scope here,
@@ -276,7 +284,7 @@ public final class Scoping {
     private static List<Claim> none(Ast.Import imp) {
         List<Claim> claims = new ArrayList<>();
         for (Ast.ImportedName name : imp.importedNames()) {
-            claims.add(new Claim.DoesNot(imp, name.text(), name.pos() != null));
+            claims.add(new Claim.DoesNot(imp, name));
         }
         return claims;
     }
@@ -311,7 +319,7 @@ public final class Scoping {
                     ownTypes.contains(spelling), ownValues.contains(spelling));
             Map<Brought, Ast.Import> distinct = new LinkedHashMap<>();
             for (Claim each : made) {
-                if (each instanceof Claim.Stands(Ast.Import imp, String _, boolean _,
+                if (each instanceof Claim.Stands(Ast.Import imp, Ast.ImportedName _,
                         Brought what)) {
                     if (held.asAValue() || held.asAType()) {
                         refused.add(new Refusal.CollidesWithADeclaration(imp, spelling));

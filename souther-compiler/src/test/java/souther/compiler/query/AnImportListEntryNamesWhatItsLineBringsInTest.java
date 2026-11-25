@@ -3,11 +3,15 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import souther.compiler.ACompiledModel;
+import souther.compiler.check.Resolve;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.source.SourceId;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -57,16 +61,25 @@ class AnImportListEntryNamesWhatItsLineBringsInTest {
             import lib ( hidden )
             """;
 
+    private static final String TWICE = """
+            module t
+
+            import lib ( scaled, scaled )
+            """;
+
     private static final Map<String, String> TEXTS = texts();
 
-    private static final Compilation COMPILATION =
-            Compilation.ofDocuments(TEXTS, Set.of(), ModulePath.EMPTY);
+    /** Refused for `n`'s import of what `lib` does not expose, which is the entry a line cannot
+     *  bring in, and for nothing else. */
+    private static final Compilation COMPILATION = ACompiledModel.refusedWith(List.of("E1507"),
+            Compilation.ofDocuments(TEXTS, Set.of(), ModulePath.EMPTY));
 
     private static Map<String, String> texts() {
         Map<String, String> out = new LinkedHashMap<>();
         out.put("lib.sou", LIB);
         out.put("m.sou", MODEL);
         out.put("n.sou", REACHING);
+        out.put("t.sou", TWICE);
         return out;
     }
 
@@ -98,5 +111,19 @@ class AnImportListEntryNamesWhatItsLineBringsInTest {
     @Test
     void anEntryTheLineCannotBringInNamesNothing() {
         assertNull(denotedAt("n.sou", "import lib ( [hidden] )"));
+    }
+
+    /** One answer for each place a name is written, so a line writing a name twice is two places
+     *  and not four. */
+    @Test
+    void eachEntryIsAnsweredOnce() {
+        List<SourcePos> answered = new ArrayList<>();
+        for (Resolve.ValueUse each
+                : COMPILATION.db().ask(new Names.Listings("t")).value().values()) {
+            answered.add(each.pos());
+        }
+
+        assertEquals(2, answered.size(), answered.toString());
+        assertEquals(2, Set.copyOf(answered).size(), answered.toString());
     }
 }

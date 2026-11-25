@@ -49,6 +49,18 @@ class ACompiledModelHoldsAModelToCompilingTest {
     }
 
     @Test
+    void resolvesStopsForAModelWithANameThatDoesNotResolve() {
+        assertDoesNotThrow(() -> ACompiledModel.resolves(sound()));
+        assertThrows(AssertionError.class, () -> ACompiledModel.resolves(broken()));
+    }
+
+    @Test
+    void checksStopsForAModelWithAnError() {
+        assertDoesNotThrow(() -> ACompiledModel.checks(sound()));
+        assertThrows(AssertionError.class, () -> ACompiledModel.checks(broken()));
+    }
+
+    @Test
     void answeredStopsForASourceWithAnError() {
         assertDoesNotThrow(() -> ACompiledModel.answered(SOUND));
         assertThrows(AssertionError.class, () -> ACompiledModel.answered(BROKEN));

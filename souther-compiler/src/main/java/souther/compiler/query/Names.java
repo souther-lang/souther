@@ -1600,24 +1600,20 @@ public final class Names {
                 }
             }
             for (Scoping.Claim claim : scope.value().claims()) {
-                if (!(claim instanceof Scoping.Claim.Stands(Ast.Import line, String asked,
-                        boolean written, Scoping.Brought what)) || !written) {
+                if (!(claim instanceof Scoping.Claim.Stands(Ast.Import _,
+                        Ast.ImportedName entry, Scoping.Brought what)) || !claim.written()) {
                     continue;   // nothing brought in, or a name no list writes
                 }
-                for (Ast.ImportedName entry : line.importedNames()) {
-                    if (entry.pos() == null || !entry.text().equals(asked)) {
-                        continue;
-                    }
-                    switch (what) {
-                        case Scoping.Brought.ADeclaration(TypeSymbol type) ->
-                                types.add(new Resolve.TypeUse(entry.written(), type));
-                        case Scoping.Brought.ABehavior(ValueName.Behavior behavior) ->
-                                values.add(new Resolve.ValueUse(entry.written(), behavior));
-                        case Scoping.Brought.AHelper helper ->
-                                values.add(new Resolve.ValueUse(entry.written(), helper.named()));
-                        case Scoping.Brought.ALibraryOperation(ValueName.Stdlib operation) ->
-                                values.add(new Resolve.ValueUse(entry.written(), operation));
-                    }
+                WrittenName at = entry.written();
+                switch (what) {
+                    case Scoping.Brought.ADeclaration(TypeSymbol type) ->
+                            types.add(new Resolve.TypeUse(at, type));
+                    case Scoping.Brought.ABehavior(ValueName.Behavior behavior) ->
+                            values.add(new Resolve.ValueUse(at, behavior));
+                    case Scoping.Brought.AHelper helper ->
+                            values.add(new Resolve.ValueUse(at, helper.named()));
+                    case Scoping.Brought.ALibraryOperation(ValueName.Stdlib operation) ->
+                            values.add(new Resolve.ValueUse(at, operation));
                 }
             }
             return Answer.of(new Listed(List.copyOf(types), List.copyOf(values)));

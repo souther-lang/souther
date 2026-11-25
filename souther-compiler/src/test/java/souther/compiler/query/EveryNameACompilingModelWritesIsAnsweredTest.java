@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.cst.SyntaxElement;
@@ -135,17 +136,14 @@ class EveryNameACompilingModelWritesIsAnsweredTest {
     }
 
     /**
-     * The model's names all came out — the module's imports, its declarations and its resolution,
-     * as {@link Names.Sound} asks — and nothing past them. Whether its types check or its rows
-     * hold is no part of what a name is answered with, and asking for it would run every row.
+     * The model's names all come out, and it is asked nothing past that. Its types and its rows
+     * are no part of what a name is answered with, and asking for them would type every body and
+     * run every row its examples have.
      */
     @Test
     void everyNameIsAnsweredOrNamesNoDeclaration() {
-        Compilation compilation = Compilation.ofDocuments(TEXTS, Set.of(), ModulePath.EMPTY);
-        for (String module : List.of("lib", "m")) {
-            assertEquals(Boolean.TRUE, compilation.db().ask(new Names.Sound(module)).value(),
-                    "every name " + module + " writes came out");
-        }
+        Compilation compilation = ACompiledModel.resolves(
+                Compilation.ofDocuments(TEXTS, Set.of(), ModulePath.EMPTY));
 
         List<String> unanswered = new ArrayList<>();
         TEXTS.forEach((file, text) -> {

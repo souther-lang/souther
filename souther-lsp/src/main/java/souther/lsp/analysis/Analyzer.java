@@ -1413,21 +1413,22 @@ public final class Analyzer {
             return name == null ? Optional.empty() : Optional.of(new Location(uri, tokenRange(lines.lines(), name)));
         }
         String targetModule = reading.importing(nameOf(ident));
-        if (targetModule == null) {
-            return Optional.empty();
-        }
-        String targetUri = uriOfModule(compilation, graph, targetModule);
+        return targetModule == null ? Optional.empty()
+                : declaredIn(compilation, graph, targetModule, nameOf(ident));
+    }
+
+    /** Where the document of {@code module} declares {@code name}, read off its tree. */
+    private Optional<Location> declaredIn(Compilation compilation, ModuleGraph graph,
+                                          String module, String name) {
+        String targetUri = uriOfModule(compilation, graph, module);
         if (targetUri == null) {
             return Optional.empty();
         }
         Reading target = readingOf(graph, targetUri);
-        SyntaxNode def = declaringDef(target.root(), nameOf(ident));
-        if (def == null) {
-            return Optional.empty();
-        }
-        SyntaxToken name = nameToken(def);
-        return name == null ? Optional.empty()
-                : Optional.of(new Location(targetUri, tokenRange(target.lines(), name)));
+        SyntaxNode def = declaringDef(target.root(), name);
+        SyntaxToken token = def == null ? null : nameToken(def);
+        return token == null ? Optional.empty()
+                : Optional.of(new Location(targetUri, tokenRange(target.lines(), token)));
     }
 
     /**
@@ -1476,33 +1477,31 @@ public final class Analyzer {
     }
 
     /**
-     * A name as a document the compile could not read can find it: the module that declares it,
-     * the spelling it is declared under, and which namespace it is in.
+     * A declaration as a list in a document the compile could not read names it: the module that
+     * declares it, and the name it is declared under.
      */
-    private record Spelled(String module, String name, boolean isType) {
+    private record Spelled(String module, String name) {
 
-        /** What the compiler identified, as such a document can find it; null where the compiler
+        /** What the compiler identified, as such a list names it; null where the compiler
          *  identified nothing a module declares — a local is bound in a body the compile read, and
          *  what the library or the language gives is declared in no document. */
         static Spelled of(TypeSymbol type, ValueName value) {
             if (type instanceof TypeSymbol.AtModule at) {
-                return new Spelled(at.module(), at.name(), true);
+                return new Spelled(at.module(), at.name());
             }
             return value instanceof ValueName.OfAModule declared
-                    ? new Spelled(declared.module(), declared.name(), false) : null;
+                    ? new Spelled(declared.module(), declared.name()) : null;
         }
     }
 
     /**
-     * Where the name under the cursor is declared and used, each document answering in the way it
-     * can.
+     * Where the name under the cursor is declared and used.
      *
-     * <p>What the name is, is the cursor's document's to say: the compiler's answer where the
-     * compile read it, its spelling where it could not. Where it is written is then asked of every
-     * document, and each answers alone — one the compile read with the compiler's answer about
-     * that identity, one it could not by the spelling. A file held out of the compile because it
-     * does not parse goes on naming what it names, and taking the compiler's answer for the
-     * cursor's document is no reason to stop looking there.
+     * <p>What the name is comes first and apart from where it is written ({@link #certainlyAt}).
+     * Where it is told for certain, the places are the compiler's answer about that identity. Where
+     * it is not — the cursor is in a document the compile could not read, on something no list
+     * pins down — the spelling is matched, which is a guess an author can read through and nothing
+     * here writes back to a source.
      */
     private References referencesOf(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
@@ -1510,32 +1509,60 @@ public final class Analyzer {
             return References.none();
         }
         Compilation compilation = compileOf(graph);
-        if (resolves(compilation, uri)) {
-            Identified named = identifiedAt(compilation, uri, pos);
-            References answered;
-            if (named.type() != null) {
-                List<Location> declarations = new ArrayList<>();
-                declarationOf(compilation, named.type(), graph).ifPresent(declarations::add);
-                answered = References.of(declarations, usesOf(compilation, named.type(), graph));
-            } else if (named.value() != null) {
-                answered = References.of(
-                        valueDeclarationsOf(compilation, named.value(), uri, graph),
-                        valueUsesOf(compilation, named.value(), graph));
-                if (named.value() instanceof ValueName.Behavior behavior) {
-                    answered = answered.and(injectionsOf(compilation, behavior, graph));
-                }
-            } else {
-                return References.none();
-            }
-            Spelled spelled = Spelled.of(named.type(), named.value());
-            return spelled == null ? answered
-                    : answered.and(spelledIn(unread(compilation, graph), spelled, graph, compilation));
+        Identified named = certainlyAt(compilation, uri, pos, graph);
+        if (named.type() != null) {
+            List<Location> declarations = new ArrayList<>();
+            declarationOf(compilation, named.type(), graph).ifPresent(declarations::add);
+            return References.of(declarations, usesOf(compilation, named.type(), graph));
         }
-        return bySpelling(uri, text, pos, graph, compilation);
+        if (named.value() != null) {
+            References answered = References.of(
+                    valueDeclarationsOf(compilation, named.value(), uri, graph),
+                    valueUsesOf(compilation, named.value(), graph));
+            return named.value() instanceof ValueName.Behavior behavior
+                    ? answered.and(injectionsOf(compilation, behavior, graph)) : answered;
+        }
+        return resolves(compilation, uri) ? References.none()
+                : bySpelling(uri, text, pos, graph, compilation);
     }
 
     /** What the cursor is on, as the compiler answers it: a type, or a value, or neither. */
-    private record Identified(TypeSymbol type, ValueName value) {}
+    private record Identified(TypeSymbol type, ValueName value) {
+
+        static final Identified NOTHING = new Identified(null, null);
+    }
+
+    /**
+     * What the name under the cursor is, where that can be told for certain.
+     *
+     * <p>In a document the compile read, it is the compiler's answer. In one it could not read, it
+     * is told only on an import list entry, which writes both the module and the name: the
+     * declaration that module makes under it, as the compiler answers at that declaration.
+     * Anywhere else in such a document a spelling could be a field, a binding or anything else
+     * spelled alike, and nothing is told.
+     */
+    private Identified certainlyAt(Compilation compilation, String uri, Position pos,
+                                   ModuleGraph graph) {
+        if (resolves(compilation, uri)) {
+            return identifiedAt(compilation, uri, pos);
+        }
+        Reading reading = readingOf(graph, uri);
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxToken ident = identAt(meaningfulTokens(reading.root()), lines,
+                lines.lines().offsetOf(pos.line(), pos.character()));
+        SyntaxNode list = ident == null ? null : ident.parent();
+        SyntaxNode line = (list == null || list.kind() != SyntaxKind.NAME_LIST) ? null
+                : list.parent();
+        SyntaxNode module = (line == null || line.kind() != SyntaxKind.IMPORT_DECL) ? null
+                : line.child(SyntaxKind.QUALIFIED_NAME).orElse(null);
+        if (module == null) {
+            return Identified.NOTHING;
+        }
+        Location declared =
+                declaredIn(compilation, graph, dottedName(module), nameOf(ident)).orElse(null);
+        return (declared == null || !resolves(compilation, declared.uri())) ? Identified.NOTHING
+                : identifiedAt(compilation, declared.uri(), declared.range().start());
+    }
 
     /**
      * What the name under the cursor is, for a question about every place it is named.
@@ -1600,51 +1627,35 @@ public final class Analyzer {
      *  it — what answers where the compile has nothing to say. */
     private References bySpelling(String uri, String text, Position pos, ModuleGraph graph,
                                   Compilation compilation) {
-        Spelled spelled = spelledAt(uri, text, pos, graph, compilation);
-        return spelled == null ? References.none()
-                : spelledIn(graph.uris(), spelled, graph, compilation);
-    }
-
-    /** The name under the cursor as its spelling finds it, or null where it finds no module that
-     *  declares it. */
-    private Spelled spelledAt(String uri, String text, Position pos, ModuleGraph graph,
-                              Compilation compilation) {
         Reading reading = readingOf(uri, text, graph.isOpen(uri));
         SyntaxNode root = reading.root();
         SourceLayout lines = laidOut(uri, reading);
         SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
         if (ident == null) {
-            return null;
+            return References.none();
         }
         String name = nameOf(ident);
         String definingModule = declaringDef(root, name) != null
                 ? moduleOf(compilation, graph, uri) : reading.importing(name);
         if (definingModule == null) {
-            return null;
+            return References.none();
         }
         String definingUri = uriOfModule(compilation, graph, definingModule);
         if (definingUri == null) {
-            return null;
+            return References.none();
         }
-        return new Spelled(definingModule, name,
-                isTypeDef(declaringDef(readingOf(graph, definingUri).root(), name)));
-    }
+        boolean isType = isTypeDef(declaringDef(readingOf(graph, definingUri).root(), name));
 
-    /** Where each of {@code uris} that declares or imports {@code spelled} writes it, matched by
-     *  its spelling. */
-    private References spelledIn(Collection<String> uris, Spelled spelled, ModuleGraph graph,
-                                 Compilation compilation) {
         List<Location> all = new ArrayList<>();
         List<Location> uses = new ArrayList<>();
-        for (String u : uris) {
+        for (String u : graph.uris()) {
             abandonment.stopIfAsked();
             Reading other = readingOf(graph, u);
-            boolean owns = spelled.module().equals(moduleOf(compilation, graph, u));
-            if (!owns && !spelled.module().equals(other.importing(spelled.name()))) {
+            boolean owns = definingModule.equals(moduleOf(compilation, graph, u));
+            if (!owns && !definingModule.equals(other.importing(name))) {
                 continue;   // this file neither defines nor imports the symbol
             }
-            collectReferences(other.root(), spelled.name(), spelled.isType(), u, other.lines(),
-                    owns, all, uses);
+            collectReferences(other.root(), name, isType, u, other.lines(), owns, all, uses);
         }
         return new References(all, uses);
     }
@@ -1748,73 +1759,66 @@ public final class Analyzer {
      * behavior, a local. A library operation and what the language gives are named all over a
      * workspace and declared in none of it, so rewriting where they are named would rename nothing
      * and break every place that named them.
+     *
+     * <p>A rename writes to sources, so it touches only places it can tell are the name: the
+     * places the compiler answers for the identity {@link #certainlyAt} tells, and in a document
+     * the compile could not read, the list entries that write the declaring module and the name.
+     * A spelling elsewhere in such a document may be a field or a binding spelled alike, and
+     * rewriting it would change what that program says. Where the name cannot be told for
+     * certain, nothing is renamed.
      */
     private Map<String, List<Range>> renameRanges(String uri, Position pos, ModuleGraph graph) {
         Compilation compilation = compileOf(graph);
-        boolean answered = resolves(compilation, uri);
-        Identified named = answered ? identifiedAt(compilation, uri, pos)
-                : new Identified(null, null);
+        Identified named = certainlyAt(compilation, uri, pos, graph);
         TypeSymbol type = named.type();
         ValueName value = named.value();
-        if (answered && !(type instanceof TypeSymbol.AtModule)
-                && !(value instanceof ValueName.OfAModule) && !(value instanceof ValueName.Local)) {
-            return new LinkedHashMap<>();
-        }
         Map<String, List<Range>> byUri = new LinkedHashMap<>();
+        if (!(type instanceof TypeSymbol.AtModule) && !(value instanceof ValueName.OfAModule)
+                && !(value instanceof ValueName.Local)) {
+            return byUri;
+        }
         for (Location loc : references(uri, pos, graph, true)) {
             byUri.computeIfAbsent(loc.uri(), k -> new ArrayList<>()).add(loc.range());
-        }
-        if (byUri.isEmpty()) {
-            return byUri;   // nothing under the cursor to rename
         }
         // references() leaves out a name in an `exposing` or `import` list: a list names a
         // declaration without using it. Rename must still rewrite those, or the module stops
         // exposing — and importers stop importing — what was renamed.
         //
-        // Each document answers which of its entries those are as it answers for its uses. Where the
-        // compile read it, that is the compiler's answer, asked of the same identity the references
-        // were: a list entry is answered with the declaration it names as a use is, so renaming from
-        // a qualified use, a list or the declaration reaches one set. Where it could not, the
-        // entries spelling the name in a list about its module are.
-        if (answered) {
-            Spelled spelled = Spelled.of(type, value);
-            if (spelled != null) {
-                addExposingAndImportSites(compilation, spelled.name(), spelled.module(),
-                        unread(compilation, graph), graph, byUri);
-            }
-            SourceLayouts texts = textsOf(graph);
-            for (String module : compilation.modules()) {
-                abandonment.stopIfAsked();
-                String moduleUri = uriOf(compilation.sourceIdOf(module));
-                Names.Listed listed = compilation.db().ask(new Names.Listings(module)).value();
-                if (listed == null || !resolves(compilation, moduleUri)) {
-                    continue;   // answered by its spelling above, as its uses are
-                }
-                List<WrittenName> naming = new ArrayList<>();
-                for (Resolve.TypeUse each : listed.types()) {
-                    if (each.denotes().equals(type)) {
-                        naming.add(each.written());
-                    }
-                }
-                for (Resolve.ValueUse each : listed.values()) {
-                    if (each.denotes().equals(value)) {
-                        naming.add(each.written());
-                    }
-                }
-                for (WrittenName entry : naming) {
-                    String at = documentOf(entry.pos(), moduleUri, graph);
-                    if (at != null) {
-                        byUri.computeIfAbsent(at, k -> new ArrayList<>())
-                                .add(writtenRange(texts, entry));
-                    }
-                }
-            }
-            return byUri;
-        }
-        Spelled spelled = spelledAt(uri, graph.text(uri), pos, graph, compilation);
+        // Where the compile read the document, which entries those are is its answer, asked of the
+        // same identity the references were: a list entry is answered with the declaration it
+        // names as a use is, so renaming from a qualified use, a list or the declaration reaches
+        // one set. Where it could not, they are the entries of a list about the declaring module.
+        Spelled spelled = Spelled.of(type, value);
         if (spelled != null) {
-            addExposingAndImportSites(compilation, spelled.name(), spelled.module(), graph.uris(),
-                    graph, byUri);
+            addExposingAndImportSites(compilation, spelled.name(), spelled.module(),
+                    unread(compilation, graph), graph, byUri);
+        }
+        SourceLayouts texts = textsOf(graph);
+        for (String module : compilation.modules()) {
+            abandonment.stopIfAsked();
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
+            Names.Listed listed = compilation.db().ask(new Names.Listings(module)).value();
+            if (listed == null || !resolves(compilation, moduleUri)) {
+                continue;   // its lists are among the unread ones above
+            }
+            List<WrittenName> naming = new ArrayList<>();
+            for (Resolve.TypeUse each : listed.types()) {
+                if (each.denotes().equals(type)) {
+                    naming.add(each.written());
+                }
+            }
+            for (Resolve.ValueUse each : listed.values()) {
+                if (each.denotes().equals(value)) {
+                    naming.add(each.written());
+                }
+            }
+            for (WrittenName entry : naming) {
+                String at = documentOf(entry.pos(), moduleUri, graph);
+                if (at != null) {
+                    byUri.computeIfAbsent(at, k -> new ArrayList<>())
+                            .add(writtenRange(texts, entry));
+                }
+            }
         }
         return byUri;
     }
@@ -1959,7 +1963,11 @@ public final class Analyzer {
                                        ModuleGraph graph) {
         List<Location> out = new ArrayList<>();
         SourceLayouts texts = textsOf(graph);
-        for (String module : compilation.modules()) {
+        // A local is used in the body that binds it and nowhere else, so its own module is the only
+        // one asked.
+        Collection<String> modules = target instanceof ValueName.Local local
+                ? List.of(local.id().owner().module()) : compilation.modules();
+        for (String module : modules) {
             abandonment.stopIfAsked();
             String moduleUri = uriOf(compilation.sourceIdOf(module));
             for (Resolve.ValueUse use
