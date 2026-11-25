@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import souther.compiler.values.InOneOrder;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -268,14 +269,16 @@ public final class CanonicalForm<A> {
      */
     @Override
     public String toString() {
-        java.util.Map<String, ExactRatio> named = new java.util.TreeMap<>();
-        coefs.forEach((atom, coef) -> named.put(String.valueOf(atom), coef));
+        List<Map.Entry<String, ExactRatio>> named = new ArrayList<>(coefs.size());
+        coefs.forEach((atom, coef) -> named.add(Map.entry(String.valueOf(atom), coef)));
+        // Each position said, two written alike both: a name says how one is written, not which.
+        named.sort(Map.Entry.comparingByKey());
         StringBuilder out = new StringBuilder();
-        named.forEach((atom, coef) -> {
+        named.forEach(each -> {
             if (!out.isEmpty()) {
                 out.append(" + ");
             }
-            out.append(coef).append("·").append(atom);
+            out.append(each.getValue()).append("·").append(each.getKey());
         });
         return out.toString();
     }

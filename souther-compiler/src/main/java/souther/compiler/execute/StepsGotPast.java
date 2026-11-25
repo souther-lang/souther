@@ -3,6 +3,7 @@ package souther.compiler.execute;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -29,8 +30,11 @@ import java.util.Set;
  */
 public final class StepsGotPast {
 
-    /** What one run got past, and the calls it ended inside, the outermost first. */
-    public record Account(Set<RunStop.Site> gotPast, List<RunStop.Site> inside) {
+    /**
+     * What one run got past, and the calls it ended inside, the outermost first, each where it is
+     * written or none where it was written in no text the generated code was told the place of.
+     */
+    public record Account(Set<RunStop.Site> gotPast, List<Optional<RunStop.Site>> inside) {
 
         public Account {
             gotPast = Set.copyOf(gotPast);
@@ -39,7 +43,7 @@ public final class StepsGotPast {
     }
 
     /** What one thread is building up while a run goes. */
-    private record Recording(Set<RunStop.Site> gotPast, List<RunStop.Site> inside) {}
+    private record Recording(Set<RunStop.Site> gotPast, List<Optional<RunStop.Site>> inside) {}
 
     private static final ThreadLocal<Recording> RECORDING = new ThreadLocal<>();
 
@@ -53,11 +57,13 @@ public final class StepsGotPast {
     }
 
     /** Called by generated code where a call written there is entered, its arguments worked
-     *  out. */
+     *  out. A {@code module} of none, or a line of nought, is a call the code generator had no
+     *  place for, entered all the same. */
     public static void entering(String module, int line, int column) {
         Recording recording = RECORDING.get();
         if (recording != null) {
-            recording.inside().add(new RunStop.Site(module, line, column));
+            recording.inside().add((module != null && line > 0)
+                    ? Optional.of(new RunStop.Site(module, line, column)) : Optional.empty());
         }
     }
 

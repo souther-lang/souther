@@ -30,15 +30,20 @@ public final class ConstraintViolation extends RuntimeException {
      *  otherwise. */
     private final transient @Nullable Site site;
 
+    /** Whether a step said it ended the run ({@link #placedAt}), whether or not it had a place to
+     *  say. A step that had none still ended it, and no step around it did. */
+    private final boolean placed;
+
     public ConstraintViolation(String message) {
-        this(message, null, null);
+        this(message, null, null, false);
     }
 
     private ConstraintViolation(String message, @Nullable ConstraintFailure failure,
-                                @Nullable Site site) {
+                                @Nullable Site site, boolean placed) {
         super(message);
         this.failure = failure;
         this.site = site;
+        this.placed = placed;
     }
 
     /**
@@ -60,21 +65,23 @@ public final class ConstraintViolation extends RuntimeException {
     /**
      * This, said to have ended the run at the step written at {@code line} and {@code column} of
      * {@code module}'s source — where it ended for an operation the language refuses to finish and
-     * nothing has said where yet.
+     * no step has said so yet. A {@code module} of none, or a line of nought, is a step the code
+     * generator had no place for: the run ended there all the same, and the end names no place.
      *
-     * <p>Where something has said, or this is a broken constraint, this as it is. A step inside the
-     * one handed here said its own place first, as the run was leaving it, and that is the step the
-     * run ended at; a constraint says its own place where it is refused. What generated code calls
-     * where it was generated to say where each step that may end a run is written.
+     * <p>Where a step has said, or this is a broken constraint, this as it is. A step inside the
+     * one handed here said it first, as the run was leaving it, and that is the step the run ended
+     * at, whether or not it had a place to say; a constraint says its own place where it is
+     * refused. What generated code calls where it was generated to say where each step that may
+     * end a run is written.
      */
-    public ConstraintViolation placedAt(String module, int line, int column) {
-        if (site != null || failure != null) {
+    public ConstraintViolation placedAt(@Nullable String module, int line, int column) {
+        if (placed || failure != null) {
             return this;
         }
-        ConstraintViolation placed = new ConstraintViolation(String.valueOf(getMessage()), null,
-                new Site(module, line, column));
-        placed.setStackTrace(getStackTrace());
-        return placed;
+        ConstraintViolation said = new ConstraintViolation(String.valueOf(getMessage()), null,
+                (module != null && line > 0) ? new Site(module, line, column) : null, true);
+        said.setStackTrace(getStackTrace());
+        return said;
     }
 
     /**
@@ -96,7 +103,7 @@ public final class ConstraintViolation extends RuntimeException {
      * third origin is written, an overload it forgot would be an origin that aborts some other way.
      */
     public static ConstraintViolation notHeld(ConstraintFailure failure) {
-        return new ConstraintViolation(failure.toString(), failure, null);
+        return new ConstraintViolation(failure.toString(), failure, null, false);
     }
 
     /**
@@ -132,7 +139,7 @@ public final class ConstraintViolation extends RuntimeException {
         }
         Object failed = ((Result.Err<?, ?>) r).error();
         if (failed instanceof ConstraintFailure broken) {
-            throw new ConstraintViolation(broken.toString(), broken, site);
+            throw new ConstraintViolation(broken.toString(), broken, site, false);
         }
         // Nothing generated reaches here: the only results handed over are `__construct`'s. Said
         // rather than cast, because a cast would report a caller this was not written for as a
