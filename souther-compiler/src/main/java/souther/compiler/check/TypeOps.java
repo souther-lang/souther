@@ -553,8 +553,8 @@ public final class TypeOps {
         }
         return switch (declared) {
             // Every compound, a function's parameters and result among them, position by position.
-            case Type.Compound _ -> Type.paired(declared, actual) instanceof List<Type.Paired> pairs
-                    && pairs.stream().allMatch(at -> admits(at.one(), at.other(), kinds, sums));
+            case Type.Compound _ -> Type.everyPaired(declared, actual,
+                    (d, a) -> admits(d, a, kinds, sums));
             // Nothing inside it to weigh position by position, so what is left is the ordinary
             // question. It answers a variable the declaration wrote too, which is not an
             // application's to decide and stands for whatever each use of it makes it.
@@ -589,9 +589,8 @@ public final class TypeOps {
         // List are covariant, and Java's mutable arrays are not. A tuple is read the same way, each
         // position on its own. A function is not gone inside: one is assigned where it is the type
         // expected and nowhere else.
-        if (!(from instanceof Type.FnOf)
-                && Type.paired(from, to) instanceof List<Type.Paired> pairs) {
-            return pairs.stream().allMatch(at -> assignable(at.one(), at.other(), kinds, sums));
+        if (!(from instanceof Type.FnOf) && Type.ofOneShape(from, to)) {
+            return Type.everyPaired(from, to, (f, t) -> assignable(f, t, kinds, sums));
         }
         List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, kinds, sums);
         List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, kinds, sums);
@@ -631,16 +630,8 @@ public final class TypeOps {
         }
         // The constructors assignable goes inside, and no others: two functions join only where
         // they are one type.
-        if (!(a instanceof Type.FnOf) && Type.paired(a, b) instanceof List<Type.Paired> pairs) {
-            List<Type> joined = new ArrayList<>(pairs.size());
-            for (Type.Paired at : pairs) {
-                Type e = join(at.one(), at.other());
-                if (e == null) {
-                    return null;
-                }
-                joined.add(e);
-            }
-            return Type.withChildren(a, joined);
+        if (!(a instanceof Type.FnOf) && Type.ofOneShape(a, b)) {
+            return Type.zipped(a, b, TypeOps::join);
         }
         if (isDataLike(a) && isDataLike(b)) {
             // In the order the cases were met, because a report quotes this type back to the author
@@ -733,12 +724,15 @@ public final class TypeOps {
                     return new Fit.Disagrees(bound, arg);
                 }
             }
-            case Type.Compound p when Type.paired(p, arg) instanceof List<Type.Paired> pairs -> {
-                for (Type.Paired each : pairs) {
-                    Fit at = unify(each.one(), each.other(), bindings, kinds, sums, refusing);
-                    if (at instanceof Fit.Disagrees) {
-                        return at;
-                    }
+            case Type.Compound p when Type.ofOneShape(p, arg) -> {
+                Fit[] disagreed = {null};
+                Type.everyPaired(p, arg, (one, other) -> {
+                    Fit at = unify(one, other, bindings, kinds, sums, refusing);
+                    disagreed[0] = at instanceof Fit.Disagrees ? at : null;
+                    return disagreed[0] == null;
+                });
+                if (disagreed[0] != null) {
+                    return disagreed[0];
                 }
             }
             default -> {

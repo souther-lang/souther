@@ -1120,8 +1120,7 @@ public final class BoundOperationFacts {
             // The containers a declared operand is written as. A tuple or a function is no
             // operand's declared type, and stands for itself.
             case Type.ListOf _, Type.SetOf _, Type.OptionOf _, Type.MapOf _ ->
-                    Type.paired(declared, actual) instanceof List<Type.Paired> pairs
-                            && pairs.stream().allMatch(at -> instanceOf(at.other(), at.one()));
+                    Type.everyPaired(declared, actual, (d, a) -> instanceOf(a, d));
             default -> declared.equals(actual);
         };
     }

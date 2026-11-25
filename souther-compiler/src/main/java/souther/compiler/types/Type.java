@@ -10,6 +10,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.BiPredicate;
+import java.util.function.BinaryOperator;
 
 /**
  * The Souther value types. Either a primitive ({@code Int}/{@code String}/{@code Bool})
@@ -478,55 +480,117 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
         }
     }
 
-    /** One position two types of one shape hold: what {@code one} holds there and what
-     *  {@code other} does. */
-    record Paired(Type one, Type other) {}
-
     /**
-     * What {@code one} and {@code other} hold position by position, in the order
-     * {@link #forEachChild} visits them — or null where they are not one compound constructor
-     * holding as many positions: two lists, two maps, two tuples of one length, two functions of
-     * one arity.
-     *
-     * <p>The pairing and nothing else. Whether the two at a position have to be equal, one has to
-     * admit the other or they are joined, which way round a position is read, and which
-     * constructors a reader goes inside at all are each reader's own; what is said once here is
-     * which positions two values of one constructor line up at, which is {@link #atChildren}'s to
-     * say for each of them.
+     * Whether {@code one} and {@code other} are one compound constructor holding as many
+     * positions: two lists, two maps, two tuples of one length, two functions of one arity. What
+     * {@link #everyPaired} and {@link #zipped} go inside, and nothing else.
      */
-    static List<Paired> paired(Type one, Type other) {
+    static boolean ofOneShape(Type one, Type other) {
         if (!(one instanceof Compound) || one.getClass() != other.getClass()) {
-            return null;
+            return false;
         }
-        List<Type> ones = new ArrayList<>();
-        List<Type> others = new ArrayList<>();
-        forEachChild(one, ones::add);
-        forEachChild(other, others::add);
-        if (ones.size() != others.size()) {
-            return null;
+        if (one instanceof TupleOf t) {
+            return t.elements().size() == ((TupleOf) other).elements().size();
         }
-        List<Paired> out = new ArrayList<>(ones.size());
-        for (int i = 0; i < ones.size(); i++) {
-            out.add(new Paired(ones.get(i), others.get(i)));
-        }
-        return out;
+        return !(one instanceof FnOf f) || f.params().size() == ((FnOf) other).params().size();
     }
 
     /**
-     * {@code t} with its positions holding {@code children}, in the order {@link #paired} names
-     * them: what a reader that worked out a type at each position of a pair puts back together.
+     * Whether {@code each} holds of what {@code one} and {@code other} hold at every position they
+     * share, asked in the order {@link #forEachChild} visits them and no further than the first
+     * it does not hold at — false where the two are not of one shape ({@link #ofOneShape}).
      *
-     * @throws IllegalArgumentException where {@code children} are not as many as {@code t} holds
+     * <p>The pairing and nothing else. Whether the two at a position have to be equal, one has to
+     * admit the other, which way round a position is read, and which constructors a reader goes
+     * inside at all are each reader's own; what is said once here is which positions two values of
+     * one constructor line up at.
      */
-    static Type withChildren(Type t, List<Type> children) {
-        int[] positions = {0};
-        forEachChild(t, _ -> positions[0]++);
-        if (positions[0] != children.size()) {
-            throw new IllegalArgumentException(show(t) + " holds " + positions[0] + " types and not "
-                    + children.size());
+    static boolean everyPaired(Type one, Type other, BiPredicate<Type, Type> each) {
+        return zipped(one, other, (a, b) -> each.test(a, b) ? a : null) != null;
+    }
+
+    /**
+     * {@code one} with each position holding what {@code at} answers of the two types {@code one}
+     * and {@code other} hold there — {@code one} itself where every answer is what it held, so a
+     * walk that only asks allocates nothing — or null where the two are not of one shape, or
+     * {@code at} answers null at a position, which ends the walk there.
+     */
+    static Type zipped(Type one, Type other, BinaryOperator<Type> at) {
+        return one instanceof Compound c ? atPairs(c, other, at) : null;
+    }
+
+    /**
+     * {@link #atChildren} of two types: the positions they line up at, read off the first and
+     * taken of the second alike, or null where the second is not of the first's shape
+     * ({@link #ofOneShape}, asked arm by arm here so the two are told apart once). Exhaustive over
+     * {@link Compound} as that one is, so a constructor added later stops the build at both.
+     */
+    private static Type atPairs(Compound one, Type other, BinaryOperator<Type> at) {
+        return switch (one) {
+            case ListOf l -> {
+                Type element = other instanceof ListOf with ? at.apply(l.element(), with.element())
+                        : null;
+                yield element == null ? null : element == l.element() ? l : new ListOf(element);
+            }
+            case SetOf s -> {
+                Type element = other instanceof SetOf with ? at.apply(s.element(), with.element())
+                        : null;
+                yield element == null ? null : element == s.element() ? s : new SetOf(element);
+            }
+            case OptionOf o -> {
+                Type element = other instanceof OptionOf with
+                        ? at.apply(o.element(), with.element()) : null;
+                yield element == null ? null : element == o.element() ? o : new OptionOf(element);
+            }
+            case MapOf m -> {
+                if (!(other instanceof MapOf with)) {
+                    yield null;
+                }
+                Type key = at.apply(m.key(), with.key());
+                Type value = key == null ? null : at.apply(m.value(), with.value());
+                yield value == null ? null
+                        : key == m.key() && value == m.value() ? m : new MapOf(key, value);
+            }
+            case TupleOf tu -> {
+                List<Type> elements = other instanceof TupleOf with
+                        ? eachPaired(tu.elements(), with.elements(), at) : null;
+                yield elements == null ? null
+                        : elements == tu.elements() ? tu : new TupleOf(elements);
+            }
+            case FnOf f -> {
+                if (!(other instanceof FnOf with)) {
+                    yield null;
+                }
+                List<Type> params = eachPaired(f.params(), with.params(), at);
+                Type result = params == null ? null : at.apply(f.result(), with.result());
+                yield result == null ? null
+                        : params == f.params() && result == f.result() ? f : new FnOf(params, result);
+            }
+        };
+    }
+
+    /** {@code ones} with {@code at} applied to each and the one at its place in {@code others},
+     *  {@code ones} itself where none changed, or null where one answered null. */
+    private static List<Type> eachPaired(List<Type> ones, List<Type> others,
+                                         BinaryOperator<Type> at) {
+        if (ones.size() != others.size()) {
+            return null;
         }
-        int[] at = {0};
-        return mapChildren(t, _ -> children.get(at[0]++));
+        List<Type> out = null;
+        for (int i = 0; i < ones.size(); i++) {
+            Type before = ones.get(i);
+            Type after = at.apply(before, others.get(i));
+            if (after == null) {
+                return null;
+            }
+            if (out == null && after != before) {
+                out = new ArrayList<>(ones.subList(0, i));
+            }
+            if (out != null) {
+                out.add(after);
+            }
+        }
+        return out == null ? ones : out;
     }
 
     /** A user-facing rendering of {@code t} in surface syntax: {@code Int}, {@code List<Int>},

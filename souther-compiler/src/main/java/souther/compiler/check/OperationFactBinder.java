@@ -1740,8 +1740,8 @@ final class OperationFactBinder {
             case Type.Var l when right instanceof Type.Var r ->
                     r.name().equals(paired.computeIfAbsent(l.name(), _ -> r.name()))
                             && l.name().equals(back.computeIfAbsent(r.name(), _ -> l.name()));
-            case Type.Compound _ -> Type.paired(left, right) instanceof List<Type.Paired> pairs
-                    && pairs.stream().allMatch(at -> sameShape(at.one(), at.other(), paired, back));
+            case Type.Compound _ -> Type.everyPaired(left, right,
+                    (one, other) -> sameShape(one, other, paired, back));
             // Everything else a declaration can hold stands for itself: a primitive, a declaration,
             // a union of them, and a variable that did not pair with one above. Being the same
             // shape is being the same type.

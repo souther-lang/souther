@@ -4,7 +4,6 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -118,15 +117,13 @@ final class Substitution {
         // Position by position where the two shapes line up. Where they do not there is no variable
         // here to decide, and whether they agree is {@link #fits}'s question.
         // A leaf holds nothing to descend into, so nothing here decides a variable.
-        if (Type.paired(left, right) instanceof List<Type.Paired> pairs) {
-            for (Type.Paired each : pairs) {
-                Fit at = decide(each.one(), each.other(), kinds, sums);
-                if (at instanceof Fit.Disagrees) {
-                    return at;
-                }
-            }
-        }
-        return Fit.FITS;
+        Fit[] disagreed = {null};
+        Type.everyPaired(left, right, (one, other) -> {
+            Fit at = decide(one, other, kinds, sums);
+            disagreed[0] = at instanceof Fit.Disagrees ? at : null;
+            return disagreed[0] == null;
+        });
+        return disagreed[0] != null ? disagreed[0] : Fit.FITS;
     }
 
     /** {@code t} with every variable this has decided written into it. One still open is left
