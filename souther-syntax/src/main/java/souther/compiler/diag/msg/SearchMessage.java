@@ -559,6 +559,8 @@ public sealed interface SearchMessage extends Message {
 
     record RowsAWalkHandsTheChoiceOfARow() implements SearchMessage, Prose {}
 
+    record SearchesARowIsComposedThrough() implements SearchMessage, Prose {}
+
     record PiecesAStringIsPutTogetherOf() implements SearchMessage, Prose {}
 
     record StringsOfTheRowAPieceIsTakenFrom() implements SearchMessage, Prose {}

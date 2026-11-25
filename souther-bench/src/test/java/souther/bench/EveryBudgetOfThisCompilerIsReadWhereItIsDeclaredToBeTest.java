@@ -775,6 +775,30 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Generator$RowsHanded#<init>()V",
                     "how many rows a walk composing a row for a point hands the choice of a row,"
                             + " and the figure it names where it stopped there"),
+            // The searches a row for a point is composed through: made once for the point, handed
+            // to every walk across its parameters, and said where one of them stopped there.
+            Map.entry("souther.compiler.partition.Generator#probeFixing("
+                            + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
+                            + "Ljava/util/Map;Lsouther/compiler/partition/NumbersAskedFor;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/StandInAttempt;"
+                            + "Lsouther/compiler/partition/Generator$Trial;Ljava/util/Optional;)"
+                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
+                    "how many searches a row for a point is composed through, handed to every walk"
+                            + " across its parameters"),
+            Map.entry("souther.compiler.partition.Generator#probeFixingAlong("
+                            + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
+                            + "Ljava/util/Map;Lsouther/compiler/partition/NumbersAskedFor;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/StandInAttempt;"
+                            + "Lsouther/compiler/partition/Generator$Trial;Z"
+                            + "Lsouther/compiler/partition/CompositionBudget;Ljava/util/Optional;"
+                            + "Lsouther/compiler/partition/Tries;)"
+                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
+                    "says the figure as what the walk left untried where the searches across the"
+                            + " parameters stopped it"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
                             + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/Map;"
                             + "Ljava/util/Map;"

@@ -796,6 +796,20 @@ public enum CompositionBudget {
     ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW(64),
 
     /**
+     * How many times a walk composing a row for a point goes on to the search for one of its
+     * parameters, under the values the parameters before it took, or hands a whole row on.
+     *
+     * <p>Each parameter's own search is bounded ({@link #ASSIGNMENTS_A_SEARCH_COMPOSES}), and each
+     * value it hands on starts the search for the next parameter afresh. So a walk whose last
+     * parameter comes to nothing under every value of the ones before it goes through as many
+     * searches as their values multiply, and a bound on each search is no bound on the walk. Spent
+     * over every way the row for the point is written along, so splitting the walk is no way past
+     * it. It stops the walk before a row was found, so the point is one this compiler stopped
+     * looking for a row at, and never one no row answers at.
+     */
+    SEARCHES_A_ROW_IS_COMPOSED_THROUGH(4096),
+
+    /**
      * How many pieces a string is put together of when a body parts it and builds a newtype of the
      * pieces: how many it is seen in that a piece of it is changed at, and how many it is made of
      * for the pieces to be ones the newtype admits.
@@ -1002,6 +1016,8 @@ public enum CompositionBudget {
             case RUNS_REPAIRING_A_ROW -> new SearchMessage.RunsRepairingARow();
             case ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW ->
                     new SearchMessage.RowsAWalkHandsTheChoiceOfARow();
+            case SEARCHES_A_ROW_IS_COMPOSED_THROUGH ->
+                    new SearchMessage.SearchesARowIsComposedThrough();
             case PIECES_A_STRING_IS_PUT_TOGETHER_OF ->
                     new SearchMessage.PiecesAStringIsPutTogetherOf();
             case STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM ->
@@ -1082,6 +1098,7 @@ public enum CompositionBudget {
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
                  CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                  RUNS_REPAIRING_A_ROW, ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                 SEARCHES_A_ROW_IS_COMPOSED_THROUGH,
                  PIECES_A_STRING_IS_PUT_TOGETHER_OF,
                  STRINGS_OF_THE_ROW_A_PIECE_IS_TAKEN_FROM,
                  ELEMENTS_A_SIDE_IS_SEARCHED_OVER,

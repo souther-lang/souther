@@ -852,6 +852,7 @@ public final class Generator {
                              CASES_A_RULE_ABOVE_IS_PLANNED_UNDER,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
+                             SEARCHES_A_ROW_IS_COMPOSED_THROUGH,
                              // The strings past this many pieces were never offered, so what the
                              // search came to is about the strings it tried.
                              PIECES_A_STRING_IS_PUT_TOGETHER_OF,
@@ -6907,6 +6908,20 @@ public final class Generator {
                                               Reachability.Reaching reaching, CandidateCheck check,
                                               StandInAttempt stood, Trial trial,
                                               Optional<RowJudge> judge) {
+        // One figure for every walk across the parameters made for the point, whichever way the
+        // row is written along: each is a walk for the same row, and splitting it is no way past
+        // what it may go through ({@link CompositionBudget#SEARCHES_A_ROW_IS_COMPOSED_THROUGH}).
+        return probeFixing(subject, label, fixing, asking, reaching, check, stood, trial, judge,
+                new Tries(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH.maximum()));
+    }
+
+    /** The same, every walk across the parameters made for the point held to {@code searches}. */
+    static BoundaryAttempt probeFixing(MeasuredInput subject, String label,
+                                       Map<RealizationTarget, Place> fixing,
+                                       NumbersAskedFor asking,
+                                       Reachability.Reaching reaching, CandidateCheck check,
+                                       StandInAttempt stood, Trial trial,
+                                       Optional<RowJudge> judge, Tries searches) {
         // Where an element may meet something several ways, a row writing its elements alike is
         // composed along each way of choosing one for every element first. A row along one is a
         // row of the way; one of them coming to nothing says nothing of the rest, or of elements
@@ -6928,7 +6943,7 @@ public final class Generator {
         List<BoundaryAttempt> builtShort = new ArrayList<>();
         if (apartFirst) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, trial, true, null, judge);
+                    check, stood, trial, true, null, judge, searches);
             if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
@@ -6936,13 +6951,13 @@ public final class Generator {
         ElementsWrittenAlike.Choices alike = ElementsWrittenAlike.of(reaching);
         for (ElementsWrittenAlike.Alike one : alike.ways()) {
             BoundaryAttempt along = probeFixingAlong(subject, label, fixing, asking,
-                    one.reaching(), check, stood, trial, false, one.leftBy(), judge);
+                    one.reaching(), check, stood, trial, false, one.leftBy(), judge, searches);
             if (builtLeavingNothingOut(along, builtShort)) {
                 return along;
             }
         }
         BoundaryAttempt whole = probeFixingAlong(subject, label, fixing, asking, reaching, check,
-                stood, trial, false, alike.stoppedBy(), judge);
+                stood, trial, false, alike.stoppedBy(), judge, searches);
         if (builtLeavingNothingOut(whole, builtShort)) {
             return whole;
         }
@@ -6951,7 +6966,7 @@ public final class Generator {
         // nothing as well.
         if (!apartFirst && counts) {
             BoundaryAttempt counted = probeFixingAlong(subject, label, fixing, asking, reaching,
-                    check, stood, trial, true, null, judge);
+                    check, stood, trial, true, null, judge, searches);
             if (builtLeavingNothingOut(counted, builtShort)) {
                 return counted;
             }
@@ -7113,7 +7128,7 @@ public final class Generator {
                                                     CandidateCheck check, StandInAttempt stood,
                                                     Trial trial, boolean byCounts,
                                                     CompositionBudget alikeStoppedBy,
-                                                    Optional<RowJudge> judge) {
+                                                    Optional<RowJudge> judge, Tries searches) {
         LocationWrites decided = new LocationWrites();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its own
         // type once another field of that record is fixed: the rule relating them says what is left,
@@ -7273,7 +7288,8 @@ public final class Generator {
         // the cases reaches a row it accepts: a row built and no row the search was for, so
         // another way is tried past it.
         List<List<FixtureTemplate>> refusedKept = new ArrayList<>();
-        DepthFirst.Walked walked = under.tryEach(way -> {
+        boolean[] cutShort = {false};
+        DepthFirst.Walked handedOver = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
             // cases share is under the case this way writes. Written beside the numbers, so a
@@ -7314,12 +7330,18 @@ public final class Generator {
                                     from)
                             : Reachability.Ways.ONE, reaching.declined(), reaching.narrowedBy());
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
-                    settled, thisWay, check, way.contents(), taking)
+                    settled, thisWay, check, way.contents(), taking, searches)
                     .from(0, ValuesHandedOn.NONE);
             return switch (came) {
                 case WalkedInOrder.CameToNothingAt(ParameterCameToNothing why) -> {
                     cameToNothing.add(why);
                     yield false;
+                }
+                // The walk ends here, and is no way that composed: the ways after it are not
+                // tried, and what this one came to is the figure.
+                case WalkedInOrder.CutShort _ -> {
+                    cutShort[0] = true;
+                    yield true;
                 }
                 case WalkedInOrder.RowTaken _, WalkedInOrder.PassedOver _,
                      WalkedInOrder.Halted _ -> {
@@ -7350,12 +7372,20 @@ public final class Generator {
                 }
             };
         });
+        // A walk the searches across the parameters cut short ended no way, whatever ending it
+        // looks like to the walk over the ways: it is cut short, at that figure.
+        DepthFirst.Walked walked = cutShort[0] ? DepthFirst.Walked.CUT_SHORT : handedOver;
+        SearchShortfall foundOut = cutShort[0]
+                ? under.foundOut(DepthFirst.Walked.EVERY_END_REACHED).and(SearchShortfall.of(
+                        CompositionShortfall.of(
+                                Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH))))
+                : under.foundOut(walked);
         // No way reached a row the judge accepts and every way there is was tried: the row it
         // refused first is what comes back, built and marked refused. A walk that left ways
         // untried, by its figure or under a case nobody read, reached no row to say nothing was
         // left to find, so it comes to what that walk came to and not to a row.
         boolean refusedOnly = !refusedKept.isEmpty() && preferring.takenIsRefused()
-                && aRefusedRowStands(walked, whatTheWalkLeftUnlookedAt(under.foundOut(walked),
+                && aRefusedRowStands(walked, whatTheWalkLeftUnlookedAt(foundOut,
                         cameToNothing, passedFound[0], preferring.untried()),
                         cameToNothing.stream().anyMatch(each -> !each.lookedAtWhole()));
         if (refusedOnly) {
@@ -7372,14 +7402,16 @@ public final class Generator {
             // away, and a proof among them is not the walk's.
             SearchShortfall passedOver = noRowAnswered[0]
                     ? preferring.untried().and(passedFound[0]) : null;
-            switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver,
-                    under.foundOut(walked), PARAMETERS)) {
+            switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver, foundOut,
+                    PARAMETERS)) {
                 case WhatTheAlternativesCameTo.Came.Said(ParameterCameToNothing said) ->
                         failed = said;
+                // Said of a case nobody read where one was, and otherwise in the figure's words
+                // alone: a walk a figure stopped left ways untried, which is not a case unread.
                 case WhatTheAlternativesCameTo.Came.Untried(SearchShortfall found) -> {
                     return leftUntried(label, found,
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                            A_CASE_WAS_NOT_READ, where.unrepresented());
+                            found.unread() ? A_CASE_WAS_NOT_READ : null, where.unrepresented());
                 }
                 case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
                     return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
@@ -7784,9 +7816,18 @@ public final class Generator {
         /** No row could be composed, and the parameter it came to nothing at. */
         record CameToNothingAt(ParameterCameToNothing why) implements WalkedInOrder {}
 
+        /**
+         * The walk went through as many searches as it may
+         * ({@link CompositionBudget#SEARCHES_A_ROW_IS_COMPOSED_THROUGH}). No parameter came to
+         * nothing for it, and no value before it is passed over for another: the walk ends there,
+         * every way of writing the row with it.
+         */
+        record CutShort() implements WalkedInOrder {}
+
         RowTaken TAKEN = new RowTaken();
         PassedOver PASSED_OVER = new PassedOver(SearchShortfall.NONE);
         Halted HALTED = new Halted();
+        CutShort CUT_SHORT = new CutShort();
     }
 
     /**
@@ -7805,13 +7846,18 @@ public final class Generator {
      * {@link #inputsFrom} hands its rows, and a row passed over sends the walk on to the next
      * assignment the way a value a later parameter came to nothing under does.
      *
+     * <p>Each parameter's search is bounded, and the walk across them is bounded apart from it:
+     * every parameter it goes on to and every whole row it hands on is a unit of {@code searches},
+     * which is the point's and not this walk's ({@link #probeFixing}).
+     *
      * @param composed each parameter's value, by its declared position, filled as the walk goes
      * @param taking   what the caller makes of each whole row
      */
     private record InOrder(MeasuredInput subject, CompositionOrder order, FixtureTemplate[] composed,
                            Map<RealizationTarget, Place> standing, LocationWrites decided,
                            Map<TermPath, Place> settled, Reachability.Reaching reaching,
-                           CandidateCheck check, ContentsAsked contents, RowTaking taking) {
+                           CandidateCheck check, ContentsAsked contents, RowTaking taking,
+                           Tries searches) {
 
         /**
          * What the parameters from the {@code next}-th in the order on came to.
@@ -7824,6 +7870,9 @@ public final class Generator {
          *                  container is handed
          */
         WalkedInOrder from(int next, ValuesHandedOn elsewhere) {
+            if (!searches.spend()) {
+                return WalkedInOrder.CUT_SHORT;
+            }
             if (next == order.order().size()) {
                 return switch (taking.take(List.of(composed))) {
                     case TAKEN -> WalkedInOrder.TAKEN;
@@ -7877,7 +7926,7 @@ public final class Generator {
                         passedFound[0] = passedFound[0].and(its);
                         yield Acceptance.PASSED;
                     }
-                    case WalkedInOrder.Halted _ -> Acceptance.STOPPED;
+                    case WalkedInOrder.Halted _, WalkedInOrder.CutShort _ -> Acceptance.STOPPED;
                     // A parameter after this one that does not turn on this one's value cannot be
                     // composed with any other value of it either, and the walk here is stopped with
                     // what that one said. One that does may be, so the next is tried.
@@ -7893,6 +7942,11 @@ public final class Generator {
             Outcome tried = valueAt(subject, p, here, sizesUnder(decided,
                             TermPath.of(head)), settled, reaching.requirements(),
                     new Handed(contents, elsewhere), certified, found, taking);
+            // Cut short past this one, which is said as it came: nothing of this parameter's, or
+            // of the values it handed on before, is what ended it.
+            if (after[0] instanceof WalkedInOrder.CutShort cut) {
+                return cut;
+            }
             return switch (tried) {
                 // Taken where the rest was composed with it.
                 case Outcome.Built _ -> after[0];
@@ -9278,10 +9332,7 @@ public final class Generator {
          * is written: the first way of writing them all that a row composes with, or why none was.
          *
          * <p>Walked {@link DepthFirst}, a number at a time, under the point's allowance
-         * ({@link WayComposer#allowance}): each way of writing them all and each number left no
-         * way of being written beside the ones before it is a unit of it, so a cut whose last
-         * number no way writes is not walked through every way of the numbers before it for
-         * nothing. A walk the allowance stopped is one stopped by it, said as such.
+         * ({@link WayComposer#allowance}). A walk the allowance stopped is said as stopped by it.
          *
          * <p>Why none composed is said over every way of every number at once
          * ({@link ReachabilityGap#overEveryWay}). That comes to what saying it a number at a time

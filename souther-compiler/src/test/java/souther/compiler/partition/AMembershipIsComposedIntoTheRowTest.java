@@ -214,6 +214,34 @@ class AMembershipIsComposedIntoTheRowTest {
         assertTrue(digitOf(row.get(2)) >= 5, () -> "a number the outer list takes: " + row);
     }
 
+    /**
+     * A walk across the parameters whose last one comes to nothing under every value of the ones
+     * before it goes through a search for each of their values, so the searches multiply with the
+     * parameters. Each search is bounded and the walk across them is bounded apart from them: held
+     * to three, it stops there, over two parameters and over three, and says the figure; held to
+     * the figure declared, it walks every value out, which is more than three searches.
+     */
+    @Test
+    void aWalkAcrossTheParametersStopsAtItsFigureHoweverManyThereAre() {
+        Generator.CandidateCheck noContainer = Generator.CandidateCheck.refusing(
+                (p, candidate) -> p == 0 ? Optional.of("no container") : Optional.empty());
+        for (String behavior : List.of("boxed", "chained")) {
+            Tries three = new Tries(3);
+            Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
+                    Generator.BoundaryAttempt.Stopped.class,
+                    composedPast(behavior, true, noContainer, three), behavior);
+            assertTrue(three.cutShort(), behavior + " was cut short at three searches");
+            assertTrue(stopped.met().figures()
+                            .contains(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH),
+                    () -> behavior + " says the searches across its parameters stopped it: "
+                            + stopped.met());
+            Tries declared = new Tries(
+                    CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH.maximum());
+            composedPast(behavior, true, noContainer, declared);
+            assertFalse(declared.cutShort(), behavior + " walked every value out");
+        }
+    }
+
     private static List<Integer> digitsIn(String written) {
         Matcher found = Pattern.compile("\\d+").matcher(written);
         List<Integer> out = new ArrayList<>();
@@ -277,6 +305,13 @@ class AMembershipIsComposedIntoTheRowTest {
 
     private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
                                                           Generator.CandidateCheck check) {
+        return composedPast(behavior, holding, check, new Tries(
+                CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH.maximum()));
+    }
+
+    private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
+                                                          Generator.CandidateCheck check,
+                                                          Tries searches) {
         List<OnTheWay.TakenIn> way = stated(behavior, holding).stream()
                 .map(each -> assertInstanceOf(OnTheWay.TakenIn.class, each)).toList();
         SearchRegion region = new WayToTheBorder(List.copyOf(way))
@@ -285,7 +320,9 @@ class AMembershipIsComposedIntoTheRowTest {
                 NumbersAskedFor.ANYTHING,
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
                         Reachability.Ways.ONE, List.of(), Optional.empty()),
-                check);
+                check, StandInAttempt.REQUIRING_NOTHING, Generator.Trial.NOTHING_RUNS,
+                Optional.empty(),
+                searches);
     }
 
     /** What {@code behavior}'s body coming out {@code holding} asks of a row, one entry for each
