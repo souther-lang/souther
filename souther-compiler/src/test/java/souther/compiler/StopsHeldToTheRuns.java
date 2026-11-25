@@ -21,6 +21,7 @@ import souther.compiler.query.Compilation;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -255,7 +256,8 @@ final class StopsHeldToTheRuns {
                         return Completions.none(NotHeld.A_WITNESS_LONGER_THAN_IS_RUN);
                     }
                     Set<Long> anyElement = new LinkedHashSet<>();
-                    numbersAt(place.get()).forEach(each -> anyElement.add(each.longValueExact()));
+                    numbersIn(values.get(place.get()))
+                            .forEach(each -> anyElement.add(each.longValueExact()));
                     if (length > 0 && anyElement.isEmpty()) {
                         return Completions.none(NotHeld.A_WITNESS_ELEMENT_THE_GRID_HOLDS_NONE_OF);
                     }
@@ -273,15 +275,17 @@ final class StopsHeldToTheRuns {
                     lists.get(place.get()).set(index, Set.of(number.longValueExact()));
                 }
             }
+            // Whether the lists come to more than are run, asked as they are counted and never by
+            // a count that could pass what a long holds: each element has some value, so a
+            // count past the most over one element's values is past the most once they are taken.
             long completions = 1;
             for (List<Set<Long>> elements : lists.values()) {
                 for (Set<Long> here : elements) {
-                    completions = Math.multiplyHigh(completions, here.size()) != 0
-                            ? Long.MAX_VALUE : completions * here.size();
+                    if (completions > MOST_COMPLETIONS / here.size()) {
+                        return Completions.none(NotHeld.A_WITNESS_COMPLETED_TO_MORE_THAN_ARE_RUN);
+                    }
+                    completions *= here.size();
                 }
-            }
-            if (completions > MOST_COMPLETIONS) {
-                return Completions.none(NotHeld.A_WITNESS_COMPLETED_TO_MORE_THAN_ARE_RUN);
             }
             lists.forEach((place, elements) -> fixed.put(place, everyListOf(elements)));
             Map<String, Set<Object>> taken = new LinkedHashMap<>(values);
@@ -397,7 +401,7 @@ final class StopsHeldToTheRuns {
                 for (String other : others) {
                     List<BigInteger> next = new ArrayList<>();
                     for (BigInteger rest : rests) {
-                        for (BigInteger number : numbersAt(other)) {
+                        for (BigInteger number : numbersIn(input.values().get(other))) {
                             next.add(rest.subtract(weighed.get(other).multiply(number)));
                         }
                     }
@@ -416,11 +420,16 @@ final class StopsHeldToTheRuns {
             }
         }
 
-        /** The whole numbers the input gives {@code place}: its numbers, or every element of its
-         *  lists. */
-        private List<BigInteger> numbersAt(String place) {
+        /**
+         * The whole numbers among {@code values} of one place: its numbers, or every element of
+         * its lists. Handed the values it reads, which are of two kinds: those the input gives a
+         * place, which the grid is widened from and which an end is solved over, and those the
+         * grid takes there once widened, which an input a witness names nothing of is completed
+         * with, as the grid's runs are.
+         */
+        private static List<BigInteger> numbersIn(Collection<?> values) {
             List<BigInteger> out = new ArrayList<>();
-            for (Object value : input.values().get(place)) {
+            for (Object value : values) {
                 if (value instanceof Long number) {
                     out.add(BigInteger.valueOf(number));
                 } else if (value instanceof List<?> list) {
@@ -523,10 +532,11 @@ final class StopsHeldToTheRuns {
                 Map<RunStop.Site, Set<Enum<?>>> notShown,
                 Set<RunStop.Site> notResolvedWhereNoneStops, List<String> notAbout) {
 
-        /** Why each claim nothing here holds to a run is not, every reason there is. */
-        Set<NotHeld> notHeldBecause() {
-            Set<NotHeld> out = new LinkedHashSet<>();
-            notHeldTo.forEach(each -> out.add(each.why()));
+        /** How many claims nothing here holds to a run, by why: a ledger held to this sees one
+         *  claim more for a reason it writes down, as it sees a reason it does not. */
+        Map<NotHeld, Integer> notHeldBecause() {
+            Map<NotHeld, Integer> out = new LinkedHashMap<>();
+            notHeldTo.forEach(each -> out.merge(each.why(), 1, Integer::sum));
             return out;
         }
 

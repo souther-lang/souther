@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import souther.compiler.inputs.AStopShown;
+import souther.compiler.inputs.InputFact;
 import souther.compiler.inputs.StepWhereARunMayStop;
 import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.WhatIsShownOfAStop;
@@ -65,13 +66,14 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         }
     }
 
-    /** The forms some claim of which no run is built to hold, each with why. Any other reason is
-     *  refused. A size of a list past the type is a list too long to build and run: its witness
-     *  is one, and the rows every run stops at weigh its length, which no run here is about. */
-    private static final Map<String, Set<StopsHeldToTheRuns.NotHeld>> TOO_LONG_TO_RUN = Map.of(
-            "aSizeOfTheLongestAListCanBePassingTheType",
-            Set.of(StopsHeldToTheRuns.NotHeld.A_WITNESS_LONGER_THAN_IS_RUN,
-                    StopsHeldToTheRuns.NotHeld.ROWS_OVER_WHAT_IS_NOT_WEIGHED_HERE));
+    /** The forms some claims of which no run is built to hold, each with how many for why. Any
+     *  other reason, or another claim for one of these, is refused. A size of a list past the
+     *  type is a list too long to build and run: its witness is one, and the rows every run stops
+     *  at weigh its length, which no run here is about. */
+    private static final Map<String, Map<StopsHeldToTheRuns.NotHeld, Integer>> TOO_LONG_TO_RUN =
+            Map.of("aSizeOfTheLongestAListCanBePassingTheType", Map.of(
+                    StopsHeldToTheRuns.NotHeld.A_WITNESS_LONGER_THAN_IS_RUN, 1,
+                    StopsHeldToTheRuns.NotHeld.ROWS_OVER_WHAT_IS_NOT_WEIGHED_HERE, 1));
 
     /** The forms a run of the grid stops at a step of that is said not resolved, with why. */
     private static final Map<String, Set<Enum<?>>> NOT_SHOWN_WHERE_A_RUN_STOPS =
@@ -117,6 +119,8 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         // the element a call answers is the only one of a list of one, which is the greatest
         STOPPING.put("theElementOfAListOfOne", new Form(
                 "Option.withDefault(0, List.max(ds)) + 1 <= 10"));
+        // a step on each element, the rows every run stops at being of the element itself
+        STOPPING.put("aStepOnEachElement", new Form("List.any(x -> x + 1 > 5, ds)"));
         // the greatest of a list written out is the element no other is past
         STOPPING.put("theGreatestOfAListWrittenOut", new Form(
                 "Option.withDefault(0, List.max([q, 3])) + 1 >= 3"));
@@ -213,7 +217,7 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                         "the stop in " + form.operation() + " is shown: " + shown),
                 () -> assertEquals(List.of(), held.unheld(),
                         "what is said of a step is what the runs do there"),
-                () -> assertEquals(TOO_LONG_TO_RUN.getOrDefault(name, Set.of()),
+                () -> assertEquals(TOO_LONG_TO_RUN.getOrDefault(name, Map.of()),
                         held.notHeldBecause(), "every claim is held to a run, but for the"
                                 + " reasons written down: " + held.notHeldTo()),
                 () -> assertEquals(NOT_SHOWN_WHERE_A_RUN_STOPS.getOrDefault(name, Set.of()),
@@ -221,6 +225,70 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                                 + " the reasons written down: " + held.notShown()),
                 () -> assertEquals(List.of(), held.notAbout(),
                         "every claim of every run is about some run of the grid"));
+    }
+
+    /**
+     * A witness that names a list's length and not its element is held to every element the
+     * grid takes there, the grid as widened by the claims and not only what the input gives: the
+     * input gives the greatest number alone, and a list of one below it, which the rows every run
+     * stops at put in the grid, runs past the step. Said of the element, the stop is held.
+     */
+    @Test
+    void aWitnessNamingNoElementIsHeldToEveryElementTheGridTakes() {
+        String behavior = OverNumbers.behavior("b", STOPPING.get("aStepOnEachElement"));
+        List<WhatIsShownOfAStop> said =
+                StopsHeldToTheRuns.saidOf(OverNumbers.COMPILED, "demo", behavior);
+        List<WhatIsShownOfAStop> lengthOnly = new ArrayList<>();
+        boolean dropped = false;
+        for (WhatIsShownOfAStop each : said) {
+            if (each instanceof StepWhereARunMayStop stops && !stops.shown().isEmpty()) {
+                List<AStopShown> shown = new ArrayList<>();
+                for (AStopShown one : stops.shown()) {
+                    List<InputFact> structure = one.structure().stream()
+                            .filter(fact -> !(fact instanceof InputFact.ListElement)).toList();
+                    dropped |= structure.size() < one.structure().size();
+                    shown.add(new AStopShown(one.operation(), one.at(), structure));
+                }
+                lengthOnly.add(new StepWhereARunMayStop(stops.at(), shown, stops.constructions(),
+                        stops.everyRunStops(), stops.keeping()));
+            } else {
+                lengthOnly.add(each);
+            }
+        }
+        assertTrue(dropped, "the witness names the element: " + said);
+        StopsHeldToTheRuns.Runs runs = new StopsHeldToTheRuns.Runs(OverNumbers.COMPILED,
+                OverNumbers.LOADER, INPUT, behavior, said);
+
+        assertEquals(Set.of(), StopsHeldToTheRuns.heldTo(said, runs).refused());
+        assertEquals(Set.of(StopsHeldToTheRuns.Claim.A_STOP_SHOWN),
+                StopsHeldToTheRuns.heldTo(lengthOnly, runs).refused());
+    }
+
+    /**
+     * A list whose elements a witness names nothing of comes to as many lists as each element's
+     * values multiplied, and past the most that are run it is held to none — counted so that no
+     * count of them is past what a long holds: sixty-three elements of two values each are two
+     * to the sixty-third lists, which a count that went round to below nought would take as few.
+     */
+    @Test
+    void aWitnessOfMoreListsThanAreRunIsHeldToNoneHoweverManyItComesTo() {
+        String behavior = OverNumbers.behavior("b", STOPPING.get("aStepOnEachElement"));
+        List<WhatIsShownOfAStop> said =
+                StopsHeldToTheRuns.saidOf(OverNumbers.COMPILED, "demo", behavior);
+        InputFact.ListLength length = said.stream()
+                .filter(StepWhereARunMayStop.class::isInstance)
+                .map(StepWhereARunMayStop.class::cast)
+                .flatMap(each -> each.shown().stream())
+                .flatMap(each -> each.structure().stream())
+                .filter(InputFact.ListLength.class::isInstance)
+                .map(InputFact.ListLength.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("a witness names a list: " + said));
+        StopsHeldToTheRuns.Runs runs = new StopsHeldToTheRuns.Runs(OverNumbers.COMPILED,
+                OverNumbers.LOADER, INPUT, behavior, said);
+
+        assertEquals(StopsHeldToTheRuns.NotHeld.A_WITNESS_COMPLETED_TO_MORE_THAN_ARE_RUN,
+                runs.completions(List.of(), List.of(new InputFact.ListLength(length.list(), 63)))
+                        .notBuilt());
     }
 
     @ParameterizedTest
