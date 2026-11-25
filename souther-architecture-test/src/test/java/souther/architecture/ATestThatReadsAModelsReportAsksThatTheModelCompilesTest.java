@@ -254,6 +254,10 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                     + "Lsouther/compiler/query/Compilation;"),
             AMethod.of(HELPER, "compiles", "(Lsouther/compiler/query/Compilation;)"
                     + "Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "checks", "(Lsouther/compiler/query/Compilation;)"
+                    + "Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "resolves", "(Lsouther/compiler/query/Compilation;)"
+                    + "Lsouther/compiler/query/Compilation;"),
             AMethod.of(HELPER, "refusedWith", "(Ljava/util/List;"
                     + "Lsouther/compiler/query/Compilation;)Lsouther/compiler/query/Compilation;"),
             AMethod.of(HELPER, "refusedOnlyWith", "(Ljava/util/Set;"

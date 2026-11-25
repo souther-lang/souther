@@ -78,16 +78,13 @@ class WhoMayParseADocumentTheEditorHoldsTest {
      *
      * <p>The reading parses its text when it is made, and parses it again where its tree is asked
      * for and it kept none: a document the editor has closed, which keeps the small facts and lets
-     * the tree go, or a parse that did not finish, which meets the same failure again. It builds
-     * what the text imports the first time that is asked. The probe parses each repair it tries,
-     * because a repair is one only if it parses.
+     * the tree go, or a parse that did not finish, which meets the same failure again. What the
+     * text imports is read off that tree, as its declarations are. The probe parses each repair it
+     * tries, because a repair is one only if it parses.
      */
     private static final List<String> PARSING = List.of(
             READ + " -> " + PARSE,
             AMethod.of(READING, "root", "()Lsouther/compiler/cst/SyntaxNode;") + " -> " + PARSE,
-            AMethod.of(READING, "importsOf", "(" + STRING + ")Ljava/util/Optional;") + " -> "
-                    + AMethod.of(FRONTEND, "parse",
-                            "(" + STRING + STRING + ")Lsouther/compiler/ast/Ast$Module;"),
             AMethod.of(PROBE, "parses", "(" + STRING + ")Lsouther/compiler/cst/SyntaxNode;")
                     + " -> " + PARSE);
 

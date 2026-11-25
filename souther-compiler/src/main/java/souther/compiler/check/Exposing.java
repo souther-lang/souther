@@ -131,17 +131,17 @@ public final class Exposing {
                 kept.add(imp);   // an ordinary user-module import — read where the universe is
                 continue;
             }
-            for (String name : imp.names()) {
+            for (Ast.ImportedName entry : imp.importedNames()) {
                 // The import line writes both halves of a library name: the module it names is the
                 // alias, and each name in its list is the operation. What is brought in is that
                 // pair, so nothing downstream has to take a spelling apart to get at either.
-                ValueName.Stdlib operation = ValueName.Stdlib.operation(imp.module(), name);
+                ValueName.Stdlib operation = ValueName.Stdlib.operation(imp.module(), entry.text());
                 if (library.isLibraryFunction(operation.qualified())) {
-                    claims.add(new Scoping.Claim.Stands(imp, name, true,
+                    claims.add(new Scoping.Claim.Stands(imp, entry,
                             new Scoping.Brought.ALibraryOperation(operation)));
                 } else {
-                    refused.add(new Refusal.NoSuchLibraryFunction(imp, name));
-                    claims.add(new Scoping.Claim.DoesNot(imp, name, true));
+                    refused.add(new Refusal.NoSuchLibraryFunction(imp, entry.text()));
+                    claims.add(new Scoping.Claim.DoesNot(imp, entry));
                 }
             }
         }

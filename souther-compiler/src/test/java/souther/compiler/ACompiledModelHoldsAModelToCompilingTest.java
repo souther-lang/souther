@@ -34,6 +34,13 @@ class ACompiledModelHoldsAModelToCompilingTest {
             let x = missing
             """;
 
+    /** Every name comes out, and a body does not answer the type it is declared to. */
+    private static final String MISTYPED = """
+            module mistyped
+
+            let one (n: Int): Int = "one"
+            """;
+
     private static Compilation sound() {
         return Compilation.ofSource(SOUND, "Main");
     }
@@ -46,6 +53,27 @@ class ACompiledModelHoldsAModelToCompilingTest {
     void compilesStopsForAModelWithAnError() {
         assertDoesNotThrow(() -> ACompiledModel.compiles(sound()));
         assertThrows(AssertionError.class, () -> ACompiledModel.compiles(broken()));
+    }
+
+    @Test
+    void resolvesStopsForAModelWithANameThatDoesNotResolve() {
+        assertDoesNotThrow(() -> ACompiledModel.resolves(sound()));
+        assertThrows(AssertionError.class, () -> ACompiledModel.resolves(broken()));
+    }
+
+    @Test
+    void checksStopsForAModelWithAnError() {
+        assertDoesNotThrow(() -> ACompiledModel.checks(sound()));
+        assertThrows(AssertionError.class, () -> ACompiledModel.checks(broken()));
+    }
+
+    /** The two stop at different places: a model whose names come out and whose types do not
+     *  passes one and stops the other. */
+    @Test
+    void resolvesAsksAboutNamesAndChecksAboutTypesAsWell() {
+        assertDoesNotThrow(() -> ACompiledModel.resolves(Compilation.ofSource(MISTYPED, "Main")));
+        assertThrows(AssertionError.class,
+                () -> ACompiledModel.checks(Compilation.ofSource(MISTYPED, "Main")));
     }
 
     @Test

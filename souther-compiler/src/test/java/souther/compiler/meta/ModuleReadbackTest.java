@@ -67,7 +67,10 @@ class ModuleReadbackTest {
 
         Ast.Module back = read.module();
         assertEquals(written.name(), back.name());
-        assertEquals(written.exposing(), back.exposing());
+        // What the clause names, and that one is written: where each entry is written is a place in
+        // the text read back, which is not the text the module was compiled from.
+        assertEquals(written.exposing().getClass(), back.exposing().getClass());
+        assertEquals(written.exposing().named(), back.exposing().named());
         assertEquals(names(written.defs()), names(back.defs()));
         assertEquals(List.of("charge"), back.behaviors().stream().map(Ast.BehaviorDef::name).toList());
         // the invariant needs `withinCap`, so it came; `charge` and `unrelated` are implementation

@@ -7,7 +7,6 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.CompilationSources;
 import souther.compiler.Compiler;
-import souther.compiler.ImplicitModuleName;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
@@ -15,6 +14,7 @@ import souther.compiler.check.Requirements;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Abandonment;
@@ -39,7 +39,6 @@ import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.CanonicalNames;
-import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.CstError;
@@ -76,7 +75,6 @@ import souther.compiler.cst.TopLevelForm;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.fmt.Skeleton;
 import souther.compiler.frontend.AstBuilder;
-import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
@@ -96,6 +94,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -106,7 +106,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.function.Supplier;
 
 /**
  * The language-analysis core, independent of the LSP transport: pure functions from source text to
@@ -540,7 +539,8 @@ public final class Analyzer {
      * use. One text has one tree, so the questions about it share the one this read.
      *
      * <p>A document the editor does not have open keeps only the small facts about it — its syntax
-     * errors, its module, its lines, its outline, what it imports — and lets the tree go. Every file
+     * errors, its module, its lines, its outline, the line each of its declarations is shown by,
+     * what it imports — and lets the tree go. Every file
      * of the workspace has a reading, and a tree is many times the size of its text; nothing the
      * editor asks of a closed file needs one but matching a name by its spelling, which reads the
      * file again where it is asked, and where a closed file's places are wanted the workspace compile
@@ -562,18 +562,37 @@ public final class Analyzer {
         private final LineIndex lines;
         private final List<DocumentSymbol> symbols;
 
+        /**
+         * Each declaration the text writes, by where its name starts.
+         *
+         * <p>Read off the tree while there is one to read it off. A reading that lets its tree go
+         * reads it before it does; one that keeps its tree reads it the first time it is asked,
+         * because an open document is parsed again for every edit and asked about far less often.
+         */
+        private Map<Integer, Declared> declared;
+
         /** What is told every time this reading parses its text. */
         private final Runnable parsing;
 
         /** Laid out the first time a place in the text is asked about, and kept with the tree. */
         private SourceLayout laidOut;
 
-        /** What the text imports, read the first time it is asked; empty where it does not read. */
-        private Optional<List<Ast.Import>> imports;
+        /**
+         * The module each name an import list writes is imported from, the first line naming it
+         * winning.
+         *
+         * <p>Read off the tree, as {@link #declared} is and for the same reason, and so off a text
+         * with a syntax error as well: a half-typed body leaves its import lines saying what they
+         * say, and a file that went on naming a declaration while it was being typed is one a
+         * rename has to reach.
+         */
+        private Map<String, String> imported;
 
         private Reading(String text, SourceId document, boolean keepsTheTree, SyntaxNode root,
                         List<CstError<?>> errors, Throwable unfinished, String declares,
-                        LineIndex lines, List<DocumentSymbol> symbols, Runnable parsing) {
+                        LineIndex lines, List<DocumentSymbol> symbols,
+                        Map<Integer, Declared> declared, Map<String, String> imported,
+                        Runnable parsing) {
             this.text = text;
             this.document = document;
             this.keepsTheTree = keepsTheTree;
@@ -583,6 +602,8 @@ public final class Analyzer {
             this.declares = declares;
             this.lines = lines;
             this.symbols = symbols;
+            this.declared = declared;
+            this.imported = imported;
             this.parsing = parsing;
         }
 
@@ -601,20 +622,32 @@ public final class Analyzer {
                 CstParser.Result parsed = CstParser.parse(text);
                 return new Reading(text, document, keepsTheTree, parsed.root(), parsed.errors(),
                         null, AstBuilder.headerModuleName(parsed.root()), lines,
-                        List.copyOf(outline.apply(parsed.root(), lines)), parsing);
+                        List.copyOf(outline.apply(parsed.root(), lines)),
+                        keepsTheTree ? null : declarationsOf(parsed.root(), text),
+                        keepsTheTree ? null : importedBy(parsed.root()), parsing);
             } catch (RuntimeException | StackOverflowError e) {
                 return new Reading(text, document, keepsTheTree, null, List.of(), e, null, lines,
-                        List.of(), parsing);
+                        List.of(), Map.of(), Map.of(), parsing);
             }
         }
 
         /** The same text, as a document the editor has closed: everything but the tree and what
          *  it is laid out as. Nothing is parsed for it. */
         Reading forgettingTheTree() {
-            Reading closed = new Reading(text, document, false, null, errors, unfinished, declares,
-                    lines, symbols, parsing);
-            closed.imports = imports;
-            return closed;
+            return new Reading(text, document, false, null, errors, unfinished, declares,
+                    lines, symbols, declarations(), imports(), parsing);
+        }
+
+        /** The declaration whose name starts at {@code offset}, or null where none does. */
+        Declared declaredAt(int offset) {
+            return declarations().get(offset);
+        }
+
+        private Map<Integer, Declared> declarations() {
+            if (declared == null) {
+                declared = root == null ? Map.of() : declarationsOf(root, text);
+            }
+            return declared;
         }
 
         boolean keepsTheTree() {
@@ -676,26 +709,38 @@ public final class Analyzer {
             return symbols;
         }
 
-        /** The module {@code name} is imported from, or null where no import of this text exposes
-         *  it or the text does not read as a module. */
+        /** The module {@code name}, which is canonical, is imported from, or null where no import
+         *  line of this text lists it. */
         String importing(String name) {
-            if (imports == null) {
-                imports = importsOf(text);
-            }
-            for (Ast.Import imp : imports.orElse(List.of())) {
-                if (imp.names().contains(name)) {
-                    return imp.module();
-                }
-            }
-            return null;
+            return imports().get(name);
         }
 
-        private static Optional<List<Ast.Import>> importsOf(String text) {
-            try {
-                return Optional.of(CstFrontend.parse(text, ImplicitModuleName.OF_A_TEXT).imports());
-            } catch (RuntimeException | StackOverflowError _) {
-                return Optional.empty();   // a file that does not parse cleanly resolves no imports
+        private Map<String, String> imports() {
+            if (imported == null) {
+                imported = root == null ? Map.of() : importedBy(root);
             }
+            return imported;
+        }
+
+        /** Each name the import lines under {@code root} list, with the module its line names. */
+        private static Map<String, String> importedBy(SyntaxNode root) {
+            Map<String, String> out = new HashMap<>();
+            for (SyntaxNode top : root.childNodes()) {
+                if (top.kind() != SyntaxKind.IMPORT_DECL) {
+                    continue;
+                }
+                SyntaxNode module = top.child(SyntaxKind.QUALIFIED_NAME).orElse(null);
+                SyntaxNode list = top.child(SyntaxKind.NAME_LIST).orElse(null);
+                if (module == null || list == null) {
+                    continue;
+                }
+                for (SyntaxElement e : list.children()) {
+                    if (e instanceof SyntaxToken tok && tok.kind() == SyntaxKind.IDENT) {
+                        out.putIfAbsent(nameOf(tok), dottedName(module));
+                    }
+                }
+            }
+            return Map.copyOf(out);
         }
     }
 
@@ -1331,10 +1376,15 @@ public final class Analyzer {
     }
 
     /**
-     * Go-to-definition across the workspace: resolves the identifier under the cursor to the document
-     * and name range of the top-level definition it names. A name defined in the current file resolves
-     * locally; otherwise it is resolved through the file's imports to the module that exposes it, and
-     * the target's own document supplies the range.
+     * Go-to-definition across the workspace: where the declaration the name under the cursor names
+     * is written.
+     *
+     * <p>Which declaration that is, is the compiler's answer wherever it read the document, and
+     * that answer is final: a name it says denotes something with no source here — a library
+     * operation, a value the language gives — is sent nowhere, and so is one it read and found to
+     * name nothing, such as an {@code example} target that is another module's behavior. Neither
+     * is sent to whatever this workspace spells alike. The spelling answers only for a document the
+     * compile could not read ({@link #resolves}).
      */
     public Optional<Location> definition(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
@@ -1347,10 +1397,9 @@ public final class Analyzer {
             if (type != null) {
                 return declarationOf(compilation, type, graph);
             }
-            Optional<Location> value = valueDeclarationOf(compilation, uri, pos, graph);
-            if (value.isPresent()) {
-                return value;
-            }
+            ValueName value = valueUnderCursor(compilation, uri, pos);
+            return value == null ? Optional.empty()
+                    : valueDeclarationOf(compilation, value, uri, graph);
         }
         Reading reading = readingOf(graph, uri);
         SourceLayout lines = laidOut(uri, reading);
@@ -1389,70 +1438,205 @@ public final class Analyzer {
      * it is, so the uses of one body's {@code x} are not another's. The declaration itself is
      * included only when {@code includeDeclaration} is set, and a behavior has two of them.
      *
-     * <p>A local is in reach, which it was not while this matched by spelling: a scan of top-level
-     * declarations cannot see a name bound inside one. Where resolution has nothing to say — a
-     * pipeline's stages and a behavior's own declaration lines are written outside any body, so it
-     * never read them — the spelling is still what answers.
+     * <p>Which name the cursor is on, and where else it is written, is the compiler's answer wherever
+     * it has one, as it is for {@link #definition}: a local is the binding it is, which no scan of
+     * spellings can see. The spelling answers only where the compiler is silent.
      */
     public List<Location> references(String uri, Position pos, ModuleGraph graph, boolean includeDeclaration) {
         References found = referencesOf(uri, pos, graph);
-        return includeDeclaration ? found.withDeclarations() : found.withoutDeclarations().get();
+        return includeDeclaration ? found.withDeclarations() : found.withoutDeclarations();
     }
 
     /**
      * The two answers {@link #references} gives, from one walk: with the declarations and without.
      *
      * <p>One walk because a highlight asks for both, and the uses are the same in each — what tells
-     * them apart is only whether the lines that declare the name are among them. The answer without
-     * them is held back where it is a walk of its own: where the compile found the declarations of
-     * a value and no use of it, what is said without the declarations is the spelling's answer,
-     * which reads every file, and a caller asking for the declarations never pays for it.
+     * them apart is only whether the lines that declare the name are among them.
      */
-    private record References(List<Location> withDeclarations,
-                              Supplier<List<Location>> withoutDeclarations) {
+    private record References(List<Location> withDeclarations, List<Location> withoutDeclarations) {
 
         static References none() {
-            return new References(List.of(), List::of);
+            return new References(List.of(), List.of());
         }
 
         /** The declarations followed by the uses, and the uses alone. */
         static References of(List<Location> declarations, List<Location> uses) {
             List<Location> both = new ArrayList<>(declarations);
             both.addAll(uses);
-            return new References(both, () -> uses);
+            return new References(both, uses);
+        }
+
+        /** These and then {@code more}, each answer beside its own kind. */
+        References and(References more) {
+            List<Location> both = new ArrayList<>(withDeclarations);
+            both.addAll(more.withDeclarations());
+            List<Location> uses = new ArrayList<>(withoutDeclarations);
+            uses.addAll(more.withoutDeclarations());
+            return new References(both, uses);
         }
     }
 
+    /**
+     * A module's declaration by where it is and what it is called: the module that declares it,
+     * and the name it is declared under — what says whether a rename can reach it, and what a list
+     * in a document the compile could not read names it by.
+     */
+    private record Spelled(String module, String name) {
+
+        /** What the compiler identified, as such a list names it; null where the compiler
+         *  identified nothing a module declares — a local is bound in a body the compile read, and
+         *  what the library or the language gives is declared in no document. */
+        static Spelled of(TypeSymbol type, ValueName value) {
+            if (type instanceof TypeSymbol.AtModule at) {
+                return new Spelled(at.module(), at.name());
+            }
+            return value instanceof ValueName.OfAModule declared
+                    ? new Spelled(declared.module(), declared.name()) : null;
+        }
+    }
+
+    /**
+     * Where the name under the cursor is declared and used.
+     *
+     * <p>What the name is comes first and apart from where it is written ({@link #certainlyAt}).
+     * Where it is told for certain, the places are the compiler's answer about that identity. Where
+     * it is not — the cursor is in a document the compile could not read, on something no list
+     * pins down — the spelling is matched, which is a guess an author can read through and nothing
+     * here writes back to a source.
+     */
     private References referencesOf(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
         if (text == null) {
             return References.none();
         }
         Compilation compilation = compileOf(graph);
-        if (resolves(compilation, uri)) {
-            TypeSymbol type = typeUnderCursor(compilation, uri, pos);
-            if (type != null) {
-                List<Location> declarations = new ArrayList<>();
-                declarationOf(compilation, type, graph).ifPresent(declarations::add);
-                return References.of(declarations, usesOf(compilation, type, graph));
-            }
-            ValueName value = valueUnderCursor(compilation, uri, pos);
-            if (value != null) {
-                List<Location> declarations = valueDeclarationsOf(compilation, value, uri, graph);
-                List<Location> uses = valueUsesOf(compilation, value, graph);
-                if (!uses.isEmpty()) {
-                    return References.of(declarations, uses);
-                }
-                if (!declarations.isEmpty()) {
-                    return new References(declarations, () -> bySpelling(uri, text, pos, graph,
-                            compilation).withoutDeclarations().get());
-                }
-            }
-            // Nothing found is not nothing here: the resolve pass records the value names written
-            // in a body, and a composition's stages and a declaration's own name are not those, so
-            // the cursor may be on a name it never saw. Matching the spelling still answers those.
+        Identified named = certainlyAt(compilation, uri, pos, graph);
+        if (named.type() != null) {
+            List<Location> declarations = new ArrayList<>();
+            declarationOf(compilation, named.type(), graph).ifPresent(declarations::add);
+            return References.of(declarations, usesOf(compilation, named.type(), graph));
         }
-        return bySpelling(uri, text, pos, graph, compilation);
+        if (named.value() != null) {
+            References answered = References.of(
+                    valueDeclarationsOf(compilation, named.value(), uri, graph),
+                    valueUsesOf(compilation, named.value(), graph));
+            return named.value() instanceof ValueName.Behavior behavior
+                    ? answered.and(injectionsOf(compilation, behavior, graph)) : answered;
+        }
+        return resolves(compilation, uri) ? References.none()
+                : bySpelling(uri, text, pos, graph, compilation);
+    }
+
+    /** What the cursor is on, as the compiler answers it: a type, or a value, or neither. */
+    private record Identified(TypeSymbol type, ValueName value) {
+
+        static final Identified NOTHING = new Identified(null, null);
+    }
+
+    /**
+     * What the name under the cursor is, where that can be told for certain.
+     *
+     * <p>In a document the compile read, it is the compiler's answer. In one it could not read, it
+     * is told only on an import list entry, which writes both the module and the name: what that
+     * module hands over under the name, by the rule a claim on a line the compile read is settled
+     * by ({@link Names.HandedOver}) — so a name it declares and does not expose is nothing here as
+     * well. Anywhere else in such a document a spelling could be a field, a binding or anything
+     * else spelled alike, and nothing is told.
+     */
+    private Identified certainlyAt(Compilation compilation, String uri, Position pos,
+                                   ModuleGraph graph) {
+        if (resolves(compilation, uri)) {
+            return identifiedAt(compilation, uri, pos);
+        }
+        Reading reading = readingOf(graph, uri);
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxToken ident = identAt(meaningfulTokens(reading.root()), lines,
+                lines.lines().offsetOf(pos.line(), pos.character()));
+        SyntaxNode list = ident == null ? null : ident.parent();
+        SyntaxNode line = (list == null || list.kind() != SyntaxKind.NAME_LIST) ? null
+                : list.parent();
+        SyntaxNode module = (line == null || line.kind() != SyntaxKind.IMPORT_DECL) ? null
+                : line.child(SyntaxKind.QUALIFIED_NAME).orElse(null);
+        if (module == null) {
+            return Identified.NOTHING;
+        }
+        Scoping.Brought brought = compilation.db()
+                .ask(new Names.HandedOver(dottedName(module), nameOf(ident))).value();
+        return switch (brought) {
+            case null -> Identified.NOTHING;
+            case Scoping.Brought.ADeclaration(TypeSymbol type) -> new Identified(type, null);
+            case Scoping.Brought.ABehavior(ValueName.Behavior behavior) ->
+                    new Identified(null, behavior);
+            case Scoping.Brought.AHelper helper -> new Identified(null, helper.named());
+            case Scoping.Brought.ALibraryOperation(ValueName.Stdlib operation) ->
+                    new Identified(null, operation);
+        };
+    }
+
+    /**
+     * What the name under the cursor is, for a question about every place it is named.
+     *
+     * <p>A parameter through which a {@code let} takes a behavior it depends on is that behavior
+     * here. It is spelled as the behavior is and must go on being so, so a rename from it is a
+     * rename of the behavior, and a rename of the behavior rewrites it with the rest.
+     */
+    private Identified identifiedAt(Compilation compilation, String uri, Position pos) {
+        TypeSymbol type = typeUnderCursor(compilation, uri, pos);
+        if (type != null) {
+            return new Identified(type, null);
+        }
+        ValueName value = valueUnderCursor(compilation, uri, pos);
+        String module = compilation.moduleOf(new SourceId(uri));
+        if (value instanceof ValueName.Local local && module != null) {
+            Map<ValueName.Local, ValueName.Behavior> injections =
+                    compilation.db().ask(new Names.Injections(module)).value();
+            ValueName.Behavior injected = injections == null ? null : injections.get(local);
+            if (injected != null) {
+                return new Identified(null, injected);
+            }
+        }
+        return new Identified(null, value);
+    }
+
+    /** Every parameter that injects {@code behavior}, where it is bound and where it is used. */
+    private References injectionsOf(Compilation compilation, ValueName.Behavior behavior,
+                                    ModuleGraph graph) {
+        References found = References.none();
+        for (String module : compilation.modules()) {
+            abandonment.stopIfAsked();
+            Map<ValueName.Local, ValueName.Behavior> injections =
+                    compilation.db().ask(new Names.Injections(module)).value();
+            if (injections == null) {
+                continue;
+            }
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
+            for (Map.Entry<ValueName.Local, ValueName.Behavior> each : injections.entrySet()) {
+                if (each.getValue().equals(behavior)) {
+                    found = found.and(References.of(
+                            valueDeclarationsOf(compilation, each.getKey(), moduleUri, graph),
+                            valueUsesOf(compilation, each.getKey(), graph)));
+                }
+            }
+        }
+        return found;
+    }
+
+    /** Whether the module declaring {@code spelled} is one whose source this workspace holds. */
+    private boolean declaredInTheWorkspace(Compilation compilation, ModuleGraph graph,
+                                           Spelled spelled) {
+        SourceId source = compilation.sourceIdOf(spelled.module());
+        return source != null && graph.text(uriOf(source)) != null;
+    }
+
+    /** The documents the compile did not read, which only a spelling can answer about. */
+    private List<String> unread(Compilation compilation, ModuleGraph graph) {
+        List<String> out = new ArrayList<>();
+        for (String u : graph.uris()) {
+            if (!resolves(compilation, u)) {
+                out.add(u);
+            }
+        }
+        return out;
     }
 
     /** The name under the cursor matched by its spelling, in every file that declares or imports
@@ -1489,7 +1673,7 @@ public final class Analyzer {
             }
             collectReferences(other.root(), name, isType, u, other.lines(), owns, all, uses);
         }
-        return new References(all, () -> uses);
+        return new References(all, uses);
     }
 
     /**
@@ -1584,59 +1768,73 @@ public final class Analyzer {
         return false;
     }
 
-    /** Where renaming touches, before what to write there is decided. */
+    /**
+     * Where renaming touches, before what to write there is decided.
+     *
+     * <p>Only what a document of this workspace declares is renamed: a local, or a type, helper or
+     * behavior of a module whose source the workspace holds. What is declared anywhere else — by
+     * the library, by the language, by a module off the path — is named here and declared where
+     * no edit reaches, so rewriting where it is named would rename nothing and break every place
+     * that named it. Which kind of name it is does not say this; where it is declared does.
+     *
+     * <p>A rename writes to sources, so it touches only places it can tell are the name: the
+     * places the compiler answers for the identity {@link #certainlyAt} tells, and in a document
+     * the compile could not read, the list entries that write the declaring module and the name.
+     * A spelling elsewhere in such a document may be a field or a binding spelled alike, and
+     * rewriting it would change what that program says. Where the name cannot be told for
+     * certain, nothing is renamed.
+     */
     private Map<String, List<Range>> renameRanges(String uri, Position pos, ModuleGraph graph) {
+        Compilation compilation = compileOf(graph);
+        Identified named = certainlyAt(compilation, uri, pos, graph);
+        TypeSymbol type = named.type();
+        ValueName value = named.value();
         Map<String, List<Range>> byUri = new LinkedHashMap<>();
+        Spelled spelled = Spelled.of(type, value);
+        if (!(value instanceof ValueName.Local)
+                && (spelled == null || !declaredInTheWorkspace(compilation, graph, spelled))) {
+            return byUri;
+        }
         for (Location loc : references(uri, pos, graph, true)) {
             byUri.computeIfAbsent(loc.uri(), k -> new ArrayList<>()).add(loc.range());
         }
-        if (byUri.isEmpty()) {
-            return byUri;   // nothing under the cursor to rename
-        }
-        // references() treats a name in an `exposing`/`import` list as a binding site, not a use, and
-        // skips it. Rename must still update those, or the module stops exposing (and importers stop
-        // importing) the renamed symbol, breaking the build.
+        // references() leaves out a name in an `exposing` or `import` list: a list names a
+        // declaration without using it. Rename must still rewrite those, or the module stops
+        // exposing — and importers stop importing — what was renamed.
         //
-        // Which module those belong to is the same question the references were found by, and it has
-        // to be answered the same way: renaming from a qualified use renames the module the
-        // reference names, and matching the spelling here would edit this module's own `exposing`
-        // instead — leaving both modules uncompilable.
-        Compilation compilation = compileOf(graph);
-        TypeSymbol type = typeUnderCursor(compilation, uri, pos);
-        // What the language gives is exposed by no module and imported by nobody, so there is no
-        // `exposing` line and no `import` line naming it to edit.
-        if (type instanceof TypeSymbol.AtModule at) {
-            addExposingAndImportSites(compilation, at.name(), at.module(), graph, byUri);
-            return byUri;
+        // Where the compile read the document, which entries those are is its answer, asked of the
+        // same identity the references were: a list entry is answered with the declaration it
+        // names as a use is, so renaming from a qualified use, a list or the declaration reaches
+        // one set. Where it could not, they are the entries of a list about the declaring module.
+        if (spelled != null) {
+            addExposingAndImportSites(compilation, spelled.name(), spelled.module(),
+                    unread(compilation, graph), graph, byUri);
         }
-        if (type != null) {
-            return byUri;
-        }
-        ValueName value = valueUnderCursor(compilation, uri, pos);
-        if (value != null) {
-            String declaring = switch (value) {
-                case ValueName.Helper h -> h.module();
-                case ValueName.Behavior b -> b.module();
-                // a local is named where it is bound and nowhere else; the library and the language
-                // are not this workspace's to rename
-                case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _ -> null;
-            };
-            if (declaring != null) {
-                addExposingAndImportSites(compilation, value.name(), declaring, graph, byUri);
+        SourceLayouts texts = textsOf(graph);
+        for (String module : compilation.modules()) {
+            abandonment.stopIfAsked();
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
+            Names.Listed listed = compilation.db().ask(new Names.Listings(module)).value();
+            if (listed == null || !resolves(compilation, moduleUri)) {
+                continue;   // its lists are among the unread ones above
             }
-            return byUri;
-        }
-        Reading reading = readingOf(graph, uri);
-        SyntaxNode root = reading.root();
-        SourceLayout lines = laidOut(uri, reading);
-        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
-        if (ident != null) {
-            String name = nameOf(ident);
-            String definingModule = declaringDef(root, name) != null
-                    ? moduleOf(compilation, graph, uri) : reading.importing(name);
-            if (definingModule != null) {
-                addExposingAndImportSites(compilation, name, definingModule, graph, byUri);
+            List<WrittenName> naming = new ArrayList<>();
+            for (Resolve.TypeUse each : listed.types()) {
+                if (each.denotes().equals(type)) {
+                    naming.add(each.written());
+                }
+            }
+            for (Resolve.ValueUse each : listed.values()) {
+                if (each.denotes().equals(value)) {
+                    naming.add(each.written());
+                }
+            }
+            for (WrittenName entry : naming) {
+                String at = documentOf(entry.pos(), moduleUri, graph);
+                if (at != null) {
+                    byUri.computeIfAbsent(at, k -> new ArrayList<>())
+                            .add(writtenRange(texts, entry));
+                }
             }
         }
         return byUri;
@@ -1650,23 +1848,18 @@ public final class Analyzer {
     }
 
     /**
-     * Where what the cursor names as a value is written, as the compiler answers it: the binding
-     * that introduced a local, or the {@code let} or {@code behavior} that declares it.
+     * Where what a name denotes as a value is written, as the compiler answers it: the binding that
+     * introduced a local, the {@code let} or {@code behavior} that declares it, or — for a type
+     * written as a value — the type's declaration.
      *
-     * <p>A local was out of reach while this was matched by spelling — one spelling may be bound in
-     * several bodies, and nothing said which binding a use belonged to. Resolution says.
+     * <p>A local is in reach because resolution says which binding a use belongs to; one spelling
+     * may be bound in several bodies, and the spelling cannot say.
      */
-    private Optional<Location> valueDeclarationOf(Compilation compilation, String uri, Position pos,
-                                                  ModuleGraph graph) {
-        ValueName target = valueUnderCursor(compilation, uri, pos);
-        if (target == null) {
-            return Optional.empty();
-        }
-        return valueDeclarationOf(compilation, target, uri, graph);
-    }
-
     private Optional<Location> valueDeclarationOf(Compilation compilation, ValueName target,
                                                   String uri, ModuleGraph graph) {
+        if (target instanceof ValueName.OfType(String _, TypeSymbol type)) {
+            return declarationOf(compilation, type, graph);
+        }
         WrittenName at = compilation.db().ask(new Names.ValueDeclaredAt(target)).value();
         return nameAt(at, declaringFile(compilation, target, uri), graph);
     }
@@ -1728,12 +1921,11 @@ public final class Analyzer {
     /**
      * Whether the compile read this document and answered about the names in it.
      *
-     * <p>This is what decides whether an unanswered question is a question with no answer or a
-     * question nothing could be asked of. Where the compile read the file, its silence is the
-     * answer: nothing is named under the cursor. Where it could not — a file with a syntax error is
-     * held out of the module set, and a module whose names would not resolve has no answers to give
-     * — matching the spelling is all there is, and it goes on being what an author gets while a file
-     * is half-typed.
+     * <p>Where it did, what it says a name denotes is the answer, and nothing a spelling matches is
+     * put in its place. Where it could not — a file with a syntax error is held out of the module
+     * set, and a module whose names would not resolve has no answers to give — matching the
+     * spelling is all there is, and it goes on being what an author gets while a file is
+     * half-typed.
      */
     private boolean resolves(Compilation compilation, String uri) {
         String module = compilation.moduleOf(new SourceId(uri));
@@ -1788,7 +1980,11 @@ public final class Analyzer {
                                        ModuleGraph graph) {
         List<Location> out = new ArrayList<>();
         SourceLayouts texts = textsOf(graph);
-        for (String module : compilation.modules()) {
+        // A local is used in the body that binds it and nowhere else, so its own module is the only
+        // one asked.
+        Collection<String> modules = target instanceof ValueName.Local local
+                ? List.of(local.id().owner().module()) : compilation.modules();
+        for (String module : modules) {
             abandonment.stopIfAsked();
             String moduleUri = uriOf(compilation.sourceIdOf(module));
             for (Resolve.ValueUse use
@@ -1802,13 +1998,14 @@ public final class Analyzer {
         return out;
     }
 
-    /** Adds the {@code exposing ( name )} occurrence in the module that defines {@code name}, and each
-     * {@code import <definingModule> ( name )} occurrence in the modules that import it — the binding
-     * sites find-references skips but rename must carry along. */
+    /** Adds, among {@code uris}, the {@code exposing ( name )} occurrence in the module that defines
+     * {@code name}, and each {@code import <definingModule> ( name )} occurrence in the modules that
+     * import it — the binding sites find-references skips but rename must carry along — matched by
+     * spelling. */
     private void addExposingAndImportSites(Compilation compilation, String name,
-                                           String definingModule, ModuleGraph graph,
-                                           Map<String, List<Range>> byUri) {
-        for (String u : graph.uris()) {
+                                           String definingModule, Collection<String> uris,
+                                           ModuleGraph graph, Map<String, List<Range>> byUri) {
+        for (String u : uris) {
             abandonment.stopIfAsked();
             Reading reading = readingOf(graph, u);
             SyntaxNode root = reading.root();
@@ -1847,7 +2044,7 @@ public final class Analyzer {
     }
 
     /** The dotted spelling of a {@code QUALIFIED_NAME} node (its identifier tokens joined by {@code .}). */
-    private String dottedName(SyntaxNode qualifiedName) {
+    private static String dottedName(SyntaxNode qualifiedName) {
         StringBuilder sb = new StringBuilder();
         for (SyntaxElement e : qualifiedName.children()) {
             if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
@@ -2132,7 +2329,7 @@ public final class Analyzer {
      */
     public List<DocumentHighlight> documentHighlights(String uri, Position pos, ModuleGraph graph) {
         References found = referencesOf(uri, pos, graph);
-        List<Range> reads = here(uri, found.withoutDeclarations().get());
+        List<Range> reads = here(uri, found.withoutDeclarations());
         List<DocumentHighlight> out = new ArrayList<>();
         for (Range at : here(uri, found.withDeclarations())) {
             out.add(new DocumentHighlight(at,
@@ -2788,7 +2985,7 @@ public final class Analyzer {
     /** Node kinds where an identifier names a type. */
     private static final java.util.Set<SyntaxKind> TYPE_POSITIONS = java.util.Set.of(
             SyntaxKind.TYPE_REF, SyntaxKind.TYPE_ARGS, SyntaxKind.SUM_BODY, SyntaxKind.NEWTYPE_BODY,
-            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.DEPENDS_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
+            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
             SyntaxKind.PATTERN_CTOR);
 
     /** Node kinds where an identifier binds a value name (a param or a {@code let}). A pattern puts
@@ -2911,33 +3108,19 @@ public final class Analyzer {
         return null;
     }
 
-    /** Go-to-definition within one document: resolves the identifier under the cursor to the name
-     * range of the top-level definition it names, if any. The workspace-aware
-     * {@link #definition(String, Position, ModuleGraph)} resolves across imports as well. */
-    public Optional<Range> definition(String text, Position pos) {
-        Reading reading = readingOf(text);
-        SourceLayout lines = reading.laidOut();
-        SyntaxNode root = reading.root();
-        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
-        if (ident == null) {
-            return Optional.empty();
-        }
-        SyntaxNode def = declaringDef(root, nameOf(ident));
-        if (def == null) {
-            return Optional.empty();
-        }
-        SyntaxToken name = nameToken(def);
-        return name == null ? Optional.empty() : Optional.of(tokenRange(lines.lines(), name));
-    }
-
     /**
-     * Hover: on a clause of an invariant, how that clause can be discharged at compile time; anywhere
-     * else, the signature line of the definition the identifier under the cursor names.
+     * Hover: on a clause of an invariant or of an {@code ensures}, what the check reads of it;
+     * anywhere else, the declaration the name under the cursor names.
      *
-     * <p>The clause answer is the compiler's, because the classification is a fact about the language
-     * and not something a reader of the syntax can work out. The rest stays syntactic: a hover that
-     * only shows what is written does not need a compile, and this one asks for one only where it has
-     * something semantic to say.
+     * <p>Which declaration that is, is {@link #definition}'s answer, so the two cannot disagree
+     * about what a name is: what a hover shows is the line a definition goes to, wherever the name
+     * is written — a call, an {@code example} header, a stand-in, another module, another file. A
+     * name that has no declaration to go to stands for itself, and the token under the cursor is
+     * then what is shown — as the declaration it is where it declares something, a field or a
+     * parameter, and as the characters otherwise.
+     *
+     * <p>The range is the cursor's name and not the declaration's. That is what the reader is
+     * pointing at.
      */
     public Optional<Hover> hover(String uri, String text, Position pos, ModuleGraph graph) {
         Reading reading = readingOf(uri, text, graph.isOpen(uri));
@@ -2946,9 +3129,66 @@ public final class Analyzer {
             return clause;
         }
         Optional<Hover> rule = ensuresClauseHover(uri, reading, pos, graph);
-        return rule.isPresent() ? rule
-                : hover(uri, reading, pos).map(shown -> withWhatIsNotStated(shown, uri, reading,
-                        pos, graph));
+        if (rule.isPresent()) {
+            return rule;
+        }
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxToken ident = identAt(meaningfulTokens(reading.root()), lines,
+                lines.lines().offsetOf(pos.line(), pos.character()));
+        if (ident == null) {
+            return Optional.empty();
+        }
+        Range here = tokenRange(lines.lines(), ident);
+        Location declared = definition(uri, pos, graph).orElse(new Location(uri, here));
+        boolean itself = declared.uri().equals(uri);
+        Reading in = itself ? reading : readingOf(graph, declared.uri());
+        int at = in.lines().offsetOf(declared.range().start().line(),
+                declared.range().start().character());
+        Declared declaring = in.declaredAt(at);
+        if (declaring == null) {
+            return Optional.of(new Hover(shownAsSource(ident.text()), here));
+        }
+        Hover shown = new Hover(shownAsSource(declaring.line()), here);
+        return Optional.of(declaring.kind() == SyntaxKind.BEHAVIOR_DEF && itself
+                && at == ident.start()
+                ? withWhatIsNotStated(shown, uri, graph, declaring.name()) : shown);
+    }
+
+    /**
+     * One declaration a text writes: what kind it is, the name it declares, and the line it is
+     * shown by.
+     *
+     * <p>Kept by a {@link Reading} beside its outline, so a hover on a name another file declares
+     * is answered from a closed file without reading it again.
+     */
+    private record Declared(SyntaxKind kind, String name, String line) {}
+
+    /** The kinds of node that declare the name they open with, each shown by its first line. */
+    private static final Set<SyntaxKind> DECLARING = EnumSet.of(SyntaxKind.DATA_DEF,
+            SyntaxKind.BEHAVIOR_DEF, SyntaxKind.FN_DEF, SyntaxKind.FIELD, SyntaxKind.PARAM,
+            SyntaxKind.FN_PARAM, SyntaxKind.LET_STMT);
+
+    /** Every declaration under {@code node}, by where its name starts in {@code text}. */
+    private static Map<Integer, Declared> declarationsOf(SyntaxNode node, String text) {
+        Map<Integer, Declared> out = new HashMap<>();
+        declarationsOf(node, text, out);
+        return Map.copyOf(out);
+    }
+
+    private static void declarationsOf(SyntaxNode node, String text, Map<Integer, Declared> out) {
+        SyntaxToken name = DECLARING.contains(node.kind()) ? nameToken(node) : null;
+        if (name != null) {
+            out.put(name.start(),
+                    new Declared(node.kind(), nameOf(name), signatureLine(text, node)));
+        }
+        for (SyntaxNode child : node.childNodes()) {
+            declarationsOf(child, text, out);
+        }
+    }
+
+    /** {@code line} as a hover shows source: a fenced block of this language. */
+    private static String shownAsSource(String line) {
+        return "```souther\n" + line + "\n```";
     }
 
     /**
@@ -2957,24 +3197,13 @@ public final class Analyzer {
      *
      * <p>There is no wildcard arm, so a case no rule names is one the behavior promises nothing of.
      * That is the declaration speaking and not a mistake in it, which is why a reader is shown it
-     * where they are reading the declaration rather than told about it as a problem.
+     * where they are reading the declaration — the cursor on the name the {@code behavior} line
+     * declares, as the hover resolved it — rather than told about it as a problem. Only there:
+     * what is read to say it is every rule of the module, which nothing else asks for.
      */
-    private Hover withWhatIsNotStated(Hover shown, String uri, Reading reading, Position pos,
-                                      ModuleGraph graph) {
-        SourceLayout lines = laidOut(uri, reading);
-        SyntaxNode root = reading.root();
-        SyntaxToken ident = identAt(meaningfulTokens(root), lines,
-                lines.lines().offsetOf(pos.line(), pos.character()));
-        // The cursor on the name a behavior is declared under, and nowhere else. `declaringDef` finds
-        // a definition by the characters of a name, so a parameter or a local spelled like a behavior
-        // of this module finds that behavior — and what is said here would be said about a value that
-        // states nothing. Which token the cursor is on tells the declaration from anything spelled
-        // like it.
-        SyntaxNode def = ident == null ? null : declaringDef(root, nameOf(ident));
-        SyntaxToken declares = def == null ? null : nameToken(def);
-        ContractDischarge discharge = def != null && def.kind() == SyntaxKind.BEHAVIOR_DEF
-                && declares != null && declares.start() == ident.start()
-                ? contractOf(uri, graph, ident) : null;
+    private Hover withWhatIsNotStated(Hover shown, String declaringUri, ModuleGraph graph,
+                                      String behavior) {
+        ContractDischarge discharge = contractOf(declaringUri, graph, behavior);
         if (discharge == null || discharge.casesNothingIsSaidAbout().isEmpty()) {
             return shown;
         }
@@ -2982,7 +3211,7 @@ public final class Analyzer {
         for (TypeSymbol each : discharge.casesNothingIsSaidAbout()) {
             unstated.add("`" + each.name() + "`");
         }
-        return new Hover(shown.contents() + "\n\nNo `ensures` rule applies when `" + ident.text()
+        return new Hover(shown.contents() + "\n\nNo `ensures` rule applies when `" + behavior
                 + "` returns " + oneOf(unstated) + ".", shown.range());
     }
 
@@ -3013,7 +3242,7 @@ public final class Analyzer {
         if (clause == null || name == null) {
             return Optional.empty();
         }
-        ContractDischarge discharge = contractOf(uri, graph, name);
+        ContractDischarge discharge = contractOf(uri, graph, nameOf(name));
         if (discharge == null) {
             return Optional.empty();
         }
@@ -3032,24 +3261,23 @@ public final class Analyzer {
     }
 
     /**
-     * What the compiler says about the behavior the token {@code named} spells, or null where the
-     * document belongs to no module this compile has, or the behavior states nothing.
+     * What the compiler says about the behavior named {@code behavior} in the document at
+     * {@code uri}, or null where the document belongs to no module this compile has, or the
+     * behavior states nothing.
      *
-     * <p>A token and not a spelling. The compiler files its answer under the canonical name, and a
-     * cursor is characters; handed a {@link String}, a caller has already decided which of the two
-     * it is passing, and both call sites here had that decision to make. Canonically equivalent
-     * spellings are one name ({@link #nameOf}), and which of them an author's cursor happens to be
-     * on is not a thing an editor may answer differently.
+     * <p>The name is canonical, as the compiler files its answer under it: a token turned into one
+     * by {@link #nameOf}, so canonically equivalent spellings are one name and which of them an
+     * author's cursor happens to be on is not a thing an editor may answer differently.
      */
-    private ContractDischarge contractOf(String uri, ModuleGraph graph, SyntaxToken named) {
+    private ContractDischarge contractOf(String uri, ModuleGraph graph, String behavior) {
         Compilation compilation = compileOf(graph);
         String module = moduleOf(compilation, graph, uri);
-        if (module == null || named == null) {
+        if (module == null || behavior == null) {
             return null;
         }
         Map<String, ContractDischarge> byName =
                 compilation.db().ask(new Bodies.ContractCapabilities(module)).value();
-        return byName == null ? null : byName.get(nameOf(named));
+        return byName == null ? null : byName.get(behavior);
     }
 
     /**
@@ -3272,38 +3500,8 @@ public final class Analyzer {
         return found;
     }
 
-    /** Hover: shows the signature line of the definition the identifier under the cursor names. */
-    public Optional<Hover> hover(String text, Position pos) {
-        return hover(null, readingOf(text), pos);
-    }
-
-    /** The same, of the document at {@code uri}, or of a text with no document where that is
-     *  null. */
-    private Optional<Hover> hover(String uri, Reading reading, Position pos) {
-        String text = reading.text();
-        SourceLayout lines = laidOut(uri, reading);
-        SyntaxNode root = reading.root();
-        int offset = lines.lines().offsetOf(pos.line(), pos.character());
-        SyntaxToken ident = identAt(meaningfulTokens(root), lines, offset);
-        if (ident == null) {
-            return Optional.empty();
-        }
-        String signature;
-        SyntaxNode parent = ident.parent();
-        if (parent != null && (parent.kind() == SyntaxKind.FIELD
-                || parent.kind() == SyntaxKind.PARAM || parent.kind() == SyntaxKind.FN_PARAM)) {
-            // a declaration site: show the binding's own `name: Type`, read straight from the tree
-            signature = signatureLine(text, parent);
-        } else {
-            SyntaxNode def = declaringDef(root, nameOf(ident));
-            signature = def != null ? signatureLine(text, def) : ident.text();
-        }
-        String contents = "```souther\n" + signature + "\n```";
-        return Optional.of(new Hover(contents, tokenRange(lines.lines(), ident)));
-    }
-
     /** The definition's first source line, from its first real token (leading comments dropped). */
-    private String signatureLine(String text, SyntaxNode def) {
+    private static String signatureLine(String text, SyntaxNode def) {
         SyntaxToken first = firstMeaningfulToken(def);
         if (first == null) {
             return def.text().strip();
@@ -3430,7 +3628,7 @@ public final class Analyzer {
         }
     }
 
-    private SyntaxToken firstMeaningfulToken(SyntaxNode node) {
+    private static SyntaxToken firstMeaningfulToken(SyntaxNode node) {
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxToken t && !t.isTrivia()) {
                 return t;
@@ -3603,10 +3801,11 @@ public final class Analyzer {
             return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
         }
         return switch (parent) {
-            case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
+            case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE,
                  ENSURES_ARM,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
-            case BEHAVIOR_DEF, FN_DEF, STAGE -> T_FUNCTION;
+            // a `depends on` clause names behaviors, as a composition's stages do
+            case BEHAVIOR_DEF, FN_DEF, STAGE, DEPENDS_CLAUSE -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
             case FIELD, FIELD_INIT, FIELD_ACCESS, FIELD_GETTER -> T_PROPERTY;
             case MODULE_HEADER, QUALIFIED_NAME, IMPORT_DECL -> T_NAMESPACE;
@@ -3674,7 +3873,7 @@ public final class Analyzer {
                 nodeRange(lines, def), tokenRange(lines, name), List.of()));
     }
 
-    private SyntaxToken nameToken(SyntaxNode node) {
+    private static SyntaxToken nameToken(SyntaxNode node) {
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
                 return t;

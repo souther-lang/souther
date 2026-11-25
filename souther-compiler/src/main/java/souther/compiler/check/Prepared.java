@@ -262,9 +262,9 @@ public final class Prepared {
             this.block = block;
         }
 
-        /** The behavior the rows are about. */
-        public String target() {
-            return block.target();
+        /** The behavior the rows are about, or null where the target named none. */
+        public ValueName.Behavior exampled() {
+            return block.exampled();
         }
 
         /**

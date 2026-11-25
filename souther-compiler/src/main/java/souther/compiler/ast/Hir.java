@@ -525,8 +525,25 @@ public interface Hir {
      * its target module). {@code exampleFileTarget} on a {@link Module} is non-null exactly when the
      * module was parsed from an {@code examples for <module>} file: it names the target and marks the
      * module as an example-only contribution, not a module of its own.
+     *
+     * <p>The target is the behavior resolution answered, as a {@link Fake}'s is. Only a behavior
+     * of the module the block is attached to answers it (spec §example-target-is-a-behavior), and
+     * a name that reaches none was read and found to name nothing: what to say about that is the
+     * example run's, which tells a name nothing declares from a helper's.
      */
-    record Example(String target, List<ExampleRow> rows, SourcePos pos) implements Hir {}
+    record Example(Var target, List<ExampleRow> rows, SourcePos pos) implements Hir {
+
+        /** Which behavior the rows are about, or null where the name denoted none. */
+        public ValueName.Behavior exampled() {
+            return behaviorOf(target);
+        }
+
+        /** The name the header writes, which is what the block's rows are filed and reported
+         *  under whether or not it denoted anything. */
+        public String named() {
+            return target.written().canonical();
+        }
+    }
 
     /**
      * What stands where a row's answer goes.

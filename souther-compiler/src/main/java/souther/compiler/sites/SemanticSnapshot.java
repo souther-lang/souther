@@ -266,7 +266,7 @@ public final class SemanticSnapshot {
         Hir.Module offered = offering.value();
         Set<String> inOrder = new LinkedHashSet<>();
         if (offered.exposing() instanceof ExposingClause.Written written) {
-            inOrder.addAll(written.entries());
+            inOrder.addAll(written.named());
         } else {
             // Every kind of declaration is its own list, so the order they were written in is
             // asked of where each was written: a `let` above a `data` comes first. Only what is

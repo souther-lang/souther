@@ -6,6 +6,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.DeclarationReads;
@@ -19,6 +20,7 @@ import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Scoping;
+import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Resolve;
@@ -1511,7 +1513,8 @@ public final class Names {
 
     /**
      * The type the cursor is on at {@code at}: the one a name there denotes, or — when the cursor is
-     * on a declaration's own name — that declaration.
+     * on a declaration's own name, or on a name a header lists ({@link Listings}) — that
+     * declaration.
      *
      * <p>One question, so an editor's go-to-definition, find-references and rename all agree about
      * what the cursor is on. They used to each decide for themselves, by spelling.
@@ -1540,8 +1543,163 @@ public final class Names {
                     }
                 }
             }
+            Answer<Listed> listed = db.ask(new Listings(name));
+            if (listed.present()) {
+                for (Resolve.TypeUse entry : listed.value().types()) {
+                    if (spans(entry.written(), at)) {
+                        return Answer.of(entry.denotes());
+                    }
+                }
+            }
             Resolve.TypeUse denoted = db.ask(new DenotedAt(at)).value();
             return denoted == null ? Answer.absent() : Answer.of(denoted.denotes());
+        }
+    }
+
+    /**
+     * What each name a module's header lists denotes: every entry of its {@code exposing} clause
+     * and of its import lines, each with the declaration it names.
+     *
+     * <p>Beside {@link Facts} and not in it. A list names a declaration without using it — an
+     * import list entry is what an unused import is found by, and counted among the uses every
+     * import would be used by being written — so the two are asked apart. What they share is that
+     * both are the compiler's answer: an editor asking what the name under the cursor is, or where
+     * a declaration is named, is answered the same at a list entry as at a use, and nothing reads a
+     * list's meaning off its spelling.
+     *
+     * <p>An {@code exposing} entry is answered with this module's declaration of that name, in each
+     * namespace it declares it in, and with nothing where it declares none. A qualified one names
+     * nothing here: the clause is granular to the type, and one is refused.
+     *
+     * <p>An import entry is answered with what its line brings in under it — the claim
+     * {@link Scoping} settled for that entry, read and not worked out again — so a library
+     * operation is answered as a use of it is, and an entry its line could not bring in (a name
+     * the module does not declare, or declares and does not expose) names nothing, as a use of it
+     * does. That the entry is wrong is what the import's own report says.
+     */
+    public record Listings(String name) implements Key<Listed> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Listed> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            Answer<Scoping.Scoped> scope = db.ask(new ModuleScope(name));
+            if (m == null || !scope.present()) {
+                return Answer.absent();
+            }
+            List<Resolve.TypeUse> types = new ArrayList<>();
+            List<Resolve.ValueUse> values = new ArrayList<>();
+            if (m.exposing() instanceof ExposingClause.Written written) {
+                for (WrittenName entry : written.entries()) {
+                    if (!entry.canonical().contains(".")) {
+                        declaredHere(db, entry, scope.value(), types, values);
+                    }
+                }
+            }
+            for (Scoping.Claim claim : scope.value().claims()) {
+                if (!(claim instanceof Scoping.Claim.Stands(Ast.Import _,
+                        Ast.ImportedName entry, Scoping.Brought what)) || !claim.written()) {
+                    continue;   // nothing brought in, or a name no list writes
+                }
+                WrittenName at = entry.written();
+                switch (what) {
+                    case Scoping.Brought.ADeclaration(TypeSymbol type) ->
+                            types.add(new Resolve.TypeUse(at, type));
+                    case Scoping.Brought.ABehavior(ValueName.Behavior behavior) ->
+                            values.add(new Resolve.ValueUse(at, behavior));
+                    case Scoping.Brought.AHelper helper ->
+                            values.add(new Resolve.ValueUse(at, helper.named()));
+                    case Scoping.Brought.ALibraryOperation(ValueName.Stdlib operation) ->
+                            values.add(new Resolve.ValueUse(at, operation));
+                }
+            }
+            return Answer.of(new Listed(List.copyOf(types), List.copyOf(values)));
+        }
+
+        /** What this module declares under the name {@code entry} writes, in either namespace,
+         *  added as what that entry denotes. */
+        private void declaredHere(Db db, WrittenName entry, Scoping.Scoped scope,
+                                  List<Resolve.TypeUse> types, List<Resolve.ValueUse> values) {
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(name));
+            Ast.Def def = defs.present()
+                    ? defs.value().declarations().get(entry.canonical()) : null;
+            if (def != null) {
+                types.add(new Resolve.TypeUse(entry,
+                        writtenRegistry(db).identify(def.declaredKey())));
+            }
+            ValueName value = scope.values().reachable().byName().get(entry.canonical());
+            if (value instanceof ValueName.OfAModule declared && declared.module().equals(name)) {
+                values.add(new Resolve.ValueUse(entry, value));
+            }
+        }
+    }
+
+    /** The names a module's header lists, by namespace, each with what it denotes. */
+    public record Listed(List<Resolve.TypeUse> types, List<Resolve.ValueUse> values) {}
+
+    /**
+     * What an import entry naming {@code from} and {@code name} names: what that module hands over
+     * under the name, as a claim on such an entry is settled ({@link Scoping#handedOver}), or
+     * absent where it hands nothing over.
+     *
+     * <p>Asked about an entry written where no claim is made — a line in a file the compile could
+     * not read. The entry writes both the module and the name, so what it names is the same
+     * answer a line of a module the compile read gets, by the same rule.
+     */
+    public record HandedOver(String from, String name) implements Key<Scoping.Brought> {
+        @Override
+        public String module() {
+            return from;
+        }
+
+        @Override
+        public Answer<Scoping.Brought> compute(Db db) {
+            ModuleUniverse.InSight there = CompilationUniverse.over(db).module(from);
+            Scoping.Brought brought = there instanceof ModuleUniverse.InSight.Read read
+                    ? Scoping.handedOver(from, name, read) : null;
+            return brought == null ? Answer.absent() : Answer.of(brought);
+        }
+    }
+
+    /**
+     * Each parameter through which a module's {@code let}s take a behavior they depend on, with
+     * that behavior.
+     *
+     * <p>A local, and a name of the behavior as well. A use in the body denotes the parameter, as
+     * resolution says; the parameter is spelled as the behavior it injects is, and an
+     * implementation that spells it otherwise is refused (E1615). So whatever goes by the
+     * behavior's name — a rename above all — goes by this binding's too, and which parameter
+     * injects which behavior is {@link SpecImplementation}'s answer, read here and not matched by
+     * spelling.
+     */
+    public record Injections(String name)
+            implements Key<Map<ValueName.Local, ValueName.Behavior>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Local, ValueName.Behavior>> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Resolved(name));
+            if (!resolved.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Local, ValueName.Behavior> out = new LinkedHashMap<>();
+            for (SpecImplementation.Implemented implemented
+                    : SpecImplementation.implementationsOf(resolved.value()).values()) {
+                for (SpecImplementation.ParameterBinding binding : implemented.bindings()) {
+                    if (binding instanceof SpecImplementation.ParameterBinding.AnInjection(
+                            Hir.FnParam written, ValueName.Behavior behavior)) {
+                        out.put(new ValueName.Local(written.binder().name(),
+                                written.binder().id()), behavior);
+                    }
+                }
+            }
+            return Answer.of(Map.copyOf(out));
         }
     }
 
@@ -1631,12 +1789,14 @@ public final class Names {
 
     /**
      * The value the cursor is on at {@code at}: the one a name there denotes, or — when the cursor
-     * is on a binding — the binding itself.
+     * is on a binding, on the name a declaration declares or on a name a header lists
+     * ({@link Listings}) — that binding or declaration.
      *
      * <p>{@link TypeAt} for the value namespace, and for the same reason: a reader asking about a
-     * binding is asking from one end or the other, and the two ends are one question. Answering
-     * only where a name is read would put a local within reach from its uses and out of reach from
-     * the {@code let} that binds it.
+     * name is asking from one end or the other, and the two ends are one question. Answering only
+     * where a name is read would put a local within reach from its uses and out of reach from the
+     * {@code let} that binds it, and a behavior within reach from a call and out of reach from its
+     * own {@code behavior} line.
      */
     public record ValueAt(SourcePos at) implements Key<ValueName> {
         @Override
@@ -1664,6 +1824,18 @@ public final class Names {
                     return Answer.of(local);
                 }
             }
+            ValueName declared = declaredAt(db, name, at);
+            if (declared != null) {
+                return Answer.of(declared);
+            }
+            Answer<Listed> listed = db.ask(new Listings(name));
+            if (listed.present()) {
+                for (Resolve.ValueUse entry : listed.value().values()) {
+                    if (spans(entry.written(), at)) {
+                        return Answer.of(entry.denotes());
+                    }
+                }
+            }
             Resolve.ValueUse use = db.ask(new ValueDenotedAt(at)).value();
             if (use == null) {
                 return Answer.absent();
@@ -1673,6 +1845,37 @@ public final class Names {
                 return Answer.absent();
             }
             return Answer.of(use.denotes());
+        }
+
+        /**
+         * The value whose own declaration writes its name at {@code at} — a {@code behavior} line,
+         * or a {@code let} that implements a behavior or defines a helper — or null where none does.
+         *
+         * <p>What the module's scope reaches by that name, which is the table resolution answers a
+         * use from. So a declaration and its uses are one identity: a behavior's {@code let} is the
+         * behavior and not a helper of its name, because the scope says so and not because this
+         * works it out again.
+         */
+        private static ValueName declaredAt(Db db, String module, SourcePos at) {
+            Ast.Module m = db.ask(new Front.Available(module)).value();
+            if (m == null) {
+                return null;
+            }
+            String declared = null;
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                if (spans(b.written(), at)) {
+                    declared = b.name();
+                }
+            }
+            for (Ast.FnDef fn : m.fns()) {
+                if (spans(fn.written(), at)) {
+                    declared = fn.name();
+                }
+            }
+            Answer<Scoping.Scoped> scope =
+                    declared == null ? null : db.ask(new ModuleScope(module));
+            return scope == null || !scope.present()
+                    ? null : scope.value().values().reachable().byName().get(declared);
         }
 
         /**

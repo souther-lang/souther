@@ -3,7 +3,9 @@ package souther.compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Names;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -46,6 +48,51 @@ public final class ACompiledModel {
     /** {@code model}, answered in full, held to compile. */
     public static Compilation compiles(Compilation model) {
         return refusedWith(List.of(), model);
+    }
+
+    /**
+     * {@code model} held to every name it writes coming out — each module's imports, declarations
+     * and resolution, as {@code Names.Sound} asks — and asked nothing past that.
+     *
+     * <p>For a test whose claim is about what a name denotes and nothing else. Types and rows are
+     * no part of that answer, and asking for them is most of what such a test would cost.
+     */
+    public static Compilation resolves(Compilation model) {
+        List<String> unsound = new ArrayList<>();
+        for (String module : model.modules()) {
+            if (!Boolean.TRUE.equals(model.db().ask(new Names.Sound(module)).value())) {
+                unsound.add(module);
+            }
+        }
+        List<String> refused = new ArrayList<>();
+        model.errors().forEach(found -> refused.add(found.diagnostic().code()));
+        assertEquals(List.of(), refused, "what the model's names came to says no error");
+        assertEquals(List.of(), unsound, "every name the model writes comes out");
+        return model;
+    }
+
+    /**
+     * {@code model} held to every module of it checking — its names, its types, each
+     * implementation against the behavior it implements — and asked nothing past that: no row is
+     * run, nothing is measured.
+     *
+     * <p>For a test whose claim is about the program as it is written, such as what a name
+     * denotes. Answering such a model in full runs every row its examples have, which is most of
+     * what the test would cost and nothing of what it holds. What is said of the model is what the
+     * checks said, and an error among it stops the test as {@link #compiles} does.
+     */
+    public static Compilation checks(Compilation model) {
+        List<String> unchecked = new ArrayList<>();
+        for (String module : model.modules()) {
+            if (!model.db().ask(new Bodies.Checked(module)).present()) {
+                unchecked.add(module);
+            }
+        }
+        List<String> refused = new ArrayList<>();
+        model.errors().forEach(found -> refused.add(found.diagnostic().code()));
+        assertEquals(List.of(), refused, "the checks of the model say no error");
+        assertEquals(List.of(), unchecked, "every module of the model checks");
+        return model;
     }
 
     /**

@@ -577,7 +577,8 @@ public final class Resolve {
         }
         List<Hir.Example> examples = new ArrayList<>();
         for (Ast.Example e : m.examples()) {
-            r.owner = r.ownerOfValue(e.target());
+            r.owner = r.ownerOfValue(e.target().name());
+            Hir.Var target = r.exampled(e.target());
             List<Hir.ExampleRow> rows = new ArrayList<>();
             for (Ast.ExampleRow row : e.rows()) {
                 List<Hir.With> withs = new ArrayList<>();
@@ -589,7 +590,7 @@ public final class Resolve {
                         r.exprs(row.inputs(), Reading.A_FIXTURE), withs,
                         r.expected(row.expected(), Reading.A_FIXTURE), row.pos()));
             }
-            examples.add(new Hir.Example(e.target(), rows, e.pos()));
+            examples.add(new Hir.Example(target, rows, e.pos()));
         }
         List<Hir.Fake> fakes = new ArrayList<>();
         for (Ast.Fake f : m.fakes()) {
@@ -760,6 +761,22 @@ public final class Resolve {
                 .repair(name.written().reportedAt(), Suggest.candidate(name.name(), candidates))
                 .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name()))
                 .say(new ExampleMessage.AFakeNamesNoBehavior(name.written().quoted())).build()));
+    }
+
+    /**
+     * The name an {@code example} header writes: a behavior of this module, and no other (spec
+     * §example-target-is-a-behavior).
+     *
+     * <p>Narrower than {@link #standsInFor}, whose name may reach a behavior another module
+     * declares: rows are about what this module does. A name reaching none is unanswered and said
+     * nothing about here. The example run says it, because what it says — a name nothing declares,
+     * or a helper's — and that the other blocks still run are an example run's answers, and a name
+     * refused here would hold the whole module back from being built.
+     */
+    private Hir.Var exampled(Ast.Var ref) {
+        ValueName.Behavior named = reachable.behaviors().get(ref.name());
+        return named != null && named.module().equals(reachable.module())
+                ? behaviorReached(ref, named) : unanswered(ref);
     }
 
     /** A name that must denote a behavior, with what to say when none does. */
@@ -990,7 +1007,14 @@ public final class Resolve {
                 case Denotation.Denotes d ->
                         denotations.add(new TypeUse(denoted.written(), d.type()));
                 case Denotation.StandsForNothing _ -> failed++;
-                case Denotation.NotInScope _ -> { }
+                // A primitive is in no module's scope and is still what the name denotes: the
+                // language declares it. Kept with the rest, so a reader asking what is written
+                // here is answered rather than told nothing is.
+                case Denotation.NotInScope _ -> {
+                    if (denoted.type() instanceof Type.Prim prim) {
+                        denotations.add(new TypeUse(denoted.written(), TypeSymbol.primitive(prim)));
+                    }
+                }
             }
         }
         return denoted;

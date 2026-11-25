@@ -1290,7 +1290,7 @@ public final class Front {
             for (Ast.Example example : m.examples()) {
                 for (Ast.ExampleRow row : example.rows()) {
                     if (row.identity() instanceof RowIdentity.Named named) {
-                        read.accept(example.target(), named.name(), row.pos());
+                        read.accept(example.target().name(), named.name(), row.pos());
                     }
                 }
             }

@@ -42,8 +42,8 @@ final class ModelVocabulary {
      * {@code ACompiledModelHoldsAModelToCompilingTest}, and a call of the helper that hands a model
      * back and is not here, or is {@link #NOT_COMPILED}, is found by {@link #unsaidChecks}.
      */
-    static final Set<String> CHECKS = Set.of("compiles", "refusedWith", "refusedOnlyWith",
-            "answered", "measured");
+    static final Set<String> CHECKS = Set.of("compiles", "checks", "resolves", "refusedWith",
+            "refusedOnlyWith", "answered", "measured");
 
     /**
      * The calls of the helper class, as {@code Class#name}, that hand a model back and are neither

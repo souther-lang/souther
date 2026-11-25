@@ -7787,8 +7787,10 @@ public final class Adequacy {
             // values that go together, which is more than this can say of one value chosen per
             // position on its own — and it is the set they reached for, which is what makes a row
             // written against it read as one column moved.
+            ValueName.Behavior behavior =
+                    new ValueName.Behavior(prepared.module().name(), spec.name());
             for (Hir.Example block : prepared.examples()) {
-                if (!block.target().equals(spec.name())) {
+                if (!behavior.equals(block.exampled())) {
                     continue;
                 }
                 for (Hir.ExampleRow row : block.rows()) {
@@ -9934,9 +9936,11 @@ public final class Adequacy {
                 owed.put(behavior.name(), new ArrayList<>());
             }
             for (Hir.Example example : prepared.value().module().examples()) {
-                List<RowObligation> of = owed.get(example.target());
-                // A block naming something this module does not declare is reported where the
-                // names are resolved. The account is of the behaviors there are.
+                // A block whose target named no behavior of this module is reported where the rows
+                // are run. The account is of the behaviors there are, by what each block's target
+                // resolved to.
+                ValueName.Behavior exampled = example.exampled();
+                List<RowObligation> of = exampled == null ? null : owed.get(exampled.name());
                 if (of == null) {
                     continue;
                 }
@@ -9949,7 +9953,7 @@ public final class Adequacy {
                         continue;
                     }
                     of.add(new RowObligation(
-                            RowRef.of(example.target(), row.pos(), row.identity()),
+                            RowRef.of(exampled.name(), row.pos(), row.identity()),
                             row.pos(), stands));
                 }
             }

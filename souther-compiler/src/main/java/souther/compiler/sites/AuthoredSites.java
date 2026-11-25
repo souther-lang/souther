@@ -353,11 +353,13 @@ public final class AuthoredSites {
         }
 
         private void example(Hir.Example example) {
+            expr(example.target());
             for (Hir.ExampleRow row : example.rows()) {
                 for (Hir.Expr input : row.inputs()) {
                     expr(input);
                 }
                 for (Hir.With with : row.withs()) {
+                    expr(with.dep());
                     expr(with.value());
                 }
                 switch (row.expected()) {

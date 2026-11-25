@@ -78,10 +78,10 @@ public final class RowFixtures {
         Hir.Module module = surface.module();
         List<Placed> out = new java.util.ArrayList<>();
         for (Hir.Example ex : module.examples()) {
-            // A row names a behavior of the module it is written in, and a stand-in names the
-            // behavior it stands in for — which may be another module's. So the target is lifted to
-            // a declaration of this module and the stand-in's is read off what it resolved to.
-            Sig sig = signatures.get(new ValueName.Behavior(module.name(), ex.target()));
+            // The target and each stand-in are read off what they resolved to: resolution is where a
+            // name is told which behavior it is, and a row's target is a behavior of this module
+            // while a stand-in's may be another module's.
+            Sig sig = sigOf(signatures, ex.exampled());
             for (Hir.ExampleRow row : ex.rows()) {
                 for (int i = 0; i < row.inputs().size(); i++) {
                     out.add(new Placed(row.inputs().get(i), supplies(sig, i)));

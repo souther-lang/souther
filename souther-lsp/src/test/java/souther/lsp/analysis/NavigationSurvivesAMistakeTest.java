@@ -52,6 +52,9 @@ class NavigationSurvivesAMistakeTest {
      * cursor was not, so a cursor on the decomposed spelling found nothing while a cursor on the
      * composed spelling found the declaration. Which of the two an author's cursor is on is not
      * something an editor may answer differently.
+     *
+     * <p>A rename is not among what a spelling answers. It writes to sources, and a spelling in a
+     * file the compiler could not read may be a field or a binding spelled alike.
      */
     @Test
     void aBrokenFileStillAnswersAcrossTheTwoSpellings() {
@@ -68,10 +71,9 @@ class NavigationSurvivesAMistakeTest {
         assertEquals(2, new Analyzer()
                         .references("file:///demo.sou", onTheDecomposedUse, graph, true).size(),
                 "the declaration and the one use");
-        assertEquals("module demo\n\ndata R = Int\n\ndata Box = { value: R }\n\n"
-                        + "let unfinished (\n",
-                applied(source, new Analyzer().renameEdits("file:///demo.sou", onTheDecomposedUse,
-                        graph, "R").get("file:///demo.sou")));
+        assertTrue(new Analyzer().renameEdits("file:///demo.sou", onTheDecomposedUse, graph, "R")
+                        .isEmpty(),
+                "a rename writes to sources, and where only a spelling is read it is a guess");
     }
 
     /**
@@ -155,27 +157,6 @@ class NavigationSurvivesAMistakeTest {
                             new Position(4, start + 1), graph).isPresent(),
                     "`" + shown + "`: the characters of `up` are still `up`");
         }
-    }
-
-    /** {@code edits} written back, latest first so an earlier one does not move a later one. */
-    private static String applied(String text, List<TextEdit> edits) {
-        StringBuilder sb = new StringBuilder(text);
-        edits.stream()
-                .sorted((a, b) -> b.range().start().line() != a.range().start().line()
-                        ? Integer.compare(b.range().start().line(), a.range().start().line())
-                        : Integer.compare(b.range().start().character(),
-                                a.range().start().character()))
-                .forEach(edit -> sb.replace(offset(text, edit.range().start()),
-                        offset(text, edit.range().end()), edit.newText()));
-        return sb.toString();
-    }
-
-    private static int offset(String text, Position pos) {
-        int offset = 0;
-        for (int line = 0; line < pos.line(); line++) {
-            offset = text.indexOf('\n', offset) + 1;
-        }
-        return offset + pos.character();
     }
 
     private static ModuleGraph graph() {
