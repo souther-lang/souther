@@ -65,9 +65,13 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
         }
     }
 
-    /** The forms whose witness is a list too long to build and run, held by no run. */
-    private static final Set<String> TOO_LONG_TO_RUN = Set.of(
-            "aSizeOfTheLongestAListCanBePassingTheType");
+    /** The forms some claim of which no run is built to hold, each with why. Any other reason is
+     *  refused. A size of a list past the type is a list too long to build and run: its witness
+     *  is one, and the rows every run stops at weigh its length, which no run here is about. */
+    private static final Map<String, Set<StopsHeldToTheRuns.NotHeld>> TOO_LONG_TO_RUN = Map.of(
+            "aSizeOfTheLongestAListCanBePassingTheType",
+            Set.of(StopsHeldToTheRuns.NotHeld.A_WITNESS_LONGER_THAN_IS_RUN,
+                    StopsHeldToTheRuns.NotHeld.ROWS_OVER_WHAT_IS_NOT_WEIGHED_HERE));
 
     /** The forms a run of the grid stops at a step of that is said not resolved, with why. */
     private static final Map<String, Set<Enum<?>>> NOT_SHOWN_WHERE_A_RUN_STOPS =
@@ -209,9 +213,9 @@ class AStopOverAValueARunWorksOutIsShownByAListTheProgramRunsIntoTest {
                         "the stop in " + form.operation() + " is shown: " + shown),
                 () -> assertEquals(List.of(), held.unheld(),
                         "what is said of a step is what the runs do there"),
-                () -> assertEquals(TOO_LONG_TO_RUN.contains(name), !held.notHeldTo().isEmpty(),
-                        "a witness is held to its run, but where written down as too long to"
-                                + " build: " + held.notHeldTo()),
+                () -> assertEquals(TOO_LONG_TO_RUN.getOrDefault(name, Set.of()),
+                        held.notHeldBecause(), "every claim is held to a run, but for the"
+                                + " reasons written down: " + held.notHeldTo()),
                 () -> assertEquals(NOT_SHOWN_WHERE_A_RUN_STOPS.getOrDefault(name, Set.of()),
                         held.notShownBecause(), "a run stops at a step said not resolved, for"
                                 + " the reasons written down: " + held.notShown()),

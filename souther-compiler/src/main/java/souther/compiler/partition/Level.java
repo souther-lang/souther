@@ -238,7 +238,8 @@ public sealed interface Level {
     /** What makes two levels one level: what they are, and not how the number was written. The same
      *  rule {@link Place#key()} states, asked of a level so that a reader holding one never reaches
      *  past it for the place inside: the canonical place on a carrier, or the exact ratio of the
-     *  quantity, each a value equal to another exactly where the two are one level. */
+     *  quantity, each a value equal to another exactly where the two are one level. Held as
+     *  either, since a string on a carrier is no ratio and a third of a quantity is no place. */
     default Object key() {
         return switch (this) {
             case OnACarrier on -> on.at().key();

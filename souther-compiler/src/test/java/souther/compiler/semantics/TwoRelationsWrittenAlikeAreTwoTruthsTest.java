@@ -41,6 +41,15 @@ class TwoRelationsWrittenAlikeAreTwoTruthsTest {
                 "x1 at y and x2 below it is reached by neither case");
     }
 
+    /** And one relation turned round over arguments written alike is one truth: which way round
+     *  it is held is not read off how its arguments are written. */
+    @Test
+    void oneRelationTurnedRoundOverArgumentsWrittenAlikeIsOne() {
+        assertTrue(DefinitionCase.coverEveryWay(List.of(reachedWhere(X1, Rel.LT, X2),
+                        reachedWhere(X2, Rel.LE, X1))),
+                "x1 below x2, or x2 at or below x1");
+    }
+
     @Test
     void oneRelationAndItsDenialCoverEveryWay() {
         assertTrue(DefinitionCase.coverEveryWay(List.of(reachedWhere(X1, Rel.LT, Y),

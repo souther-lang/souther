@@ -13,6 +13,8 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.Type;
@@ -35,6 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * being named. The program is the library's own body compiled and run, which is what the cases
  * are a reading of: a fold that took a case for the wrong arguments, or answered past the end of
  * an {@code Int}, answers what the program does not.
+ *
+ * <p>Each argument is a sum of two numbers, so that working one out can stop the run: a run works
+ * every argument out before the call, and a fold that answered from the case reached without one
+ * of them — {@code Int.clamp} answers its low end below it without its high end — answers where
+ * the program stops.
  */
 class AFoldOfAnOperationDefinedByCasesAnswersWhatTheProgramAnswersTest {
 
@@ -44,7 +51,26 @@ class AFoldOfAnOperationDefinedByCasesAnswersWhatTheProgramAnswersTest {
     private static final List<Long> NUMBERS = List.of(Long.MIN_VALUE, -1L, 0L, 1L,
             Long.MAX_VALUE);
 
+    /** An argument worked out as its number and what is added to it. */
+    private record Argument(long number, long added) {
+
+        static Argument of(long number) {
+            return new Argument(number, 0);
+        }
+
+        /** An argument whose working out stops the run: past the greatest {@code Int}. */
+        static final Argument STOPPING = new Argument(Long.MAX_VALUE, 1);
+
+        Core written() {
+            return new Core.Binary(BinOp.ADD, new Core.Int(number, Type.INT, POS),
+                    new Core.Int(added, Type.INT, POS), Core.BinaryReading.AS_THEY_STAND,
+                    ConstructOccurrence.unwritten(), Type.INT, POS);
+        }
+    }
+
     private static final List<String> PLACES = List.of("a", "b", "c");
+
+    private static final List<String> ADDED = List.of("x", "y", "z");
 
     @Test
     void aFoldAnswersWhatTheProgramAnswers() throws Exception {
@@ -61,19 +87,21 @@ class AFoldOfAnOperationDefinedByCasesAnswersWhatTheProgramAnswersTest {
         StringBuilder model = new StringBuilder("""
                 module demo
 
-                data In = { a: Int, b: Int, c: Int }
+                data In = { a: Int, b: Int, c: Int, x: Int, y: Int, z: Int }
                 data Out = Int
                 """);
         for (int at = 0; at < operations.size(); at++) {
             ValueName.Stdlib.Operation operation = operations.get(at);
-            int arity = entryOf(operation).signature().params().size();
+            List<String> args = new ArrayList<>();
+            for (int place = 0; place < arityOf(operation); place++) {
+                args.add("i." + PLACES.get(place) + " + i." + ADDED.get(place));
+            }
             model.append("""
 
                     behavior b%d : (i: In) -> Out
                     let b%d (i) = Out { value = %s.%s(%s) }
                     """.formatted(at, at, operation.alias(), operation.name(),
-                    String.join(", ", PLACES.subList(0, arity).stream()
-                            .map(place -> "i." + place).toList())));
+                    String.join(", ", args)));
         }
         ClassLoader loader = ACompiledModel.compiles(Compilation.ofSources(
                 List.of(model.toString()), ModulePath.EMPTY)).loader();
@@ -85,11 +113,12 @@ class AFoldOfAnOperationDefinedByCasesAnswersWhatTheProgramAnswersTest {
             ValueName.Stdlib.Operation operation = operations.get(at);
             Object behavior = Emitted.behavior(loader, "demo", "b" + at).getConstructor()
                     .newInstance();
-            int arity = entryOf(operation).signature().params().size();
-            for (List<Long> args : everyChoiceOf(arity)) {
+            for (List<Argument> args : everyChoiceOf(arityOf(operation))) {
                 Map<String, Object> in = new LinkedHashMap<>();
                 for (int place = 0; place < PLACES.size(); place++) {
-                    in.put(PLACES.get(place), place < arity ? args.get(place) : 0L);
+                    Argument one = place < args.size() ? args.get(place) : Argument.of(0);
+                    in.put(PLACES.get(place), one.number());
+                    in.put(ADDED.get(place), one.added());
                 }
                 Optional<Object> answered;
                 try {
@@ -112,37 +141,47 @@ class AFoldOfAnOperationDefinedByCasesAnswersWhatTheProgramAnswersTest {
     }
 
     private static boolean overWholeNumbers(ValueName.Stdlib.Operation operation) {
-        Stdlib.Entry entry = entryOf(operation);
+        Stdlib.Entry entry = DefaultStdlib.get().entry(operation);
         return entry.signature().result() == Type.INT
                 && entry.signature().params().stream().allMatch(Type.INT::equals);
     }
 
-    private static Stdlib.Entry entryOf(ValueName.Stdlib.Operation operation) {
-        return DefaultStdlib.get().entry(operation);
+    private static int arityOf(ValueName.Stdlib.Operation operation) {
+        return DefaultStdlib.get().entry(operation).signature().params().size();
     }
 
-    /** Every list of {@code arity} of {@link #NUMBERS}. */
-    private static List<List<Long>> everyChoiceOf(int arity) {
-        List<List<Long>> out = new ArrayList<>(List.of(List.of()));
+    /** Every list of {@code arity} of {@link #NUMBERS}, and each such list with one of its
+     *  arguments one whose working out stops the run. */
+    private static List<List<Argument>> everyChoiceOf(int arity) {
+        List<List<Argument>> out = new ArrayList<>(List.of(List.of()));
         for (int place = 0; place < arity; place++) {
-            List<List<Long>> next = new ArrayList<>();
-            for (List<Long> sofar : out) {
+            List<List<Argument>> next = new ArrayList<>();
+            for (List<Argument> sofar : out) {
                 for (Long number : NUMBERS) {
-                    List<Long> one = new ArrayList<>(sofar);
-                    one.add(number);
+                    List<Argument> one = new ArrayList<>(sofar);
+                    one.add(Argument.of(number));
                     next.add(one);
                 }
             }
             out = next;
         }
+        List<List<Argument>> stopping = new ArrayList<>();
+        for (List<Argument> each : out) {
+            for (int place = 0; place < arity; place++) {
+                List<Argument> one = new ArrayList<>(each);
+                one.set(place, Argument.STOPPING);
+                stopping.add(one);
+            }
+        }
+        out.addAll(stopping);
         return out;
     }
 
-    /** A call to {@code operation} over the constants {@code args}. */
+    /** A call to {@code operation} over {@code args}. */
     private static Core.PreservedCall callTo(ValueName.Stdlib.Operation operation,
-                                             List<Long> args) {
+                                             List<Argument> args) {
         List<Core> written = new ArrayList<>();
-        args.forEach(each -> written.add(new Core.Int(each, Type.INT, POS)));
+        args.forEach(each -> written.add(each.written()));
         return new Core.PreservedCall(KeptCalls.declared(operation), written,
                 new Core.KeptCallPlace(new FixtureReferenceOrigin(0),
                         new ApplicationOrigin.ComposedFixture(), OccurrenceLineage.ORIGINAL),

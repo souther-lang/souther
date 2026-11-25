@@ -44,7 +44,7 @@ public record Cut(Carrier carrier, Place at, List<LineOrigin> origins) {
     /** What makes two cuts one cut: the place on the order, and not how the number was written.
      * {@code invariant value >= 0.00} and {@code guard x <= 0m} draw one line; keyed by spelling they
      * are two, and then a position has two classes both holding zero. */
-    public Object key() {
+    public Place key() {
         return at.key();
     }
 

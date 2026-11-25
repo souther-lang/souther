@@ -41,8 +41,18 @@ import java.util.function.Function;
 public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
 
     /** The coefficients held as a copy in the order given: a form is held as long as what holds
-     *  it, and the table the arithmetic filled holds a slot table and an entry per term on top. */
+     *  it, and the table the arithmetic filled holds a slot table and an entry per term on top.
+     *  A nought coefficient is left out here, whoever made the table, so that no form is two
+     *  values for having been put together by hand. */
     public LinearForm {
+        for (ExactRatio weight : coefs.values()) {
+            if (weight.isZero()) {
+                Map<A, ExactRatio> weighing = new LinkedHashMap<>(coefs);
+                weighing.values().removeIf(ExactRatio::isZero);
+                coefs = weighing;
+                break;
+            }
+        }
         coefs = InTheOrderGiven.map(coefs);
     }
 

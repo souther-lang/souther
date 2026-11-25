@@ -89,7 +89,6 @@ public final class TotalsOfOneRun {
                 return form;
             }
             coefs.put(total.term(), weight);
-            coefs.values().removeIf(ExactRatio::isZero);
             merged = true;
         }
         return merged ? new LinearForm<>(form.constant(), coefs) : form;

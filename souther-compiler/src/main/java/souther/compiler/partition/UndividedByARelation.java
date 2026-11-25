@@ -9183,9 +9183,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
         }
-        coefs.values().removeIf(ExactRatio::isZero);
-        return coefs.isEmpty() ? null
-                : new TakenConstraint.Affine(new LinearForm<>(constant, coefs), relation);
+        LinearForm<NumericTerm> form = new LinearForm<>(constant, coefs);
+        return form.coefs().isEmpty() ? null : new TakenConstraint.Affine(form, relation);
     }
 
     /** A number the way's equalities define, put in the terms of the others: the equality, which

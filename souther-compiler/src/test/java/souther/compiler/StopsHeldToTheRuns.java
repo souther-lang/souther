@@ -57,6 +57,10 @@ final class StopsHeldToTheRuns {
     /** The longest list a witness is built of and run: past it a run is no test of a moment. */
     private static final int MOST_ELEMENTS = 1_000;
 
+    /** The most lists a witness's elements named nothing of are completed to; a witness that
+     *  would be completed to more is one nothing here holds to a run. */
+    private static final long MOST_COMPLETIONS = 64;
+
     private StopsHeldToTheRuns() {
     }
 
@@ -222,30 +226,41 @@ final class StopsHeldToTheRuns {
 
         /**
          * Every input that holds {@code at} at the places it names and {@code structure} of the
-         * lists it names, the places it names nothing of at every value the grid takes there; none
-         * where it names what is no place of the input, or a list longer than a witness is built
-         * of.
+         * lists it names, the places and the elements it names nothing of at every value the grid
+         * takes there; none where it names what is no place of the input, a list longer than a
+         * witness is built of, an element of a list the grid holds no element of, or more lists
+         * than {@link #MOST_COMPLETIONS}, each said as which ({@link NotHeld}).
          */
-        Optional<List<Map<String, Object>>> completions(List<AStopShown.NumberAt> at,
-                                                        List<InputFact> structure) {
+        Completions completions(List<AStopShown.NumberAt> at, List<InputFact> structure) {
             Map<String, Set<Object>> fixed = new LinkedHashMap<>();
             for (AStopShown.NumberAt number : at) {
                 Optional<String> place = placeOf(number.place());
                 if (place.isEmpty() || !values.containsKey(place.get())) {
-                    return Optional.empty();
+                    return Completions.none(NotHeld.A_WITNESS_NAMES_NO_PLACE);
                 }
                 Object sample = values.get(place.get()).iterator().next();
                 fixed.put(place.get(), Set.of(sample instanceof BigDecimal
                         ? new BigDecimal(number.number()) : number.number().longValueExact()));
             }
-            Map<String, List<Long>> lists = new LinkedHashMap<>();
+            // An element named nothing of is at every value the grid takes at an element of that
+            // list, as a place named nothing of is at every value the grid takes there.
+            Map<String, List<Set<Long>>> lists = new LinkedHashMap<>();
             for (InputFact fact : structure) {
                 if (fact instanceof InputFact.ListLength(TermPath list, int length)) {
                     Optional<String> place = placeOf(list);
-                    if (place.isEmpty() || length > MOST_ELEMENTS) {
-                        return Optional.empty();
+                    if (place.isEmpty() || !values.containsKey(place.get())) {
+                        return Completions.none(NotHeld.A_WITNESS_NAMES_NO_PLACE);
                     }
-                    lists.put(place.get(), new ArrayList<>(Collections.nCopies(length, 0L)));
+                    if (length > MOST_ELEMENTS) {
+                        return Completions.none(NotHeld.A_WITNESS_LONGER_THAN_IS_RUN);
+                    }
+                    Set<Long> anyElement = new LinkedHashSet<>();
+                    numbersAt(place.get()).forEach(each -> anyElement.add(each.longValueExact()));
+                    if (length > 0 && anyElement.isEmpty()) {
+                        return Completions.none(NotHeld.A_WITNESS_ELEMENT_THE_GRID_HOLDS_NONE_OF);
+                    }
+                    lists.put(place.get(), new ArrayList<>(Collections.nCopies(length,
+                            anyElement)));
                 }
             }
             for (InputFact fact : structure) {
@@ -253,18 +268,45 @@ final class StopsHeldToTheRuns {
                                                           BigInteger number)) {
                     Optional<String> place = placeOf(list);
                     if (place.isEmpty() || !lists.containsKey(place.get())) {
-                        return Optional.empty();
+                        return Completions.none(NotHeld.A_WITNESS_NAMES_NO_PLACE);
                     }
-                    lists.get(place.get()).set(index, number.longValueExact());
+                    lists.get(place.get()).set(index, Set.of(number.longValueExact()));
                 }
             }
-            lists.forEach((place, list) -> fixed.put(place, Set.of(List.copyOf(list))));
+            long completions = 1;
+            for (List<Set<Long>> elements : lists.values()) {
+                for (Set<Long> here : elements) {
+                    completions = Math.multiplyHigh(completions, here.size()) != 0
+                            ? Long.MAX_VALUE : completions * here.size();
+                }
+            }
+            if (completions > MOST_COMPLETIONS) {
+                return Completions.none(NotHeld.A_WITNESS_COMPLETED_TO_MORE_THAN_ARE_RUN);
+            }
+            lists.forEach((place, elements) -> fixed.put(place, everyListOf(elements)));
             Map<String, Set<Object>> taken = new LinkedHashMap<>(values);
             taken.putAll(fixed);
             List<Map<String, Object>> out = new ArrayList<>();
             List<String> places = new ArrayList<>(taken.keySet());
             collect(places, 0, new LinkedHashMap<>(), taken, out);
-            return Optional.of(out);
+            return new Completions(out, null);
+        }
+
+        /** Every list whose element at each index is one of {@code elements} there. */
+        private static Set<Object> everyListOf(List<Set<Long>> elements) {
+            List<List<Long>> out = new ArrayList<>(List.of(List.of()));
+            for (Set<Long> here : elements) {
+                List<List<Long>> next = new ArrayList<>();
+                for (List<Long> sofar : out) {
+                    for (Long each : here) {
+                        List<Long> one = new ArrayList<>(sofar);
+                        one.add(each);
+                        next.add(List.copyOf(one));
+                    }
+                }
+                out = next;
+            }
+            return new LinkedHashSet<>(out);
         }
 
         private List<Map<String, Object>> product(List<String> places, int from,
@@ -290,12 +332,12 @@ final class StopsHeldToTheRuns {
 
         /**
          * Every value at a place of the input where a claim of every run in {@code said} turns:
-         * values that put what the claim weighs at an end it names and at each number beside the
-         * end. For a form of the rows, each value of one place it weighs that puts the form there,
-         * the other places it weighs at each value the input gives them — so that an input of the
-         * grid stands on the end and beside it, whatever the weights, and not each place at the
-         * form's end, which a form of several places is at no input of. For a bound, the place it
-         * is declared on, there. A place whose value would come to no whole number is given none.
+         * the whole numbers either side of an end it names. For a form of the rows, each place it
+         * weighs, the others at each value the input gives them, at the whole numbers below and
+         * above where the form meets the end — so that the grid holds the inputs nearest the end
+         * on both sides of it whatever the weights, a form of several places being at its end at
+         * no input whose places are each at that end, and a form weighed by more than one at no
+         * input next to it. For a bound, the place it is declared on, at the bound and beside it.
          */
         private Map<String, List<BigInteger>> endsNamedBy(List<WhatIsShownOfAStop> said) {
             Map<String, List<BigInteger>> out = new LinkedHashMap<>();
@@ -307,8 +349,7 @@ final class StopsHeldToTheRuns {
                         for (BigInteger end : new BigInteger[] {within.least(),
                                 within.greatest()}) {
                             if (end != null && weighed != null && shift != null) {
-                                beside(end.subtract(shift)).forEach(at ->
-                                        onTheEnd(weighed, at, out));
+                                onTheEnd(weighed, end.subtract(shift), out);
                             }
                         }
                     }
@@ -343,8 +384,10 @@ final class StopsHeldToTheRuns {
             return out;
         }
 
-        /** Each value of each place {@code weighed} names that puts the form it weighs at
-         *  {@code end}, the others at every number the input gives them, into {@code out}. */
+        /** For each place {@code weighed} names, the others at every number the input gives them,
+         *  the whole numbers either side of where the form it weighs meets {@code end} — the
+         *  floor and the ceiling of that place's value there, and where that is a whole number,
+         *  it and the numbers beside it — into {@code out}. */
         private void onTheEnd(Map<String, BigInteger> weighed, BigInteger end,
                               Map<String, List<BigInteger>> out) {
             for (String solved : weighed.keySet()) {
@@ -360,11 +403,15 @@ final class StopsHeldToTheRuns {
                     }
                     rests = next;
                 }
+                BigInteger weight = weighed.get(solved);
                 for (BigInteger rest : rests) {
-                    BigInteger[] divided = rest.divideAndRemainder(weighed.get(solved));
-                    if (divided[1].signum() == 0) {
-                        out.computeIfAbsent(solved, _ -> new ArrayList<>()).add(divided[0]);
-                    }
+                    BigInteger[] divided = rest.divideAndRemainder(weight);
+                    boolean exact = divided[1].signum() == 0;
+                    BigInteger floor = !exact && divided[1].signum() != weight.signum()
+                            ? divided[0].subtract(BigInteger.ONE) : divided[0];
+                    List<BigInteger> either = out.computeIfAbsent(solved, _ -> new ArrayList<>());
+                    either.addAll(exact ? beside(floor)
+                            : List.of(floor, floor.add(BigInteger.ONE)));
                 }
             }
         }
@@ -430,12 +477,40 @@ final class StopsHeldToTheRuns {
     /** One claim a run does not hold, and how. */
     record Unheld(Claim claim, String how) {}
 
+    /** Why nothing here holds a claim to a run. */
+    enum NotHeld {
+        /** A witness names what is no place of the input. */
+        A_WITNESS_NAMES_NO_PLACE,
+        /** A witness holds a list longer than a run is made with ({@link #MOST_ELEMENTS}). */
+        A_WITNESS_LONGER_THAN_IS_RUN,
+        /** A witness names an element of a list nothing of the grid holds an element of. */
+        A_WITNESS_ELEMENT_THE_GRID_HOLDS_NONE_OF,
+        /** The elements a witness names nothing of come to more lists than are run
+         *  ({@link #MOST_COMPLETIONS}). */
+        A_WITNESS_COMPLETED_TO_MORE_THAN_ARE_RUN,
+        /** Rows weighing what this weighs no run by ({@link #inside}): a term that is neither a
+         *  whole number at a place of the input nor the element of a list at one. */
+        ROWS_OVER_WHAT_IS_NOT_WEIGHED_HERE,
+        /** Bounds declared on what is no place of the input. */
+        BOUNDS_ON_NO_PLACE
+    }
+
+    /** One claim nothing here holds to a run, why, and which. */
+    record NotHeldTo(NotHeld why, String what) {}
+
+    /** The inputs a witness is completed to, or why it is completed to none: one of the two. */
+    record Completions(List<Map<String, Object>> inputs, NotHeld notBuilt) {
+
+        static Completions none(NotHeld why) {
+            return new Completions(List.of(), why);
+        }
+    }
+
     /**
      * What {@link #heldTo} found.
      *
      * @param unheld                    each claim the runs do not hold
-     * @param notHeldTo                 each claim nothing here can hold to a run, and why: a region
-     *                                  over what is no value at a place, a witness too long to build
+     * @param notHeldTo                 each claim nothing here can hold to a run, and why
      * @param notShown                  each step a run of the grid stops at that no finding shows a
      *                                  stop at, and only one saying it is not resolved names, with
      *                                  why each finding there says so
@@ -444,9 +519,16 @@ final class StopsHeldToTheRuns {
      *                                  holds of every run there is and is held to none: a step no
      *                                  input gets to is one
      */
-    record Held(List<Unheld> unheld, List<String> notHeldTo,
+    record Held(List<Unheld> unheld, List<NotHeldTo> notHeldTo,
                 Map<RunStop.Site, Set<Enum<?>>> notShown,
                 Set<RunStop.Site> notResolvedWhereNoneStops, List<String> notAbout) {
+
+        /** Why each claim nothing here holds to a run is not, every reason there is. */
+        Set<NotHeld> notHeldBecause() {
+            Set<NotHeld> out = new LinkedHashSet<>();
+            notHeldTo.forEach(each -> out.add(each.why()));
+            return out;
+        }
 
         /** The kinds of claim held wrong. */
         Set<Claim> refused() {
@@ -467,7 +549,7 @@ final class StopsHeldToTheRuns {
     /** What {@code said} holds of {@code runs}, and what it does not. */
     static Held heldTo(List<WhatIsShownOfAStop> said, Runs runs) {
         List<Unheld> out = new ArrayList<>();
-        List<String> notHeldTo = new ArrayList<>();
+        List<NotHeldTo> notHeldTo = new ArrayList<>();
         List<String> notAbout = new ArrayList<>();
         Set<RunStop.Site> named = new LinkedHashSet<>();
         Set<RunStop.Site> shownAt = new LinkedHashSet<>();
@@ -550,15 +632,14 @@ final class StopsHeldToTheRuns {
 
     /** Each run of a witness of a stop shown at {@code step} stops there first. */
     private static void shown(StepWhereARunMayStop stops, RunStop.Site step, Runs runs,
-                              List<Unheld> out, List<String> notHeldTo) {
+                              List<Unheld> out, List<NotHeldTo> notHeldTo) {
         for (AStopShown shown : stops.shown()) {
-            Optional<List<Map<String, Object>>> inputs =
-                    runs.completions(shown.at(), shown.structure());
-            if (inputs.isEmpty()) {
-                notHeldTo.add("a witness no input of these is built of: " + shown);
+            Completions inputs = runs.completions(shown.at(), shown.structure());
+            if (inputs.notBuilt() != null) {
+                notHeldTo.add(new NotHeldTo(inputs.notBuilt(), shown.toString()));
                 continue;
             }
-            for (Map<String, Object> in : inputs.get()) {
+            for (Map<String, Object> in : inputs.inputs()) {
                 Run run = runs.of(in);
                 if (!run.endedAt(step)) {
                     out.add(new Unheld(Claim.A_STOP_SHOWN, shown.operation() + " shown at " + step
@@ -568,12 +649,12 @@ final class StopsHeldToTheRuns {
             }
         }
         for (AConstructionStopShown shown : stops.constructions()) {
-            Optional<List<Map<String, Object>>> inputs = runs.completions(shown.at(), List.of());
-            if (inputs.isEmpty()) {
-                notHeldTo.add("a witness no input of these is built of: " + shown);
+            Completions inputs = runs.completions(shown.at(), List.of());
+            if (inputs.notBuilt() != null) {
+                notHeldTo.add(new NotHeldTo(inputs.notBuilt(), shown.toString()));
                 continue;
             }
-            for (Map<String, Object> in : inputs.get()) {
+            for (Map<String, Object> in : inputs.inputs()) {
                 Run run = runs.of(in);
                 if (!(run.stopped().orElse(null) instanceof RunStop.AtAConstruction)
                         || !run.stoppedInTheBodyAt().equals(Optional.of(step))) {
@@ -591,7 +672,7 @@ final class StopsHeldToTheRuns {
      * own way. A claim no run of the grid is about is said in {@code notAbout}.
      */
     private static void everyRunStops(List<EveryRunStops> stops, RunStop.Site step, Runs runs,
-                                      List<Unheld> out, List<String> notHeldTo,
+                                      List<Unheld> out, List<NotHeldTo> notHeldTo,
                                       List<String> notAbout) {
         for (EveryRunStops each : stops) {
             boolean about = false;
@@ -599,7 +680,8 @@ final class StopsHeldToTheRuns {
             for (Run run : runs.grid()) {
                 Optional<Boolean> inside = inside(each.where(), run.in());
                 if (inside.isEmpty()) {
-                    notHeldTo.add("rows over what is no value at a place: " + each);
+                    notHeldTo.add(new NotHeldTo(NotHeld.ROWS_OVER_WHAT_IS_NOT_WEIGHED_HERE,
+                            each.toString()));
                     weighed = false;
                     break;
                 }
@@ -634,7 +716,7 @@ final class StopsHeldToTheRuns {
      */
     private static void keeping(Set<ABoundThatKeepsEveryRunGoing> bounds,
                                 Set<RunStop.Site> ofAnOperation, Runs runs, List<Unheld> out,
-                                List<String> notHeldTo, List<String> notAbout) {
+                                List<NotHeldTo> notHeldTo, List<String> notAbout) {
         if (bounds.isEmpty()) {
             return;
         }
@@ -642,7 +724,7 @@ final class StopsHeldToTheRuns {
         for (Run run : runs.grid()) {
             Optional<Boolean> meets = meets(bounds, run.in(), runs.input);
             if (meets.isEmpty()) {
-                notHeldTo.add("bounds declared on what is no place of the input: " + bounds);
+                notHeldTo.add(new NotHeldTo(NotHeld.BOUNDS_ON_NO_PLACE, bounds.toString()));
                 return;
             }
             if (!meets.get()) {

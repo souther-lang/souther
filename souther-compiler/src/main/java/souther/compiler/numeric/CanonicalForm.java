@@ -263,9 +263,8 @@ public final class CanonicalForm<A> {
      *
      * <p>The map this holds is compared by its contents and iterated in whatever order it was built
      * with — which is the right way round for deciding that two writings are one rule, and the wrong
-     * way round for writing one out. Sorted by the name of the position for the same reason
-     * {@link souther.compiler.partition.QuantityKey#key} sorts: a form written {@code 6b + 3a} and
-     * one written {@code 3a + 6b} are one form and should read as one.
+     * way round for writing one out. Sorted by the name of the position: a form written
+     * {@code 6b + 3a} and one written {@code 3a + 6b} are one form and should read as one.
      */
     @Override
     public String toString() {

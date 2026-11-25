@@ -241,9 +241,17 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      * first case the folded values reach, worked out of them. Empty where it is defined by none, a
      * value a case reads folds to nothing, or the answer is where a run stops — {@code Int.abs} of
      * the least {@code Int}.
+     *
+     * <p>Every argument folded first, whichever of them the cases read: a run works each out
+     * before the call, and one it stops working out stops the run there, whatever a case would
+     * have answered without it.
      */
     private Optional<Object> byItsCases(Core.PreservedCall call, E at) {
-        for (Choice.ADefinitionCase one : Choice.casesOf(call)) {
+        List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
+        if (cases.isEmpty() || call.args().stream().anyMatch(arg -> eval(arg, at).isEmpty())) {
+            return Optional.empty();
+        }
+        for (Choice.ADefinitionCase one : cases) {
             boolean reached = true;
             for (Choice.FormsStand stands : one.given()) {
                 Object left = at(stands.left(), at).orElse(null);

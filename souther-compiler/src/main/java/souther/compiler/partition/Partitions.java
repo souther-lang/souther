@@ -1523,7 +1523,7 @@ public final class Partitions {
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
     private static List<Cut> mergedPoints(List<Cut> had, List<GuardThresholds.Guards.Singled> points,
                                           Carrier carrier) {
-        Map<Object, Cut> byValue = new LinkedHashMap<>();
+        Map<Place, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(cut.key(), cut);
         }
@@ -1567,7 +1567,7 @@ public final class Partitions {
     }
 
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
-        Map<Object, Cut> byValue = new LinkedHashMap<>();
+        Map<Place, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(cut.key(), cut);
         }

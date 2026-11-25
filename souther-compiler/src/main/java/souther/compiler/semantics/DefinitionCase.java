@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.Set;
 
 /**
  * One case of a piecewise definition: the number it answers, written in the arguments, and what
@@ -54,7 +54,7 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
      * read as one, a value they leave out would be read as one of them.
      */
     public static <A> boolean coverEveryWay(List<DefinitionCase<A>> cases) {
-        Map<Relation<A>, Integer> truths = new LinkedHashMap<>();
+        Map<Set<Set<Said<A>>>, Integer> truths = new LinkedHashMap<>();
         List<Map<Integer, Boolean>> reached = new ArrayList<>();
         for (DefinitionCase<A> one : cases) {
             Map<Integer, Boolean> where = new LinkedHashMap<>();
@@ -63,17 +63,15 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
                         instanceof ExactAnswer.Held<LinearForm<A>>(LinearForm<A> apart))) {
                     return false;
                 }
-                // `a < b` and `b > a` are one relation, and `a >= b` is its denial. Which way round
-                // a relation is held is chosen by how the two ways are written; which relation it
-                // is, is the form and the relation. Two written alike and turned the same way are
-                // read as two relations, which asks more of the cases and never less.
-                boolean asWritten = spelling(apart).compareTo(spelling(apart.negate())) <= 0;
-                Rel rel = asWritten ? stands.rel() : stands.rel().turned();
-                int truth = truths.computeIfAbsent(new Relation<>(
-                        asWritten ? apart : apart.negate(), rel.orItsDenial()),
+                // `a < b` and `b > a` are one relation, and `a >= b` is its denial: one truth,
+                // the rows where it holds and the rows where it fails, each however it is said.
+                Set<Said<A>> holds = waysOfSaying(apart, stands.rel());
+                Set<Said<A>> fails = waysOfSaying(apart, stands.rel().denied());
+                int truth = truths.computeIfAbsent(Set.copyOf(List.of(holds, fails)),
                         _ -> truths.size());
-                Boolean before = where.put(truth, rel == rel.orItsDenial());
-                if (before != null && before != (rel == rel.orItsDenial())) {
+                boolean held = onTheSideOfLess(holds);
+                Boolean before = where.put(truth, held);
+                if (before != null && before != held) {
                     // A case reached where a relation holds and fails is reached nowhere.
                     where = null;
                     break;
@@ -102,14 +100,22 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
         return true;
     }
 
-    /** A relation of the arguments: how far apart two forms of them are, against nought. */
-    private record Relation<A>(LinearForm<A> apart, Rel rel) { }
+    /** One way of saying which rows a relation of the arguments holds at: a form of them held
+     *  against nought. */
+    private record Said<A>(LinearForm<A> form, Rel rel) { }
 
-    /** {@code form} spelled the one way whatever order its terms were met in, which chooses
-     *  which way round a relation is held and is not which relation it is. */
-    private static <A> String spelling(LinearForm<A> form) {
-        Map<String, String> terms = new TreeMap<>();
-        form.coefs().forEach((atom, weight) -> terms.put(String.valueOf(atom), weight.toString()));
-        return terms + " " + form.constant();
+    /** Every way of saying the rows at which {@code form rel 0}: as it is, and turned round. */
+    private static <A> Set<Said<A>> waysOfSaying(LinearForm<A> form, Rel rel) {
+        return Set.copyOf(List.of(new Said<>(form, rel), new Said<>(form.negate(), rel.turned())));
+    }
+
+    /**
+     * Which of a truth's two sides {@code rows} is, the same however either is said: the side
+     * some way of saying holds below nought or at it. Of {@code f < 0} and {@code f >= 0}, the
+     * first, which is also {@code -f > 0}; of {@code f <= 0} and {@code f > 0}, the second, which
+     * is also {@code -f < 0}; of {@code f == 0} and {@code f != 0}, the first.
+     */
+    private static <A> boolean onTheSideOfLess(Set<Said<A>> rows) {
+        return rows.stream().anyMatch(said -> said.rel() == Rel.LT || said.rel() == Rel.EQ);
     }
 }
