@@ -5056,11 +5056,9 @@ public final class Generator {
 
         @Override
         public Taken take(Candidate candidate) {
-            Map<String, Written> given = candidate.from().writtenAgainst(axes,
-                    candidate.delta(), candidate.where(), references);
-            known.written(candidate, given);
-            if (!candidate.from().composes() && given.isEmpty()) {
-                return Taken.AND_MORE;   // nothing here can be written against the model's value
+            Map<String, Written> given = known.writtenOf(candidate, axes, references);
+            if (given == null) {
+                return Taken.AND_MORE;
             }
             // What composing it would find out first, found out without building it. A candidate
             // whose classes leave what the row is held to no room is one nothing can be built
@@ -5354,8 +5352,21 @@ public final class Generator {
             }
         }
 
+        /**
+         * What {@code candidate} writes against the model's value at {@code axes}, with what it
+         * could not write taken in here ({@link #written}) — or null where its origin composes
+         * nothing and writes nothing, so no row is built from it.
+         */
+        Map<String, Written> writtenOf(Candidate candidate, MeasuredInput.MeasuredAxes axes,
+                                       FixtureReferences references) {
+            Map<String, Written> given = candidate.from().writtenAgainst(axes, candidate.delta(),
+                    candidate.where(), references);
+            written(candidate, given);
+            return !candidate.from().composes() && given.isEmpty() ? null : given;
+        }
+
         /** Takes in which of the parameters it states the candidate's origin could not write. */
-        void written(Candidate candidate, Map<String, Written> given) {
+        private void written(Candidate candidate, Map<String, Written> given) {
             ResolvedOrigin origin = candidate.from();
             for (int p = 0; p < parameters.size(); p++) {
                 if (origin.states(parameters.get(p)) && !given.containsKey(parameters.get(p))) {
@@ -11791,11 +11802,6 @@ public final class Generator {
      */
     static final class TellingArmsApart implements RowPreference {
 
-        /** What bounds the rows a walk hands the choice, whatever they come to. */
-        private static final CompositionBudget HANDED_THE_CHOICE =
-                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
-        private static final int MOST_ROWS_HANDED = HANDED_THE_CHOICE.maximum();
-
         private final RunOnce trial;
         private final List<StoodInAnswer> answers;
         /** Every row ranked so far, as it is written, so a row composed again is not ranked again. */
@@ -11809,10 +11815,8 @@ public final class Generator {
         private int bestTold = -1;
         /** How many rows that met the requirement were run and came to an answer. */
         private int answering;
-        /** Whether the walk was stopped for handing more rows than it may. */
-        private boolean stoppedAtItsFigure;
-        /** How many rows a walk has handed here, ranked or not. */
-        private int handed;
+        /** The rows a walk has handed here, ranked or not. */
+        private final RowsHanded handed = new RowsHanded();
 
         /** What a row's run is also held to, or null where it is held to nothing. */
         private final RowJudge judge;
@@ -11851,8 +11855,7 @@ public final class Generator {
         @Override
         public RowTaking over(RowTaking meets) {
             return inputs -> {
-                if (++handed > MOST_ROWS_HANDED) {
-                    stoppedAtItsFigure = true;
+                if (!handed.oneMore()) {
                     return Acceptance.STOPPED;
                 }
                 RowToRun row = new RowToRun(inputs, answers);
@@ -11875,12 +11878,12 @@ public final class Generator {
          */
         @Override
         public List<FixtureTemplate> taken() {
-            return best != null ? best : stoppedAtItsFigure ? null : refused;
+            return best != null ? best : handed.stopped() ? null : refused;
         }
 
         @Override
         public boolean takenIsRefused() {
-            return best == null && !stoppedAtItsFigure && refused != null;
+            return best == null && !handed.stopped() && refused != null;
         }
 
         /** Whether a run of a row ranked here went past what a run may spend, read off the runs
@@ -11897,19 +11900,17 @@ public final class Generator {
         }
 
         /**
-         * Whether the walk handed more rows than {@link #HANDED_THE_CHOICE} allows and was
-         * stopped, which leaves the rows past it untried.
+         * Whether the walk handed more rows than {@link RowsHanded} allows and was stopped, which
+         * leaves the rows past it untried.
          */
         boolean stoppedAtItsFigure() {
-            return stoppedAtItsFigure;
+            return handed.stopped();
         }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
         @Override
         public SearchShortfall untried() {
-            return stoppedAtItsFigure
-                    ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
-                    : SearchShortfall.NONE;
+            return handed.untried();
         }
 
         /** What is made of one row that meets the requirement, not ranked before. */
@@ -12030,6 +12031,45 @@ public final class Generator {
     }
 
     /**
+     * The rows a walk hands a preference, counted against the figure a walk may hand the choice of
+     * a row at ({@link CompositionBudget#ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW}).
+     *
+     * <p>Every row counts, whatever is made of it — taken, passed over, refused, or composed again
+     * — since each costs composing whether or not it costs a run. The rows past the figure are the
+     * rows nobody looked at, and that is what a preference stopped at it says it left.
+     */
+    static final class RowsHanded {
+
+        private static final CompositionBudget FIGURE =
+                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
+        private static final int MOST = FIGURE.maximum();
+
+        private int handed;
+        private boolean stopped;
+
+        /** Whether one more row may be handed; where it may not, the walk is stopped at the
+         *  figure. */
+        boolean oneMore() {
+            if (++handed > MOST) {
+                stopped = true;
+                return false;
+            }
+            return true;
+        }
+
+        /** Whether the walk was stopped at the figure. */
+        boolean stopped() {
+            return stopped;
+        }
+
+        /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
+        SearchShortfall untried() {
+            return stopped ? SearchShortfall.of(CompositionShortfall.of(List.of(FIGURE)))
+                    : SearchShortfall.NONE;
+        }
+    }
+
+    /**
      * Which of the rows a walk composes for one way is taken, kept across the rows the walk hands
      * on, and what it left untried.
      */
@@ -12075,10 +12115,6 @@ public final class Generator {
      */
     static final class ReachingWhatIsJudged implements RowPreference {
 
-        private static final CompositionBudget HANDED_THE_CHOICE =
-                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
-        private static final int MOST_ROWS_HANDED = HANDED_THE_CHOICE.maximum();
-
         private final RowJudge judge;
         private final List<StoodInAnswer> answers;
         /** Where the rows the judge runs are run, which is what is asked where they stopped. */
@@ -12089,9 +12125,8 @@ public final class Generator {
         /** The rows put to the judge, as they are written, in the order they were. */
         private final Set<List<String>> putToTheJudge = new LinkedHashSet<>();
         private List<FixtureTemplate> taken;
-        private boolean stoppedAtItsFigure;
-        /** How many rows the walk has handed here, judged or not. */
-        private int handed;
+        /** The rows the walk has handed here, judged or not. */
+        private final RowsHanded handed = new RowsHanded();
 
         ReachingWhatIsJudged(RowJudge judge, List<StoodInAnswer> answers, Trial trial) {
             this.judge = judge;
@@ -12102,8 +12137,7 @@ public final class Generator {
         @Override
         public RowTaking over(RowTaking meets) {
             return inputs -> {
-                if (++handed > MOST_ROWS_HANDED) {
-                    stoppedAtItsFigure = true;
+                if (!handed.oneMore()) {
                     return Acceptance.STOPPED;
                 }
                 RowToRun row = new RowToRun(inputs, answers);
@@ -12130,9 +12164,7 @@ public final class Generator {
 
         @Override
         public SearchShortfall untried() {
-            return stoppedAtItsFigure
-                    ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
-                    : SearchShortfall.NONE;
+            return handed.untried();
         }
 
         /** Whether a run the judge made of a row put to it went past what a run may spend, read
@@ -12439,11 +12471,8 @@ public final class Generator {
 
             @Override
             public Taken take(Candidate candidate) {
-                Map<String, Written> given = candidate.from().writtenAgainst(axes,
-                        candidate.delta(), candidate.where(), references);
-                known.written(candidate, given);
-                if (!candidate.from().composes() && given.isEmpty()) {
-                    // nothing here can be written against the model's value
+                Map<String, Written> given = known.writtenOf(candidate, axes, references);
+                if (given == null) {
                     return Taken.AND_MORE;
                 }
                 where = candidate.where();

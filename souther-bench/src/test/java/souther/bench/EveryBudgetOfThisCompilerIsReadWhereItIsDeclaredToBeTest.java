@@ -748,14 +748,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " figure"),
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),
-            // The rows a walk hands the choice among rows. The budget is held here as the figure
-            // the walk is stopped at, and handed over from here as what it left untried.
-            Map.entry("souther.compiler.partition.Generator$TellingArmsApart#<clinit>()V",
-                    "how many rows a walk composing a row for a point hands the choice of a row,"
-                            + " and the figure it names where it stopped there"),
-            // The same figure, for the walk that holds each row to a run: held as the figure the
-            // walk is stopped at, and handed over from here as what it left untried.
-            Map.entry("souther.compiler.partition.Generator$ReachingWhatIsJudged#<clinit>()V",
+            // The rows a walk hands the choice among rows, for each preference a walk hands them
+            // to. The budget is held here as the figure the walk is stopped at, and handed over
+            // from here as what it left untried.
+            Map.entry("souther.compiler.partition.Generator$RowsHanded#<clinit>()V",
                     "how many rows a walk composing a row for a point hands the choice of a row,"
                             + " and the figure it names where it stopped there"),
             Map.entry("souther.compiler.partition.Generator#conditioned("
