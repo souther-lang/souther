@@ -1144,8 +1144,7 @@ final class Coverages {
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands, LookingForARow looking) {
-            return attempt(label, fixing, asking, reaching, demands, java.util.Optional.empty(),
-                    looking);
+            return attempt(label, fixing, asking, reaching, demands, Optional.empty(), looking);
         }
 
         /**
@@ -1160,8 +1159,7 @@ final class Coverages {
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands,
-                java.util.Optional<souther.compiler.partition.Generator.RowJudge> judge,
-                LookingForARow looking);
+                Optional<Generator.RowJudge> judge, LookingForARow looking);
 
         /**
          * A composed row built and run, so that what it turned out to be can be asked.

@@ -9956,6 +9956,8 @@ public final class Generator {
         private final Tries allowance;
 
         /**
+         * A composer for one way to the point, spending of the point's allowance.
+         *
          * @param region   the way's region, which a location's value is composed in
          * @param unchosen the way's region with the numbers the point fixes standing where it fixes
          *                 them and nothing a condition chose, which is what a proof is asked of
