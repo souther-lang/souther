@@ -237,12 +237,12 @@ public sealed interface Level {
 
     /** What makes two levels one level: what they are, and not how the number was written. The same
      *  rule {@link Place#key()} states, asked of a level so that a reader holding one never reaches
-     *  past it for the place inside. Either side names itself from its own canonical parts, so a
-     *  name costs what those parts cost and never what writing the number out would. */
-    default String key() {
+     *  past it for the place inside: the canonical place on a carrier, or the exact ratio of the
+     *  quantity, each a value equal to another exactly where the two are one level. */
+    default Object key() {
         return switch (this) {
             case OnACarrier on -> on.at().key();
-            case OfTheQuantity counted -> counted.at().key();
+            case OfTheQuantity counted -> counted.at();
         };
     }
 

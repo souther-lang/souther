@@ -1344,7 +1344,7 @@ final class StopsOfABody {
      */
     private List<TakenConstraint.Affine> relationsOf(Proposition stated) {
         List<List<TakenConstraint.Affine>> ways = waysOf(stated);
-        return ways == null || ways.isEmpty() ? null : ways.getFirst();
+        return (ways == null || ways.isEmpty()) ? null : ways.getFirst();
     }
 
     /** {@code number} moved by {@code by}, or null where that is no number held exactly. */

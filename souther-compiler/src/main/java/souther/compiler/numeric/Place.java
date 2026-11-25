@@ -29,10 +29,11 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
      * and then a position has two classes both holding zero — which is not a partition, and the
      * classifier that reads a row against it has no answer.
      *
-     * <p>A name and not a number to read: it is built from the parts of the canonical value, so
-     * it costs what those parts cost and no reader should expect digits in it.
+     * <p>The place in its one canonical form, which is equal to another exactly where the two are
+     * one line: a value, and not a name written out of one, so that two places are never one for
+     * having been written alike.
      */
-    String key();
+    Place key();
 
     /**
      * This place's coordinate written out as text: the number for a count, the string itself for a

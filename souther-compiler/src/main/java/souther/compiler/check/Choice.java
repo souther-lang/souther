@@ -295,12 +295,14 @@ public record Choice(Kind kind, List<Arm> arms) {
         return out;
     }
 
-    /** {@code form}, each argument it names written as the value {@code call} was given there. */
+    /** {@code form}, each argument it names written as the value {@code call} was given there:
+     *  two arguments given one value are that value, weighed by both their weights together. */
     private static LinearForm<Core> atTheCall(LinearForm<DeclaredArgument> form,
                                               Core.PreservedCall call) {
         Map<Core, ExactRatio> values = new LinkedHashMap<>();
-        form.coefs().forEach((argument, weight) ->
-                values.put(CallArguments.of(argument, call), weight));
+        form.coefs().forEach((argument, weight) -> values.merge(CallArguments.of(argument, call),
+                weight, (one, other) -> one.plus(other).orFail(
+                        "two weights a library writes a case in are held together")));
         return new LinearForm<>(form.constant(), values);
     }
 

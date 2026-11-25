@@ -201,7 +201,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs, List<R
      *             than as two arguments so that which end is which is not said again here
      */
     public static QuantityArrangement of(LevelSpace space, List<Parting> parted, DomainEnds ends) {
-        Map<String, Parting> distinct = new LinkedHashMap<>();
+        Map<Seam.Key, Parting> distinct = new LinkedHashMap<>();
         for (Parting each : parted) {
             // A place the rules leave nothing at divides nothing. The values it would tell apart are
             // values no row can be written at, so it is dropped rather than kept as a run holding

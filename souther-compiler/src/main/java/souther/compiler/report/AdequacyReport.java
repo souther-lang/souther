@@ -8503,7 +8503,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // A quantity that is no form weighs no terms, and is the quantity it names itself as: how
         // many elements of which container meet what.
         if (!(quantity instanceof LinearQuantity form)) {
-            into.put("counted", quantity.identity());
+            into.put("counted", quantity.spelledWhole());
             return;
         }
         ArrayNode terms = into.putArray("terms");
@@ -8636,7 +8636,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("kind", "occurrences_in_every_container");
                 into.put("position", it.subjectPath().discriminated());
                 if (it.selection() != null) {
-                    into.put("kept_by", it.selection().key());
+                    into.put("kept_by", it.selection().spelling().toString());
                 }
             }
             // How often the value an input holds occurs among every occurrence of the place.
@@ -8680,7 +8680,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
                 elementComputation(into.putObject("computation"), it.value());
                 if (it.selection() != null) {
-                    into.put("kept_by", it.selection().key());
+                    into.put("kept_by", it.selection().spelling().toString());
                 }
             }
             // The same number for the key an input holds, which is the number of the elements of

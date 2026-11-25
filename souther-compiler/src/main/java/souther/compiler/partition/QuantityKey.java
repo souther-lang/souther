@@ -10,7 +10,6 @@ import souther.compiler.numeric.LinearForm;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.TreeMap;
 
 /**
  * What a rule cuts, told from how much of it the rule happened to write.
@@ -122,22 +121,5 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
     public static ExactRatio per(LinearForm<NumericTerm> form) {
         return form.coefs().isEmpty() ? ExactRatio.ONE
                 : LevelSpace.stepOf(form.coefs().values());
-    }
-
-    /**
-     * What makes two quantities one quantity, as a name a map can hold.
-     *
-     * <p>In an order the coefficients settle rather than the one they were recorded in, so that a
-     * form written {@code 6 * b + 3 * a} and one written {@code 3 * a + 6 * b} are one name. The
-     * coefficients are named by the ratio's own name ({@link ExactRatio#key}): an exact ratio is
-     * kept in lowest terms, so two writings of one number are one value, and the name costs what
-     * its parts cost rather than what writing the number out would.
-     */
-    public String key() {
-        Map<String, String> named = new TreeMap<>();
-        direction.forEach((term, coef) -> named.put(term.toString(), coef.key()));
-        StringBuilder out = new StringBuilder();
-        named.forEach((term, coef) -> out.append(coef).append('*').append(term).append(' '));
-        return out.toString().trim();
     }
 }

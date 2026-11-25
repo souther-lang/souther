@@ -1523,7 +1523,7 @@ public final class Partitions {
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
     private static List<Cut> mergedPoints(List<Cut> had, List<GuardThresholds.Guards.Singled> points,
                                           Carrier carrier) {
-        Map<String, Cut> byValue = new LinkedHashMap<>();
+        Map<Object, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(cut.key(), cut);
         }
@@ -1554,20 +1554,20 @@ public final class Partitions {
      * position has a value at it. A line over a form of several positions divides none of them and
      * is on a quantity of its own, which no axis names — those arrive with the lines themselves.
      */
-    private static Map<String, List<Parting>> partedByQuantity(List<Axis> axes) {
-        Map<String, List<Parting>> out = new LinkedHashMap<>();
+    private static Map<QuantityKey, List<Parting>> partedByQuantity(List<Axis> axes) {
+        Map<QuantityKey, List<Parting>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (axis.parted().isEmpty()) {
                 continue;
             }
-            out.computeIfAbsent(QuantityKey.of(LinearForm.atom(axis.term())).key(),
+            out.computeIfAbsent(QuantityKey.of(LinearForm.atom(axis.term())),
                     _ -> new ArrayList<>()).addAll(axis.parted());
         }
         return out;
     }
 
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
-        Map<String, Cut> byValue = new LinkedHashMap<>();
+        Map<Object, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(cut.key(), cut);
         }
@@ -3908,8 +3908,8 @@ public final class Partitions {
          */
         List<String> inside(Endpoint low, Endpoint high, int many) {
             return many <= 0 ? List.of() : revision.settled(new StringsInsideARun(rules,
-                    low == null ? null : low.at().key(), low != null && low.inclusive(),
-                    high == null ? null : high.at().key(), high != null && high.inclusive(),
+                    low == null ? null : low.at().spelled(), low != null && low.inclusive(),
+                    high == null ? null : high.at().spelled(), high != null && high.inclusive(),
                     many));
         }
     }

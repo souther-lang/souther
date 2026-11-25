@@ -14,6 +14,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -155,7 +156,7 @@ public final class TotalsOfOneRun {
         // was written.
         ElementValue weighed = computed == null || !holdsEverySum(each, source) ? null
                 : ElementValue.times(computed, weight);
-        return weighed == null || named(weighed) == null ? null
+        return (weighed == null || weightsOf(weighed) == null) ? null
                 : new Part(new Run(over.operation(), elements, order), over, weighed, each);
     }
 
@@ -196,11 +197,11 @@ public final class TotalsOfOneRun {
                 return null;
             }
         }
-        LinearForm<String> named = sum == null ? null : named(sum);
-        if (named == null || named.coefs().isEmpty()) {
+        Map<?, ExactRatio> weights = sum == null ? null : weightsOf(sum);
+        if (weights == null || weights.isEmpty()) {
             return null;
         }
-        ExactRatio shared = sharedBy(named);
+        ExactRatio shared = sharedBy(weights);
         ElementValue perElement = shared.equals(ExactRatio.ONE) ? sum
                 : ExactRatio.ONE.dividedBy(shared) instanceof ExactAnswer.Held<ExactRatio>(var by)
                         ? ElementValue.times(sum, by) : null;
@@ -224,35 +225,23 @@ public final class TotalsOfOneRun {
     }
 
     /**
-     * {@code value} with its fields and products named, where it is a form or a sum of products —
-     * or null where it is anything else, which is no part this adds up.
+     * The weight of each field or product of {@code value}, by the field or product it is, where
+     * it is a form or a sum of products — or null where it is anything else, which is no part
+     * this adds up.
      */
-    private static LinearForm<String> named(ElementValue value) {
-        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
-        ExactRatio constant;
-        switch (value) {
-            case ElementValue.Affine affine -> {
-                affine.form().coefs().forEach((field, weight) ->
-                        coefs.put(field.toString(), weight));
-                constant = affine.form().constant();
-            }
-            case ElementValue.Multilinear products -> {
-                products.form().coefs().forEach((product, weight) ->
-                        coefs.put(product.toString(), weight));
-                constant = products.form().constant();
-            }
+    private static Map<?, ExactRatio> weightsOf(ElementValue value) {
+        return switch (value) {
+            case ElementValue.Affine affine -> affine.form().coefs();
+            case ElementValue.Multilinear products -> products.form().coefs();
             case ElementValue.Choose _, ElementValue.Indexed _,
-                 ElementValue.OfItsCase _, ElementValue.SumOfChoices _ -> {
-                return null;
-            }
-        }
-        return new LinearForm<>(constant, coefs);
+                 ElementValue.OfItsCase _, ElementValue.SumOfChoices _ -> null;
+        };
     }
 
     /**
-     * What every weight of {@code form} is a whole multiple of, signed so that the weight first in
-     * the order of the names it weighs is positive once divided by it: a total of minus a field is
-     * minus that field's total, whichever way it was written.
+     * What every weight of {@code weights} is a whole multiple of, signed so that the weight first
+     * in the order of what it weighs, as that is written, is positive once divided by it: a total
+     * of minus a field is minus that field's total, whichever way it was written.
      *
      * <p>The weights of the fields and not the number beside them. What one element comes to is
      * then its fields at the weights they share nothing more of, and the number beside them as it
@@ -261,9 +250,11 @@ public final class TotalsOfOneRun {
      * the second, a total whose field is weighed two, and the values it takes would be those of
      * twice a field, which are not the values of the total that was written.
      */
-    private static ExactRatio sharedBy(LinearForm<String> form) {
-        ExactRatio shared = AdditiveImage.divisorOf(form.coefs().values());
-        String first = form.coefs().keySet().stream().sorted().findFirst().orElseThrow();
-        return form.coefs().get(first).signum() < 0 ? shared.negated() : shared;
+    private static ExactRatio sharedBy(Map<?, ExactRatio> weights) {
+        ExactRatio shared = AdditiveImage.divisorOf(weights.values());
+        ExactRatio first = weights.entrySet().stream()
+                .min(Comparator.comparing(each -> String.valueOf(each.getKey())))
+                .orElseThrow().getValue();
+        return first.signum() < 0 ? shared.negated() : shared;
     }
 }

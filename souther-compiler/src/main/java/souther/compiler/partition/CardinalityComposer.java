@@ -1462,7 +1462,7 @@ final class CardinalityComposer {
                 repeated, unheld, unnamed, reading.today());
         if (candidates == null) {
             return notChosen(new SearchMessage.WhereItTurnsOverCouldNotBeWorkedOut(
-                    String.valueOf(kept.key()), String.valueOf(container)));
+                    String.valueOf(kept.spelling()), String.valueOf(container)));
         }
         List<Place> beside = candidates.isEmpty() ? List.of()
                 : valuesBeside(candidates.getFirst(), candidates, kept, carrier, run, repeated,
@@ -1705,12 +1705,12 @@ final class CardinalityComposer {
                 leaves, unheld, unnamed, reading.today());
         if (candidates == null) {
             return notChosen(new SearchMessage.WhereItTurnsOverCouldNotBeWorkedOut(
-                    String.valueOf(kept.key()), String.valueOf(chain.getLast())));
+                    String.valueOf(kept.spelling()), String.valueOf(chain.getLast())));
         }
         if (candidates.isEmpty()) {
             return none(kept == null ? new SearchMessage.NoValueToRepeat(String.valueOf(place))
                     : new SearchMessage.NoValueToRepeatThatKeeps(String.valueOf(place),
-                            String.valueOf(kept.key())));
+                            String.valueOf(kept.spelling())));
         }
         List<Place> beside = valuesBeside(candidates.getFirst(), candidates, kept, carrier, run,
                 leaves, unheld, unnamed, reading.today());

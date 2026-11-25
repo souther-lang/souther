@@ -236,11 +236,6 @@ public record KeptOccurrences(DecisionSubject container, Proposition meeting,
                 meeting.spelling());
     }
 
-    /** {@link #spelling} written out, for a reader. */
-    public String key() {
-        return spelling().toString();
-    }
-
     /** Two of these are one where they keep the elements of the same container by the same
      *  statement; how the statement is put to rows is the statement's own. */
     @Override

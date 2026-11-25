@@ -97,7 +97,7 @@ public record Parting(Seam geometry, List<LineOrigin> readings) {
     }
 
     /** What makes two of these one place, which is the quantity's answer and not the model's. */
-    public String key() {
+    public Seam.Key key() {
         return geometry.key();
     }
 }

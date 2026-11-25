@@ -54,7 +54,7 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
      * read as one, a value they leave out would be read as one of them.
      */
     public static <A> boolean coverEveryWay(List<DefinitionCase<A>> cases) {
-        Map<String, Integer> truths = new LinkedHashMap<>();
+        Map<Relation<A>, Integer> truths = new LinkedHashMap<>();
         List<Map<Integer, Boolean>> reached = new ArrayList<>();
         for (DefinitionCase<A> one : cases) {
             Map<Integer, Boolean> where = new LinkedHashMap<>();
@@ -63,13 +63,15 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
                         instanceof ExactAnswer.Held<LinearForm<A>>(LinearForm<A> apart))) {
                     return false;
                 }
-                // `a < b` and `b > a` are one relation, and `a >= b` is its denial.
-                String spelled = spelling(apart);
-                String turned = spelling(apart.negate());
-                Rel rel = spelled.compareTo(turned) <= 0 ? stands.rel() : stands.rel().turned();
-                String relation = (spelled.compareTo(turned) <= 0 ? spelled : turned) + " "
-                        + rel.orItsDenial();
-                int truth = truths.computeIfAbsent(relation, _ -> truths.size());
+                // `a < b` and `b > a` are one relation, and `a >= b` is its denial. Which way round
+                // a relation is held is chosen by how the two ways are written; which relation it
+                // is, is the form and the relation. Two written alike and turned the same way are
+                // read as two relations, which asks more of the cases and never less.
+                boolean asWritten = spelling(apart).compareTo(spelling(apart.negate())) <= 0;
+                Rel rel = asWritten ? stands.rel() : stands.rel().turned();
+                int truth = truths.computeIfAbsent(new Relation<>(
+                        asWritten ? apart : apart.negate(), rel.orItsDenial()),
+                        _ -> truths.size());
                 Boolean before = where.put(truth, rel == rel.orItsDenial());
                 if (before != null && before != (rel == rel.orItsDenial())) {
                     // A case reached where a relation holds and fails is reached nowhere.
@@ -100,7 +102,11 @@ public record DefinitionCase<A>(LinearForm<A> answers, List<ArgumentsStand<A>> g
         return true;
     }
 
-    /** {@code form} spelled the one way whatever order its terms were met in. */
+    /** A relation of the arguments: how far apart two forms of them are, against nought. */
+    private record Relation<A>(LinearForm<A> apart, Rel rel) { }
+
+    /** {@code form} spelled the one way whatever order its terms were met in, which chooses
+     *  which way round a relation is held and is not which relation it is. */
     private static <A> String spelling(LinearForm<A> form) {
         Map<String, String> terms = new TreeMap<>();
         form.coefs().forEach((atom, weight) -> terms.put(String.valueOf(atom), weight.toString()));
