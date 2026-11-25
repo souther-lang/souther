@@ -140,6 +140,9 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static souther.compiler.numeric.WholeDivision.ceilingOf;
+import static souther.compiler.numeric.WholeDivision.floorOf;
+
 /**
  * A relation this stage read over the input, held as what is asked of it: which of its places it
  * is shown to leave undivided ({@link WhatARelationLeavesUndivided}).
@@ -1991,8 +1994,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static UndividedByARelation ofAValueAmongThePieces(LinearForm<Quantity> form,
                                                                Rel relation) {
-        if (form.coefs().size() != 1 || !(form.coefs().keySet().iterator().next()
-                instanceof Quantity.IsAmongThePieces among) || among.separator().isEmpty()
+        if (!(form.loneAtom() instanceof Quantity.IsAmongThePieces among)
+                || among.separator().isEmpty()
                 || !(form.coefs().get(among).plus(form.constant())
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio whenAmong))) {
             return null;
@@ -3169,7 +3172,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean keptWithin(LinearForm<NumericTerm> form, BigInteger least,
                                       BigInteger greatest, Map<TermPath, BigInteger[]> kept) {
-        BigInteger shift = wholeOf(form.constant());
+        BigInteger shift = form.constant().wholeOrNull();
         if (shift == null || form.coefs().isEmpty()) {
             return false;
         }
@@ -3177,9 +3180,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         BigInteger to = greatest == null ? null : greatest.subtract(shift);
         TermPath place;
         BigInteger[] days;
-        if (form.coefs().size() == 1
-                && form.coefs().keySet().iterator().next() instanceof NumericTerm.ValueOf value
-                && wholeOf(form.coefs().get(value)) instanceof BigInteger weight
+        if (form.loneAtom() instanceof NumericTerm.ValueOf value
+                && form.coefs().get(value).wholeOrNull() instanceof BigInteger weight
                 && weight.signum() != 0) {
             place = value.position();
             BigInteger low = from == null ? null : weight.signum() > 0 ? ceilingOf(from, weight)
@@ -3257,8 +3259,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     static boolean placedOnRows(LinearForm<NumericTerm> form) {
         Map<NumericTerm, ExactRatio> coefs = form.coefs();
-        return !coefs.isEmpty() && wholeOf(form.constant()) != null
-                && (coefs.size() != 1 || wholeOf(coefs.values().iterator().next()) != null)
+        return !coefs.isEmpty() && form.constant().wholeOrNull() != null
+                && (coefs.size() != 1 || coefs.values().iterator().next().wholeOrNull() != null)
                 && coefs.keySet().stream()
                 .allMatch(term -> term instanceof NumericTerm.FromOnePosition);
     }
@@ -3292,9 +3294,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             Map<NumericTerm, ExactRatio> coefs = each.form().coefs();
-            BigInteger weight = coefs.size() == 1 ? wholeOf(coefs.values().iterator().next())
+            BigInteger weight = coefs.size() == 1 ? coefs.values().iterator().next().wholeOrNull()
                     : BigInteger.ONE;
-            BigInteger shift = wholeOf(each.form().constant());
+            BigInteger shift = each.form().constant().wholeOrNull();
             coefs.keySet().forEach(term -> numbers.add((NumericTerm.FromOnePosition) term));
             BigInteger least = each.least() == null ? null : each.least().subtract(shift);
             BigInteger greatest = each.greatest() == null ? null
@@ -3398,12 +3400,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         SearchRegion taken) ? taken : region;
     }
 
-    /** {@code ratio} where it is a whole number, or null. */
-    static BigInteger wholeOf(ExactRatio ratio) {
-        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(
-                BigInteger whole) ? whole : null;
-    }
-
     /**
      * The least {@code form} comes to where each number in it is at an end of its type — or the
      * most, where {@code least} is false — or null where a number of it has no such end or is no
@@ -3442,21 +3438,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static BigInteger withinWhatItCanBe(BigInteger end, NumericTerm number,
                                                 boolean least) {
         NumericDomain.Bounds reach = number.reachBounds();
-        BigInteger narrower = wholeEnd(least ? reach.min() : reach.max(), least);
+        BigInteger narrower = least ? reach.leastWhole() : reach.greatestWhole();
         if (narrower == null) {
             return end;
         }
         return end == null ? narrower : least ? end.max(narrower) : end.min(narrower);
-    }
-
-    static BigInteger floorOf(BigInteger numerator, BigInteger denominator) {
-        BigInteger[] parts = numerator.divideAndRemainder(denominator);
-        return parts[1].signum() != 0 && parts[1].signum() != denominator.signum()
-                ? parts[0].subtract(BigInteger.ONE) : parts[0];
-    }
-
-    static BigInteger ceilingOf(BigInteger numerator, BigInteger denominator) {
-        return floorOf(numerator.negate(), denominator).negate();
     }
 
     /** {@code form} as an author would write it: each number weighed, in the order of their
@@ -3865,9 +3851,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             out.add(new OnAWay(positionsADemandTurnsOn(taken.demand()),
                     relation instanceof TakenConstraint.Affine(var form, var rel, var _)
-                            && rel != Rel.NE && form.coefs().size() == 1
-                            && form.coefs().keySet().iterator().next()
-                            instanceof NumericTerm.TakenOf count
+                            && rel != Rel.NE
+                            && form.loneAtom() instanceof NumericTerm.TakenOf count
                             && count.takenAs() instanceof TakenAs.HowManyItHolds,
                     relation, elementsAsked(taken.demand()),
                     taken.demand() instanceof RowDemand.Exists some ? some.ofAnElement() : null,
@@ -5593,22 +5578,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         NumericDomain.Bounds bounds = everyValueTheDeclarationsLeave(value, read, true);
         return bounds == null ? null : new LengthsPastTheWay.Ends(
-                wholeEnd(bounds.min(), true), wholeEnd(bounds.max(), false));
-    }
-
-    /** The least whole number {@code end} allows, or the greatest where {@code lower} is false;
-     *  null where there is no end. */
-    private static BigInteger wholeEnd(Endpoint end, boolean lower) {
-        if (end == null || !(end.at() instanceof Count count)) {
-            return null;
-        }
-        ExactRatio at = count.exactly();
-        ExactAnswer<BigInteger> rounded = lower ? at.ceiling() : at.floor();
-        if (!(rounded instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))) {
-            return null;
-        }
-        boolean on = end.inclusive() || !at.isWhole();
-        return on ? whole : lower ? whole.add(BigInteger.ONE) : whole.subtract(BigInteger.ONE);
+                bounds.leastWhole(), bounds.greatestWhole());
     }
 
     /**
@@ -7016,12 +6986,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (held.min() == null) {
             return Optional.of(BigInteger.ZERO);
         }
-        return held.min().at() instanceof Count least
-                && least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
-                        BigInteger up)
-                ? Optional.of(held.min().inclusive() || !least.exactly().isWhole() ? up
-                        : up.add(BigInteger.ONE))
-                : Optional.empty();
+        return Optional.ofNullable(held.leastWhole());
     }
 
     /**
@@ -7715,9 +7680,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 || !(bound.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger down))) {
             return Optional.empty();
         }
-        // How many it holds stands to the bound as the statement says, turned where the count is
-        // weighed below nought.
-        Rel asked = weight.signum() > 0 ? rel : rel.turned();
+        // How many it holds stands to the bound as the statement says of the count.
+        Rel asked = rel.scaledBy(weight);
         boolean whole = bound.isWhole();
         return switch (asked) {
             case GE -> Optional.of(new HowManyAsked(up.max(BigInteger.ZERO), null));
@@ -8273,7 +8237,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WholeEnds mine = wholeEndsOf(takes.meet(freeOrders.answered().whereItStops()));
         List<BigInteger> moves = new ArrayList<>();
         for (RowDemand.OnARemainder each : together) {
-            BigInteger move = wholeNumberOf(each.dividend().constant());
+            BigInteger move = each.dividend().constant().wholeOrNull();
             if (move == null) {
                 return false;
             }
@@ -8397,8 +8361,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (!(each.statedOfTheRun() instanceof Proposition.Compared(
                     Relation relation, boolean holds, var _, var _))
                     || !(relation instanceof Relation.Affine affine)
-                    || affine.form().coefs().size() != 1
-                    || !(affine.form().coefs().keySet().iterator().next()
+                    || !(affine.form().loneAtom()
                             instanceof Quantity.RemainderOfADividend remainder)
                     || !remainder.divisor().equals(divisor)) {
                 continue;
@@ -8411,17 +8374,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (part.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                     inputs.put(term, part.getValue());
                 } else if (part.getKey() instanceof Quantity.OfABinding value
-                        && wholeNumberOf(part.getValue()) != null
+                        && part.getValue().wholeOrNull() instanceof BigInteger whole
                         && (bound == null || bound.equals(value))) {
                     bound = value;
-                    weighs = wholeNumberOf(part.getValue());
+                    weighs = whole;
                 } else {
                     mine = false;
                 }
             }
-            BigInteger shift = wholeNumberOf(remainder.dividend().constant());
+            BigInteger shift = remainder.dividend().constant().wholeOrNull();
             WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine,
-                    holds ? affine.proposition() : affine.proposition().denied());
+                    affine.proposition().whenHolding(holds));
             Set<Integer> allowed = leaves == null ? null : remaindersOf(leaves, modulus);
             if (!mine || shift == null || allowed == null || bound == null
                     || (number != null && !number.equals(bound))) {
@@ -8484,9 +8447,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || !affine.form().coefs().containsKey(number)) {
                 continue;
             }
-            Rel rel = holds ? affine.proposition() : affine.proposition().denied();
-            BigInteger onNumber = wholeNumberOf(affine.form().coefs().get(number));
-            BigInteger constant = wholeNumberOf(affine.form().constant());
+            Rel rel = affine.proposition().whenHolding(holds);
+            BigInteger onNumber = affine.form().coefs().get(number).wholeOrNull();
+            BigInteger constant = affine.form().constant().wholeOrNull();
             if (onNumber == null || onNumber.abs().compareTo(BigInteger.ONE) != 0
                     || constant == null) {
                 continue;
@@ -8513,7 +8476,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     if (part.getKey().equals(number)) {
                         continue;
                     }
-                    BigInteger by = wholeNumberOf(part.getValue());
+                    BigInteger by = part.getValue().wholeOrNull();
                     WholeEnds ends = by != null && part.getKey()
                             instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)
                             ? keptEndsOf(term, read) : null;
@@ -8749,8 +8712,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         BigInteger from = weight.signum() > 0 ? mine.low() : negated(mine.high());
         BigInteger to = weight.signum() > 0 ? mine.high() : negated(mine.low());
         for (BigInteger rests : List.of(lowest, highest)) {
-            BigInteger windowFrom = ceilingOfQuotient(least.subtract(rests), by);
-            BigInteger windowTo = floorOfQuotient(greatest.subtract(rests).subtract(spread), by);
+            BigInteger windowFrom = ceilingOf(least.subtract(rests), by);
+            BigInteger windowTo = floorOf(greatest.subtract(rests).subtract(spread), by);
             BigInteger low = from == null ? windowFrom : windowFrom.max(from);
             BigInteger high = to == null ? windowTo : windowTo.min(to);
             if (high.subtract(low).add(BigInteger.ONE).compareTo(divisor) < 0) {
@@ -8762,13 +8725,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** The whole values from {@code low} to {@code high}, either null where it has no end. */
     record WholeEnds(BigInteger low, BigInteger high) {}
-
-    /** {@code ratio} as a whole number, or null where it is none. */
-    static BigInteger wholeNumberOf(ExactRatio ratio) {
-        return ratio != null && ratio.isWhole()
-                && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
-                ? whole : null;
-    }
 
     private static BigInteger negated(BigInteger value) {
         return value == null ? null : value.negate();
@@ -8803,16 +8759,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new WholeEnds(low, high);
-    }
-
-    private static BigInteger floorOfQuotient(BigInteger dividend, BigInteger divisor) {
-        BigInteger[] both = dividend.divideAndRemainder(divisor);
-        return both[1].signum() < 0 ? both[0].subtract(BigInteger.ONE) : both[0];
-    }
-
-    private static BigInteger ceilingOfQuotient(BigInteger dividend, BigInteger divisor) {
-        BigInteger[] both = dividend.divideAndRemainder(divisor);
-        return both[1].signum() > 0 ? both[0].add(BigInteger.ONE) : both[0];
     }
 
     /**
@@ -10193,9 +10139,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> out = new LinkedHashMap<>();
         for (RowDemand.OfAnElement each : way) {
             if (!(each instanceof RowDemand.Relational(TakenConstraint.Affine stated))
-                    || stated.form().coefs().size() != 1
-                    || !(stated.form().coefs().keySet().iterator().next()
-                            instanceof NumericTerm.FromOnePosition number)
+                    || !(stated.form().loneAtom() instanceof NumericTerm.FromOnePosition number)
                     || !number.placesReadOff().stream()
                             .allMatch(place -> place.isAtOrUnder(container.element()))) {
                 return null;
@@ -11874,7 +11818,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static boolean holdsOverTheWholeTypeOfItsNumbers(LinearForm<NumericTerm> form,
                                                              Rel rel, InputReading read) {
-        BigInteger low = wholeNumberOf(form.constant());
+        BigInteger low = form.constant().wholeOrNull();
         BigInteger high = low;
         if (low == null) {
             return false;
@@ -11884,7 +11828,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? read.quantities().ordersOf(number) : null;
             WholeEnds ends = orders == null ? null
                     : wholeEndsOf(orders.answered().whereItStops());
-            BigInteger by = wholeNumberOf(each.getValue());
+            BigInteger by = each.getValue().wholeOrNull();
             if (ends == null || ends.low() == null || ends.high() == null || by == null) {
                 return false;
             }
@@ -12696,12 +12640,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || form.coefs().keySet().stream().anyMatch(term ->
                             !term.equals(value) && !others.contains(term))
                     || form.coefs().values().stream().anyMatch(weight ->
-                            wholeNumberOf(weight) == null
-                                    || wholeNumberOf(weight).abs().compareTo(BigInteger.ONE) != 0)
+                            !(weight.wholeOrNull() instanceof BigInteger whole)
+                                    || whole.abs().compareTo(BigInteger.ONE) != 0)
                     || (shape != null && !shape.coefs().equals(form.coefs()))) {
                 return null;
             }
-            BigInteger constant = wholeNumberOf(form.constant());
+            BigInteger constant = form.constant().wholeOrNull();
             if (constant == null) {
                 return null;
             }
@@ -12720,9 +12664,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             TermOrders otherOrders = read.quantities().ordersOf((NumericTerm.FromOnePosition) other);
             weighed.add(new RunOfASum.Other(otherOrders == null ? null
                     : wholeEndsOf(otherOrders.answered().whereItStops()),
-                    wholeNumberOf(shape.coefs().get(other))));
+                    shape.coefs().get(other) instanceof ExactRatio by ? by.wholeOrNull() : null));
         }
-        Optional<WholeEnds> run = RunOfASum.of(mine, wholeNumberOf(shape.coefs().get(value)),
+        Optional<WholeEnds> run = RunOfASum.of(mine, shape.coefs().get(value).wholeOrNull(),
                 weighed, from, to);
         if (run.isEmpty()) {
             return null;
@@ -13037,7 +12981,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         ExactRatio weight = weighed.form().coefs().values().iterator().next();
-        BigInteger step = weight.isWhole() ? weight.abs().floor().orNull() : null;
+        BigInteger step = weight.abs().wholeOrNull();
         StatedOfATotal stated = statedOfTheTotalAlone(over, conditions);
         if (step == null || step.equals(BigInteger.ONE) || stated == null
                 || stated.run().min() != null || stated.run().max() != null) {
@@ -13227,8 +13171,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (most != null && most.compareTo(fewest) < 0) {
             return null;
         }
-        ExactRatio least = endOf(run.min());
-        ExactRatio greatest = endOf(run.max());
+        ExactRatio least = run.minNumber();
+        ExactRatio greatest = run.maxNumber();
         if (least != null && least.signum() > 0) {
             return pastNought(run, least, greatest, fewest, most, whole);
         }
@@ -13311,9 +13255,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return onwards;
         }
         // The run of the fewest stands apart from the rest; the wider of the two is taken.
-        ExactRatio onwardsTo = endOf(onwards.max());
+        ExactRatio onwardsTo = onwards.maxNumber();
         ExactRatio onwardsWidth = onwardsTo == null ? null
-                : onwardsTo.minus(endOf(onwards.min())).orNull();
+                : onwardsTo.minus(onwards.minNumber()).orNull();
         ExactRatio fewestWidth = width.times(fewest).orNull();
         return onwardsTo != null && onwardsWidth != null && fewestWidth != null
                 && onwardsWidth.compareTo(fewestWidth) < 0 ? ofTheFewest : onwards;
@@ -13342,10 +13286,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return whole.holdsAValue() ? whole : null;
     }
 
-    /** The number {@code end} is at, or null where there is no end, or it is at no number. */
-    private static ExactRatio endOf(Endpoint end) {
-        return end != null && end.at() instanceof Count count ? count.exactly() : null;
-    }
 
     /** The whole count an end of a run of counts holds, from below where {@code lower}; null
      *  where it is at no count. */
@@ -14319,21 +14259,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** The values {@code stated}, which is over one number, leaves it — or null where it is an
      *  equality, a difference, or a bound no number holds. */
     private static NumericDomain.Bounds boundsStatedOf(TakenConstraint.Affine stated) {
-        ExactRatio weight = stated.form().coefs().values().iterator().next();
-        ExactRatio at = stated.form().constant().negated().dividedBy(weight).orNull();
-        if (at == null || !(Count.written(at)
+        LinearForm.Stated<NumericTerm> one = stated.form()
+                .weighingOne(stated.form().loneTerm().getKey(), stated.rel()).orNull();
+        if (one == null || !(Count.written(one.form().constant().negated())
                 instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> count))
                 || count.isEmpty()) {
             return null;
         }
-        Rel rel = weight.signum() > 0 ? stated.rel() : switch (stated.rel()) {
-            case GE -> Rel.LE;
-            case GT -> Rel.LT;
-            case LE -> Rel.GE;
-            case LT -> Rel.GT;
-            case EQ, NE -> stated.rel();
-        };
-        return switch (rel) {
+        return switch (one.rel()) {
             case GE -> new NumericDomain.Bounds(Endpoint.inclusive(count.get()), null);
             case GT -> new NumericDomain.Bounds(Endpoint.exclusive(count.get()), null);
             case LE -> new NumericDomain.Bounds(null, Endpoint.inclusive(count.get()));
@@ -15367,13 +15300,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // Not one: the fewest the run holds, where that is more and the elements may repeat. A
         // set holds that many values apart, which is a question of the element's type.
-        if (!elementsMayRepeat(at, read) || whole.min() == null || !(whole.min().at() instanceof Count least)
-                || !(least.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(
-                        BigInteger up))) {
+        if (!elementsMayRepeat(at, read) || !(whole.leastWhole() instanceof BigInteger fewest)) {
             return false;
         }
-        BigInteger fewest = whole.min().inclusive() || !least.exactly().isWhole() ? up
-                : up.add(BigInteger.ONE);
         return fewest.signum() > 0 && whole.admits(ExactRatio.of(fewest));
     }
 

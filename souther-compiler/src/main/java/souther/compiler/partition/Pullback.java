@@ -17006,7 +17006,7 @@ final class Pullback {
             return ArmsLeft.BOTH;
         }
         SearchRegion here = onTheWay.get() != null ? onTheWay.get() : read.quantities().region();
-        Rel holding = holds ? relation : relation.denied();
+        Rel holding = relation.whenHolding(holds);
         // Where the form runs on the way here, worked out once for both arms: an arm whose
         // condition the run leaves no value for is one no run takes, and only an arm that is read
         // has the way narrowed to it.

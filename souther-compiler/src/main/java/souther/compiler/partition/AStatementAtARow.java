@@ -359,9 +359,8 @@ final class AStatementAtARow {
     /** The one remainder by an input's number {@code affine} weighs where it weighs one and
      *  nothing else, or null. */
     static Quantity.RemainderByAnInput remainderByAnInputIn(Relation.Affine affine) {
-        return affine.form().coefs().size() == 1
-                && affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.RemainderByAnInput remainder ? remainder : null;
+        return affine.form().loneAtom() instanceof Quantity.RemainderByAnInput remainder
+                ? remainder : null;
     }
 
     /**
@@ -416,9 +415,7 @@ final class AStatementAtARow {
      * it is asked at is of the relations a reader may ask.
      */
     static Quantity.IsAmongThePieces pieceMembershipIn(Relation.Affine affine) {
-        return affine.form().coefs().size() == 1
-                && affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.IsAmongThePieces among
+        return affine.form().loneAtom() instanceof Quantity.IsAmongThePieces among
                 && OneRelation.OnPieceMembership.readsARow(among) ? among : null;
     }
 
@@ -473,9 +470,7 @@ final class AStatementAtARow {
 
     /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
     static Quantity.ProductOfTwo productIn(Relation.Affine affine) {
-        return affine.form().coefs().size() == 1
-                && affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.ProductOfTwo product ? product : null;
+        return affine.form().loneAtom() instanceof Quantity.ProductOfTwo product ? product : null;
     }
 
     /**
@@ -1521,7 +1516,7 @@ final class AStatementAtARow {
     private static Answer countedAgainst(Proposition.Compared compared, Relation.Affine affine,
                                          HowManyAtARow counted) {
         ExactRatio weight = affine.form().coefs().values().iterator().next();
-        Rel rel = compared.holds() ? affine.proposition() : affine.proposition().denied();
+        Rel rel = affine.proposition().whenHolding(compared.holds());
         return counted.whether(n -> weight.times(ExactRatio.of(n))
                 .flatMap(weighed -> weighed.plus(affine.form().constant()))
                 .map(sum -> rel.holds(sum.signum())));

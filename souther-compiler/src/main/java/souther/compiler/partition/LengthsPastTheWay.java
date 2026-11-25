@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeDivision;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
@@ -301,10 +302,10 @@ final class LengthsPastTheWay {
                     return new Lengths(BigInteger.ONE, BigInteger.ZERO);
                 }
             } else if (weight.signum() > 0) {
-                BigInteger from = UndividedByARelation.ceilingOf(each.constant().negate(), weight);
+                BigInteger from = WholeDivision.ceilingOf(each.constant().negate(), weight);
                 least = least == null ? from : least.max(from);
             } else {
-                BigInteger to = UndividedByARelation.floorOf(each.constant(), weight.negate());
+                BigInteger to = WholeDivision.floorOf(each.constant(), weight.negate());
                 most = most == null ? to : most.min(to);
             }
         }
@@ -313,13 +314,13 @@ final class LengthsPastTheWay {
 
     /** {@code form} as an inequality, or null where a weight or the constant is no whole number. */
     private static Inequality inequalityOf(LinearForm<NumericTerm> form) {
-        BigInteger constant = UndividedByARelation.wholeOf(form.constant());
+        BigInteger constant = form.constant().wholeOrNull();
         if (constant == null) {
             return null;
         }
         Map<NumericTerm, BigInteger> weights = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            BigInteger weight = UndividedByARelation.wholeOf(each.getValue());
+            BigInteger weight = each.getValue().wholeOrNull();
             if (weight == null) {
                 return null;
             }

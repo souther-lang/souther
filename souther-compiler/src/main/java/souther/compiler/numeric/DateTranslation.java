@@ -93,8 +93,10 @@ public record DateTranslation(long offsetDays, long first, long last) {
      * defined at, so the dates a position may hold are kept where the move is.
      */
     public DateTranslation definedOnlyWithin(NumericDomain.Bounds days) {
-        BigInteger from = days.min() == null ? BigInteger.valueOf(first) : dayAt(days.min(), true);
-        BigInteger to = days.max() == null ? BigInteger.valueOf(last) : dayAt(days.max(), false);
+        BigInteger from = days.min() == null ? BigInteger.valueOf(first)
+                : days.min().wholeAdmitted(true);
+        BigInteger to = days.max() == null ? BigInteger.valueOf(last)
+                : days.max().wholeAdmitted(false);
         if (from == null || to == null) {
             return null;
         }
@@ -122,21 +124,6 @@ public record DateTranslation(long offsetDays, long first, long last) {
         int least = from.getDayOfYear() == 1 ? from.getYear() : from.getYear() + 1;
         int most = to.getDayOfYear() == to.lengthOfYear() ? to.getYear() : to.getYear() - 1;
         return least > most ? null : new int[] {least, most};
-    }
-
-    /** The day nearest {@code end} on the run's side of it, or null where it is no number: the
-     *  run's first day where {@code least}, and its last otherwise. */
-    private static BigInteger dayAt(Endpoint end, boolean least) {
-        if (!(end.at() instanceof Count count)) {
-            return null;
-        }
-        ExactRatio at = count.exactly();
-        if (least) {
-            return end.inclusive() ? at.ceiling().orNull()
-                    : at.floor().map(day -> day.add(BigInteger.ONE)).orNull();
-        }
-        return end.inclusive() ? at.floor().orNull()
-                : at.ceiling().map(day -> day.subtract(BigInteger.ONE)).orNull();
     }
 
     /** Whether the chain is defined at the date {@code day} counts to. */

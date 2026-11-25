@@ -1263,15 +1263,10 @@ final class ContainersAddingUp {
                 return inside.exactly();
             }
             Endpoint other = lower ? run.max() : run.min();
-            ExactCut near = cutAt(end);
-            return near == null || (other != null && cutAt(other) == null) ? null
-                    : DecimalPoints.within(near, other == null ? null : cutAt(other), lower);
-        }
-
-        /** {@code end} as a cut of exact numbers, or null where it is at no number. */
-        private static ExactCut cutAt(Endpoint end) {
-            return end.at() instanceof Count count
-                    ? new ExactCut(count.exactly(), end.inclusive()) : null;
+            ExactCut near = end.asCut();
+            ExactCut far = other == null ? null : other.asCut();
+            return near == null || (other != null && far == null) ? null
+                    : DecimalPoints.within(near, far, lower);
         }
 
         /** One where {@code left} holds it, and otherwise the whole number nearest it that
@@ -1428,7 +1423,7 @@ final class ContainersAddingUp {
             // weight * field + constant stands to nought as the relation says, where the form is
             // taken; so the field stands to what turns it as the relation does, turned about where
             // the weight is below nought.
-            Rel taken = formWhereItHolds ? test.relation() : test.relation().denied();
+            Rel taken = test.relation().whenHolding(formWhereItHolds);
             if (taken == Rel.NE
                     || !(test.form().constant().negated().dividedBy(tested.getValue())
                             instanceof ExactAnswer.Held<ExactRatio>(ExactRatio turns))
@@ -1438,7 +1433,7 @@ final class ContainersAddingUp {
             }
             return new FieldSolved(solved.field(), solved.carrier(), solved.weight(),
                     solved.constant(), false, null, null, null, new Where(at.get(),
-                            tested.getValue().signum() < 0 ? taken.turned() : taken));
+                            taken.scaledBy(tested.getValue())));
         }
 
         /**

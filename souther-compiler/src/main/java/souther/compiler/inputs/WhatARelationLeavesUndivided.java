@@ -11,6 +11,7 @@ import souther.compiler.numeric.NumberRegion;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeDivision;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.Figure;
@@ -1825,7 +1826,7 @@ public final class WhatARelationLeavesUndivided {
             WholeRun between = side;
             for (boolean holds : List.of(true, false)) {
                 WholeRun settling = settledByAFactor(sign, lies, level,
-                        holds ? relation : relation.denied());
+                        relation.whenHolding(holds));
                 if (settling == null) {
                     continue;
                 }
@@ -2120,7 +2121,7 @@ public final class WhatARelationLeavesUndivided {
         }
         Term<P> part = terms.get(within.part());
         Term<P> whole = terms.get(within.whole());
-        BigInteger weight = whole.weight().isWhole() ? whole.weight().floor().orNull() : null;
+        BigInteger weight = whole.weight().wholeOrNull();
         BigInteger offset = constant.floor().orNull();
         if (weight == null || offset == null || whole.spacing() != Granularity.DISCRETE
                 || whole.realizes() == null || part.weight().abs().compareTo(ExactRatio.ONE) != 0) {
@@ -2214,7 +2215,7 @@ public final class WhatARelationLeavesUndivided {
                                                   Form.Lines ends) {
         List<SettledRun> runs = new ArrayList<>();
         for (boolean holds : List.of(true, false)) {
-            for (WholeRun each : whereEveryValueMeets(holds ? relation : relation.denied(),
+            for (WholeRun each : whereEveryValueMeets(relation.whenHolding(holds),
                     ends.lowSlope(), ends.lowOffset(), ends.highSlope(), ends.highOffset())) {
                 WholeRun here = each.meet(values);
                 if (here.holdsAWholeNumber()) {
@@ -3148,7 +3149,7 @@ public final class WhatARelationLeavesUndivided {
 
     /** Whether the whole number {@code value} is one {@code stepped} takes. */
     private static boolean inTheStepped(Term.Stepped stepped, ExactRatio value) {
-        BigInteger whole = value.isWhole() ? value.floor().orNull() : null;
+        BigInteger whole = value.wholeOrNull();
         return whole != null && stepped.takes(whole);
     }
 
@@ -4581,10 +4582,10 @@ public final class WhatARelationLeavesUndivided {
         } else {
             BigInteger magnitude = weightThere.abs();
             BigInteger below = greatest.add(BigInteger.ONE).negate();
-            BigInteger low = weightThere.signum() > 0 ? ceilDividedBy(below, weightThere)
-                    : ceilDividedBy(greatest, weightThere);
+            BigInteger low = weightThere.signum() > 0 ? WholeDivision.ceilingOf(below, weightThere)
+                    : WholeDivision.ceilingOf(greatest, weightThere);
             BigInteger high = weightThere.signum() > 0 ? greatest.divide(weightThere)
-                    : floorDividedBy(below, weightThere);
+                    : WholeDivision.floorOf(below, weightThere);
             reached.add(taken.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(low, high))));
             reached.add(taken.and(WholeNumberSet.ofRuns(WholeNumberRuns.one(
                     greatest.divide(magnitude).negate(), greatest.divide(magnitude)))));
@@ -4645,18 +4646,6 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return true;
-    }
-
-    private static BigInteger ceilDividedBy(BigInteger number, BigInteger by) {
-        BigInteger[] both = number.divideAndRemainder(by);
-        return both[1].signum() != 0 && both[1].signum() == by.signum()
-                ? both[0].add(BigInteger.ONE) : both[0];
-    }
-
-    private static BigInteger floorDividedBy(BigInteger number, BigInteger by) {
-        BigInteger[] both = number.divideAndRemainder(by);
-        return both[1].signum() != 0 && both[1].signum() != by.signum()
-                ? both[0].subtract(BigInteger.ONE) : both[0];
     }
 
     /** The whole numbers {@code bounds} holds, or null where an end is no number. */
@@ -5115,8 +5104,8 @@ public final class WhatARelationLeavesUndivided {
         }
         // A term that takes the values of a remainder stands at the first and last of them.
         if (term.stepped() != null) {
-            BigInteger first = lowest.isWhole() ? lowest.floor().orNull() : null;
-            BigInteger last = highest.isWhole() ? highest.floor().orNull() : null;
+            BigInteger first = lowest.wholeOrNull();
+            BigInteger last = highest.wholeOrNull();
             if (first == null || last == null) {
                 return null;
             }
@@ -5351,8 +5340,8 @@ public final class WhatARelationLeavesUndivided {
             if (spacings.areKnown() && onTheGrid(realized.min()) && onTheGrid(realized.max())) {
                 ExactCut asked = below ? lowerCut() : upperCut();
                 return asked != null && (below
-                        ? reachesFrom(reach, asked, cutOf(end), spacings)
-                        : reachesTo(reach, asked, cutOf(end), spacings));
+                        ? reachesFrom(reach, asked, end.asCut(), spacings)
+                        : reachesTo(reach, asked, end.asCut(), spacings));
             }
             return below ? lowFrom(end, reach, spacings.reaching())
                     : highTo(end, reach, spacings.reaching());
@@ -5406,19 +5395,15 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             return (realized.min() == null
-                    || (start != null && reachesFrom(atLeast, start, cutOf(realized.min()), spacings)))
+                    || (start != null && reachesFrom(atLeast, start, realized.minCut(), spacings)))
                     && (realized.max() == null
-                    || (stop != null && reachesTo(atMost, stop, cutOf(realized.max()), spacings)));
+                    || (stop != null && reachesTo(atMost, stop, realized.maxCut(), spacings)));
         }
 
         /** Whether the run is the one value, and a whole number: all the whole term can be at. */
         private static boolean isOneWholeValue(ExactCut start, ExactCut stop) {
             return start != null && stop != null && start.inclusive() && stop.inclusive()
                     && start.at().compareTo(stop.at()) == 0 && start.at().isWhole();
-        }
-
-        private static ExactCut cutOf(Endpoint end) {
-            return new ExactCut(((Count) end.at()).exactly(), end.inclusive());
         }
 
         /** Whether the term, taking points from {@code taken}, has beside the least point of
@@ -5737,7 +5722,7 @@ public final class WhatARelationLeavesUndivided {
         /** Whether some whole number of this run is a difference {@code line} comes out
          *  {@code holding} at. */
         boolean comesOut(OnTheDifference line, boolean holding) {
-            Rel relation = holding ? line.relation() : line.relation().denied();
+            Rel relation = line.relation().whenHolding(holding);
             if (relation == Rel.NE) {
                 WholeRun at = where(new OnTheDifference(line.weight(), line.constant(), Rel.EQ));
                 return at != null && holdsAWholeNumber() && !equals(at);
@@ -5765,17 +5750,12 @@ public final class WhatARelationLeavesUndivided {
 
         /** The run {@code bounds} gives, or null where an end is no number. */
         static Interval of(NumericDomain.Bounds bounds) {
-            ExactCut low = cut(bounds.min());
-            ExactCut high = cut(bounds.max());
+            ExactCut low = bounds.minCut();
+            ExactCut high = bounds.maxCut();
             if ((bounds.min() != null && low == null) || (bounds.max() != null && high == null)) {
                 return null;
             }
             return new Interval(low, high);
-        }
-
-        private static ExactCut cut(Endpoint end) {
-            return end != null && end.at() instanceof Count count
-                    ? new ExactCut(count.exactly(), end.inclusive()) : null;
         }
 
         ExactRatio low() {

@@ -1156,17 +1156,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (counted == null) {
             return null;
         }
-        // The constant over the count's weight is where the line is. The weight is above nought: a
-        // relation faces the one way, its first weight positive, and the count is its only atom.
-        ExactRatio weight = only.getValue();
-        ExactAnswer<ExactRatio> at = affine.form().constant().negated().dividedBy(weight);
-        if (!(at instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+        // The constant over the count's weight is where the line is.
+        if (!(weighingOne(affine, only.getKey(), holds)
+                instanceof ExactAnswer.Held<LinearForm.Stated<Quantity>>(var one))) {
             return null;
         }
-        ComparisonClaim claim = ComparisonClaim.stating(
-                holds ? affine.proposition() : affine.proposition().denied());
         BorderQuantity.HowMany of = BorderQuantity.HowMany.reading(counted, read);
-        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(one.form().constant().negated()),
+                ComparisonClaim.stating(one.rel()), read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -1211,24 +1208,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         // The sum of the remainder and the other numbers is the quantity, the remainder weighed
         // once: scaled so, `c == r`, `r == c` and `2 * c == 2 * r` are one quantity and one line.
-        if (!(ExactRatio.ONE.dividedBy(affine.form().coefs().get(remainder))
-                instanceof ExactAnswer.Held<ExactRatio> scale)
-                || !(affine.form().times(scale.value())
-                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(
-                                LinearForm<Quantity> scaled))) {
+        if (!(weighingOne(affine, remainder, holds)
+                instanceof ExactAnswer.Held<LinearForm.Stated<Quantity>>(var one))) {
             return null;
         }
-        LinearForm<NumericTerm> added = AStatementAtARow.otherNumbersWithTheRemainder(scaled);
+        LinearForm<NumericTerm> added = AStatementAtARow.otherNumbersWithTheRemainder(one.form());
         BorderQuantity.RemainderOfAForm of =
                 remainderOf(behavior, remainder, added, read.quantities());
         if (of == null) {
             return null;
         }
-        ComparisonClaim claim = ComparisonClaim.stating(
-                holds ? affine.proposition() : affine.proposition().denied());
-        Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
-                scale.value().signum() < 0 ? claim.turned() : claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(one.form().constant().negated()),
+                ComparisonClaim.stating(one.rel()), read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
+    /**
+     * What {@code affine} states, where it {@code holds} or where it is asked not to, said of its
+     * form weighing {@code quantity} by one — or which way a number divided has no
+     * representation.
+     */
+    private static ExactAnswer<LinearForm.Stated<Quantity>> weighingOne(Relation.Affine affine,
+                                                                        Quantity quantity,
+                                                                        boolean holds) {
+        return affine.form().weighingOne(quantity, affine.proposition().whenHolding(holds));
     }
 
     /**
@@ -1310,9 +1313,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (remainder == null) {
             return null;
         }
-        ExactRatio weight = affine.form().coefs().get(remainder);
-        if (!(affine.form().constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+        if (!(weighingOne(affine, remainder, holds)
+                instanceof ExactAnswer.Held<LinearForm.Stated<Quantity>>(var one))) {
             return null;
         }
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
@@ -1325,14 +1327,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             on.put(number, orders);
             each.put(number, ExactRatio.ONE);
         }
-        // Over the remainder's weight, which turns the relation round where it is below nought.
-        ComparisonClaim claim = ComparisonClaim.stating(
-                holds ? affine.proposition() : affine.proposition().denied());
         BorderQuantity.RemainderOfAPair of = new BorderQuantity.RemainderOfAPair(behavior,
                 new BorderQuantity.OverAForm(behavior, new LinearForm<>(ExactRatio.ZERO, each),
                         on), remainder.dividend(), remainder.divisor());
-        Cutting drawn = made(of, new Level.OfTheQuantity(level),
-                weight.signum() < 0 ? claim.turned() : claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(one.form().constant().negated()),
+                ComparisonClaim.stating(one.rel()), read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -1349,9 +1348,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (product == null) {
             return null;
         }
-        ExactRatio weight = affine.form().coefs().get(product);
-        if (!(affine.form().constant().negated().dividedBy(weight)
-                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+        if (!(weighingOne(affine, product, holds)
+                instanceof ExactAnswer.Held<LinearForm.Stated<Quantity>>(var one))) {
             return null;
         }
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
@@ -1360,14 +1358,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             on.put(factor, read.quantities().ordersOf(factor));
             each.put(factor, ExactRatio.ONE);
         }
-        // Over the product's weight, which turns the relation round where it is below nought.
-        ComparisonClaim claim = ComparisonClaim.stating(
-                holds ? affine.proposition() : affine.proposition().denied());
         BorderQuantity.ProductOfAPair of = new BorderQuantity.ProductOfAPair(behavior,
                 new BorderQuantity.OverAForm(behavior, new LinearForm<>(ExactRatio.ZERO, each),
                         on));
-        Cutting drawn = made(of, new Level.OfTheQuantity(level),
-                weight.signum() < 0 ? claim.turned() : claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(one.form().constant().negated()),
+                ComparisonClaim.stating(one.rel()), read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -1385,14 +1380,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read onACountAndNumbers(String behavior, Relation.Affine affine,
                                            boolean holds, InputReading read) {
         Quantity count = null;
-        ExactRatio weight = null;
         for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
             if (AStatementAtARow.countsElements(each.getKey())) {
                 if (count != null) {
                     return null;
                 }
                 count = each.getKey();
-                weight = each.getValue();
             } else if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 TermOrders orders = read.quantities().ordersOf(term);
                 if (orders == null || orders.answered() == null || !orders.answered().counts()) {
@@ -1406,24 +1399,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (counted == null) {
             return null;
         }
-        if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
-                ExactRatio scale))
-                || !(affine.form().times(scale) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
-                        LinearForm<Quantity> scaled))) {
+        if (!(weighingOne(affine, count, holds)
+                instanceof ExactAnswer.Held<LinearForm.Stated<Quantity>>(var one))) {
             return null;
         }
         Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
-        for (Map.Entry<Quantity, ExactRatio> each : scaled.coefs().entrySet()) {
+        for (Map.Entry<Quantity, ExactRatio> each : one.form().coefs().entrySet()) {
             if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
                 added.put(term, each.getValue());
             }
         }
-        ComparisonClaim claim = ComparisonClaim.stating(
-                holds ? affine.proposition() : affine.proposition().denied());
         BorderQuantity.HowMany of = BorderQuantity.HowMany.reading(counted,
                 new LinearForm<>(ExactRatio.ZERO, added), read);
-        Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
-                scale.signum() < 0 ? claim.turned() : claim, read.quantities());
+        Cutting drawn = made(of, new Level.OfTheQuantity(one.form().constant().negated()),
+                ComparisonClaim.stating(one.rel()), read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
@@ -1616,7 +1605,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     DecisionAtom.OfTheInput(NumericTerm term, var _), Place at, Rel proposition),
                     boolean holds, Spelling _, var _) when term.atOnePosition() != null ->
                     onAnOrder(behavior, term.atOnePosition(), at,
-                            holds ? proposition : proposition.denied(), read.quantities());
+                            proposition.whenHolding(holds), read.quantities());
             // A number the statement names has no representation, which is a line placed at a
             // number nothing holds: nothing about the order fell short.
             case Proposition.Unread unread when unread.why() instanceof WhyUnread.ANumberNotHeld ->
@@ -3133,7 +3122,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         LinearForm<NumericTerm> over = WhatTheDeclarationsLeave.ofTheInput(affine.form());
         if (over != null) {
             return realized(behavior, AffineReading.stating(over,
-                    holds ? affine.proposition() : affine.proposition().denied(),
+                    affine.proposition().whenHolding(holds),
                     written, reads, read), read.quantities());
         }
         return onANumberNoPositionHolds(behavior, affine, holds, read);
@@ -3447,14 +3436,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /** The values of this quantity the comparison holds at. */
     private LevelRegion holdsOn() {
-        return switch (claim.statedRelation()) {
-            case EQ -> LevelRegion.point(at);
-            case NE -> LevelRegion.EVERYTHING.without(at);
-            case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
-            case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
-            case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
-            case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
-        };
+        return LevelRegion.where(claim.statedRelation(), at);
     }
 
     /**

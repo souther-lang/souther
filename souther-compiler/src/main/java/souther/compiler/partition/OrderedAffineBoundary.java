@@ -198,9 +198,8 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     static ExactAnswer<Optional<ExactRatio>> remainderAt(LinearForm<NumericTerm> dividend,
                                                          BigInteger divisor,
                                                          Map<NumericTerm, Place> values) {
-        return at(dividend, values).map(comesTo -> comesTo.isWhole()
-                && comesTo.floor() instanceof ExactAnswer.Held<BigInteger> whole
-                ? Optional.of(ExactRatio.of(whole.value().mod(divisor))) : Optional.empty());
+        return at(dividend, values).map(comesTo -> comesTo.wholeOrNull() instanceof BigInteger whole
+                ? Optional.of(ExactRatio.of(whole.mod(divisor))) : Optional.empty());
     }
 
     /**

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeDivision;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigInteger;
@@ -397,23 +398,13 @@ final class YearsAWayAllows {
         /** Keeps the years at which {@code a * year + c} is not below nought. */
         void holdAtLeastNought(BigInteger a, BigInteger c) {
             if (a.signum() > 0) {
-                low = low.max(ceilingDiv(c.negate(), a));
+                low = low.max(WholeDivision.ceilingOf(c.negate(), a));
             } else if (a.signum() < 0) {
-                high = high.min(floorDiv(c, a.negate()));
+                high = high.min(WholeDivision.floorOf(c, a.negate()));
             } else if (c.signum() < 0) {
                 high = low.subtract(BigInteger.ONE);
             }
         }
-    }
-
-    private static BigInteger floorDiv(BigInteger numerator, BigInteger positive) {
-        BigInteger[] divided = numerator.divideAndRemainder(positive);
-        return divided[1].signum() < 0 ? divided[0].subtract(BigInteger.ONE) : divided[0];
-    }
-
-    private static BigInteger ceilingDiv(BigInteger numerator, BigInteger positive) {
-        BigInteger[] divided = numerator.divideAndRemainder(positive);
-        return divided[1].signum() > 0 ? divided[0].add(BigInteger.ONE) : divided[0];
     }
 
     /**
@@ -499,13 +490,13 @@ final class YearsAWayAllows {
         BigInteger farthest = BigInteger.valueOf(Math.max(
                 Math.abs(LEAST_YEAR), Math.abs(GREATEST_YEAR)) + YEARS_OF_A_CYCLE);
         for (Statement each : statements) {
-            BigInteger constant = wholeOf(each.constant());
+            BigInteger constant = each.constant().wholeOrNull();
             if (constant == null) {
                 return false;
             }
             BigInteger size = constant.abs();
             for (Year year : each.years()) {
-                BigInteger weight = wholeOf(year.weight());
+                BigInteger weight = year.weight().wholeOrNull();
                 if (weight == null) {
                     return false;
                 }
@@ -518,21 +509,16 @@ final class YearsAWayAllows {
         return true;
     }
 
-    /** The whole number {@code value} is, or null where it is not one. */
-    private static BigInteger wholeOf(ExactRatio value) {
-        return value.isWhole() ? value.floor().orNull() : null;
-    }
-
     /** The whole number {@code value} is, which {@link #staysInsideTheType} has shown the type
      *  holds. */
     private static long asLong(ExactRatio value) {
-        return wholeOf(value).longValueExact();
+        return value.wholeOrNull().longValueExact();
     }
 
     /** The whole number {@code value} is, or null where it is not one or the type does not hold
      *  it. */
     static Long asLongOrNull(ExactRatio value) {
-        BigInteger whole = wholeOf(value);
+        BigInteger whole = value.wholeOrNull();
         return whole == null || whole.bitLength() > Long.SIZE - 2 ? null : whole.longValue();
     }
 }

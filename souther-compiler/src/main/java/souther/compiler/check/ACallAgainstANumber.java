@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -57,8 +56,7 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
 
     /** The number on the other side as a whole number, or null where it is none. */
     BigInteger whole() {
-        return against.isWhole() && against.floor() instanceof ExactAnswer.Held<BigInteger>(var n)
-                ? n : null;
+        return against.wholeOrNull();
     }
 
     /**
@@ -94,7 +92,7 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
             }
             Rel stated = (callFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
-            Rel written = side.scale().signum() > 0 ? stated : stated.turned();
+            Rel written = stated.scaledBy(side.scale());
             Core answered = Core.withoutStanding(side.call().value());
             AnOperationApplied applied = AnOperationApplied.of(answered);
             return new ACallAgainstANumber<>(applied, answered, factOf.apply(applied.operation()),

@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Rel;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,6 +44,18 @@ public record LevelRegion(List<LevelInterval> parts) {
     /** The one level, and nothing else. */
     public static LevelRegion point(Level at) {
         return of(LevelInterval.point(at));
+    }
+
+    /** The values that stand to {@code at} as {@code relation} says: {@code x relation at}. */
+    public static LevelRegion where(Rel relation, Level at) {
+        return switch (relation) {
+            case EQ -> point(at);
+            case NE -> EVERYTHING.without(at);
+            case GE -> of(new LevelInterval(Bound.at(at, true), null));
+            case GT -> of(new LevelInterval(Bound.at(at, false), null));
+            case LE -> of(new LevelInterval(null, Bound.at(at, true)));
+            case LT -> of(new LevelInterval(null, Bound.at(at, false)));
+        };
     }
 
     /** The same values with every end written the one way, for an identity to be built from. */

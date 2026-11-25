@@ -95,7 +95,7 @@ public final class WhatTheNumbersOfACaseLeave {
                     Spelling _, var _)) || affine.form().coefs().isEmpty()) {
                 continue;
             }
-            Rel rel = holds ? affine.proposition() : affine.proposition().denied();
+            Rel rel = affine.proposition().whenHolding(holds);
             ExactRatio at = affine.form().constant().negated();
             Point point = switch (rel) {
                 case GE, LT -> new Point(at, true);
@@ -125,8 +125,8 @@ public final class WhatTheNumbersOfACaseLeave {
         Map<List<Object>, Quantity.RemainderOfADividend> of = new LinkedHashMap<>();
         for (Proposition part : parts) {
             if (!(part instanceof Proposition.Compared(Relation.Affine affine, boolean _,
-                    Spelling _, var _)) || affine.form().coefs().size() != 1
-                    || !(affine.form().coefs().keySet().iterator().next()
+                    Spelling _, var _))
+                    || !(affine.form().loneAtom()
                             instanceof Quantity.RemainderOfADividend remainder)) {
                 continue;
             }

@@ -70,15 +70,12 @@ final class ResiduesAStatementLeaves {
                     && compared.relation() instanceof Relation.Affine affine
                     && affine.proposition() == Rel.EQ
                     && affine.form().constant().signum() == 0
-                    && affine.form().coefs().size() == 1
-                    && affine.form().coefs().keySet().iterator().next()
-                            instanceof Quantity.RemainderOfADividend remainder
+                    && affine.form().loneAtom() instanceof Quantity.RemainderOfADividend remainder
                     && remainder.dividend().coefs().size() == 1
                     && ExactRatio.ONE.equals(remainder.dividend().coefs().get(element.get()))
                     && remainder.divisor().mod(divisor).signum() == 0
-                    && remainder.dividend().constant().isWhole()) {
-                return new ComesRound(element.get(),
-                        whole(remainder.dividend().constant()).negate().mod(divisor));
+                    && remainder.dividend().constant().wholeOrNull() instanceof BigInteger moved) {
+                return new ComesRound(element.get(), moved.negate().mod(divisor));
             }
         }
         return null;
@@ -134,8 +131,7 @@ final class ResiduesAStatementLeaves {
          *  remainder. */
         private WholeNumberRuns ofAComparison(Proposition.Compared compared) {
             if (!(compared.relation() instanceof Relation.Affine affine)
-                    || affine.form().coefs().size() != 1
-                    || !(affine.form().coefs().keySet().iterator().next()
+                    || !(affine.form().loneAtom()
                             instanceof Quantity.RemainderOfADividend remainder)
                     || !remainder.divisor().equals(divisor)) {
                 return WholeNumberRuns.EVERY;
@@ -147,7 +143,7 @@ final class ResiduesAStatementLeaves {
                 return WholeNumberRuns.EVERY;
             }
             WholeNumberRuns standing = WholeNumberRuns.standing(
-                    weight.signum() > 0 ? affine.proposition() : affine.proposition().turned(),
+                    affine.proposition().scaledBy(weight),
                     level);
             if (standing == null) {
                 return WholeNumberRuns.EVERY;
@@ -163,10 +159,11 @@ final class ResiduesAStatementLeaves {
          * statement holds it to come round — or null where they are not.
          */
         private BigInteger movedBy(LinearForm<Quantity> other) {
-            if (!other.constant().isWhole()) {
+            if (!(other.constant().wholeOrNull() instanceof BigInteger to)
+                    || !(dividend.constant().wholeOrNull() instanceof BigInteger from)) {
                 return null;
             }
-            BigInteger moved = whole(other.constant()).subtract(whole(dividend.constant()));
+            BigInteger moved = to.subtract(from);
             int matched = 0;
             for (Map.Entry<Quantity, ExactRatio> each : other.coefs().entrySet()) {
                 if (round != null && each.getKey().equals(round.element())) {
@@ -184,9 +181,5 @@ final class ResiduesAStatementLeaves {
             }
             return matched == dividend.coefs().size() ? moved : null;
         }
-    }
-
-    private static BigInteger whole(ExactRatio ratio) {
-        return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
     }
 }

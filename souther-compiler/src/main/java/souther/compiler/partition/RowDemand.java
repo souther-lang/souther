@@ -1111,15 +1111,7 @@ public sealed interface RowDemand {
         }
 
         private LevelRegion regionOf(ExactRatio threshold) {
-            Level at = new Level.OfTheQuantity(threshold);
-            return switch (met) {
-                case EQ -> LevelRegion.point(at);
-                case NE -> LevelRegion.EVERYTHING.without(at);
-                case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
-                case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
-                case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
-                case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
-            };
+            return LevelRegion.where(met, new Level.OfTheQuantity(threshold));
         }
 
         /** The numbers the statement reads, of the elements and beside them, and the numbers added
@@ -1208,9 +1200,7 @@ public sealed interface RowDemand {
          * ask.
          */
         static WholeNumberRuns meeting(Relation.Affine affine, Rel met) {
-            if (affine.form().coefs().size() != 1
-                    || !(affine.form().coefs().keySet().iterator().next()
-                            instanceof Quantity.RemainderOfADividend remainder)) {
+            if (!(affine.form().loneAtom() instanceof Quantity.RemainderOfADividend remainder)) {
                 return null;
             }
             ExactRatio weight = affine.form().coefs().get(remainder);
@@ -1218,7 +1208,7 @@ public sealed interface RowDemand {
                     instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
                 return null;
             }
-            return WholeNumberRuns.standing(weight.signum() < 0 ? met.turned() : met, threshold)
+            return WholeNumberRuns.standing(met.scaledBy(weight), threshold)
                     .and(WholeNumberRuns.one(BigInteger.ZERO,
                             remainder.divisor().subtract(BigInteger.ONE)));
         }

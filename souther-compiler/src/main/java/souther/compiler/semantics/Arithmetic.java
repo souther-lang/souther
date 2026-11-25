@@ -219,9 +219,8 @@ public sealed interface Arithmetic {
          * its magnitude is one more than the greatest is.
          */
         public static BigInteger wholeDivisorOf(BigDecimal divisor) {
-            ExactRatio ratio = ExactRatio.of(divisor);
-            return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger> held
-                    && held.value().signum() != 0 ? held.value() : null;
+            return ExactRatio.of(divisor).wholeOrNull() instanceof BigInteger whole
+                    && whole.signum() != 0 ? whole : null;
         }
 
         /** The magnitude of {@link #wholeDivisorOf the divisor}, or null where there is none. */

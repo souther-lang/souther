@@ -1023,8 +1023,7 @@ final class MeaningAssumptions {
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
             return null;
         }
-        // Weighed below nought, the number stands the other way round to where the form does.
-        return WholeNumberRuns.standing(weight.signum() < 0 ? rel.turned() : rel, threshold);
+        return WholeNumberRuns.standing(rel.scaledBy(weight), threshold);
     }
 
     /**

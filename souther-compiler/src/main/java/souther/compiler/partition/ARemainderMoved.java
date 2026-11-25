@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.WholeNumberRuns;
@@ -48,11 +47,11 @@ record ARemainderMoved(Unmoved of, BigInteger by) {
     static Optional<ARemainderMoved> of(LinearForm<NumericTerm> dividend, BigInteger divisor) {
         if (dividend.coefs().isEmpty() || divisor.signum() <= 0
                 || !WhatStatementsOfOneFormDecide.outsideEveryContainer(dividend.coefs().keySet())
-                || !(whole(dividend.constant()) instanceof BigInteger moved)) {
+                || !(dividend.constant().wholeOrNull() instanceof BigInteger moved)) {
             return Optional.empty();
         }
         for (ExactRatio each : dividend.coefs().values()) {
-            if (whole(each) == null) {
+            if (each.wholeOrNull() == null) {
                 return Optional.empty();
             }
         }
@@ -141,10 +140,5 @@ record ARemainderMoved(Unmoved of, BigInteger by) {
                             .or(WholeNumberRuns.one(BigInteger.ZERO, to)));
         }
         return out;
-    }
-
-    private static BigInteger whole(ExactRatio ratio) {
-        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(var value)
-                ? value : null;
     }
 }

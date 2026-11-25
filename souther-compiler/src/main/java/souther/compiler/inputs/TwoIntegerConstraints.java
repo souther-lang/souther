@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeDivision;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -181,7 +182,7 @@ public final class TwoIntegerConstraints<A> {
             return new Bound(BigInteger.ZERO, BigInteger.ZERO,
                     c.signum() >= 0 ? BigInteger.ZERO : BigInteger.ONE.negate());
         }
-        return new Bound(a.divide(shared), b.divide(shared), floorDivide(c, shared));
+        return new Bound(a.divide(shared), b.divide(shared), WholeDivision.floorOf(c, shared));
     }
 
     private static Shadow shadow(List<Bound> all) {
@@ -290,13 +291,13 @@ public final class TwoIntegerConstraints<A> {
         BigInteger[] ceilLow = new BigInteger[lower.size()];
         for (int at = 0; at < ceilLow.length; at++) {
             Bound low = lower.get(at);
-            ceilLow[at] = ceilDivide(low.a().multiply(residue).subtract(low.c()),
+            ceilLow[at] = WholeDivision.ceilingOf(low.a().multiply(residue).subtract(low.c()),
                     low.b().negate());
         }
         BigInteger[] floorUp = new BigInteger[upper.size()];
         for (int at = 0; at < floorUp.length; at++) {
             Bound up = upper.get(at);
-            floorUp[at] = floorDivide(up.c().subtract(up.a().multiply(residue)), up.b());
+            floorUp[at] = WholeDivision.floorOf(up.c().subtract(up.a().multiply(residue)), up.b());
         }
         for (int low = 0; low < ceilLow.length; low++) {
             for (int up = 0; up < floorUp.length; up++) {
@@ -330,10 +331,10 @@ public final class TwoIntegerConstraints<A> {
             return limit.signum() >= 0;
         }
         if (slope.signum() > 0) {
-            BigInteger most = floorDivide(limit, slope);
+            BigInteger most = WholeDivision.floorOf(limit, slope);
             steps[1] = (steps[1] == null || most.compareTo(steps[1]) < 0) ? most : steps[1];
         } else {
-            BigInteger fewest = ceilDivide(limit, slope);
+            BigInteger fewest = WholeDivision.ceilingOf(limit, slope);
             steps[0] = (steps[0] == null || fewest.compareTo(steps[0]) > 0) ? fewest : steps[0];
         }
         return steps[0] == null || steps[1] == null || steps[0].compareTo(steps[1]) <= 0;
@@ -350,17 +351,17 @@ public final class TwoIntegerConstraints<A> {
             if (from == null || to == null) {
                 return false;
             }
-            return ceilDivide(from.subtract(residue), period)
-                    .compareTo(floorDivide(to.subtract(residue), period)) > 0;
+            return WholeDivision.ceilingOf(from.subtract(residue), period)
+                    .compareTo(WholeDivision.floorOf(to.subtract(residue), period)) > 0;
         }
         boolean below = from == null
                 ? steps[0] == null
                 : steps[0] != null
-                        && steps[0].equals(ceilDivide(from.subtract(residue), period));
+                        && steps[0].equals(WholeDivision.ceilingOf(from.subtract(residue), period));
         boolean above = to == null
                 ? steps[1] == null
                 : steps[1] != null
-                        && steps[1].equals(floorDivide(to.subtract(residue), period));
+                        && steps[1].equals(WholeDivision.floorOf(to.subtract(residue), period));
         return below && above;
     }
 
@@ -368,17 +369,6 @@ public final class TwoIntegerConstraints<A> {
         return one.divide(one.gcd(other)).multiply(other);
     }
 
-    private static BigInteger floorDivide(BigInteger number, BigInteger by) {
-        BigInteger[] qr = number.divideAndRemainder(by);
-        return qr[1].signum() != 0 && (qr[1].signum() != by.signum())
-                ? qr[0].subtract(BigInteger.ONE) : qr[0];
-    }
-
-    private static BigInteger ceilDivide(BigInteger number, BigInteger by) {
-        BigInteger[] qr = number.divideAndRemainder(by);
-        return qr[1].signum() != 0 && (qr[1].signum() == by.signum())
-                ? qr[0].add(BigInteger.ONE) : qr[0];
-    }
 
     private ExactRatio coefficient(LinearForm<A> form, A of) {
         Map<A, ExactRatio> coefs = form.coefs();

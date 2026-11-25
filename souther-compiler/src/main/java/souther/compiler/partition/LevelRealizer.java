@@ -1198,8 +1198,7 @@ public final class LevelRealizer {
         List<NumericWitness.Congruent> congruents = new ArrayList<>();
         for (Level level : LevelCandidateSource.forItem(over.where(), over.levels()).levels()) {
             ExactRatio asked = level.asAnExactNumber();
-            if (asked != null && asked.isWhole()
-                    && asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger r)
+            if (asked != null && asked.wholeOrNull() instanceof BigInteger r
                     && r.signum() >= 0 && r.compareTo(over.divisor()) < 0
                     && over.remainders().holds(r)) {
                 congruents.add(new NumericWitness.Congruent(over.dividend(), over.divisor(), r));

@@ -3639,9 +3639,8 @@ final class ReadQuantities implements Quantities {
         for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
             if (each.getKey() instanceof NumericTerm.TakenOf of && each.getValue().isOne()
                     && each.getValue().least() instanceof Count residue
-                    && residue.exactly().isWhole()
-                    && residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole) {
-                pinned.put(of, whole.value());
+                    && residue.exactly().wholeOrNull() instanceof BigInteger whole) {
+                pinned.put(of, whole);
             }
         }
         for (Assumed taken : assumed) {
@@ -3653,9 +3652,9 @@ final class ReadQuantities implements Quantities {
                     over.form().coefs().entrySet().iterator().next();
             ExactRatio at = over.form().constant().negated();
             if (only.getKey() instanceof NumericTerm.TakenOf of
-                    && only.getValue().equals(ExactRatio.ONE) && at.isWhole()
-                    && at.floor() instanceof ExactAnswer.Held<BigInteger> whole) {
-                pinned.putIfAbsent(of, whole.value());
+                    && only.getValue().equals(ExactRatio.ONE)
+                    && at.wholeOrNull() instanceof BigInteger whole) {
+                pinned.putIfAbsent(of, whole);
             }
         }
         return pinned;

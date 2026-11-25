@@ -3,9 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigInteger;
@@ -30,23 +27,12 @@ final class HowManyAPlaceHolds {
                     && taken.takenAs() instanceof TakenAs.HowManyItHolds
                     && taken.position().equals(at.path())
                     && each.rangeLeft() != null && each.rangeLeft().max() != null) {
-                BigInteger bound = mostUpTo(each.rangeLeft().max());
+                BigInteger bound = each.rangeLeft().max().wholeAdmitted(false);
                 if (bound != null) {
                     most = most == null ? bound : most.min(bound);
                 }
             }
         }
         return most;
-    }
-
-    /** The most a count the end {@code end} lets through can be, or null where it is no count. */
-    static BigInteger mostUpTo(Endpoint end) {
-        if (!(end.at() instanceof Count count)
-                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
-                        BigInteger whole))) {
-            return null;
-        }
-        return count.exactly().isWhole() && !end.inclusive() ? whole.subtract(BigInteger.ONE)
-                : whole;
     }
 }

@@ -354,7 +354,7 @@ public final class AnswerAsAnInput {
                 // And a count held against nought is the statement that some element meets what is
                 // counted, which {@link Proposition#compared} is what writes.
                 Relation.OneWay<Quantity> one =
-                        Relation.OneWay.of(over, holds ? rel : rel.denied());
+                        Relation.OneWay.of(over, rel.whenHolding(holds));
                 yield Proposition.compared(new Relation.Affine(one.form(), one.proposition()),
                         one.holds());
             }

@@ -247,7 +247,7 @@ class AJointCoverageHoldsWhenEveryRowIsTriedTest {
         private BigInteger sum(Map<NumericTerm, BigInteger> at) {
             BigInteger out = BigInteger.ZERO;
             for (Map.Entry<NumericTerm, ExactRatio> each : dividend.coefs().entrySet()) {
-                out = out.add(UndividedByARelation.wholeNumberOf(each.getValue())
+                out = out.add(each.getValue().wholeOrNull()
                         .multiply(at.getOrDefault(each.getKey(), BigInteger.ZERO)));
             }
             return out;

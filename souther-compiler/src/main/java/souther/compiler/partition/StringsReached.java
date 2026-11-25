@@ -7,7 +7,6 @@ import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
@@ -123,8 +122,8 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
             return from.compareTo(to) <= 0;
         }
         for (OrderedInterval each : left.runs()) {
-            BigInteger low = wholeEnd(each.low(), true);
-            BigInteger high = wholeEnd(each.high(), false);
+            BigInteger low = each.low() == null ? null : each.low().wholeAdmitted(true);
+            BigInteger high = each.high() == null ? null : each.high().wholeAdmitted(false);
             // A run whose end names no number shows no length: widened to no end, it would.
             if ((each.low() != null && low == null) || (each.high() != null && high == null)) {
                 continue;
@@ -136,22 +135,6 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
             }
         }
         return false;
-    }
-
-    /** The nearest whole number {@code end} admits on the run's side of it, or null where the
-     *  run has no end that way or the end names no number: its least where {@code lower}, and its
-     *  greatest otherwise. */
-    private static BigInteger wholeEnd(Endpoint end, boolean lower) {
-        if (end == null || !(end.at() instanceof Count count)) {
-            return null;
-        }
-        ExactRatio at = count.exactly();
-        if (lower) {
-            return end.inclusive() ? at.ceiling().orNull()
-                    : at.floor().map(each -> each.add(BigInteger.ONE)).orNull();
-        }
-        return end.inclusive() ? at.floor().orNull()
-                : at.ceiling().map(each -> each.subtract(BigInteger.ONE)).orNull();
     }
 
     /** The most of {@code term} a string has, or null where it is no number of a string. */

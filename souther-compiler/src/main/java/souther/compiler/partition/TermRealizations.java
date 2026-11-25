@@ -3123,8 +3123,8 @@ final class TermRealizations {
                                              ValueSet admits) {
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
-        BigInteger target = named instanceof Count count && count.exactly().isWhole()
-                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+        BigInteger target = named instanceof Count count
+                && count.exactly().wholeOrNull() instanceof BigInteger whole
                 ? whole : BigInteger.ZERO;
         // A set small enough to name each member is walked member by member, nearest where the
         // number is usually near first: what none of them builds is a class the rules leave

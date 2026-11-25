@@ -286,6 +286,45 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
         return scaledBy(coef -> coef.dividedBy(k), constant.dividedBy(k));
     }
 
+    /**
+     * {@code this rel 0} said again of this form divided by what it weighs {@code atom} by, so
+     * that it weighs that atom by one — the relation turned round where the weight is below
+     * nought. Or which way a number divided has no representation.
+     *
+     * <p>What a reader does that has to see {@code 2 * c >= 2 * n}, {@code -c <= -n} and
+     * {@code n <= c} as one statement about {@code c}. The constant of the answer, negated, is
+     * where {@code atom} stands to the rest.
+     *
+     * @throws IllegalArgumentException where this does not weigh {@code atom}
+     */
+    public ExactAnswer<Stated<A>> weighingOne(A atom, Rel rel) {
+        ExactRatio weight = coefs.get(atom);
+        if (weight == null) {
+            throw new IllegalArgumentException(this + " does not weigh " + atom);
+        }
+        return dividedBy(weight).map(scaled -> new Stated<>(scaled, rel.scaledBy(weight)));
+    }
+
+    /**
+     * {@code form rel 0}.
+     *
+     * @param form what is compared with nought
+     * @param rel  how it stands to nought
+     */
+    public record Stated<A>(LinearForm<A> form, Rel rel) {}
+
+    /** The one atom this weighs and what it weighs it by, or null where it weighs none or more
+     *  than one. The constant is not asked about: {@code 2 * x + 3} weighs one atom. */
+    public Map.Entry<A, ExactRatio> loneTerm() {
+        return coefs.size() == 1 ? coefs.entrySet().iterator().next() : null;
+    }
+
+    /** The one atom this weighs, or null where it weighs none or more than one ({@link #loneTerm}
+     *  without the weight). */
+    public A loneAtom() {
+        return coefs.size() == 1 ? coefs.keySet().iterator().next() : null;
+    }
+
     private ExactAnswer<LinearForm<A>> scaledBy(
             Function<ExactRatio, ExactAnswer<ExactRatio>> scale, ExactAnswer<ExactRatio> constantScaled) {
         Map<A, ExactRatio> scaled = new HashMap<>();

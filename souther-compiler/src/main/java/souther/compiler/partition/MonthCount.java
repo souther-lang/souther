@@ -5,7 +5,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.CalendarMonths;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.ValueTransformation;
@@ -126,7 +125,7 @@ final class MonthCount {
         TermPath dates = counted != null ? counted : placeAMonthStarts(bare);
         FormRange days = dates == null ? null
                 : FormRange.endsHeldByTheRules(new NumericTerm.ValueOf(dates), read);
-        BigInteger shift = wholeOf(form.constant());
+        BigInteger shift = form.constant().wholeOrNull();
         if (days == null || shift == null) {
             return null;
         }
@@ -156,16 +155,9 @@ final class MonthCount {
 
     /** {@code epochDay} where it is a day of the calendar, and null otherwise. */
     private static BigInteger dayOfTheCalendar(ExactRatio epochDay) {
-        BigInteger day = wholeOf(epochDay);
+        BigInteger day = epochDay == null ? null : epochDay.wholeOrNull();
         return (day == null || day.compareTo(BigInteger.valueOf(LocalDate.MIN.toEpochDay())) < 0
                 || day.compareTo(BigInteger.valueOf(LocalDate.MAX.toEpochDay())) > 0) ? null : day;
-    }
-
-    /** {@code number} where it is whole, and null otherwise. */
-    private static BigInteger wholeOf(ExactRatio number) {
-        return number != null && number.isWhole()
-                && number.truncated() instanceof ExactAnswer.Held<BigInteger> whole
-                ? whole.value() : null;
     }
 
     /**

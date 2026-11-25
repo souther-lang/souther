@@ -587,7 +587,7 @@ public final class NumericallyConsistentWays {
                                 divisor)));
             }
             return Optional.of(new Narrowing(new Form(form),
-                    holds ? affine.proposition() : affine.proposition().denied(),
+                    affine.proposition().whenHolding(holds),
                     affine.form().constant().negated(), remainders));
         }
 

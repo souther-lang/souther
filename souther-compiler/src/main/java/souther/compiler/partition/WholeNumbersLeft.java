@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
@@ -42,26 +40,18 @@ record WholeNumbersLeft(BigInteger least, BigInteger most, Set<BigInteger> holes
         BigInteger least = null;
         BigInteger most = null;
         if (run.min() != null) {
-            ExactRatio at = numberAt(run.min());
-            if (at == null || !(at.ceiling() instanceof ExactAnswer.Held<BigInteger>(
-                    BigInteger up))) {
+            least = run.min().wholeAdmitted(true);
+            if (least == null) {
                 return null;
             }
-            least = !run.min().inclusive() && at.isWhole() ? up.add(BigInteger.ONE) : up;
         }
         if (run.max() != null) {
-            ExactRatio at = numberAt(run.max());
-            if (at == null || !(at.floor() instanceof ExactAnswer.Held<BigInteger>(
-                    BigInteger down))) {
+            most = run.max().wholeAdmitted(false);
+            if (most == null) {
                 return null;
             }
-            most = !run.max().inclusive() && at.isWhole() ? down.subtract(BigInteger.ONE) : down;
         }
         return new WholeNumbersLeft(least, most, Set.of());
-    }
-
-    private static ExactRatio numberAt(Endpoint end) {
-        return end.at() instanceof Count count ? count.exactly() : null;
     }
 
     /**
@@ -78,8 +68,7 @@ record WholeNumbersLeft(BigInteger least, BigInteger most, Set<BigInteger> holes
                 || !(at.ceiling() instanceof ExactAnswer.Held<BigInteger>(BigInteger up))) {
             return null;
         }
-        // Weighed below nought, the number stands to the value the other way round.
-        return switch (weight.signum() < 0 ? rel.turned() : rel) {
+        return switch (rel.scaledBy(weight)) {
             case LT -> below(up.subtract(BigInteger.ONE));
             case LE -> below(down);
             case GT -> above(down.add(BigInteger.ONE));

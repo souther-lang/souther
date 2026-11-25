@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BinOp;
@@ -123,7 +122,7 @@ public final class RemainderOfAShiftedValue {
          * it says of {@code r} there.
          */
         ConstantComparison standing(Rel rel, BigInteger against) {
-            return negated ? inStretch(turned(rel), by.subtract(against), from, to, most)
+            return negated ? inStretch(rel.turned(),by.subtract(against), from, to, most)
                     : inStretch(rel, against.subtract(by), from, to, most);
         }
     }
@@ -262,8 +261,7 @@ public final class RemainderOfAShiftedValue {
         if (divides.isEmpty() || call.args().size() <= divides.getAsInt()) {
             return null;
         }
-        BigInteger divisor =
-                wholeNumberOf(sides.constant(call.args().get(divides.getAsInt()), side.at()));
+        BigInteger divisor = wholeOn(sides, call.args().get(divides.getAsInt()), side.at());
         return divisor == null || divisor.signum() <= 0
                 ? null : new OfADivision<>(call, side.at(), divisor);
     }
@@ -281,7 +279,7 @@ public final class RemainderOfAShiftedValue {
             return null;
         }
         Core other = remainderFirst ? comparison.right() : comparison.left();
-        BigInteger against = wholeNumberOf(sides.constant(other, at));
+        BigInteger against = wholeOn(sides, other, at);
         Rel written = (remainderFirst ? comparison.claim() : comparison.claim().turned())
                 .statedRelation();
         return new Located<>(division, other, against, written);
@@ -382,21 +380,11 @@ public final class RemainderOfAShiftedValue {
         return wholeStretch ? stretch : ConstantComparison.both(stretch, saying);
     }
 
-    private static Rel turned(Rel rel) {
-        return switch (rel) {
-            case GE -> Rel.LE;
-            case GT -> Rel.LT;
-            case LE -> Rel.GE;
-            case LT -> Rel.GT;
-            case EQ -> Rel.EQ;
-            case NE -> Rel.NE;
-        };
-    }
-
-    private static BigInteger wholeNumberOf(ExactRatio number) {
-        return number != null && number.isWhole()
-                && number.floor() instanceof ExactAnswer.Held<BigInteger> whole
-                ? whole.value() : null;
+    /** The whole number {@code e} is on every run where it is read at {@code at}, or null where it
+     *  is no number or none that is whole. */
+    private static <E> BigInteger wholeOn(TheSignOfAnOrder.Sides<E> sides, Core e, E at) {
+        ExactRatio number = sides.constant(e, at);
+        return number == null ? null : number.wholeOrNull();
     }
 
     /**
@@ -425,8 +413,8 @@ public final class RemainderOfAShiftedValue {
                 if (arithmetic == null) {
                     break;
                 }
-                BigInteger left = wholeNumberOf(sides.constant(arithmetic.left(), here));
-                BigInteger right = wholeNumberOf(sides.constant(arithmetic.right(), here));
+                BigInteger left = wholeOn(sides, arithmetic.left(), here);
+                BigInteger right = wholeOn(sides, arithmetic.right(), here);
                 if (left != null == (right != null)) {
                     break;
                 }

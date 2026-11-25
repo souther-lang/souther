@@ -1318,7 +1318,7 @@ final class StopsOfABody {
                         instanceof ExactAnswer.Held<ExactRatio>(var bound))) {
                     continue;
                 }
-                Rel rel = coef.signum() > 0 ? each.rel() : each.rel().turned();
+                Rel rel = each.rel().scaledBy(coef);
                 boolean oneIn = whole && bound.isWhole() && (rel == Rel.GT || rel == Rel.LT);
                 ExactRatio from = (oneIn && rel == Rel.GT) ? stepped(bound, 1) : bound;
                 ExactRatio to = (oneIn && rel == Rel.LT) ? stepped(bound, -1) : bound;

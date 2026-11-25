@@ -81,6 +81,33 @@ public enum Rel {
         };
     }
 
+    /**
+     * This where a statement of it {@code holds}, and its denial where the statement is that it
+     * does not: what a comparison claims, read off the relation it was written with and which way
+     * it was asked.
+     */
+    public Rel whenHolding(boolean holds) {
+        return holds ? this : denied();
+    }
+
+    /**
+     * The relation a form stands in to nought once it is multiplied by {@code factor}, where this
+     * is the relation it stood in before: this for a factor above nought and {@link #turned} for
+     * one below.
+     *
+     * <p>Nought is refused. A form multiplied by it is nought whatever the form was, so no
+     * relation of the product says what this said of the form.
+     *
+     * @throws IllegalArgumentException where {@code factor} is nought
+     */
+    public Rel scaledBy(ExactRatio factor) {
+        if (factor.isZero()) {
+            throw new IllegalArgumentException(
+                    "a relation is not carried over a product by nought");
+        }
+        return factor.signum() < 0 ? turned() : this;
+    }
+
     /** The operator the language writes this relation with. */
     public String written() {
         return switch (this) {

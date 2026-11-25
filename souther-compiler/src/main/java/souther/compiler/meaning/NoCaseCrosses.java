@@ -1,7 +1,6 @@
 package souther.compiler.meaning;
 
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
@@ -117,7 +116,8 @@ public final class NoCaseCrosses {
             Map.Entry<Quantity, ExactRatio> only = affine.form().coefs().entrySet().iterator()
                     .next();
             if (!(only.getKey() instanceof Quantity.RemainderOfADividend remainder)
-                    || whole(only.getValue()) == null || whole(affine.form().constant()) == null) {
+                    || only.getValue().wholeOrNull() == null
+                    || affine.form().constant().wholeOrNull() == null) {
                 return Optional.empty();
             }
             return offsetOf(remainder);
@@ -129,13 +129,13 @@ public final class NoCaseCrosses {
                 return Optional.empty();
             }
             LinearForm<Quantity> dividend = remainder.dividend();
-            BigInteger constant = whole(dividend.constant());
+            BigInteger constant = dividend.constant().wholeOrNull();
             if (constant == null) {
                 return Optional.empty();
             }
             Map<Quantity, BigInteger> weights = new LinkedHashMap<>();
             for (Map.Entry<Quantity, ExactRatio> each : dividend.coefs().entrySet()) {
-                BigInteger coefficient = whole(each.getValue());
+                BigInteger coefficient = each.getValue().wholeOrNull();
                 Quantity number = each.getKey();
                 boolean aNumberOfTheInput = number instanceof DecisionAtom.OfTheInput
                         || number instanceof Quantity.OfABinding;
@@ -150,11 +150,6 @@ public final class NoCaseCrosses {
             }
             return Optional.of(new Offset(new Sum(weights, divisor), constant.mod(divisor)));
         }
-    }
-
-    private static BigInteger whole(ExactRatio ratio) {
-        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(var held)
-                ? held : null;
     }
 
     // ---- residues, as the bits of a long ----
@@ -174,8 +169,8 @@ public final class NoCaseCrosses {
             return Optional.empty();
         }
         Relation.Affine affine = (Relation.Affine) relation.relation();
-        BigInteger constant = whole(affine.form().constant());
-        BigInteger coefficient = whole(affine.form().coefs().values().iterator().next());
+        BigInteger constant = affine.form().constant().wholeOrNull();
+        BigInteger coefficient = affine.form().coefs().values().iterator().next().wholeOrNull();
         long held = 0;
         for (int residue = 0; residue < divisor; residue++) {
             BigInteger remainder = read.get().offset().add(BigInteger.valueOf(residue))

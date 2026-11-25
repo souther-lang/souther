@@ -187,9 +187,8 @@ final class RemainderSolutions {
         BigInteger most = positive ? size.subtract(BigInteger.ONE) : BigInteger.ZERO;
         int allowed = CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum();
         List<BigInteger> found = new ArrayList<>();
-        BigInteger named = demand.named() instanceof Count count && count.exactly().isWhole()
-                && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole
-                ? whole.value() : null;
+        BigInteger named = demand.named() instanceof Count count
+                ? count.exactly().wholeOrNull() : null;
         if (named != null && admits(demand, named, least, most, carrier)) {
             found.add(named);
         }

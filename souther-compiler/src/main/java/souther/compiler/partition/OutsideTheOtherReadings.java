@@ -79,7 +79,7 @@ final class OutsideTheOtherReadings {
 
     private static SearchRegion takenIn(Proposition.Compared compared, SearchRegion region) {
         Rel proposition = compared.relation().proposition();
-        Rel met = compared.holds() ? proposition : proposition.denied();
+        Rel met = proposition.whenHolding(compared.holds());
         return switch (compared.relation()) {
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheDeclarationsLeave.ofTheInput(form);

@@ -6,7 +6,6 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.TheElementComesRound;
 import souther.compiler.numeric.Congruences;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -152,17 +151,16 @@ final class RemaindersOfAnElement {
     private static Congruences classOf(RowDemand.ForTheRun run, Quantity.OfABinding element) {
         if (!(run.statement() instanceof Proposition.Compared(Relation.Affine affine,
                 boolean holds, var _, var _))
-                || affine.form().coefs().size() != 1
-                || !(affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.RemainderOfADividend remainder)
+                || !(affine.form().loneAtom() instanceof Quantity.RemainderOfADividend remainder)
                 || remainder.dividend().coefs().size() != 1
                 || !element.equals(remainder.dividend().coefs().keySet().iterator().next())
                 || !element.type().equals(Type.INT)
-                || !(whole(remainder.dividend().coefs().get(element)) instanceof BigInteger weight)
-                || !(whole(remainder.dividend().constant()) instanceof BigInteger moved)) {
+                || !(remainder.dividend().coefs().get(element).wholeOrNull()
+                        instanceof BigInteger weight)
+                || !(remainder.dividend().constant().wholeOrNull() instanceof BigInteger moved)) {
             return null;
         }
-        Rel met = holds ? affine.proposition() : affine.proposition().denied();
+        Rel met = affine.proposition().whenHolding(holds);
         WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine, met);
         if (leaves == null || leaves.runs().size() != 1
                 || !leaves.runs().getFirst().isOneNumber()) {
@@ -212,23 +210,15 @@ final class RemaindersOfAnElement {
                 LinearForm.constant(ExactRatio.of(members.residue())))
                 instanceof Proposition.Compared(Relation.Affine affine, boolean holds, var _,
                         var _))
-                || affine.form().coefs().size() != 1
-                || !(affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.RemainderOfADividend remainder)
+                || !(affine.form().loneAtom() instanceof Quantity.RemainderOfADividend remainder)
                 || remainder.overTheInput() == null) {
             return null;
         }
         WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine,
-                holds ? affine.proposition() : affine.proposition().denied());
+                affine.proposition().whenHolding(holds));
         if (leaves == null || leaves.isNone()) {
             return null;
         }
         return new Kept.Left(remainder, leaves);
-    }
-
-    /** {@code ratio} as a whole number, or null where it is none. */
-    private static BigInteger whole(ExactRatio ratio) {
-        return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger>(var held)
-                ? held : null;
     }
 }

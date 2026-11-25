@@ -230,21 +230,19 @@ final class NumericWitness {
          */
         HeldClass leavesTheLast(NumericTerm last, Map<NumericTerm, Place> standing) {
             ExactRatio weight = form.coefs().getOrDefault(last, ExactRatio.ZERO);
-            BigInteger right = residue.subtract(whole(form.constant()));
+            BigInteger right = residue.subtract(form.constant().wholeOrNull());
             for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
                 if (each.getKey().equals(last)) {
                     continue;
                 }
                 Place at = standing.get(each.getKey());
                 if (!(at instanceof Count count)
-                        || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
-                                BigInteger value))
-                        || !count.whole()) {
+                        || !(count.exactly().wholeOrNull() instanceof BigInteger value)) {
                     return HeldClass.NO_VALUE;
                 }
-                right = right.subtract(whole(each.getValue()).multiply(value));
+                right = right.subtract(each.getValue().wholeOrNull().multiply(value));
             }
-            BigInteger a = whole(weight).mod(divisor);
+            BigInteger a = weight.wholeOrNull().mod(divisor);
             BigInteger shared = a.gcd(divisor);
             if (right.mod(shared).signum() != 0) {
                 return HeldClass.NO_VALUE;
@@ -261,21 +259,16 @@ final class NumericWitness {
         /** Whether every number of the form stands at {@code standing} at a whole number that
          *  brings the form to the residue. */
         boolean metBy(Map<NumericTerm, Place> standing) {
-            BigInteger sum = whole(form.constant());
+            BigInteger sum = form.constant().wholeOrNull();
             for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
                 Place at = standing.get(each.getKey());
-                if (at == null || !(Count.number(at).exactly().floor()
-                        instanceof ExactAnswer.Held<BigInteger>(BigInteger value))
-                        || !Count.number(at).exactly().isWhole()) {
+                if (at == null || !(Count.number(at).exactly().wholeOrNull()
+                        instanceof BigInteger value)) {
                     return false;
                 }
-                sum = sum.add(whole(each.getValue()).multiply(value));
+                sum = sum.add(each.getValue().wholeOrNull().multiply(value));
             }
             return sum.mod(divisor).equals(residue);
-        }
-
-        private static BigInteger whole(ExactRatio ratio) {
-            return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value();
         }
     }
 

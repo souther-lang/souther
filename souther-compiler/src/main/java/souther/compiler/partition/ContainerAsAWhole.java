@@ -542,9 +542,8 @@ final class ContainerAsAWhole {
             ExactAnswer<ExactRatio> owed = one.added().constant().times(ExactRatio.of(held))
                     .flatMap(beside -> total.exactly().minus(beside))
                     .flatMap(left -> left.dividedBy(one.added().weight()));
-            return owed instanceof ExactAnswer.Held<ExactRatio>(ExactRatio whole) && whole.isWhole()
-                    && whole.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger at)
-                    ? at : null;
+            return owed instanceof ExactAnswer.Held<ExactRatio>(ExactRatio whole)
+                    ? whole.wholeOrNull() : null;
         }
     }
 
@@ -1206,9 +1205,7 @@ final class ContainerAsAWhole {
         if (!(place instanceof Count count)) {
             return null;
         }
-        ExactRatio exactly = count.exactly();
-        return exactly.isWhole() && exactly.floor() instanceof ExactAnswer.Held<BigInteger>(
-                BigInteger whole) ? whole : null;
+        return count.exactly().wholeOrNull();
     }
 
     /** {@code element} holding {@code value} {@code steps} inside it, or null where it has no

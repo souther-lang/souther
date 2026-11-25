@@ -555,8 +555,8 @@ public sealed interface Derivation {
                 && other instanceof Proposition.Compared(
                         Relation.Affine(LinearForm<Quantity> otherForm, Rel otherRel),
                         boolean otherHolds, Spelling _, var _)
-                && apart(form, holds ? rel : rel.denied(), otherForm,
-                        otherHolds ? otherRel : otherRel.denied());
+                && apart(form, rel.whenHolding(holds), otherForm,
+                        otherRel.whenHolding(otherHolds));
     }
 
     /** Whether {@code form rel 0} and {@code otherForm otherRel 0} are met on no sign the one
@@ -568,7 +568,7 @@ public sealed interface Derivation {
         if (scale == null) {
             return false;
         }
-        Rel against = scale.signum() > 0 ? otherRel : otherRel.turned();
+        Rel against = otherRel.scaledBy(scale);
         for (int sign = -1; sign <= 1; sign++) {
             if (rel.holds(sign) && against.holds(sign)) {
                 return false;

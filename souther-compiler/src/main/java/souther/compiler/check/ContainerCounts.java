@@ -173,7 +173,7 @@ public final class ContainerCounts {
         LinearForm<Count> form = law.over(number -> reading.lawNumber(applied, number));
         // The call, the closures it is handed and everything they work out: what its law states
         // is what it answers, and it answers wherever none of that ends a run.
-        return form == null ? null : new Stated(form, positive ? states : states.denied(),
+        return form == null ? null : new Stated(form, states.whenHolding(positive),
                 WhatARunMayEndFor.endsNoneBeneath(call), reading.written);
     }
 
