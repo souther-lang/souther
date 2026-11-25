@@ -938,8 +938,7 @@ final class Term {
                 ExactAnswer<LinearForm<List<String>>> out = switch ((BinOp) of) {
                     case ADD -> left.plus(right);
                     case SUB -> left.minus(right);
-                    case MUL -> left.coefs().isEmpty() ? right.times(left.constant())
-                            : right.coefs().isEmpty() ? left.times(right.constant()) : null;
+                    case MUL -> left.productWith(right);
                     default -> null;
                 };
                 yield out instanceof ExactAnswer.Held<LinearForm<List<String>>>(var held)

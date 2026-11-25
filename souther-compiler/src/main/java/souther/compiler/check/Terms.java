@@ -1071,11 +1071,9 @@ final class Terms {
 
     /** The product of two forms: a scalar multiply where one side is a bare constant. */
     static <A> Operated<A> product(LinearForm<A> a, LinearForm<A> b) {
-        if (a.coefs().isEmpty()) {
-            return Operated.of(b.times(a.constant()));
-        }
-        if (b.coefs().isEmpty()) {
-            return Operated.of(a.times(b.constant()));
+        ExactAnswer<LinearForm<A>> scaled = a.productWith(b);
+        if (scaled != null) {
+            return Operated.of(scaled);
         }
         Set<A> over = new HashSet<>(theOneAtomOf(a));
         over.addAll(theOneAtomOf(b));

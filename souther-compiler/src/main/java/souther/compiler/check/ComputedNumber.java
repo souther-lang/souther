@@ -81,6 +81,17 @@ final class ComputedNumber {
                     low == null ? null : low.negated());
         }
 
+        /** What {@code operator} answers of a number in this and one in {@code other}, for the
+         *  three operators whose arithmetic this holds — or null for any other. */
+        Range operated(BinOp operator, Range other) {
+            return switch (operator) {
+                case ADD -> plus(other);
+                case SUB -> plus(other.negated());
+                case MUL -> times(other);
+                default -> null;
+            };
+        }
+
         Range times(Range other) {
             End[] ends = {
                 End.of(low, -1).times(End.of(other.low, -1)),
@@ -356,12 +367,11 @@ final class ComputedNumber {
                 if (left == null || right == null) {
                     yield null;
                 }
-                yield stays(switch (it.operator()) {
-                    case ADD -> left.plus(right);
-                    case SUB -> left.plus(right.negated());
-                    case MUL -> left.times(right);
-                    default -> throw new IllegalStateException("not arithmetic: " + it.operator());
-                }, orders.get(it.term()));
+                Range operated = left.operated(it.operator(), right);
+                if (operated == null) {
+                    throw new IllegalStateException("not arithmetic: " + it.operator());
+                }
+                yield stays(operated, orders.get(it.term()));
             }
             case Expr.Weighed it -> {
                 // Each argument on the order it is, and the weighed sum on the order it answers:

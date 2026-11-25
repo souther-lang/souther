@@ -314,8 +314,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "keeps the three operators that are exact arithmetic over places, and leaves"
                             + " a number written with any other unread"),
             new Held("souther.compiler.check.ComputedNumber.bounded",
-                    "does what each of those three does to the range its operands lie in, a"
-                            + " single number being the range of one"),
+                    "hands the operator a step was written with to the range its operands lie"
+                            + " in, a single number being the range of one"),
+            new Held("souther.compiler.check.ComputedNumber.Range.operated",
+                    "does what each of those three does to the range its operands lie in, for"
+                            + " the arithmetic over places and over counts alike"),
             new Held("souther.compiler.check.ComputedNumber.Expr.Operated.operator",
                     "hands back the operator the arithmetic was written with"),
             // Recognising a comparison, which is what carries the claim to everything below.

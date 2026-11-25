@@ -276,6 +276,18 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     }
 
     /**
+     * This form times {@code other}, where one of the two is a constant and the product is the
+     * other scaled by it ({@link #times}) — or null where both weigh an atom, since a product of two
+     * unknowns is no form over them.
+     */
+    public ExactAnswer<LinearForm<A>> productWith(LinearForm<A> other) {
+        if (coefs.isEmpty()) {
+            return other.times(constant);
+        }
+        return other.coefs.isEmpty() ? times(other.constant) : null;
+    }
+
+    /**
      * This form over a constant {@code k}, each number divided by it and not multiplied by its
      * reciprocal — the reciprocal of a number at the least exponent has none, and its quotient by
      * itself is one. Or which way a number divided has no representation.
