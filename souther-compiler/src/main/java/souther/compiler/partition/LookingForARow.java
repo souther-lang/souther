@@ -33,6 +33,24 @@ public final class LookingForARow {
         this.searches = new Tries(searches);
     }
 
+    /**
+     * Whether there is a search left for one more attempt, asked by whatever makes the attempts
+     * before it makes the next ({@link Tries#left}). Where there is none, the looking is cut short
+     * there, and the attempt is not made.
+     */
+    public boolean left() {
+        return searches.left();
+    }
+
+    /**
+     * Whether one more attempt is made: a search is spent on it where one is left, and where none
+     * is, the looking is cut short there. For an attempt that is not a composing of its own, which
+     * spends where it starts ({@link Generator#probeFixing}).
+     */
+    public boolean attempt() {
+        return searches.spend();
+    }
+
     /** The searches the walks across the row's parameters go through
      *  ({@link CompositionBudget#SEARCHES_A_ROW_IS_COMPOSED_THROUGH}). */
     Tries searches() {

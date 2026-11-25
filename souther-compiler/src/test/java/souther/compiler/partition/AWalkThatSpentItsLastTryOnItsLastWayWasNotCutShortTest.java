@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 
 import java.util.AbstractList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,37 @@ class AWalkThatSpentItsLastTryOnItsLastWayWasNotCutShortTest {
             assertFalse(left.cutShort(), "no way was left at a figure of " + figure);
             assertEquals(figure == 0, left.spent(), "nothing was spent");
         }
+    }
+
+    /**
+     * Thirty lists of two are more than a thousand million ways, and a walk held to three makes
+     * three of them: each way is made as it is asked for, so what is read of the lists is what
+     * three ways hold and the figure ends the making.
+     */
+    @Test
+    void aWalkHeldToAFigureMakesNoMoreWaysThanItSpendsOn() {
+        int[] read = {0};
+        List<Integer> two = new AbstractList<>() {
+            @Override
+            public Integer get(int index) {
+                read[0]++;
+                return index;
+            }
+
+            @Override
+            public int size() {
+                return 2;
+            }
+        };
+        List<List<Integer>> lists = Collections.nCopies(30, two);
+        Tries three = new Tries(3);
+        int[] handed = {0};
+        assertEquals(DepthFirst.Walked.CUT_SHORT, EveryWayOfChoosing.each(lists, three, way -> {
+            handed[0]++;
+            return true;
+        }));
+        assertEquals(3, handed[0], "three ways handed out");
+        assertEquals(3 * 30, read[0], "and no more of the lists read than three ways hold");
     }
 
     @Test

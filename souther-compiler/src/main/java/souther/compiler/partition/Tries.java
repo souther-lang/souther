@@ -34,6 +34,22 @@ final class Tries {
         return true;
     }
 
+    /**
+     * Whether there is a unit for one more piece of work, asked where that work is in front of
+     * the search and before it is done or made: where there is none, it is left undone, which cuts
+     * the search short. Nothing is spent; the work spends when it is done.
+     *
+     * <p>Asked by whatever produces work for the search as well as by what does it. Work produced
+     * for a search with nothing left to spend is work no figure bounds.
+     */
+    boolean left() {
+        if (left > 0) {
+            return true;
+        }
+        refused = true;
+        return false;
+    }
+
     /** Whether none is left. */
     boolean spent() {
         return left <= 0;

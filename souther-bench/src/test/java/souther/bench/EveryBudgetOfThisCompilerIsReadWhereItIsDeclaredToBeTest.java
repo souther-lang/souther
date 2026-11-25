@@ -774,6 +774,39 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LookingForARow#<init>(I)V",
                     "how many rows a walk hands a preference and how many assignments on the way"
                             + " are composed for, held for every attempt for the row"),
+            // Where the looking for a row has no search left for what is in front of it: the ways
+            // of standing in, the values of a point, the ways a plan is searched under. Each
+            // stops making them there, and says the figure beside what was found.
+            Map.entry("souther.compiler.query.Adequacy$ARowBuiltAndRun#attempt("
+                            + "Ljava/lang/String;Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/NumbersAskedFor;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Lsouther/compiler/partition/AnswersDemanded;Ljava/util/Optional;"
+                            + "Lsouther/compiler/partition/LookingForARow;)Ljava/util/List;",
+                    "says the figure of the attempts kept where the ways of standing in were"
+                            + " left for want of a search"),
+            Map.entry("souther.compiler.query.Coverages$3#lookedAlong("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
+                            + "Ljava/util/function/UnaryOperator;"
+                            + "Lsouther/compiler/partition/StandingAtAPoint$AtALine;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;"
+                            + "Ljava/util/Optional;Lsouther/compiler/partition/LookingForARow;)"
+                            + "Lsouther/compiler/query/Coverages$3$Looked;",
+                    "says the figure as what ended the asking where no search was left for"
+                            + " another value"),
+            Map.entry("souther.compiler.query.Adequacy$Generated#rowsFor("
+                            + "Lsouther/compiler/ast/Hir$SpecBehavior;Lsouther/compiler/check/Sig;"
+                            + "Lsouther/compiler/reading/CoverageRead$Read;"
+                            + "Lsouther/compiler/partition/GenerationPlan;Ljava/util/List;"
+                            + "Ljava/util/Optional;Lsouther/compiler/query/Adequacy$RowReading;"
+                            + "Lsouther/compiler/query/FixturesAtTheBoundary;"
+                            + "Lsouther/compiler/partition/Generator$Trial;Ljava/lang/Iterable;"
+                            + "Lsouther/compiler/partition/HeldOutcome$Of;"
+                            + "Lsouther/compiler/partition/WhereNothingIsAnswered;"
+                            + "Lsouther/compiler/partition/AdequacyPolicy$OfTheGeneration;)"
+                            + "Lsouther/compiler/partition/FillResult;",
+                    "says the figure as a run that looked for nothing, for the ways of standing in"
+                            + " it had no search left for"),
             Map.entry("souther.compiler.partition.Generator#probeFixing("
                             + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
                             + "Ljava/util/Map;Lsouther/compiler/partition/NumbersAskedFor;"

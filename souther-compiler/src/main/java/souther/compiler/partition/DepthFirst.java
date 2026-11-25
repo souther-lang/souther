@@ -16,9 +16,13 @@ import java.util.function.Predicate;
  *
  * <p>What this bounds is the walking. A state is entered only while a unit is left, and every
  * state entered is on the way to an end, so the states entered are at most as many as the ends
- * the figure allows times how deep the search goes, and the states put past one are at most that
- * many again times how many one state has past it. What it costs to work out the states past one,
- * and what is done at a whole way, are the search's own and bounded where they are done.
+ * the figure allows times how deep the search goes. Past the last unit no state is entered and
+ * nothing is walked from one. What is still done is to look whether a state is left to enter,
+ * which is what tells a walk cut short from one that ran out: where the states past one are
+ * worked out as they are asked for, that looks at most at the next of them, and asks the search
+ * to work it out, so a search whose states past one are filtered may look at several to find it.
+ * What it costs to work out the states past one, and what is done at a whole way, are the
+ * search's own and bounded where they are done.
  *
  * <p>What each end means is the search's as well. A dead end met for a contradiction, for a value
  * nothing works out, or for a reading that stopped are three things to a reader; the walk counts
@@ -45,13 +49,13 @@ final class DepthFirst {
      *
      * @param past the states one choice past a state, in the order they are walked — or null
      *             where it is a whole way. None is a dead end. Worked out as they are walked, so
-     *             that a walk cut short works out nothing past where it stopped
+     *             that a walk cut short works out no more than the next of them, to know one was
+     *             left
      * @param goOn what is done with a whole way: whether to go on past it
      */
     static <S> Walked walk(S from, Tries tries, Function<S, Iterable<? extends S>> past,
                            Predicate<S> goOn) {
-        if (tries.spent()) {
-            tries.leftSomethingUndone();
+        if (!tries.left()) {
             return Walked.CUT_SHORT;
         }
         Iterable<? extends S> next = past.apply(from);

@@ -2437,7 +2437,7 @@ final class Coverages {
                 }
                 // One looking for the row at the point, whichever way it is looked along and
                 // whatever value it is asked at: every attempt for it spends of what it may.
-                LookingForARow looking = new LookingForARow();
+                LookingForARow theRow = new LookingForARow();
                 // A way no value takes: one position would have to take two of its cases, or a
                 // condition on it comes out the other way for every row. Said in that word and not
                 // in the one for a walk that tried what the rules leave and reached nothing:
@@ -2464,7 +2464,7 @@ final class Coverages {
                 // way whole came to: one of them coming to nothing says nothing of the others, and
                 // the way whole is the account every one of them is inside.
                 if (able.along().isEmpty()) {
-                    return lookedAlong(criterion, label, narrowing, rows, able, besideRows, looking);
+                    return lookedAlong(criterion, label, narrowing, rows, able, besideRows, theRow);
                 }
                 // Past the figure the way whole is looked along first where a condition it was not
                 // split at is composed against whole there — a statement the elements of one
@@ -2474,7 +2474,7 @@ final class Coverages {
                 Looked whole = null;
                 if (able.ways() instanceof Reachability.Ways.Whole past
                         && past.composedAgainstWhole(line.quantity().behavior())) {
-                    whole = lookedAlong(criterion, label, narrowing, rows, able, besideRows, looking);
+                    whole = lookedAlong(criterion, label, narrowing, rows, able, besideRows, theRow);
                     if (whole.witness().isPresent()) {
                         return whole;
                     }
@@ -2492,7 +2492,7 @@ final class Coverages {
                         continue;
                     }
                     Looked one = lookedAlong(criterion, label, narrowing, rows, along,
-                            besideRows, looking);
+                            besideRows, theRow);
                     if (one.witness().isPresent()) {
                         return one;
                     }
@@ -2507,7 +2507,7 @@ final class Coverages {
                     return new Looked(alongEach, null, Optional.empty());
                 }
                 return whole != null ? whole
-                        : lookedAlong(criterion, label, narrowing, rows, able, besideRows, looking);
+                        : lookedAlong(criterion, label, narrowing, rows, able, besideRows, theRow);
             }
 
             /**
@@ -2545,7 +2545,7 @@ final class Coverages {
                                        StandingAtAPoint.AtALine rows,
                                        Reachability.Reaching able,
                                        Optional<Generator.RowsBesideBudget> besideRows,
-                                       LookingForARow looking) {
+                                       LookingForARow theRow) {
                 // A reading of the line under a case this way does not take. A line at a name the
                 // cases of a sum share is read under each case, and a way split at the cases a
                 // narrowing leaves is looked along each of them, so no row along this one is the
@@ -2582,8 +2582,24 @@ final class Coverages {
                 int askings = quantity.searchGoalAt(criterion).askedAtMost();
                 int value = 0;
                 do {
+                    // The looking for the row has no search left for another value. That ends the
+                    // asking, and is what ended it: the values asked before keep what they came
+                    // to, and this is said beside them ({@link #endedBy}). Asked before the value
+                    // is, so no value is put to the point that nothing could be spent on.
+                    if (!theRow.left()) {
+                        Realization.Unknown none = Realization.Unknown.leftOpen(
+                                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                                Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH),
+                                Set.of(), Set.of());
+                        if (last == null) {
+                            return new Looked(SearchOutcomes.of(whatAWalkLeft(label, within, none)),
+                                    null, Optional.empty());
+                        }
+                        nothingMoreAsked = none;
+                        break;
+                    }
                     Searching came = searchingWith(criterion, label, rows, able, region, tried,
-                            looking);
+                            theRow);
                     if (came.witness().isPresent()) {
                         return new Looked(came.outcomes(), came.realized(), came.witness());
                     }
@@ -2955,7 +2971,7 @@ final class Coverages {
             private Searching searchingWith(Criterion criterion, String label,
                     StandingAtAPoint.AtALine rows,
                     souther.compiler.partition.Reachability.Reaching able,
-                    SearchRegion region, ValuesTried tried, LookingForARow looking) {
+                    SearchRegion region, ValuesTried tried, LookingForARow theRow) {
                 Realization answered = realized(criterion, rows, able, region, tried);
                 return switch (answered) {
                     case Realization.Found found -> {
@@ -2974,7 +2990,7 @@ final class Coverages {
                                 probe.attempt(label, found.fixing(),
                                         quantity.asksOfEachTerm(criterion), able,
                                         souther.compiler.partition.AnswersDemanded.NOTHING,
-                                        looking);
+                                        theRow);
                         // Nothing was tried at all, which is the classes not linking. An empty
                         // answer would say the point was searched and nothing happened. Not a value
                         // this point was tried with either: nothing was built, so there is nothing

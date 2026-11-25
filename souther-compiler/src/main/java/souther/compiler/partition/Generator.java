@@ -7305,6 +7305,7 @@ public final class Generator {
         // another way is tried past it.
         List<List<FixtureTemplate>> refusedKept = new ArrayList<>();
         boolean[] cutShort = {false};
+        boolean[] rowKept = {false};
         DepthFirst.Walked handedOver = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -7353,10 +7354,20 @@ public final class Generator {
                     cameToNothing.add(why);
                     yield false;
                 }
-                // The walk ends here, and is no way that composed: the ways after it are not
-                // tried, and what this one came to is the figure.
+                // The walk ends here, and the ways after it are not tried. What it found before
+                // the looking ran out is the preference's to say, as at any other end: a row it
+                // took stays the row, since running out of searches for a better one takes
+                // nothing from it. Where it holds none, or one a judge refused, the walk comes to
+                // the figure.
                 case WalkedInOrder.CutShort _ -> {
                     cutShort[0] = true;
+                    List<FixtureTemplate> kept = preferring == null ? null : preferring.taken();
+                    if (kept != null && !preferring.takenIsRefused()) {
+                        kept.toArray(composed);
+                        rowKept[0] = true;
+                    } else if (kept != null && refusedKept.isEmpty()) {
+                        refusedKept.add(kept);
+                    }
                     yield true;
                 }
                 case WalkedInOrder.RowTaken _, WalkedInOrder.PassedOver _,
@@ -7389,9 +7400,11 @@ public final class Generator {
             };
         });
         // A walk the searches across the parameters cut short ended no way, whatever ending it
-        // looks like to the walk over the ways: it is cut short, at that figure.
-        DepthFirst.Walked walked = cutShort[0] ? DepthFirst.Walked.CUT_SHORT : handedOver;
-        SearchShortfall foundOut = cutShort[0]
+        // looks like to the walk over the ways, unless the preference kept a row from before it
+        // ran out: then it took that row, and is otherwise cut short at that figure.
+        boolean stopped = cutShort[0] && !rowKept[0];
+        DepthFirst.Walked walked = stopped ? DepthFirst.Walked.CUT_SHORT : handedOver;
+        SearchShortfall foundOut = stopped
                 ? under.foundOut(DepthFirst.Walked.EVERY_END_REACHED).and(SearchShortfall.of(
                         CompositionShortfall.of(
                                 Set.of(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH))))

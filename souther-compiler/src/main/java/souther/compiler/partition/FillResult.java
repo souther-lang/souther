@@ -331,23 +331,41 @@ public record FillResult(SequencedMap<RowId, FilledRow> composed,
                                                  List<GenerationReason> reasons) {
         // Nothing of this compiler's was met anywhere here, because nothing was looked for. A
         // figure is what a search ran into, and there was no search.
+        return nothingLookedFor(plan, why, reasons, CompositionShortfall.NONE);
+    }
+
+    /**
+     * The runs a figure left unmade: every obligation told it came to nothing at {@code figures},
+     * which a run that looked would have answered. Joined with the runs that were made
+     * ({@link #acrossRuns}), it keeps their answer about the model from being read as an answer
+     * over every way it was to be searched in.
+     */
+    public static FillResult leftAt(GenerationPlan plan, Set<CompositionBudget> figures) {
+        return nothingLookedFor(plan, Generator.UnresolvedCombination.Reason.wordFor(figures),
+                List.of(), CompositionShortfall.of(figures));
+    }
+
+    private static FillResult nothingLookedFor(GenerationPlan plan,
+                                               Generator.UnresolvedCombination.Reason why,
+                                               List<GenerationReason> reasons,
+                                               CompositionShortfall met) {
         List<GenerationAnswer> answers = new ArrayList<>();
         for (GenerationObligation obligation : plan.obligations()) {
             switch (obligation) {
                 case GenerationObligation.Class q -> answers.add(new GenerationAnswer.Class(q,
-                        new ClassDisposition.Unresolved(CameToNothing.metNothing(
+                        new ClassDisposition.Unresolved(cameToNothing(met,
                                 new Generator.UnresolvedCombination(
                                         List.of(Generator.labelOf(plan.subject(), q.target())),
                                         why)))));
                 case GenerationObligation.Arm q -> answers.add(new GenerationAnswer.Arm(q,
-                        new ArmDisposition.Unresolved(List.of(CameToNothing.metNothing(
+                        new ArmDisposition.Unresolved(List.of(cameToNothing(met,
                                 new Generator.UnresolvedCombination(List.of(), why))))));
                 case GenerationObligation.Pair q -> answers.add(new GenerationAnswer.Pair(q,
-                        new ClassDisposition.Unresolved(CameToNothing.metNothing(
+                        new ClassDisposition.Unresolved(cameToNothing(met,
                                 new Generator.UnresolvedCombination(
                                         q.target().classIdsInOrder(), why)))));
                 case GenerationObligation.Meeting q -> answers.add(new GenerationAnswer.Meeting(q,
-                        new ClassDisposition.Unresolved(CameToNothing.metNothing(
+                        new ClassDisposition.Unresolved(cameToNothing(met,
                                 new Generator.UnresolvedCombination(List.of(), why)))));
                 // Nothing was composed, which a search for a rewrite ends in as surely as one
                 // for an arm: the reasons say why nothing was.
@@ -358,6 +376,12 @@ public record FillResult(SequencedMap<RowId, FilledRow> composed,
         }
         return new FillResult(new LinkedHashMap<>(), List.of(), reasons,
                 Discharge.of(plan, answers));
+    }
+
+    /** What a run that looked for nothing came to at one obligation, having met {@code met}. */
+    private static CameToNothing cameToNothing(CompositionShortfall met,
+                                               Generator.UnresolvedCombination why) {
+        return new CameToNothing(why, met, Set.of());
     }
 
     /**

@@ -4,6 +4,16 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.Rewriting;
+import souther.compiler.coverage.RunRewrite;
+import souther.compiler.coverage.Runs;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.observe.AnswerChange;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -24,6 +34,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -258,6 +269,79 @@ class AMembershipIsComposedIntoTheRowTest {
                 .contains(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH), again::toString);
     }
 
+    /**
+     * A row the choice among rows kept stays the row where the looking runs out of searches while
+     * it looks for a better one: running out is no reason the row it had is not one. Every row
+     * here runs and answers, and no rewrite tells two of them apart, so the choice keeps the first
+     * and asks for more — and at every figure that let the first be run, the row comes back.
+     */
+    @Test
+    void aRowKeptBeforeTheLookingRanOutIsTheRow() {
+        boolean cutWithARowKept = false;
+        for (int figure = 1; figure <= 12; figure++) {
+            NeverToldApart trial = new NeverToldApart();
+            LookingForARow looking = new LookingForARow(figure);
+            Generator.BoundaryAttempt came = composedPast("boxed", true,
+                    Generator.CandidateCheck.ANY, looking, trial, Optional.empty());
+            if (trial.runs > 0) {
+                int at = figure;
+                assertInstanceOf(Generator.BoundaryAttempt.Built.class, came,
+                        () -> "a row was run at a figure of " + at + ": " + came);
+                cutWithARowKept |= looking.searches().cutShort();
+            }
+        }
+        assertTrue(cutWithARowKept, "some figure ran out after a row was kept");
+    }
+
+    /**
+     * Rows a judge refused are no row, and a looking that ran out with only those is no proof
+     * that every row was looked at: it comes to the figure.
+     */
+    @Test
+    void aLookingThatRanOutWithOnlyRefusedRowsComesToTheFigure() {
+        LookingForARow looking = new LookingForARow(6);
+        NeverToldApart trial = new NeverToldApart();
+        Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class,
+                composedPast("boxed", true, Generator.CandidateCheck.ANY, looking, trial,
+                        Optional.of(Generator.RowJudge.preferring(_ -> false))));
+        assertTrue(trial.runs > 0, "rows were run and refused");
+        assertTrue(stopped.met().figures()
+                .contains(CompositionBudget.SEARCHES_A_ROW_IS_COMPOSED_THROUGH), stopped::toString);
+    }
+
+    /** Rows that run and answer nought, with one rewrite that never changes the answer. */
+    private static final class NeverToldApart implements Generator.Trial {
+
+        private final SiteNumbering numbering = COMPILATION.db()
+                .ask(new Bodies.Checked(module())).value().plan().numbering();
+        private int runs;
+
+        @Override
+        public Generator.ObservedRun run(RowToRun row) {
+            runs++;
+            return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(numbering)),
+                    new AnswerObservation.Answered(new ObservedValue.Integer(0)),
+                    Optional.empty());
+        }
+
+        @Override
+        public Optional<AnswerObservation> runReplacing(RowToRun row, Rewriting asked) {
+            return Optional.of(new AnswerObservation.Answered(new ObservedValue.Integer(0)));
+        }
+
+        @Override
+        public AnswerChange change(AnswerObservation was, AnswerObservation now) {
+            return was.equals(now) ? AnswerChange.SAME : AnswerChange.CHANGED;
+        }
+
+        @Override
+        public List<RunRewrite> rewritesThrough(AlignedObservation ran) {
+            return List.of(new ArmReplacements.Rewrite(SourceConstructOrigin.unwritten(), 0, 1,
+                    new TreeMap<>(Map.of(3, 1))));
+        }
+    }
+
     private static List<Integer> digitsIn(String written) {
         Matcher found = Pattern.compile("\\d+").matcher(written);
         List<Integer> out = new ArrayList<>();
@@ -327,6 +411,15 @@ class AMembershipIsComposedIntoTheRowTest {
     private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
                                                           Generator.CandidateCheck check,
                                                           LookingForARow looking) {
+        return composedPast(behavior, holding, check, looking, Generator.Trial.NOTHING_RUNS,
+                Optional.empty());
+    }
+
+    private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
+                                                          Generator.CandidateCheck check,
+                                                          LookingForARow looking,
+                                                          Generator.Trial trial,
+                                                          Optional<Generator.RowJudge> judge) {
         List<OnTheWay.TakenIn> way = stated(behavior, holding).stream()
                 .map(each -> assertInstanceOf(OnTheWay.TakenIn.class, each)).toList();
         SearchRegion region = new WayToTheBorder(List.copyOf(way))
@@ -335,8 +428,7 @@ class AMembershipIsComposedIntoTheRowTest {
                 NumbersAskedFor.ANYTHING,
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
                         Reachability.Ways.ONE, List.of(), Optional.empty()),
-                check, StandInAttempt.REQUIRING_NOTHING, Generator.Trial.NOTHING_RUNS,
-                Optional.empty(), looking);
+                check, StandInAttempt.REQUIRING_NOTHING, trial, judge, looking);
     }
 
     /** What {@code behavior}'s body coming out {@code holding} asks of a row, one entry for each

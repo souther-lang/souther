@@ -800,7 +800,8 @@ public enum CompositionBudget {
     /**
      * How many searches looking for one row goes through: each attempt made for it, each time a
      * walk across the row's parameters goes on to the search for one of them under the values the
-     * ones before it took, and each whole row it hands on.
+     * ones before it took, and each whole row it hands on. And looking for the rows of one plan,
+     * the search of it under each way of standing the dependencies in.
      *
      * <p>Each of those is bounded ({@link #ASSIGNMENTS_A_SEARCH_COMPOSES} for a parameter's), and
      * their number is not. Each value a parameter's search hands on starts the next parameter's
