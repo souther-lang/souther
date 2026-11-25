@@ -1691,22 +1691,24 @@ public final class Names {
          */
         private static ValueName declaredAt(Db db, String module, SourcePos at) {
             Ast.Module m = db.ask(new Front.Available(module)).value();
-            Answer<Scoping.Scoped> scope = db.ask(new ModuleScope(module));
-            if (m == null || !scope.present()) {
+            if (m == null) {
                 return null;
             }
-            Map<String, ValueName> reached = scope.value().values().reachable().byName();
+            String declared = null;
             for (Ast.BehaviorDef b : m.behaviors()) {
                 if (spans(b.written(), at)) {
-                    return reached.get(b.name());
+                    declared = b.name();
                 }
             }
             for (Ast.FnDef fn : m.fns()) {
                 if (spans(fn.written(), at)) {
-                    return reached.get(fn.name());
+                    declared = fn.name();
                 }
             }
-            return null;
+            Answer<Scoping.Scoped> scope =
+                    declared == null ? null : db.ask(new ModuleScope(module));
+            return scope == null || !scope.present()
+                    ? null : scope.value().values().reachable().byName().get(declared);
         }
 
         /**

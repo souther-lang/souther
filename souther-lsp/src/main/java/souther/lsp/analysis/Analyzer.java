@@ -563,8 +563,14 @@ public final class Analyzer {
         private final LineIndex lines;
         private final List<DocumentSymbol> symbols;
 
-        /** Each declaration the text writes, by where its name starts. */
-        private final Map<Integer, Declared> declared;
+        /**
+         * Each declaration the text writes, by where its name starts.
+         *
+         * <p>Read off the tree while there is one to read it off. A reading that lets its tree go
+         * reads it before it does; one that keeps its tree reads it the first time it is asked,
+         * because an open document is parsed again for every edit and asked about far less often.
+         */
+        private Map<Integer, Declared> declared;
 
         /** What is told every time this reading parses its text. */
         private final Runnable parsing;
@@ -608,7 +614,7 @@ public final class Analyzer {
                 return new Reading(text, document, keepsTheTree, parsed.root(), parsed.errors(),
                         null, AstBuilder.headerModuleName(parsed.root()), lines,
                         List.copyOf(outline.apply(parsed.root(), lines)),
-                        declarationsOf(parsed.root(), text), parsing);
+                        keepsTheTree ? null : declarationsOf(parsed.root(), text), parsing);
             } catch (RuntimeException | StackOverflowError e) {
                 return new Reading(text, document, keepsTheTree, null, List.of(), e, null, lines,
                         List.of(), Map.of(), parsing);
@@ -619,14 +625,21 @@ public final class Analyzer {
          *  it is laid out as. Nothing is parsed for it. */
         Reading forgettingTheTree() {
             Reading closed = new Reading(text, document, false, null, errors, unfinished, declares,
-                    lines, symbols, declared, parsing);
+                    lines, symbols, declarations(), parsing);
             closed.imports = imports;
             return closed;
         }
 
         /** The declaration whose name starts at {@code offset}, or null where none does. */
         Declared declaredAt(int offset) {
-            return declared.get(offset);
+            return declarations().get(offset);
+        }
+
+        private Map<Integer, Declared> declarations() {
+            if (declared == null) {
+                declared = root == null ? Map.of() : declarationsOf(root, text);
+            }
+            return declared;
         }
 
         boolean keepsTheTree() {
@@ -2959,15 +2972,18 @@ public final class Analyzer {
         }
         Range here = tokenRange(lines.lines(), ident);
         Location declared = definition(uri, pos, graph).orElse(new Location(uri, here));
-        Reading in = declared.uri().equals(uri) ? reading : readingOf(graph, declared.uri());
-        Declared declaring = in.declaredAt(in.lines().offsetOf(declared.range().start().line(),
-                declared.range().start().character()));
+        boolean itself = declared.uri().equals(uri);
+        Reading in = itself ? reading : readingOf(graph, declared.uri());
+        int at = in.lines().offsetOf(declared.range().start().line(),
+                declared.range().start().character());
+        Declared declaring = in.declaredAt(at);
         if (declaring == null) {
             return Optional.of(new Hover(shownAsSource(ident.text()), here));
         }
         Hover shown = new Hover(shownAsSource(declaring.line()), here);
-        return Optional.of(declaring.kind() == SyntaxKind.BEHAVIOR_DEF
-                ? withWhatIsNotStated(shown, declared.uri(), graph, declaring.name()) : shown);
+        return Optional.of(declaring.kind() == SyntaxKind.BEHAVIOR_DEF && itself
+                && at == ident.start()
+                ? withWhatIsNotStated(shown, uri, graph, declaring.name()) : shown);
     }
 
     /**
@@ -3013,11 +3029,9 @@ public final class Analyzer {
      *
      * <p>There is no wildcard arm, so a case no rule names is one the behavior promises nothing of.
      * That is the declaration speaking and not a mistake in it, which is why a reader is shown it
-     * where they are reading the declaration rather than told about it as a problem.
-     *
-     * <p>Asked of the behavior's own name in the document that declares it, which is what the
-     * hover resolved the cursor to — so a parameter spelled like a behavior is the parameter, and
-     * a call in another module is the behavior it calls.
+     * where they are reading the declaration — the cursor on the name the {@code behavior} line
+     * declares, as the hover resolved it — rather than told about it as a problem. Only there:
+     * what is read to say it is every rule of the module, which nothing else asks for.
      */
     private Hover withWhatIsNotStated(Hover shown, String declaringUri, ModuleGraph graph,
                                       String behavior) {
