@@ -364,6 +364,7 @@ public final class Backend {
         ctx.setCoveragePlan(coverage);
         ctx.setNotCarrying(notCarrying);
         ctx.setCounting(instrumentation.counting());
+        ctx.setSayingWhereRunsStop(instrumentation.saysWhereRunsStop());
         Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.

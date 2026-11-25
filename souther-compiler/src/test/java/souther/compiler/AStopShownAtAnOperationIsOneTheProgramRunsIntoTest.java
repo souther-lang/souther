@@ -1,69 +1,82 @@
 package souther.compiler;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import souther.compiler.diag.SourcePos;
+import souther.compiler.execute.RunStop;
+import souther.compiler.execute.StepsGotPast;
+import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
+import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.StepWhereARunMayStop;
 import souther.compiler.inputs.StepWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatIsShownOfAStop;
-import souther.compiler.partition.Partitions;
+import souther.compiler.inputs.WhatKeepsEveryRunGoing;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.runtime.ConstraintViolation;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A stop the report shows at an operation of whole numbers is one the program runs into, and a run
- * that stops is never left unsaid.
+ * What the report says of the steps a run may stop at is what the program does at those steps.
  *
- * <p>The truth is the program run: each behavior is compiled and run, and a run that stops is a
- * {@code ConstraintViolation}, whose message says whether a number went past its range or a
- * divisor was nought, so a stop shown at an operation is held to ending for that reason and not
- * for the other, which is what an operation worked out before it that stops first would be. The
- * run of the numbers a stop rests on stops whatever the places the
- * stop does not name hold, which is tried over every value of a small grid: a place a stop does not
- * name is a place nothing before the operation or after it asks anything of, so a stop shown past
- * a quotient worked out after the operation is held to a divisor of every value, nought included.
- * The way to the comparison is written in the program, so a run off it stops at nothing, and the
- * numbers a stop rests on are held to it as well.
+ * <p>The truth is the program run, through classes generated to say where each step that may end a
+ * run is written: a run that stops says the step it stopped at, which steps it got past, and which
+ * calls it was inside. A step is where it is written, as the report names a step
+ * ({@link StepWhereARunMayStop#at}), so two steps of one operation and one reason are two steps
+ * however alike the numbers they stop at, and nothing is read off what a run said it stopped for.
  *
- * <p>The second direction is held to the grid alone: some run of it stops, and the findings say
- * something of the operations, a stop shown or one not resolved. And a stop is shown of a form
- * that says it is {@code required}: every run of its way stops, which the program says and this
- * does not take on trust, and what a run works out before the stop is nothing this compiler cannot
- * say it gets past. How the report words a finding is held elsewhere, and so is which operation of
- * the same reason a stop is at.
+ * <p>Each claim is held to what it says ({@link Oracle}): a stop shown, to the first stop of each
+ * run of its witness being at its step; a step said nowhere, to no run of the grid stopping there,
+ * a step said not resolved excusing only itself; the rows every run getting to a step stops at, to
+ * every run of the grid inside them that gets to the step stopping there; and what keeps every run
+ * going, to no run of the grid meeting its bounds stopping at the step past where a number stops.
+ * A claim of every run that no run of the grid is about is one nothing here holds, and is said so.
+ * The oracle is held to refusing claims moved off their step ({@code aClaimMovedOffItsStep...}).
+ *
+ * <p>Each step of these forms stops a run for one reason, so a step is held to where a run stops
+ * and not to why: two reasons at one step would be told apart by nothing here.
+ *
+ * <p>And a stop is shown of a form that says it is {@code required}: every run of its way stops,
+ * which the program says and this does not take on trust. How the report words a finding is held
+ * elsewhere.
  *
  * <p>Each form is a case of its own, one model of one behavior, and a form is in the list for the
  * mechanism that turns its case red where it is taken out. The grid is the three numbers that
- * decide them, so a case costs what running the grid of one behavior does, the forms being
- * behaviors of one module compiled once.
+ * decide the forms, and each end a claim of every run names with the number either side of it, so
+ * a case costs what running the grid of one behavior does, the forms being behaviors of one module
+ * compiled once.
  */
 class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
 
     private static final String GREATEST = "9223372036854775807";
 
-    /** What a run of each kind of stop says it stops for. */
-    private static final String INT_OVERFLOW = "Int overflow";
-    private static final String DIVISION_BY_ZERO = "division by zero";
-
     /** The fewest numbers that decide every form below: nought, which a divisor is held at, one,
      *  which a branch is taken at, and the end of an {@code Int}, which a sum passes. */
     private static final List<Long> WHOLE = List.of(0L, 1L, Long.MAX_VALUE);
+
+    /** The places of the input, as the model declares them. */
+    private static final List<String> PLACES = List.of("e", "p", "q");
 
     /**
      * A comparison, and the way the program takes to it.
@@ -163,6 +176,13 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         // first gets past it
         FORMS.put("oneSiteOnTwoApplications", new Form("e == e",
                 "List.length(List.map(x -> x + 1, [0, q])) >= 2"));
+        // one operation written at two places, alike in the numbers they stop at: a run stops at
+        // the first and never gets to the second
+        FORMS.put("oneOperationWrittenAtTwoPlaces", new Form("e == e",
+                "(p + 1) + (p + 1) > q"));
+        // two quotients of one dividend, whose runs stop for one reason with one dividend
+        FORMS.put("twoQuotientsOfOneDividend", new Form("e == e",
+                "Rational.toInt(DOWN, e / p) + Rational.toInt(DOWN, e / q) >= 2"));
     }
 
     static Stream<String> forms() {
@@ -170,14 +190,15 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
     }
 
     /**
-     * The module of every form, one behavior for each, compiled and loaded when the first is
-     * run.
+     * The module of every form, one behavior for each, compiled when the first is run, and the
+     * loader of its classes generated to say where runs stop.
      */
     private static final class Module {
 
         static final Compilation COMPILED = compile();
-        static final BytesClassLoader LOADER = new BytesClassLoader(COMPILED.classes(),
-                AStopShownAtAnOperationIsOneTheProgramRunsIntoTest.class.getClassLoader());
+        static final ClassLoader LOADER = COMPILED.loaderSayingWhereRunsStop("demo")
+                .orElseThrow(() -> new AssertionError("the module is generated to say where runs"
+                        + " stop"));
 
         private static Compilation compile() {
             StringBuilder model = new StringBuilder("""
@@ -216,69 +237,24 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
         return "b" + new ArrayList<>(FORMS.keySet()).indexOf(form);
     }
 
+    /** What the report says of the stops of {@code form}'s behavior. */
+    private static List<WhatIsShownOfAStop> saidOf(String form) {
+        return Module.COMPILED.db().ask(new Adequacy.Divided("demo", behaviorOf(form))).value()
+                .stopsShown();
+    }
+
     /** One form is one behavior of the one module, which is as much as the claim about it asks. */
     @ParameterizedTest
     @MethodSource("forms")
-    void aStopShownAtAnOperationIsOneTheProgramRunsInto(String name) throws Exception {
+    void whatIsSaidOfAStepIsWhatTheProgramDoesThere(String name) throws Exception {
         Form form = FORMS.get(name);
-        String id = behaviorOf(name);
-        BytesClassLoader loader = Module.LOADER;
-        Object behavior = Emitted.behavior(loader, "demo", id).getConstructor().newInstance();
-        Partitions.Partitioning divided =
-                Module.COMPILED.db().ask(new Adequacy.Divided("demo", id)).value();
-        boolean saidSomething = false;
-        boolean aStopShown = false;
-        boolean aStopNotResolved = false;
-        List<String> operationsShown = new ArrayList<>();
-        List<String> shownAndItsRunDoesNotStop = new ArrayList<>();
-        for (WhatIsShownOfAStop each : divided.stopsShown()) {
-            if (each instanceof StepWhereARunMayStop stops) {
-                saidSomething |= !stops.shown().isEmpty() || !stops.constructions().isEmpty()
-                        || !stops.everyRunStops().isEmpty();
-                aStopShown |= !stops.shown().isEmpty() || !stops.constructions().isEmpty();
-                for (AStopShown shown : stops.shown()) {
-                    operationsShown.add(shown.operation());
-                    String ends = shown.operation().startsWith("division")
-                            ? DIVISION_BY_ZERO : INT_OVERFLOW;
-                    for (Map<String, Object> in : inputsOf(shown)) {
-                        String stoppedFor = stoppedFor(loader, behavior, in);
-                        if (stoppedFor == null || !stoppedFor.startsWith(ends)
-                                || !isTheOperationItStopsIn(shown.operation(), stoppedFor, in)) {
-                            shownAndItsRunDoesNotStop.add(shown.operation() + " at " + in
-                                    + " ends for " + stoppedFor);
-                        }
-                    }
-                }
-            } else if (each instanceof StepWhereAStopIsNotShown open) {
-                saidSomething |= !open.notShown().isEmpty() || !open.asks().isEmpty();
-                aStopNotResolved = true;
-            }
-        }
-        boolean said = saidSomething;
-        boolean shown = aStopShown;
-        boolean someRunStops = someRunStops(loader, behavior);
-        boolean everyRunOfTheWayStops = form.required() && everyRunOfTheWayStops(loader, behavior);
-        // A run that stops in an operation no stop shown is of, where nothing is said not to be
-        // resolved, is a stop said nowhere.
-        boolean openSomewhere = aStopNotResolved;
-        List<String> stopsSaidNowhere = new ArrayList<>();
-        for (Map.Entry<Map<String, Object>, String> run : stopsOfTheGrid(loader, behavior)
-                .entrySet()) {
-            String stoppedFor = run.getValue();
-            if (!openSomewhere && stoppedFor.startsWith(INT_OVERFLOW) && operationsShown.stream()
-                    .noneMatch(operation -> isTheOperationItStopsIn(operation, stoppedFor,
-                            run.getKey()))) {
-                stopsSaidNowhere.add(run.getKey() + " ends for " + stoppedFor);
-            }
-        }
+        List<WhatIsShownOfAStop> said = saidOf(name);
+        Runs runs = Runs.of(name, said);
+        boolean shown = said.stream().anyMatch(StepWhereARunMayStop.class::isInstance);
+        boolean everyRunOfTheWayStops = form.required() && everyRunOfTheWayStops(runs);
         assertAll(
-                () -> assertEquals(List.of(), shownAndItsRunDoesNotStop,
-                        "told that a run stops at an operation, and the run of the numbers the "
-                                + "stop rests on does not stop there"),
-                () -> assertTrue(said || !someRunStops,
-                        "a run of the grid stops and the findings say nothing of an operation"),
-                () -> assertEquals(List.of(), stopsSaidNowhere,
-                        "a run of the grid stops in an operation no finding is of"),
+                () -> assertEquals(List.of(), Oracle.unheld(said, runs),
+                        "what is said of a step is what the runs of the grid do there"),
                 () -> assertTrue(!form.required() || everyRunOfTheWayStops,
                         "a form said to stop every run of its way, and a run of the grid on the"
                                 + " way gets past what it works out"),
@@ -287,29 +263,133 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
                                 + " compiler cannot say it gets past, and no stop is shown"));
     }
 
+    /**
+     * Each kind of claim of every run is held to some run of the forms: a claim no run of the grid
+     * is about holds of every run there is, and where every claim of a kind were one, the forms
+     * would hold that kind to nothing. A step no input gets to is one such, and some forms say
+     * them; those are not refused, and are not what holds the kind either.
+     */
+    @Test
+    void eachKindOfClaimOfEveryRunIsHeldToSomeRun() throws Exception {
+        int rows = 0;
+        int keeping = 0;
+        for (String name : FORMS.keySet()) {
+            List<WhatIsShownOfAStop> said = saidOf(name);
+            Oracle.Held held = Oracle.heldTo(said, Runs.of(name, said));
+            rows += held.rowsHeldTo();
+            keeping += held.keepingHeldTo();
+        }
+        assertTrue(rows > 0, "no run of the grid is in the rows every run stops at");
+        assertTrue(keeping > 0, "no run of the grid is within what keeps every run going");
+    }
+
+    /**
+     * A stop shown at one step and moved to another is refused, though the run of its witness
+     * stops for the same reason at the same numbers: the run stops at the step it is written at.
+     */
+    @Test
+    void aClaimMovedOffItsStepIsRefusedThoughItsRunStopsForTheSameReason() throws Exception {
+        String name = "oneOperationWrittenAtTwoPlaces";
+        List<WhatIsShownOfAStop> said = saidOf(name);
+        Runs runs = Runs.of(name, said);
+        StepWhereARunMayStop stop = said.stream().filter(StepWhereARunMayStop.class::isInstance)
+                .map(StepWhereARunMayStop.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("a stop is shown of " + said));
+        SourcePos elsewhere = said.stream().map(WhatIsShownOfAStop::at)
+                .filter(at -> !at.equals(stop.at())).findFirst()
+                .orElseThrow(() -> new AssertionError("something is said of another step: "
+                        + said));
+        List<WhatIsShownOfAStop> moved = new ArrayList<>(said);
+        moved.set(said.indexOf(stop), new StepWhereARunMayStop(elsewhere, stop.shown(),
+                stop.constructions(), stop.everyRunStops(), stop.keeping()));
+
+        assertEquals(List.of(), Oracle.unheld(said, runs));
+        assertNotEquals(List.of(), Oracle.unheld(moved, runs));
+    }
+
+    /**
+     * A step said not resolved excuses itself and no other: with the stop shown at one step taken
+     * out, the runs that stop there are said nowhere, whatever else is left not resolved.
+     */
+    @Test
+    void aStepLeftNotResolvedExcusesNoOtherStep() throws Exception {
+        for (String name : FORMS.keySet()) {
+            List<WhatIsShownOfAStop> said = saidOf(name);
+            if (said.stream().noneMatch(StepWhereAStopIsNotShown.class::isInstance)
+                    || said.stream().noneMatch(StepWhereARunMayStop.class::isInstance)) {
+                continue;
+            }
+            Runs runs = Runs.of(name, said);
+            List<WhatIsShownOfAStop> without = said.stream()
+                    .filter(each -> !(each instanceof StepWhereARunMayStop)).toList();
+            assertEquals(List.of(), Oracle.unheld(said, runs), name);
+            assertNotEquals(List.of(), Oracle.unheld(without, runs), name);
+            return;
+        }
+        throw new AssertionError("some form says a stop is shown at one step and not resolved at"
+                + " another");
+    }
+
+    /**
+     * The rows every run getting to a step stops at, widened to every row, are refused: on a way
+     * every run takes, a run outside them gets to the step and past it.
+     */
+    @Test
+    void theRowsEveryRunStopsAtWidenedToEveryRowAreRefused() throws Exception {
+        String name = "oneOperationWrittenAtTwoPlaces";
+        List<WhatIsShownOfAStop> said = saidOf(name);
+        StepWhereARunMayStop stop = said.stream().filter(StepWhereARunMayStop.class::isInstance)
+                .map(StepWhereARunMayStop.class::cast)
+                .filter(each -> !each.everyRunStops().isEmpty()).findFirst()
+                .orElseThrow(() -> new AssertionError("the rows every run stops at are said of "
+                        + said));
+        Runs runs = Runs.of(name, said);
+        EveryRunStops first = stop.everyRunStops().getFirst();
+        EveryRunStops everywhere = new EveryRunStops(first.operation(), first.where().stream()
+                .map(within -> new EveryRunStops.Within(within.form(),
+                        BigInteger.valueOf(Long.MIN_VALUE), null))
+                .toList());
+        List<WhatIsShownOfAStop> widened = new ArrayList<>(said);
+        widened.set(said.indexOf(stop), new StepWhereARunMayStop(stop.at(), stop.shown(),
+                stop.constructions(), List.of(everywhere), stop.keeping()));
+
+        assertEquals(List.of(), Oracle.unheld(said, runs));
+        assertNotEquals(List.of(), Oracle.unheld(widened, runs));
+    }
+
+    /**
+     * What keeps every run going, its bounds let out to every value, is refused: on a way every
+     * run takes, a run at the greatest value gets to the step and stops there.
+     */
+    @Test
+    void whatKeepsEveryRunGoingLetOutToEveryValueIsRefused() throws Exception {
+        String name = "oneOperationWrittenAtTwoPlaces";
+        List<WhatIsShownOfAStop> said = saidOf(name);
+        StepWhereARunMayStop stop = said.stream().filter(StepWhereARunMayStop.class::isInstance)
+                .map(StepWhereARunMayStop.class::cast)
+                .filter(each -> each.keeping().isPresent()).findFirst()
+                .orElseThrow(() -> new AssertionError("what keeps every run going is said of "
+                        + said));
+        Runs runs = Runs.of(name, said);
+        WhatKeepsEveryRunGoing kept = stop.keeping().orElseThrow();
+        Set<ABoundThatKeepsEveryRunGoing> letOut = new LinkedHashSet<>();
+        for (ABoundThatKeepsEveryRunGoing bound : kept.bounds()) {
+            letOut.add(new ABoundThatKeepsEveryRunGoing(bound.holder(), bound.atMost(),
+                    BigInteger.valueOf(bound.atMost() ? Long.MAX_VALUE : Long.MIN_VALUE),
+                    bound.bound()));
+        }
+        List<WhatIsShownOfAStop> loosened = new ArrayList<>(said);
+        loosened.set(said.indexOf(stop), stop.keptBy(Optional.of(new WhatKeepsEveryRunGoing(
+                letOut, kept.held(), Set.of(), kept.shownTogether()))));
+
+        assertEquals(List.of(), Oracle.unheld(said, runs));
+        assertNotEquals(List.of(), Oracle.unheld(loosened, runs));
+    }
+
     /** {@code text} over the fields of the input {@code i}. */
     private static String onTheInput(String text) {
         return text.replaceAll("\\be\\b", "i.e").replaceAll("\\bp\\b", "i.p")
                 .replaceAll("\\bq\\b", "i.q");
-    }
-
-    /** The numbers {@code shown} rests on, with each place it does not name at every value of the
-     *  grid. */
-    private static List<Map<String, Object>> inputsOf(AStopShown shown) {
-        Map<String, Long> named = new LinkedHashMap<>();
-        for (AStopShown.NumberAt number : shown.at()) {
-            named.put(((TermPath.Step.Field) number.place().steps().getLast()).name(),
-                    number.number().longValueExact());
-        }
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (long e : named.containsKey("e") ? List.of(named.get("e")) : WHOLE) {
-            for (long p : named.containsKey("p") ? List.of(named.get("p")) : WHOLE) {
-                for (long q : named.containsKey("q") ? List.of(named.get("q")) : WHOLE) {
-                    out.add(Map.of("e", e, "p", p, "q", q));
-                }
-            }
-        }
-        return out;
     }
 
     /**
@@ -317,125 +397,353 @@ class AStopShownAtAnOperationIsOneTheProgramRunsIntoTest {
      * way answers {@code 3} and a run on it that stops answers nothing, so a run that answers one
      * or two is a run on the way that does not stop.
      */
-    private static boolean everyRunOfTheWayStops(ClassLoader loader, Object behavior)
-            throws Exception {
+    private static boolean everyRunOfTheWayStops(Runs runs) {
         boolean someStops = false;
-        for (long e : WHOLE) {
-            for (long p : WHOLE) {
-                for (long q : WHOLE) {
-                    Map<String, Object> raw = Map.of("e", e, "p", p, "q", q);
-                    if (stoppedFor(loader, behavior, raw) != null) {
-                        someStops = true;
-                    } else {
-                        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", raw));
-                        if (!String.valueOf(Codecs.encode(loader, "demo.Out", out)).equals("3")) {
-                            return false;
-                        }
-                    }
-                }
+        for (Run run : runs.grid()) {
+            if (run.stopped().isPresent()) {
+                someStops = true;
+            } else if (!run.answered().equals(Optional.of("3"))) {
+                return false;
             }
         }
         return someStops;
     }
 
-    /** An operation the program stopped in, as its message says it: two numbers and an
-     *  operator. */
-    private static final Pattern RAN = Pattern.compile(INT_OVERFLOW
-            + ": (-?\\d+) ([+*-]) (-?\\d+)$");
+    /**
+     * One run of the behavior: the input, what it got past and the calls it ended inside, and
+     * where it stopped, or what it answered where it did not.
+     */
+    record Run(Map<String, Long> in, StepsGotPast.Account account, Optional<RunStop> stopped,
+               Optional<String> answered) {
 
-    /** One term of a sum of the input's fields, as a stop shown says it: {@code 2 * i.q},
-     *  {@code i.q} or {@code 3}, with its sign. */
-    private static final Pattern TERM = Pattern.compile(
-            "([+-])?\\s*(?:(\\d+)\\s*\\*\\s*)?(i\\.[epq]|\\d+)");
+        /**
+         * The step of the behavior the run stopped at, as a finding of the behavior names a step:
+         * the call it ended inside, where it ended inside one, which is the step of this body a
+         * stop in another declaration's is at, and where it stopped otherwise. None where it did
+         * not stop, or stopped where the code said no place.
+         */
+        Optional<RunStop.Site> stoppedAt() {
+            if (stopped.isEmpty()) {
+                return Optional.empty();
+            }
+            if (!account.inside().isEmpty()) {
+                return Optional.of(account.inside().getFirst());
+            }
+            return switch (stopped.get()) {
+                case RunStop.AtAnEnd it -> it.site();
+                case RunStop.AtAConstruction it -> it.site();
+                case RunStop.AtAnUnreachable it -> it.site();
+                case RunStop.AtAnEnsures _ -> Optional.empty();
+            };
+        }
+
+        /** Whether the run stopped at {@code step} for an operation the language refuses to
+         *  finish. */
+        boolean endedAt(RunStop.Site step) {
+            return stopped.orElse(null) instanceof RunStop.AtAnEnd
+                    && stoppedAt().equals(Optional.of(step));
+        }
+
+        /** Whether the run got to {@code step}: got past it, or stopped there. */
+        boolean gotTo(RunStop.Site step) {
+            return account.gotPast().contains(step) || stoppedAt().equals(Optional.of(step));
+        }
+    }
 
     /**
-     * Whether {@code operation}, a stop shown, is the operation a run that stopped for
-     * {@code stoppedFor} on {@code in} stopped in: what it comes to on {@code in} is what the
-     * operation the program stopped in came to. A stop shown is said as the sum of the input's
-     * fields the way makes it, and two operations of one reason are told apart by that number.
-     * Where either is said otherwise, nothing tells them apart and they are taken alike.
+     * The runs of one behavior: every run of the grid, and a run of any input asked for, with
+     * where each step the report names is written.
      */
-    private static boolean isTheOperationItStopsIn(String operation, String stoppedFor,
-                                                   Map<String, Object> in) {
-        Matcher ran = RAN.matcher(stoppedFor);
-        BigInteger shown = valueOf(operation, in);
-        if (!ran.find() || shown == null) {
-            return true;
+    record Runs(Object behavior, List<Run> grid, Function<SourcePos, Optional<RunStop.Site>> placed) {
+
+        /**
+         * The runs of {@code form}'s behavior over the grid of {@code said}: {@link #WHOLE}, and
+         * each end a claim of every run names, with the number either side of it, at every place.
+         * An end is where a claim of every run turns, and a grid without it holds no run the
+         * claim is about where every run it holds stops before the step.
+         */
+        static Runs of(String form, List<WhatIsShownOfAStop> said) throws Exception {
+            Object behavior = Emitted.behavior(Module.LOADER, "demo", behaviorOf(form))
+                    .getConstructor().newInstance();
+            Set<Long> values = new LinkedHashSet<>(WHOLE);
+            for (BigInteger end : endsNamedBy(said)) {
+                for (BigInteger near : List.of(end.subtract(BigInteger.ONE), end,
+                        end.add(BigInteger.ONE))) {
+                    if (near.bitLength() < Long.SIZE) {
+                        values.add(near.longValueExact());
+                    }
+                }
+            }
+            List<Run> grid = new ArrayList<>();
+            for (long e : values) {
+                for (long p : values) {
+                    for (long q : values) {
+                        grid.add(run(behavior, Map.of("e", e, "p", p, "q", q)));
+                    }
+                }
+            }
+            return new Runs(behavior, grid, Module.COMPILED::writtenAt);
         }
-        BigInteger left = new BigInteger(ran.group(1));
-        BigInteger right = new BigInteger(ran.group(3));
-        BigInteger came = switch (ran.group(2)) {
-            case "+" -> left.add(right);
-            case "-" -> left.subtract(right);
-            default -> left.multiply(right);
-        };
-        return came.equals(shown);
+
+        /** Every end a claim of every run in {@code said} names. */
+        private static List<BigInteger> endsNamedBy(List<WhatIsShownOfAStop> said) {
+            List<BigInteger> out = new ArrayList<>();
+            for (WhatIsShownOfAStop each : said) {
+                List<EveryRunStops> stops = switch (each) {
+                    case StepWhereARunMayStop it -> it.everyRunStops();
+                    case StepWhereAStopIsNotShown it -> it.everyRunStops();
+                };
+                Optional<WhatKeepsEveryRunGoing> kept = switch (each) {
+                    case StepWhereARunMayStop it -> it.keeping();
+                    case StepWhereAStopIsNotShown it -> it.keeping();
+                };
+                for (EveryRunStops stop : stops) {
+                    for (EveryRunStops.Within within : stop.where()) {
+                        Stream.of(within.least(), within.greatest())
+                                .filter(end -> end != null).forEach(out::add);
+                    }
+                }
+                kept.ifPresent(region -> region.bounds().forEach(bound -> out.add(bound.at())));
+            }
+            return out;
+        }
+
+        /** The run of {@code in}. */
+        Run of(Map<String, Long> in) {
+            try {
+                return run(behavior, in);
+            } catch (Exception e) {
+                throw new AssertionError("the input " + in + " is one the behavior takes", e);
+            }
+        }
+
+        private static Run run(Object behavior, Map<String, Long> in) throws Exception {
+            Object decoded = Codecs.decoded(Module.LOADER, "demo.In", new LinkedHashMap<>(in));
+            StepsGotPast.begin();
+            Object answered;
+            try {
+                answered = Codecs.apply(behavior, decoded);
+            } catch (RuntimeException stopped) {
+                StepsGotPast.Account account = StepsGotPast.end();
+                Optional<RunStop> end = RunStop.ofTheEndOf(stopped);
+                if (end.isEmpty()) {
+                    throw stopped;
+                }
+                return new Run(in, account, end, Optional.empty());
+            }
+            return new Run(in, StepsGotPast.end(), Optional.empty(), Optional.of(String.valueOf(
+                    Codecs.encode(Module.LOADER, "demo.Out", answered))));
+        }
     }
 
-    /** What {@code sum}, a sum of the input's fields, comes to on {@code in}; null where it is
-     *  not one. */
-    private static BigInteger valueOf(String sum, Map<String, Object> in) {
-        Matcher term = TERM.matcher(sum.strip());
-        BigInteger out = BigInteger.ZERO;
-        int at = 0;
-        while (term.find() && term.start() == at) {
-            BigInteger one = term.group(3).startsWith("i.")
-                    ? BigInteger.valueOf((Long) in.get(term.group(3).substring(2)))
-                    : new BigInteger(term.group(3));
-            if (term.group(2) != null) {
-                one = one.multiply(new BigInteger(term.group(2)));
-            }
-            out = "-".equals(term.group(1)) ? out.subtract(one) : out.add(one);
-            at = term.end();
-            while (at < sum.strip().length() && sum.strip().charAt(at) == ' ') {
-                at++;
-            }
-        }
-        return (at == sum.strip().length() && at > 0) ? out : null;
-    }
+    /**
+     * What a report says of the steps a run may stop at, held to the runs of a grid: each claim
+     * the runs do not hold, said. A pure reading of what it is handed, so that it is held as well to
+     * refusing claims it is handed wrong.
+     */
+    static final class Oracle {
 
-    /** What every run of the grid that stops stops for, by the run. */
-    private static Map<Map<String, Object>, String> stopsOfTheGrid(ClassLoader loader,
-                                                                   Object behavior)
-            throws Exception {
-        Map<Map<String, Object>, String> out = new LinkedHashMap<>();
-        for (long e : WHOLE) {
-            for (long p : WHOLE) {
-                for (long q : WHOLE) {
-                    Map<String, Object> run = Map.of("e", e, "p", p, "q", q);
-                    String stoppedFor = stoppedFor(loader, behavior, run);
-                    if (stoppedFor != null) {
-                        out.put(run, stoppedFor);
+        /**
+         * What {@link #heldTo} found: each claim the runs do not hold, and how many claims of
+         * every run of each kind some run was about. A claim of every run no run is about holds of
+         * every run there is, and is no claim the runs held it to; a step no input gets to is one.
+         */
+        record Held(List<String> unheld, int rowsHeldTo, int keepingHeldTo) {}
+
+        static List<String> unheld(List<WhatIsShownOfAStop> said, Runs runs) {
+            return heldTo(said, runs).unheld();
+        }
+
+        static Held heldTo(List<WhatIsShownOfAStop> said, Runs runs) {
+            List<String> out = new ArrayList<>();
+            int[] heldTo = new int[2];
+            Set<RunStop.Site> named = new LinkedHashSet<>();
+            for (WhatIsShownOfAStop each : said) {
+                Optional<RunStop.Site> step = runs.placed().apply(each.at());
+                if (step.isEmpty()) {
+                    out.add("said of a step written nowhere this compilation lays out: " + each);
+                    continue;
+                }
+                named.add(step.get());
+                switch (each) {
+                    case StepWhereARunMayStop stops -> {
+                        shown(stops, step.get(), runs, out);
+                        heldTo[0] += everyRunStops(stops.everyRunStops(), step.get(), runs, out);
+                        heldTo[1] += keeping(stops.keeping(), step.get(), runs, out);
+                    }
+                    case StepWhereAStopIsNotShown open -> {
+                        heldTo[0] += everyRunStops(open.everyRunStops(), step.get(), runs, out);
+                        heldTo[1] += keeping(open.keeping(), step.get(), runs, out);
+                    }
+                }
+            }
+            for (Run run : runs.grid()) {
+                if (run.stopped().isEmpty()) {
+                    continue;
+                }
+                Optional<RunStop.Site> at = run.stoppedAt();
+                if (at.isEmpty()) {
+                    out.add(run.in() + " stops where the code says no place: " + run.stopped());
+                } else if (!named.contains(at.get())) {
+                    out.add(run.in() + " stops at " + at.get() + ", a step nothing is said of: "
+                            + run.stopped());
+                }
+            }
+            return new Held(out, heldTo[0], heldTo[1]);
+        }
+
+        /** Each run of a witness of a stop shown at {@code step} stops there first. */
+        private static void shown(StepWhereARunMayStop stops, RunStop.Site step, Runs runs,
+                                  List<String> out) {
+            for (AStopShown shown : stops.shown()) {
+                if (!shown.structure().isEmpty()) {
+                    out.add("a witness asks of a list, which this input has none of: " + shown);
+                    continue;
+                }
+                for (Map<String, Long> in : completions(shown.at())) {
+                    Run run = runs.of(in);
+                    if (!run.endedAt(step)) {
+                        out.add(shown.operation() + " shown at " + step + ", and the run of " + in
+                                + " stops at " + run.stoppedAt() + ": " + run.stopped());
+                    }
+                }
+            }
+            for (AConstructionStopShown shown : stops.constructions()) {
+                for (Map<String, Long> in : completions(shown.at())) {
+                    Run run = runs.of(in);
+                    if (!(run.stopped().orElse(null) instanceof RunStop.AtAConstruction)
+                            || !run.stoppedAt().equals(Optional.of(step))) {
+                        out.add("a construction shown at " + step + ", and the run of " + in
+                                + " stops at " + run.stoppedAt() + ": " + run.stopped());
                     }
                 }
             }
         }
-        return out;
-    }
 
-    private static boolean someRunStops(ClassLoader loader, Object behavior) throws Exception {
-        for (long e : WHOLE) {
-            for (long p : WHOLE) {
-                for (long q : WHOLE) {
-                    if (stoppedFor(loader, behavior, Map.of("e", e, "p", p, "q", q)) != null) {
-                        return true;
+        /** Every run of the grid inside the rows, getting to {@code step}, stops there. Answers
+         *  how many of {@code stops} some run of the grid is about. */
+        private static int everyRunStops(List<EveryRunStops> stops, RunStop.Site step, Runs runs,
+                                         List<String> out) {
+            int heldTo = 0;
+            for (EveryRunStops each : stops) {
+                boolean about = false;
+                for (Run run : runs.grid()) {
+                    Optional<Boolean> inside = inside(each.where(), run.in());
+                    if (inside.isEmpty()) {
+                        out.add("the rows every run stops at weigh what this does not: " + each);
+                        return heldTo;
+                    }
+                    if (!inside.get() || !run.gotTo(step)) {
+                        continue;
+                    }
+                    about = true;
+                    if (!run.endedAt(step)) {
+                        out.add("every run getting to " + step + " in " + each + " stops there, and"
+                                + " the run of " + run.in() + " stops at " + run.stoppedAt()
+                                + ": " + run.stopped());
+                    }
+                }
+                heldTo += about ? 1 : 0;
+            }
+            return heldTo;
+        }
+
+        /** No run of the grid meeting the bounds stops at {@code step} past where a number
+         *  stops. Answers one where some run of the grid is about what is kept, and none where
+         *  none is or nothing is kept. */
+        private static int keeping(Optional<WhatKeepsEveryRunGoing> kept, RunStop.Site step,
+                                   Runs runs, List<String> out) {
+            if (kept.isEmpty()) {
+                return 0;
+            }
+            boolean about = false;
+            for (Run run : runs.grid()) {
+                Optional<Boolean> meets = meets(kept.get().bounds(), run.in());
+                if (meets.isEmpty()) {
+                    out.add("what keeps every run going is declared on what this does not weigh: "
+                            + kept.get().bounds());
+                    return 0;
+                }
+                if (!meets.get() || !run.gotTo(step)) {
+                    continue;
+                }
+                about = true;
+                if (run.endedAt(step)) {
+                    out.add("no run within " + kept.get().bounds() + " stops at " + step
+                            + ", and the run of " + run.in() + " does: " + run.stopped());
+                }
+            }
+            return about ? 1 : 0;
+        }
+
+        /**
+         * Every input that holds {@code at} at the places it names, the places it does not name at
+         * every value of the grid.
+         */
+        private static List<Map<String, Long>> completions(List<AStopShown.NumberAt> at) {
+            Map<String, Long> named = new LinkedHashMap<>();
+            for (AStopShown.NumberAt number : at) {
+                named.put(fieldOf(number.place()), number.number().longValueExact());
+            }
+            List<Map<String, Long>> out = new ArrayList<>();
+            for (long e : named.containsKey("e") ? List.of(named.get("e")) : WHOLE) {
+                for (long p : named.containsKey("p") ? List.of(named.get("p")) : WHOLE) {
+                    for (long q : named.containsKey("q") ? List.of(named.get("q")) : WHOLE) {
+                        out.add(Map.of("e", e, "p", p, "q", q));
                     }
                 }
             }
+            return out;
         }
-        return false;
-    }
 
-    /** What the run of {@code raw} stops for, the message of its {@code ConstraintViolation}:
-     *  null where it stops at nothing. */
-    private static String stoppedFor(ClassLoader loader, Object behavior, Map<String, Object> raw)
-            throws Exception {
-        Object in = Codecs.decoded(loader, "demo.In", raw);
-        try {
-            Codecs.apply(behavior, in);
-            return null;
-        } catch (ConstraintViolation stopped) {
-            return stopped.getMessage();
+        /** Whether {@code in} is within every one of {@code where}; none where one weighs a number
+         *  that is not the value at a place of the input, or weighs one by other than a whole
+         *  number. */
+        private static Optional<Boolean> inside(List<EveryRunStops.Within> where,
+                                                Map<String, Long> in) {
+            boolean inside = true;
+            for (EveryRunStops.Within within : where) {
+                BigInteger sum = BigInteger.ZERO;
+                for (Map.Entry<NumericTerm, ExactRatio> term : within.form().coefs().entrySet()) {
+                    BigInteger weight = term.getValue().wholeOrNull();
+                    if (weight == null
+                            || !(term.getKey() instanceof NumericTerm.ValueOf(TermPath place))
+                            || !in.containsKey(fieldOf(place))) {
+                        return Optional.empty();
+                    }
+                    sum = sum.add(weight.multiply(BigInteger.valueOf(in.get(fieldOf(place)))));
+                }
+                inside &= (within.least() == null || sum.compareTo(within.least()) >= 0)
+                        && (within.greatest() == null || sum.compareTo(within.greatest()) <= 0);
+            }
+            return Optional.of(inside);
         }
+
+        /** Whether {@code in} meets every one of {@code bounds}; none where one is declared on
+         *  something other than a field of the input. */
+        private static Optional<Boolean> meets(Set<ABoundThatKeepsEveryRunGoing> bounds,
+                                               Map<String, Long> in) {
+            boolean meets = true;
+            for (ABoundThatKeepsEveryRunGoing bound : bounds) {
+                if (!(bound.holder() instanceof ABoundThatKeepsEveryRunGoing.Holder.AData data)
+                        || !data.data().module().equals("demo")
+                        || !data.data().name().equals("In")
+                        || data.named().steps().size() != 1
+                        || !PLACES.contains(data.named().steps().getFirst())) {
+                    return Optional.empty();
+                }
+                BigInteger value = BigInteger.valueOf(in.get(data.named().steps().getFirst()));
+                meets &= bound.atMost() ? value.compareTo(bound.at()) <= 0
+                        : value.compareTo(bound.at()) >= 0;
+            }
+            return Optional.of(meets);
+        }
+
+        /** The field of the input {@code place} is. */
+        private static String fieldOf(TermPath place) {
+            return ((TermPath.Step.Field) place.steps().getLast()).name();
+        }
+
+        private Oracle() {}
     }
 }

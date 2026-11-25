@@ -1,5 +1,10 @@
 package souther.compiler.execute;
 
+import souther.runtime.ConstraintViolation;
+import souther.runtime.EnsuresFailure;
+import souther.runtime.InvariantFailure;
+import souther.runtime.UnreachableReached;
+
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
@@ -65,7 +70,9 @@ public sealed interface RunStop {
                     .thenComparing(AtAnEnsures::behavior)
                     .thenComparing(AtAnEnsures::clause, named)
                     .compare(it, (AtAnEnsures) other);
-            case AtAnEnd it -> it.said().compareTo(((AtAnEnd) other).said());
+            case AtAnEnd it -> Comparator.comparing(AtAnEnd::said)
+                    .thenComparing(AtAnEnd::site, placed)
+                    .compare(it, (AtAnEnd) other);
             case AtAnUnreachable it -> Comparator.comparing(AtAnUnreachable::said)
                     .thenComparing(AtAnUnreachable::site, placed)
                     .compare(it, (AtAnUnreachable) other);
@@ -73,9 +80,9 @@ public sealed interface RunStop {
     }
 
     /**
-     * Where a construction or an {@code unreachable} is written, as the code that stopped the run
-     * said it: the module whose text it is in, which for one inlined from another module's helper
-     * is that module, and the line and column it starts at there.
+     * Where a construction, an operation or an {@code unreachable} is written, as the code that
+     * stopped the run said it: the module whose text it is in, which for one inlined from another
+     * module's helper is that module, and the line and column it starts at there.
      *
      * <p>All three or none. The code generator says a place only where this compilation held the
      * text laid out, and a stop it said none for has no place here rather than another module's
@@ -154,20 +161,65 @@ public sealed interface RunStop {
 
     /**
      * An operation the language refuses to finish — a number past what its type holds, a division
-     * by zero — in the runtime's own words for it. The runtime says no place, so this has none.
+     * by zero — in the runtime's own words for it, and where the operation is written, where the
+     * code was generated to say ({@link Site}). The runtime says no place of its own: only code
+     * generated to say where each step that may end a run is written does, and code that ships
+     * is not.
      *
      * @param said what the runtime said ended the run
+     * @param site where the operation is written, or none where the code that ran it said no place
      */
-    record AtAnEnd(String said) implements RunStop {
+    record AtAnEnd(String said, Optional<Site> site) implements RunStop {
 
         public AtAnEnd {
             Objects.requireNonNull(said, "an end is said as something");
+            Objects.requireNonNull(site, "an end was said to be somewhere or nowhere");
+        }
+
+        /** An end the code that ran it said no place for. */
+        public AtAnEnd(String said) {
+            this(said, Optional.empty());
         }
 
         @Override
         public Optional<String> writtenIn() {
-            return Optional.empty();
+            return site.map(Site::module);
         }
+    }
+
+    /**
+     * Where {@code stopped} ended, read off the language's own ends among it and its causes: a
+     * {@link ConstraintViolation} — a construction refused, an {@code ensures} not kept, or an
+     * operation the language refuses to finish — or an {@link UnreachableReached}. None where it
+     * ended some other way.
+     *
+     * <p>The one place a run's end is read into one of these, for every reader of a run: what the
+     * examples record and what a test holds a report to are read alike.
+     */
+    static Optional<RunStop> ofTheEndOf(Throwable stopped) {
+        for (Throwable cause = stopped; cause != null; cause = cause.getCause()) {
+            if (cause instanceof UnreachableReached reached) {
+                UnreachableReached.Site site = reached.site();
+                return Optional.of(new AtAnUnreachable(String.valueOf(reached.getMessage()),
+                        site == null ? Optional.empty()
+                                : Optional.of(new Site(site.module(), site.line(),
+                                        site.column()))));
+            }
+            if (cause instanceof ConstraintViolation violation) {
+                Optional<Site> site = Optional.ofNullable(violation.site())
+                        .map(at -> new Site(at.module(), at.line(), at.column()));
+                return Optional.of(switch (violation.failure()) {
+                    case InvariantFailure failed -> new AtAConstruction(
+                            failed.declared().module(), failed.declared().type(),
+                            Optional.ofNullable(failed.clause()), failed.declared().ordinal(),
+                            site);
+                    case EnsuresFailure failed -> new AtAnEnsures(failed.module(),
+                            failed.behavior(), Optional.ofNullable(failed.clause()));
+                    case null -> new AtAnEnd(String.valueOf(violation.getMessage()), site);
+                });
+            }
+        }
+        return Optional.empty();
     }
 
     /**

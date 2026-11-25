@@ -18,6 +18,8 @@ import souther.compiler.check.FieldLayout;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.WhatARunMayEndFor;
+import souther.compiler.abort.AbortSet;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -855,6 +857,58 @@ final class BodyGen {
          * checker validated. Only the passthrough arms (if/let/match/call) forward it.
          */
         Type genExpr(Core e, Type expected) {
+            Optional<TextsOfModules.WrittenAt> step = aStepThatMayEndARun(e);
+            if (step.isEmpty()) {
+                return emitted(e, expected);
+            }
+            Label start = code.newLabel();
+            Label end = code.newLabel();
+            Label left = code.newLabel();
+            Label after = code.newLabel();
+            code.labelBinding(start);
+            Type out = emitted(e, expected);
+            code.labelBinding(end);
+            placed(step.get());
+            code.invokestatic(CD_StepsGotPast, "passed", MTD_passed);
+            code.goto_(after);
+            code.labelBinding(left);
+            placed(step.get());
+            code.invokevirtual(CD_ConstraintViolation, "placedAt", MTD_placedAt);
+            code.athrow();
+            code.exceptionCatch(start, end, left, CD_ConstraintViolation);
+            code.labelBinding(after);
+            return out;
+        }
+
+        /**
+         * Where {@code e} is written, where this generation says where runs stop and {@code e} is a
+         * step that may itself end one, for a reason its place is not said by anything else.
+         *
+         * <p>Which steps may end a run is {@link WhatARunMayEndFor#itself}'s, read of the step and
+         * not of what it is made of: what it is made of is a step of its own, emitted inside this
+         * one, which says its own place first as the run leaves it. A construction and an
+         * {@code unreachable} say theirs where they are refused or reached. None where the step is
+         * written in no text this compilation holds laid out, which a reader of the run is then
+         * told by the stop saying no place.
+         */
+        private Optional<TextsOfModules.WrittenAt> aStepThatMayEndARun(Core e) {
+            if (!ctx.sayingWhereRunsStop() || Core.withoutStanding(e) instanceof Core.Unreachable
+                    || !(WhatARunMayEndFor.itself(e) instanceof WhatARunMayEndFor.Endings.Known(
+                            AbortSet kinds)) || kinds.isEmpty()) {
+                return Optional.empty();
+            }
+            return ctx.writtenAt(e.pos());
+        }
+
+        /** Pushes the module, line and column of {@code at}. */
+        private void placed(TextsOfModules.WrittenAt at) {
+            code.loadConstant(at.module());
+            code.loadConstant(at.sits().line());
+            code.loadConstant(at.sits().column());
+        }
+
+        /** Emits {@code e} and yields its type, saying nothing of where a run stops. */
+        private Type emitted(Core e, Type expected) {
             if (e.type() == null) {
                 throw new IllegalStateException("this node reached the emitter untyped: "
                         + e.getClass().getSimpleName() + " at " + e.pos());
@@ -1022,11 +1076,9 @@ final class BodyGen {
          * place ({@link CodegenContext#writtenAt}), which the runtime reads as no place.
          */
         private void writtenAt(SourcePos place) {
-            Optional<CodegenContext.WrittenAt> at = ctx.writtenAt(place);
+            Optional<TextsOfModules.WrittenAt> at = ctx.writtenAt(place);
             if (at.isPresent()) {
-                code.loadConstant(at.get().module());
-                code.loadConstant(at.get().sits().line());
-                code.loadConstant(at.get().sits().column());
+                placed(at.get());
             } else {
                 code.aconst_null();
                 code.loadConstant(0);
@@ -1595,7 +1647,9 @@ final class BodyGen {
                 box(code, emitArgument(call, i));
             }
             reachedAsACall(call);
+            Optional<TextsOfModules.WrittenAt> entered = entering(call);
             invokeRecursiveHelper(call);
+            left(entered);
             castFromObject(code, call.type());
         }
 
@@ -1993,9 +2047,39 @@ final class BodyGen {
                 Type at = genExpr(arg);
                 box(code, at);
             }
+            Optional<TextsOfModules.WrittenAt> entered = entering(call);
             invoke(linked.apply());
+            left(entered);
             project(linked);
             castFromObject(code, linked.answers());
+        }
+
+        /**
+         * Records that a run entered what {@code call} calls, where this generation says where runs
+         * stop and the call is written in text this compilation holds: with its arguments worked
+         * out, so a run that stopped working one out stopped at a step of the caller. Answers where
+         * the call is written, for {@link #left}.
+         *
+         * <p>What a run stopped inside when it stopped at a step of another declaration's body: a
+         * finding of the caller names the call and not that step.
+         */
+        private Optional<TextsOfModules.WrittenAt> entering(Core.Call call) {
+            if (!ctx.sayingWhereRunsStop()) {
+                return Optional.empty();
+            }
+            Optional<TextsOfModules.WrittenAt> at = ctx.writtenAt(call.pos());
+            at.ifPresent(written -> {
+                placed(written);
+                code.invokestatic(CD_StepsGotPast, "entering", MTD_passed);
+            });
+            return at;
+        }
+
+        /** Records that a run came back out of the call {@link #entering} recorded it entering. */
+        private void left(Optional<TextsOfModules.WrittenAt> entered) {
+            if (entered.isPresent()) {
+                code.invokestatic(CD_StepsGotPast, "left", MTD_left);
+            }
         }
 
         /** Emits the instruction {@code invocation} describes. */
@@ -2033,7 +2117,9 @@ final class BodyGen {
                 box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
                 keepForTheCheck(saved);
             }
+            Optional<TextsOfModules.WrittenAt> entered = entering(call);
             invoke(linked.apply());
+            left(entered);
             project(linked);
             CanonicalizeAtCrossing.emit(ctx, code, success);
             checkAtCrossing(callee, saved);

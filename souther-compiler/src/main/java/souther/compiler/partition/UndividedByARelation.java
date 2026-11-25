@@ -130,7 +130,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
@@ -3339,16 +3338,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             asked.add(new Bounded(form, least, greatest));
-            NumericTerm.FromOnePosition alone = form.coefs().size() == 1
-                    ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator().next() : null;
             BigInteger shownLeast = least != null && least.equals(typeLeast) ? null : least;
             BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
                     : greatest;
             if (shownLeast != null || shownGreatest != null) {
-                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest, alone));
+                out.add(new EveryRunStops.Within(form, shownLeast, shownGreatest));
             }
             if (least != null || greatest != null) {
-                everyValue.add(new EveryRunStops.Within(written(form), least, greatest, alone));
+                everyValue.add(new EveryRunStops.Within(form, least, greatest));
             }
         }
         // And every number of them within its type, which every row is, for the regions: a
@@ -3370,7 +3367,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         List<EveryRunStops.Within> said = out.isEmpty() ? everyValue : out;
         // In the order of what they are written as, which is what a report is compared by.
-        return said.stream().sorted(Comparator.comparing(EveryRunStops.Within::form)).toList();
+        return said.stream().sorted(Comparator.comparing(EveryRunStops.Within::written)).toList();
     }
 
     /** Whether {@code region}, narrowed to {@code bounds}, is not shown to hold no row. A bound
@@ -3448,23 +3445,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** {@code form} as an author would write it: each number weighed, in the order of their
      *  names, and the constant last. */
     static <A> String written(LinearForm<A> form) {
-        Map<String, ExactRatio> named = new TreeMap<>();
-        form.coefs().forEach((term, weight) -> named.put(term.toString(), weight));
-        StringBuilder out = new StringBuilder();
-        named.forEach((name, weight) -> {
-            boolean below = weight.signum() < 0;
-            ExactRatio size = below ? weight.negated() : weight;
-            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
-                    .append(size.equals(ExactRatio.ONE) ? "" : size.spelled() + " * ")
-                    .append(name);
-        });
-        if (!form.constant().isZero() || out.isEmpty()) {
-            boolean below = form.constant().signum() < 0;
-            ExactRatio size = below ? form.constant().negated() : form.constant();
-            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
-                    .append(size.spelled());
-        }
-        return out.toString();
+        return form.asAnAuthorWritesIt();
     }
 
     /**

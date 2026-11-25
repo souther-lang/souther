@@ -592,7 +592,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "inputs/InputReads;L" + c + "check/Symbols;L" + c
                         + "check/DeclarationNewtypes;L" + c + "coverage/CoverageSites$Plan;L" + c
                         + "coverage/NormalReturn;ZLjava/util/List;)V", 1, GOES_ON_INTO_IT);
-        row(out, c + "codegen/BodyGen", "genExpr",
+        row(out, c + "codegen/BodyGen", "emitted",
                 "(" + core + "L" + c + "types/Type;)L" + c + "types/Type;", 1,
                 "asks whether the node just emitted was an unreachable, to say which shape it left;"
                         + " a Widen is emitted by its own case, as what it holds");

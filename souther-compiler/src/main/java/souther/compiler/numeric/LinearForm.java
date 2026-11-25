@@ -241,6 +241,30 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     }
 
     /**
+     * The form as an author would write it: each number weighed, by the name it is written as, in
+     * the order of the names, and the constant last where there is one or nothing else.
+     */
+    public String asAnAuthorWritesIt() {
+        Map<String, ExactRatio> named = new TreeMap<>();
+        coefs.forEach((term, weight) -> named.put(term.toString(), weight));
+        StringBuilder out = new StringBuilder();
+        named.forEach((name, weight) -> {
+            boolean below = weight.signum() < 0;
+            ExactRatio size = below ? weight.negated() : weight;
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.equals(ExactRatio.ONE) ? "" : size.spelled() + " * ")
+                    .append(name);
+        });
+        if (!constant.isZero() || out.isEmpty()) {
+            boolean below = constant.signum() < 0;
+            ExactRatio size = below ? constant.negated() : constant;
+            out.append(out.isEmpty() ? (below ? "-" : "") : below ? " - " : " + ")
+                    .append(size.spelled());
+        }
+        return out.toString();
+    }
+
+    /**
      * What {@link #toString} writes, as the pieces it is written from in order: the text around the
      * positions, and each position as {@code named} names it — one entry for each name, in the order
      * of the names. Named by {@link String#valueOf} the pieces write {@link #toString}; a reader that

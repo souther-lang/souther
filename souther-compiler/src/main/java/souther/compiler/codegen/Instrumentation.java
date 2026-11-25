@@ -23,9 +23,16 @@ import java.util.Objects;
  * once it is already walking. So the plan is made where the bodies are ({@link Backend}), and what a
  * caller says is which of the two things it wants.
  *
- * <p>{@link #NONE} is what ships: bytecode with no reference to either.
+ * <p>{@code saysWhereRunsStop} says, at each step that may end a run, where the step is written:
+ * a run that ends at an operation the language refuses to finish carries the step with its end,
+ * and a step a run got past is recorded as got past ({@code StepsGotPast}). Asked for by a reader
+ * that holds what a report says of a step to what runs do at it, and goes on every module a run
+ * can reach, as counting does: a step in an import that ended a run and said no place would leave
+ * the place to be said by the step the run was in when it left the import, which is another step.
+ *
+ * <p>{@link #NONE} is what ships: bytecode with no reference to any of them.
  */
-public record Instrumentation(Coverage coverage, boolean counting) {
+public record Instrumentation(Coverage coverage, boolean counting, boolean saysWhereRunsStop) {
 
     /** Whose arms a generation numbers. */
     public enum Coverage {
@@ -38,10 +45,10 @@ public record Instrumentation(Coverage coverage, boolean counting) {
     }
 
     /** What a generation whose classes are written out gets. */
-    public static final Instrumentation NONE = new Instrumentation(Coverage.NONE, false);
+    public static final Instrumentation NONE = new Instrumentation(Coverage.NONE, false, false);
 
     /** What every evaluation runs against: counted, and measuring nothing. */
-    public static final Instrumentation COUNTING = new Instrumentation(Coverage.NONE, true);
+    public static final Instrumentation COUNTING = new Instrumentation(Coverage.NONE, true, false);
 
     public Instrumentation {
         Objects.requireNonNull(coverage, "a generation says whose arms it numbers, Coverage.NONE"
@@ -51,7 +58,13 @@ public record Instrumentation(Coverage coverage, boolean counting) {
     /** The same, also numbering the arms of the bodies being emitted — for the one module a
      *  measurement is about. */
     public Instrumentation measuring() {
-        return new Instrumentation(Coverage.THE_BODIES_BEING_EMITTED, counting);
+        return new Instrumentation(Coverage.THE_BODIES_BEING_EMITTED, counting,
+                saysWhereRunsStop);
+    }
+
+    /** The same, also saying where each step that may end a run is written. */
+    public Instrumentation sayingWhereRunsStop() {
+        return new Instrumentation(coverage, counting, true);
     }
 
     /** Whether the arms of the bodies being emitted are numbered. */
