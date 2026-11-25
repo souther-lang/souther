@@ -249,9 +249,6 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
     private record Asks(Set<CompositionBudget> asks, String why) {}
 
     private static final Map<String, Asks> LOADING_MAY_ASK = Map.of(
-            "souther.compiler.partition.Generator$RowsHanded",
-            new Asks(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
-                    "copies the rows a walk hands the choice of a row among"),
             "souther.compiler.check.FieldDomains",
             new Asks(Set.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
                     "makes a concluding, which counts to the parts a derivation concludes with"),

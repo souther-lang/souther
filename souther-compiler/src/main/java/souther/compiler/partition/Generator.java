@@ -132,7 +132,8 @@ import java.util.stream.Stream;
 public final class Generator {
 
     /** How many assignments of values one parameter is tried at in one pass. A parameter with
-     *  something held in reserve is walked twice, each pass under this bound. The figure is
+     *  something held in reserve is walked twice, each pass under this bound, the second over
+     *  the assignments the first did not reach. The figure is
      *  {@link CompositionBudget}'s, where every budget of this compiler's is named. */
     private static final int MAX_TUPLES =
             CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES.maximum();
@@ -7272,7 +7273,7 @@ public final class Generator {
         // the cases reaches a row it accepts: a row built and no row the search was for, so
         // another way is tried past it.
         List<List<FixtureTemplate>> refusedKept = new ArrayList<>();
-        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
+        DepthFirst.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
             // cases share is under the case this way writes. Written beside the numbers, so a
@@ -7361,7 +7362,7 @@ public final class Generator {
             refusedKept.getFirst().toArray(composed);
         }
         ParameterCameToNothing failed = null;
-        if (walked != ContentsAsked.UnderTheCases.Walked.COMPOSED && !refusedOnly) {
+        if (walked != DepthFirst.Walked.TAKEN && !refusedOnly) {
             // What every way tried came to, beside the figure where the walk stopped short of the
             // rest and a way under a case nobody read; where no way came to nothing to say it in,
             // the figure, the case nobody read, or that no case held them.
@@ -7496,9 +7497,9 @@ public final class Generator {
      * or one with a way under a case nobody read, did not look at every way, so a row it refused
      * is no answer that nothing else was there to find; it comes to what that walk found out.
      */
-    static boolean aRefusedRowStands(ContentsAsked.UnderTheCases.Walked walked,
+    static boolean aRefusedRowStands(DepthFirst.Walked walked,
                                      SearchShortfall left, boolean aParameterWasNotLookedAtWhole) {
-        return walked == ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED && left.nothing()
+        return walked == DepthFirst.Walked.EVERY_END_REACHED && left.nothing()
                 && !aParameterWasNotLookedAtWhole;
     }
 
@@ -9198,8 +9199,7 @@ public final class Generator {
         // so a cut that comes to nothing leaves the row the case it had, and the next cut chooses
         // as freely as this one did.
         return new CutPlacing(subject, composer, looking, within, unchosen, alreadyStanding,
-                someElement, cut, List.copyOf(terms))
-                .from(0, assumed, new LinkedHashMap<>(), new LinkedHashMap<>());
+                someElement, cut, List.copyOf(terms)).placed(assumed);
     }
 
     /**
@@ -9262,55 +9262,100 @@ public final class Generator {
         }
 
         /**
-         * The placing of the cut's numbers from {@code next} on.
+         * The cut's numbers before {@code next} placed.
          *
-         * @param trying what the row is taken to be with the numbers before {@code next} written
-         * @param routes where the row writes each number before {@code next}
-         * @param owing  each target before {@code next} a value has to be chosen for, with the
-         *               number it is chosen as
+         * @param trying what the row is taken to be with them written
+         * @param routes where the row writes each of them
+         * @param owing  each target among those a value has to be chosen for, with the number it
+         *               is chosen as
          */
-        Placed from(int next, Requirements trying,
-                    Map<NumericTerm, RealizationTarget> routes,
-                    SequencedMap<RealizationTarget, NumericTerm> owing) {
-            if (next == terms.size()) {
-                return witnessed(trying, routes, owing);
-            }
-            NumericTerm term = terms.get(next);
-            // Where a row may write to move this number, which is where the number is read except
-            // at a name every case of a sum spreads. Asked before anything else about the number,
-            // because every question below is about the place the row writes: what else is being
-            // written there, whether one value answers them all, and which location the value is
-            // gathered under.
-            //
-            // The ways of this row: a name sent under a case takes the row with it, and the number
-            // beside it is written under the same case or not at all, since no value is two cases.
-            WaysToWrite ways = waysToWrite(subject, looking, term, trying);
+        private record Placing(int next, Requirements trying,
+                               Map<NumericTerm, RealizationTarget> routes,
+                               SequencedMap<RealizationTarget, NumericTerm> owing) {}
+
+        /**
+         * The placing of the cut's numbers, the row taken to be {@code trying} before any of them
+         * is written: the first way of writing them all that a row composes with, or why none was.
+         *
+         * <p>Walked {@link DepthFirst}, a number at a time, under the point's allowance
+         * ({@link WayComposer#allowance}): each way of writing them all and each number left no
+         * way of being written beside the ones before it is a unit of it, so a cut whose last
+         * number no way writes is not walked through every way of the numbers before it for
+         * nothing. A walk the allowance stopped is one stopped by it, said as such.
+         *
+         * <p>Why none composed is said over every way of every number at once
+         * ({@link ReachabilityGap#overEveryWay}). That comes to what saying it a number at a time
+         * and then over the ways of the number before came to: shown to leave nothing only where
+         * every way was and no number had a way left unworked out, and otherwise what stopped one
+         * of them, two numbers met at one location, or nothing found.
+         */
+        Placed placed(Requirements trying) {
             List<ReachabilityGap> missed = new ArrayList<>();
-            for (Way way : ways.to()) {
-                switch (writing(next, term, way.target(), way.taken(), routes, owing)) {
-                    case Placed.AtAll placed -> {
-                        return placed;
-                    }
-                    case Placed.AtNone(ReachabilityGap why) -> missed.add(why);
-                }
+            boolean[] someUnsettled = {false};
+            Placed[] found = {null};
+            DepthFirst.Walked walked = DepthFirst.walk(
+                    new Placing(0, trying, Map.of(), new LinkedHashMap<>()), composer.allowance(),
+                    at -> {
+                        if (at.next() == terms.size()) {
+                            return null;
+                        }
+                        NumericTerm term = terms.get(at.next());
+                        // Where a row may write to move this number, which is where the number is
+                        // read except at a name every case of a sum spreads. Asked before anything
+                        // else about the number, because every question below is about the place
+                        // the row writes: what else is being written there, whether one value
+                        // answers them all, and which location the value is gathered under.
+                        //
+                        // The ways of this row: a name sent under a case takes the row with it, and
+                        // the number beside it is written under the same case or not at all, since
+                        // no value is two cases.
+                        WaysToWrite ways = waysToWrite(subject, looking, term, at.trying());
+                        someUnsettled[0] |= ways.someNotWorkedOut();
+                        if (ways.to().isEmpty()) {
+                            missed.add(new ReachabilityGap.Uncomposed(cut,
+                                    new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                        }
+                        return () -> ways.to().stream()
+                                .map(way -> writing(at, term, way.target(), way.taken(), missed))
+                                .filter(Objects::nonNull)
+                                .iterator();
+                    }, way -> {
+                        switch (witnessed(way.trying(), way.routes(), way.owing())) {
+                            case Placed.AtAll placed -> {
+                                found[0] = placed;
+                                return false;
+                            }
+                            case Placed.AtNone(ReachabilityGap why) -> {
+                                missed.add(why);
+                                return true;
+                            }
+                        }
+                    });
+            if (found[0] != null) {
+                return found[0];
             }
-            return new Placed.AtNone(
-                    ReachabilityGap.overEveryWay(cut, missed, ways.someNotWorkedOut()));
+            if (walked == DepthFirst.Walked.CUT_SHORT) {
+                missed.add(new ReachabilityGap.Uncomposed(cut,
+                        ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
+                                CompositionShortfall.of(Set.of(
+                                        CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR)))));
+            }
+            return new Placed.AtNone(ReachabilityGap.overEveryWay(cut, missed, someUnsettled[0]));
         }
 
-        /** The placing with {@code term} written at {@code target}, and the rest after it. */
-        private Placed writing(int next, NumericTerm term, RealizationTarget.OfANumber target,
-                               Requirements trying,
-                               Map<NumericTerm, RealizationTarget> routes,
-                               SequencedMap<RealizationTarget, NumericTerm> owing) {
-            Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>(routes);
+        /** The placing with {@code term} written at {@code target} after {@code at}, or null
+         *  where the location refuses it, said in {@code missed}. */
+        private Placing writing(Placing at, NumericTerm term, RealizationTarget.OfANumber target,
+                                Requirements trying, List<ReachabilityGap> missed) {
+            SequencedMap<RealizationTarget, NumericTerm> owing = at.owing();
+            Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>(at.routes());
             routed.put(term, target);
             // This very number already stands somewhere: the item asked for it, or an earlier cut
             // did. Nothing to place, and the cut is answered at it either way. And where another
             // number of this cut is written at the same target, it is written there once: the
             // number is placed where that one is, and is no second demand on the location.
             if (alreadyStanding.containsKey(target) || owing.containsKey(target)) {
-                return from(next + 1, trying, routed, owing);
+                return new Placing(at.next() + 1, trying, routed, owing);
             }
             // Another number taken at the same location. A row writes one value where a location
             // is, and that one value has to answer both — the hour of a time beside its minute,
@@ -9343,12 +9388,13 @@ public final class Generator {
             placedHere.add(target);
             if (!beside.isEmpty()
                     && !writtenTogether(beside, target, someElementWith(placedHere))) {
-                return new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
+                missed.add(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
+                return null;
             }
             SequencedMap<RealizationTarget, NumericTerm> owed = new LinkedHashMap<>(owing);
             owed.put(target, writtenAs(subject, target));
-            return from(next + 1, trying, routed, owed);
+            return new Placing(at.next() + 1, trying, routed, owed);
         }
 
         /**
@@ -9841,7 +9887,11 @@ public final class Generator {
                 Map<RealizationTarget, NumbersAskedFor>> askedOf;
         private final List<ElementBound> bounds;
         private final Map<RealizationTarget, Place> countsToCome;
-        private int composedFor;
+
+        /** The point's allowance: each assignment composed for, and each end a walk placing a
+         *  condition's numbers reaches ({@link CutPlacing}). */
+        private final Tries allowance =
+                new Tries(CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR.maximum());
 
         /**
          * @param region   the way's region, which a location's value is composed in
@@ -9888,6 +9938,11 @@ public final class Generator {
             return unchosen;
         }
 
+        /** The point's allowance, which every walk for its conditions spends of. */
+        Tries allowance() {
+            return allowance;
+        }
+
         /** Whether some number stands because a condition on the way chose where it does. */
         boolean anyChosen() {
             return !chosen.isEmpty();
@@ -9920,11 +9975,10 @@ public final class Generator {
                                          SequencedMap<RealizationTarget, NumericTerm> owing,
                                          SequencedMap<NumericTerm, Place> assignment,
                                          List<ComposedAt> into) {
-            if (composedFor >= CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR.maximum()) {
+            if (!allowance.spend()) {
                 return new NumericWitness.Composed.NotBuilt(CompositionShortfall.of(
                         Set.of(CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR)));
             }
-            composedFor++;
             Map<RealizationTarget, Place> standing = new LinkedHashMap<>(alreadyStanding);
             owing.forEach((target, term) -> standing.put(target, assignment.get(term)));
             // And each count to come at a container these numbers are written at, where one value
@@ -12025,29 +12079,23 @@ public final class Generator {
 
         private static final CompositionBudget FIGURE =
                 CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
-        private static final int MOST = FIGURE.maximum();
 
-        private int handed;
-        private boolean stopped;
+        private final Tries left = new Tries(FIGURE.maximum());
 
         /** Whether one more row may be handed; where it may not, the walk is stopped at the
          *  figure. */
         boolean oneMore() {
-            if (++handed > MOST) {
-                stopped = true;
-                return false;
-            }
-            return true;
+            return left.spend();
         }
 
         /** Whether the walk was stopped at the figure. */
         boolean stopped() {
-            return stopped;
+            return left.cutShort();
         }
 
         /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
         SearchShortfall untried() {
-            return stopped ? SearchShortfall.of(CompositionShortfall.of(List.of(FIGURE)))
+            return stopped() ? SearchShortfall.of(CompositionShortfall.of(List.of(FIGURE)))
                     : SearchShortfall.NONE;
         }
     }
@@ -13530,7 +13578,7 @@ public final class Generator {
         RowComposed[] stoppedWith = {null};
         SearchShortfall[] passedOver = {null};
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
-        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
+        DepthFirst.Walked walked = under.tryEach(way -> {
             // And the value the way to the comparisons asks of each Bool position it read, beside
             // what the classes wrote — at the position each stands at in this way, which for a Bool
             // the cases share is under the case this way writes. A class of the position holding
@@ -13595,7 +13643,7 @@ public final class Generator {
                 }
             };
         });
-        if (walked == ContentsAsked.UnderTheCases.Walked.COMPOSED) {
+        if (walked == DepthFirst.Walked.TAKEN) {
             return stoppedWith[0];
         }
         return overTheAlternatives(cameToNothing, passedOver[0], under.foundOut(walked),
@@ -14777,65 +14825,53 @@ public final class Generator {
                 found.stream().filter(each -> decided.containsKey(each.at())).toList());
         positions.addAll(
                 found.stream().filter(each -> !decided.containsKey(each.at())).toList());
-        Budget budget = new Budget();
-        ComposedValue built = descend(positions, 0, new LinkedHashMap<>(),
-                new LinkedHashMap<>(settled), decided, composing, budget, candidates);
-        if (built != null) {
-            return new Outcome.Built(built);
+        Tries budget = new Tries(MAX_TUPLES);
+        ComposedValue[] built = {null};
+        DepthFirst.walk(new Descent(0, Map.of(), new LinkedHashMap<>(settled)), budget, at -> {
+            if (at.index() == positions.size()) {
+                return null;
+            }
+            ConstructionPlan.Slot position = positions.get(at.index());
+            TermPath where = position.at();
+            // Refused by its own type, so refused in every assignment under it: no branch is
+            // walked into it ({@link Composing} says why).
+            return () -> candidatesAt(position, at.settled(), decided, candidates).stream()
+                    .filter(candidate -> !composing.refusedAlone(where, candidate))
+                    .map(candidate -> at.taking(where, candidate))
+                    .iterator();
+        }, way -> {
+            if (composing.attempt(way.chosen()) instanceof Composing.Tried.Built(var value)) {
+                built[0] = value;
+                return false;
+            }
+            return true;
+        });
+        if (built[0] != null) {
+            return new Outcome.Built(built[0]);
         }
         // What the values chosen from met is the offer's, and is said with the offer's.
-        return budget.cutShort
+        return budget.cutShort()
                 ? new Outcome.Stopped(CompositionShortfall.of(
-                        java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
+                        Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
                         new LinkedHashMap<>(), null)
                 : new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                         null);
     }
 
     /**
-     * What is left of the bound on one search, and whether it ran out.
-     *
-     * <p>The two are one fact and are held together. Nothing left is not the same as everything
-     * tried, and a search that stopped at the bound reporting that every value was refused would put
-     * a combination nobody looked at beside the ones that were.
-     */
-    private static final class Budget {
-
-        private int left = MAX_TUPLES;
-        private boolean cutShort;
-
-        /**
-         * Whether there is room to compose one more assignment.
-         *
-         * <p>The only place the bound is called reached. Spending the last of it is not the same as
-         * being short of it: a search whose last assignment was composed and refused has tried
-         * everything it had, and marking it where the count reaches zero would report the one search
-         * that finished as the one that stopped.
-         */
-        boolean spend() {
-            if (left <= 0) {
-                cutShort = true;
-                return false;
-            }
-            left--;
-            return true;
-        }
-    }
-
-    /**
      * Every assignment one parameter's search composes, put through one place.
      *
-     * <p><b>The bound is spent only on an assignment whose answer is not already known.</b> Two
-     * kinds are known without composing them. One holds a value its own type refuses
+     * <p><b>An assignment whose answer is already known is not composed again.</b> Two kinds are
+     * known without composing them. One holds a value its own type refuses
      * ({@link CandidateCheck#admissibility}), which is refused in every value holding it. The other
-     * is one this search already composed and saw refused — the product walk's second pass walks
-     * every assignment of its first again before it reaches what was held back, and the conditioned
-     * search can arrive at an assignment the product walk tried. Neither is composed, and neither
-     * counts against {@link CompositionBudget#ASSIGNMENTS_A_SEARCH_COMPOSES}: what the bound limits
-     * is the questions this search had to put to the decoder, and those were not questions.
+     * is one this search already composed — the conditioned search can arrive at an assignment the
+     * product walk tried. What is saved is the composing. The walk that arrived at it spends its
+     * unit of {@link CompositionBudget#ASSIGNMENTS_A_SEARCH_COMPOSES} as at any other end, since
+     * what that bounds is the walking ({@link DepthFirst}), and arriving costs a walk the same
+     * whatever is known at the end of it.
      *
      * <p>Here and not at each pass, because a pass that asked for itself would be the pass that
-     * forgot to. The first assignment a pass tries is asked about like every other.
+     * forgot to.
      *
      * <p>Known by what the assignment writes at each position, and not by the values' trees, for
      * the reason {@code FixturesAtTheBoundary} keeps its answers by text: two occurrences of one
@@ -14958,12 +14994,8 @@ public final class Generator {
          * others, which may well be inside the class, where the value the assignment chose for that
          * class was never going to be.
          */
-        Tried attempt(Map<TermPath, FixtureTemplate> assigned, Budget budget) {
-            // One assignment is what the bound counts, however many ways it is written: the bound
-            // is how many assignments a search tries ({@link #MAX_TUPLES}), and a search that
-            // tried every one it had has not stopped short for having written some twice.
-            boolean[] spent = {false};
-            Tried put = put(assigned, budget, spent);
+        Tried attempt(Map<TermPath, FixtureTemplate> assigned) {
+            Tried put = put(assigned);
             if (!(put instanceof Tried.Refused || put instanceof Tried.Known)) {
                 return put;
             }
@@ -14973,8 +15005,8 @@ public final class Generator {
                 if (completed == null) {
                     continue;
                 }
-                Tried again = put(completed, budget, spent);
-                if (again instanceof Tried.Built || again instanceof Tried.OutOfBudget) {
+                Tried again = put(completed);
+                if (again instanceof Tried.Built) {
                     return again;
                 }
             }
@@ -15022,11 +15054,8 @@ public final class Generator {
          * <p>Put once whatever asks for it again: what was built is handed back as built, and what
          * was refused is known refused. Two assignments the model refuses may be written as the
          * same value of the places a rule ties together, and that value is one build.
-         *
-         * @param spent whether the assignment this writes has spent its place under the bound
-         *              already, which a second way of writing it does not spend again
          */
-        private Tried put(Map<TermPath, FixtureTemplate> chosen, Budget budget, boolean[] spent) {
+        private Tried put(Map<TermPath, FixtureTemplate> chosen) {
             Map<TermPath, String> written = new HashMap<>();
             for (Map.Entry<TermPath, FixtureTemplate> each : chosen.entrySet()) {
                 if (refusedAlone(each.getKey(), each.getValue())) {
@@ -15040,12 +15069,6 @@ public final class Generator {
             ComposedValue already = composedBefore.get(written);
             if (already != null) {
                 return new Tried.Built(already);
-            }
-            if (!spent[0]) {
-                if (!budget.spend()) {
-                    return new Tried.OutOfBudget();
-                }
-                spent[0] = true;
             }
             FromTheAssignment values = new FromTheAssignment(chosen, plan, here);
             Proposals built = compose(plan.root(), values, reading);
@@ -15105,58 +15128,32 @@ public final class Generator {
              */
             record NotHeld() implements Tried {}
 
-            /** Known refused without composing it, so nothing was spent. */
+            /** Known refused without composing it. */
             record Known() implements Tried {}
-
-            /** Not composed, because the bound is spent. */
-            record OutOfBudget() implements Tried {}
         }
     }
 
     /**
-     * The assignment this branch leads to, or null where none of them builds.
+     * The positions before {@code index} chosen.
      *
-     * @param chosen  what the positions before this one took
+     * @param chosen  what they took
      * @param settled the numbers among them, which is what a projection can be asked about
-     * @param budget  assignments left to compose, shared down the whole search
-     * @param candidates what a position can take under a settling, shared down the whole search
      */
-    private static ComposedValue descend(List<ConstructionPlan.Slot> positions, int index,
-                                           Map<TermPath, FixtureTemplate> chosen,
-                                           Map<TermPath, Place> settled,
-                                           Map<TermPath, List<FixtureTemplate>> decided,
-                                           Composing composing, Budget budget,
-                                           ConditionedCandidates candidates) {
-        if (index == positions.size()) {
-            return composing.attempt(chosen, budget) instanceof Composing.Tried.Built(var value)
-                    ? value : null;
-        }
-        ConstructionPlan.Slot position = positions.get(index);
-        TermPath where = position.at();
-        for (FixtureTemplate candidate
-                : candidatesAt(position, settled, decided, candidates)) {
-            // Refused by its own type, so refused in every assignment under this branch: the branch
-            // is not walked ({@link Composing} says why).
-            if (composing.refusedAlone(where, candidate)) {
-                continue;
-            }
-            chosen.put(where, candidate);
+    private record Descent(int index, Map<TermPath, FixtureTemplate> chosen,
+                           Map<TermPath, Place> settled) {
+
+        /** This with the position at {@code index} taking {@code candidate}. */
+        Descent taking(TermPath where, FixtureTemplate candidate) {
+            Map<TermPath, FixtureTemplate> took = new LinkedHashMap<>(chosen);
+            took.put(where, candidate);
+            Map<TermPath, Place> numbers = settled;
             Place number = Counts.writtenIn(candidate.value());
             if (number != null) {
-                settled.put(where, number);
+                numbers = new LinkedHashMap<>(settled);
+                numbers.put(where, number);
             }
-            ComposedValue found = descend(positions, index + 1, chosen, settled,
-                    decided, composing, budget, candidates);
-            if (found != null) {
-                return found;
-            }
-            chosen.remove(where);
-            settled.remove(where);
-            if (budget.cutShort) {
-                return null;
-            }
+            return new Descent(index + 1, took, numbers);
         }
-        return null;
     }
 
     /** What one position can take, given what the positions before it took. */
@@ -15683,14 +15680,16 @@ public final class Generator {
         if (!(walked instanceof Outcome.PassedOver)) {
             return walked;
         }
-        Outcome displaced = over(choices.at(), choices.displaced(reading), composing, taking);
+        Outcome displaced = over(choices.at(), choices.displaced(reading), null, composing,
+                taking);
         return displaced instanceof Outcome.Unresolved(UnresolvedCombination.Reason why, SearchMessage _)
                 && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED ? walked : displaced;
     }
 
     /** The ordinary passes: what the positions offer, and then what they held back as well. */
     private static Outcome ordinarily(Choices choices, Composing composing, ValueTaking taking) {
-        Outcome tried = over(choices.at(), choices.values(), composing, taking);        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
+        Outcome tried = over(choices.at(), choices.values(), null, composing, taking);
+        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
         // what is left on assignments further from what the model says the row is about, while the
         // nearer ones stay untried.
@@ -15704,9 +15703,11 @@ public final class Generator {
         if (!ranOut || !choices.anythingHeldBack()) {
             return tried;
         }
-        // The assignments of the first pass are all in this one too, nearest first, and each is
-        // known refused: the second pass reaches what was held back without spending on them.
-        Outcome widened = over(choices.at(), choices.widened(), composing, taking);
+        // The assignments of the first pass are all in this one too, nearest first, and every one
+        // of them was reached: the second pass steps across them to what was held back, and
+        // reaches none of them again.
+        List<Integer> walked = choices.values().stream().map(List::size).toList();
+        Outcome widened = over(choices.at(), choices.widened(), walked, composing, taking);
         // Passed over in the first pass and refused in the second is still a pass that composed
         // values the model takes, and saying every candidate was refused would be saying it did not.
         return tried instanceof Outcome.PassedOver
@@ -15732,12 +15733,25 @@ public final class Generator {
      *
      * <p>A position left with nothing is every assignment refused, and is said as that: the values
      * were offered and refused, which is not a position nothing could be offered at.
+     *
+     * <p>Every assignment the pass reaches is a unit of
+     * {@link CompositionBudget#ASSIGNMENTS_A_SEARCH_COMPOSES}, whatever is known of it when it is
+     * reached. A pass after one that walked the first {@code walkedBefore} of each position's
+     * values whole does not reach those assignments again: they are no part of what this pass
+     * looks for, and are only stepped across on the way to the ones that hold what was held back
+     * — no more of them than the pass before reached.
+     *
+     * @param walkedBefore how many of each position's values a pass before this one walked every
+     *                     assignment of, or null where none did
      */
     private static Outcome over(List<TermPath> at, List<List<FixtureTemplate>> offered,
-                                Composing composing, ValueTaking taking) {
+                                List<Integer> walkedBefore, Composing composing,
+                                ValueTaking taking) {
         int positions = at.size();
-        Budget budget = new Budget();
+        Tries budget = new Tries(MAX_TUPLES);
         int[] first = new int[positions];
+        boolean firstWalkedBefore = walkedBefore != null
+                && walkedBefore.stream().allMatch(each -> each > 0);
         // Whether some value was composed and passed over, which is what tells a walk that ran out
         // of values the model takes from one that ran out of values the caller takes.
         boolean passed = false;
@@ -15748,7 +15762,8 @@ public final class Generator {
         // value the caller has just passed over, and asking it twice is a second run for the same
         // answer.
         Set<String> handed = new LinkedHashSet<>();
-        if (composing.attempt(assigned(at, offered, first), budget)
+        if (!firstWalkedBefore && budget.spend()
+                && composing.attempt(assigned(at, offered, first))
                 instanceof Composing.Tried.Built(var value)) {
             switch (taking.take(value)) {
                 case TAKEN -> {
@@ -15764,10 +15779,26 @@ public final class Generator {
             }
         }
         List<List<FixtureTemplate>> values = new ArrayList<>();
+        // How many of each position's values left are among the ones walked before; and whether
+        // the first assignment of what is left is the one just asked, every first value being
+        // one its type takes.
+        int[] before = new int[positions];
+        boolean firstAsked = !firstWalkedBefore;
         for (int i = 0; i < positions; i++) {
             TermPath here = at.get(i);
-            values.add(offered.get(i).stream()
-                    .filter(each -> !composing.refusedAlone(here, each)).toList());
+            List<FixtureTemplate> all = offered.get(i);
+            List<FixtureTemplate> left = new ArrayList<>();
+            for (int each = 0; each < all.size(); each++) {
+                if (composing.refusedAlone(here, all.get(each))) {
+                    firstAsked &= each > 0;
+                    continue;
+                }
+                if (walkedBefore != null && each < walkedBefore.get(i)) {
+                    before[i]++;
+                }
+                left.add(all.get(each));
+            }
+            values.add(left);
         }
         if (values.stream().anyMatch(List::isEmpty)) {
             return passed ? new Outcome.PassedOver()
@@ -15785,27 +15816,25 @@ public final class Generator {
         boolean stopped = false;
         while (!next.isEmpty()) {
             int[] assignment = next.poll();
-            Map<TermPath, FixtureTemplate> chosen = assigned(at, values, assignment);
-            switch (composing.attempt(chosen, budget)) {
-                case Composing.Tried.Built(var value) -> {
-                    if (handed.add(value.value().text())) {
-                        switch (taking.take(value)) {
-                            case TAKEN -> {
-                                return new Outcome.Built(value);
-                            }
-                            case STOPPED -> {
-                                return new Outcome.Halted();
-                            }
-                            case PASSED -> passed = true;
-                        }
-                    }
-                }
-                case Composing.Tried.OutOfBudget _ -> stopped = true;
-                case Composing.Tried.Refused _, Composing.Tried.NotHandedOn _,
-                     Composing.Tried.NotHeld _, Composing.Tried.Known _ -> { }
-            }
-            if (stopped) {
+            // Not reached again, and only stepped across: the first assignment where it was just
+            // asked, and one of values the pass before walked every assignment of.
+            boolean reached = !(firstAsked && assignment == first) && !among(assignment, before);
+            if (reached && !budget.spend()) {
+                stopped = true;
                 break;
+            }
+            if (reached && composing.attempt(assigned(at, values, assignment))
+                    instanceof Composing.Tried.Built(var value)
+                    && handed.add(value.value().text())) {
+                switch (taking.take(value)) {
+                    case TAKEN -> {
+                        return new Outcome.Built(value);
+                    }
+                    case STOPPED -> {
+                        return new Outcome.Halted();
+                    }
+                    case PASSED -> passed = true;
+                }
             }
             for (int i = 0; i < positions; i++) {
                 if (assignment[i] + 1 >= values.get(i).size()) {
@@ -15830,6 +15859,17 @@ public final class Generator {
         return passed ? new Outcome.PassedOver()
                 : new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                         null);
+    }
+
+    /** Whether {@code assignment} takes, at each position, one of the first {@code before} of its
+     *  values. */
+    private static boolean among(int[] assignment, int[] before) {
+        for (int i = 0; i < assignment.length; i++) {
+            if (assignment[i] >= before[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** What one assignment puts at each position. */

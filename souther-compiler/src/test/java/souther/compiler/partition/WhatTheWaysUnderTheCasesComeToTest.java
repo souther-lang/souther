@@ -107,9 +107,9 @@ class WhatTheWaysUnderTheCasesComeToTest {
 
         assertEquals(SearchShortfall.of(CompositionShortfall.of(
                         Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))),
-                under.foundOut(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE));
+                under.foundOut(DepthFirst.Walked.CUT_SHORT));
         assertEquals(SearchShortfall.NONE,
-                under.foundOut(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED));
+                under.foundOut(DepthFirst.Walked.EVERY_END_REACHED));
     }
 
     /**
@@ -121,8 +121,8 @@ class WhatTheWaysUnderTheCasesComeToTest {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
                 .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE, Set.of());
 
-        assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED).unread());
-        assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.COMPOSED).unread());
+        assertTrue(under.foundOut(DepthFirst.Walked.EVERY_END_REACHED).unread());
+        assertTrue(under.foundOut(DepthFirst.Walked.TAKEN).unread());
     }
 
     /**
@@ -135,7 +135,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         Requirements asked = Requirements.of(LEAD.then("flag").refine(ONE), reach.crossings());
         List<Requirements> taken = new ArrayList<>();
 
-        assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
+        assertEquals(DepthFirst.Walked.EVERY_END_REACHED,
                 ContentsAsked.NONE.underTheCases(reach, asked, Set.of())
                         .tryEach(way -> {
                             taken.add(way.taken());
@@ -183,7 +183,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
                 .underTheCases(spreadUnderBoth("campaigns", "campaign"), Requirements.NONE, Set.of());
         List<ContentsAsked> handed = new ArrayList<>();
 
-        assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
+        assertEquals(DepthFirst.Walked.EVERY_END_REACHED,
                 under.tryEach(way -> {
                     handed.add(way.contents());
                     return false;
@@ -203,7 +203,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
                 .underTheCases(spreadUnderBoth("campaigns", "campaign"), Requirements.NONE, Set.of());
         int[] handed = {0};
 
-        assertEquals(ContentsAsked.UnderTheCases.Walked.COMPOSED,
+        assertEquals(DepthFirst.Walked.TAKEN,
                 under.tryEach(_ -> ++handed[0] == 1));
         assertEquals(1, handed[0]);
     }
@@ -216,7 +216,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     void theWaysStopAtTheFigureAndSaySo() {
         int[] handed = {0};
 
-        assertEquals(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE,
+        assertEquals(DepthFirst.Walked.CUT_SHORT,
                 apart("first", "second", "third", "fourth").tryEach(_ -> {
                     handed[0]++;
                     return false;
@@ -229,7 +229,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     void asManyWaysAsTheFigureAreEveryWay() {
         int[] handed = {0};
 
-        assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
+        assertEquals(DepthFirst.Walked.EVERY_END_REACHED,
                 apart("first", "second", "third").tryEach(_ -> {
                     handed[0]++;
                     return false;

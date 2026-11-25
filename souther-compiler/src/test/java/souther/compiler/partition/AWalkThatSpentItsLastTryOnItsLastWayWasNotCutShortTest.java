@@ -98,9 +98,13 @@ class AWalkThatSpentItsLastTryOnItsLastWayWasNotCutShortTest {
                 return 1000;
             }
         };
-        assertTrue(EveryWayOfChoosing.each(List.of(ahead, ahead, List.<Integer>of()), chosen -> {
-            throw new AssertionError("there is no way to hand out: " + chosen);
-        }));
+        Tries tries = new Tries(1);
+        assertEquals(DepthFirst.Walked.EVERY_END_REACHED,
+                EveryWayOfChoosing.each(List.of(ahead, ahead, List.<Integer>of()), tries,
+                        chosen -> {
+                            throw new AssertionError("there is no way to hand out: " + chosen);
+                        }));
         assertEquals(0, read[0], "the values ahead of the empty list were read");
+        assertFalse(tries.spent(), "nothing was spent");
     }
 }

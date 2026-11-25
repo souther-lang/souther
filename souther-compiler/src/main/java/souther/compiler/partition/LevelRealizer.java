@@ -2482,6 +2482,10 @@ public final class LevelRealizer {
             SearchRegion next =
                     narrowing(here, terms.get(i).getKey().term(), x);
             if (next == null) {
+                // A value the region refuses is a step of the walk as one it takes is: the
+                // narrowing was worked out either way, and a run of values every one of them
+                // refused would otherwise be walked to its end at no cost to the figure.
+                steps.taken++;
                 return Reached.EXHAUSTED;
             }
             // A value tried can put what is owed after it out of the exact arithmetic's reach where

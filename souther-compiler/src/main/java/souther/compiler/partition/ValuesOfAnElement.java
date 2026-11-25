@@ -260,10 +260,20 @@ final class ValuesOfAnElement {
     private static final int MOST_HELD =
             CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
 
+    /**
+     * Each container of {@code left} more elements after {@code taken}, into {@code out} while it
+     * holds fewer than {@code most}.
+     *
+     * <p>Bounded by {@code most} because every branch walked ends at a container: a set is taken
+     * from the elements after the last one taken, and one with fewer of them left than it still
+     * needs is no set at all, so it is not walked. A walk into it would go through every choice of
+     * the elements before it and end at none — as many choices as there are sets of them, none of
+     * them a container the bound counts.
+     */
     private static void takenFrom(boolean distinct, int left, int from,
                                   List<ObservedValue> elements, List<ObservedValue> taken, int most,
                                   List<ObservedValue> out) {
-        if (out.size() >= most) {
+        if (out.size() >= most || (distinct && elements.size() - from < left)) {
             return;
         }
         if (left == 0) {

@@ -55,7 +55,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -774,8 +773,7 @@ final class StopsOfABody {
                 continue;
             }
             List<Map<NumericTerm, Attainment>> ways = new ArrayList<>();
-            if (!waysOf(List.copyOf(worked.keySet()), 0, new LinkedHashMap<>(), new ArrayList<>(),
-                    worked, ways, new boolean[1]) || ways.isEmpty()
+            if (!waysOfEach(List.copyOf(worked.keySet()), worked, List.of(), ways) || ways.isEmpty()
                     || worked.values().stream().anyMatch(each -> each.ways().isEmpty())) {
                 return null;
             }
@@ -1125,70 +1123,60 @@ final class StopsOfABody {
             keptBy.add(kept);
             droppedBy.add(dropped);
         }
+        // Each way of keeping the elements: each one kept, and dropped by each way its dropping
+        // holds ({@link #alternativesOf}). Some are left where the figure is reached, where the
+        // total kept so far has no form, and where a dropping was not read — the last two a way
+        // there may be and nothing here worked out, which no figure raised would find.
         List<Attainment> ways = new ArrayList<>();
-        boolean left = !waysOfKeeping(forms, keptBy, droppedBy, 0,
-                LinearForm.constant(ExactRatio.ZERO), new ArrayList<>(), ways, new boolean[1]);
-        return new Keeping(new Attainments(ways, left), range);
-    }
-
-    /** Each way of keeping the elements from {@code at} on, after {@code sofar} under
-     *  {@code holding}, into {@code out}, as many as {@link #MOST_WAYS_OF_KEEPING}: an element
-     *  kept, and dropped by each way its dropping holds ({@link #alternativesOf}). False where
-     *  some were left, for the figure or for a dropping not read. */
-    private static boolean waysOfKeeping(List<LinearForm<NumericTerm>> forms,
-                                         List<List<TakenConstraint.Affine>> keptBy,
-                                         List<List<List<TakenConstraint.Affine>>> droppedBy,
-                                         int at, LinearForm<NumericTerm> sofar,
-                                         List<TakenConstraint.Affine> holding,
-                                         List<Attainment> out, boolean[] full) {
-        // Past the figure nothing more is made, and nothing more is looked at to make it.
-        if (full[0]) {
-            return false;
-        }
-        if (at == forms.size()) {
-            if (out.size() >= MOST_WAYS_OF_KEEPING) {
-                full[0] = true;
-                return false;
-            }
-            out.add(new Attainment(sofar, List.copyOf(holding)));
-            return true;
-        }
-        boolean all = true;
-        if (forms.get(at).plus(sofar) instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(
-                var kept)) {
-            all = under(keptBy.get(at), holding, () ->
-                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, kept, holding, out, full));
-        } else {
-            all = false;
-        }
-        if (droppedBy.get(at) == null) {
-            return false;
-        }
-        for (List<TakenConstraint.Affine> dropping : droppedBy.get(at)) {
-            all &= under(dropping, holding, () ->
-                    waysOfKeeping(forms, keptBy, droppedBy, at + 1, sofar, holding, out, full));
-        }
-        return all;
+        boolean[] unread = {false};
+        DepthFirst.Walked walked = DepthFirst.walk(
+                new Along<>(0, LinearForm.<NumericTerm>constant(ExactRatio.ZERO), List.of()),
+                new Tries(MOST_WAYS_OF_KEEPING), sofar -> {
+                    int next = sofar.at();
+                    if (next == forms.size()) {
+                        return null;
+                    }
+                    List<Along<LinearForm<NumericTerm>>> out = new ArrayList<>();
+                    if (forms.get(next).plus(sofar.sofar())
+                            instanceof ExactAnswer.Held<LinearForm<NumericTerm>>(var kept)) {
+                        sofar.with(kept, keptBy.get(next), out);
+                    } else {
+                        unread[0] = true;
+                    }
+                    if (droppedBy.get(next) == null) {
+                        unread[0] = true;
+                    } else {
+                        for (List<TakenConstraint.Affine> dropping : droppedBy.get(next)) {
+                            sofar.with(sofar.sofar(), dropping, out);
+                        }
+                    }
+                    return out;
+                }, way -> ways.add(new Attainment(way.sofar(), way.holding())));
+        return new Keeping(new Attainments(ways,
+                walked == DepthFirst.Walked.CUT_SHORT || unread[0]), range);
     }
 
     /**
-     * What {@code then} answers with {@code more} held beside {@code holding}, which is left as it
-     * was; true without asking it where one of {@code more} is the denial of one held, which no row
-     * meets both of.
+     * A walk over positions, each taking something under relations held beside what the ones
+     * before it hold: past {@code at} positions, what they came to, and the relations they hold.
      */
-    private static boolean under(List<TakenConstraint.Affine> more,
-                                 List<TakenConstraint.Affine> holding, BooleanSupplier then) {
-        for (TakenConstraint.Affine each : more) {
-            if (holding.contains(new TakenConstraint.Affine(each.form(), each.rel().denied()))) {
-                return true;
+    private record Along<V>(int at, V sofar, List<TakenConstraint.Affine> holding) {
+
+        /**
+         * The next position taking {@code next} under {@code more}, into {@code out} — and nothing
+         * where one of {@code more} is the denial of one held, which no row meets both of.
+         */
+        void with(V next, List<TakenConstraint.Affine> more, List<Along<V>> out) {
+            for (TakenConstraint.Affine each : more) {
+                TakenConstraint.Affine denied =
+                        new TakenConstraint.Affine(each.form(), each.rel().denied());
+                if (holding.contains(denied)) {
+                    return;
+                }
             }
-        }
-        int mark = holding.size();
-        holding.addAll(more);
-        try {
-            return then.getAsBoolean();
-        } finally {
-            holding.subList(mark, holding.size()).clear();
+            List<TakenConstraint.Affine> both = new ArrayList<>(holding);
+            both.addAll(more);
+            out.add(new Along<>(at + 1, next, List.copyOf(both)));
         }
     }
 
@@ -1914,7 +1902,7 @@ final class StopsOfABody {
 
     /**
      * Every way of putting a way of each of {@code values} together under {@code way}, into
-     * {@code out} ({@link #waysOf}); false where some were left.
+     * {@code out}, walked {@link DepthFirst}; false where some were left.
      *
      * <p>A value no way makes a number of leaves no way of putting them together, whatever the
      * others have, so nothing is walked and nothing is left: the ways made of the others, and any
@@ -1935,40 +1923,30 @@ final class StopsOfABody {
                 leftUnmade = true;
             }
         }
-        return !leftUnmade && waysOf(values, 0, new LinkedHashMap<>(), new ArrayList<>(way), worked,
-                out, new boolean[1]);
-    }
-
-    /** Every way of putting a way of each of {@code values} from {@code at} on, after
-     *  {@code sofar} under {@code holding}, into {@code out}, as many as
-     *  {@link #MOST_WAYS_TRIED}: none whose relations deny each other ({@link #under}). False
-     *  where more were left, or some value's ways were left unmade. */
-    private static boolean waysOf(List<NumericTerm> values, int at,
-                                  Map<NumericTerm, Attainment> sofar,
-                                  List<TakenConstraint.Affine> holding,
-                                  Map<NumericTerm, Attainments> worked,
-                                  List<Map<NumericTerm, Attainment>> out, boolean[] full) {
-        // Past the figure nothing more is made, and nothing more is looked at to make it.
-        if (full[0]) {
+        if (leftUnmade) {
             return false;
         }
-        if (at == values.size()) {
-            if (out.size() >= MOST_WAYS_TRIED) {
-                full[0] = true;
-                return false;
-            }
-            out.add(Map.copyOf(sofar));
-            return true;
-        }
-        Attainments ways = worked.get(values.get(at));
-        boolean all = !ways.leftUnmade();
-        for (Attainment way : ways.ways()) {
-            sofar.put(values.get(at), way);
-            all &= under(way.holding(), holding, () ->
-                    waysOf(values, at + 1, sofar, holding, worked, out, full));
-            sofar.remove(values.get(at));
-        }
-        return all;
+        // None whose relations deny each other ({@link Along#with}), as many as the figure — and
+        // where some value's ways were left unmade, the ways put together are not all there are.
+        boolean[] unmade = {false};
+        DepthFirst.Walked walked = DepthFirst.walk(
+                new Along<Map<NumericTerm, Attainment>>(0, Map.of(), List.copyOf(way)),
+                new Tries(MOST_WAYS_TRIED), at -> {
+                    if (at.at() == values.size()) {
+                        return null;
+                    }
+                    NumericTerm value = values.get(at.at());
+                    Attainments ways = worked.get(value);
+                    unmade[0] |= ways.leftUnmade();
+                    List<Along<Map<NumericTerm, Attainment>>> next = new ArrayList<>();
+                    for (Attainment one : ways.ways()) {
+                        Map<NumericTerm, Attainment> sofar = new LinkedHashMap<>(at.sofar());
+                        sofar.put(value, one);
+                        at.with(Collections.unmodifiableMap(sofar), one.holding(), next);
+                    }
+                    return next;
+                }, each -> out.add(each.sofar()));
+        return walked == DepthFirst.Walked.EVERY_END_REACHED && !unmade[0];
     }
 
     /** {@code operation} over numbers of the input, each value worked out it is over put as

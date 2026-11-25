@@ -245,8 +245,10 @@ public enum CompositionBudget {
      *  walked to the end at any length. */
     STEPS_A_SEARCH_MAY_TAKE(200_000),
 
-    /** How many assignments of one parameter's positions a search composes. A bound on the search
-     *  and not on any one position. */
+    /** How many assignments of one parameter's positions a search reaches, and positions it finds
+     *  nothing to choose at after the ones before them: each is an end of the walk, whether it is
+     *  composed or already known ({@link DepthFirst}). A bound on the search and not on any one
+     *  position. */
     ASSIGNMENTS_A_SEARCH_COMPOSES(256),
 
     /** How many values of a progression nothing bounds are tried. */

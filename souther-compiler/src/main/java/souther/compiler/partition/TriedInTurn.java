@@ -17,10 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * worked out before an operation ({@link StopAssessment}), and one looking past what a
  * construction asks ({@link ConstructionStopAssessment}). Which values each number is tried at, and
  * what is asked of one way of putting them, are each search's own. The ways are
- * {@link EveryWayOfChoosing}'s, and each one asked spends a unit of {@link Tries}: where a way is
- * to be asked and no unit is left, the walk is cut short there. A walk that spent its last unit on
- * its last way, or that had no way to ask because a number has no value to be tried at, left
- * nothing.
+ * {@link EveryWayOfChoosing}'s, each one asked a unit of {@link Tries}.
  */
 final class TriedInTurn {
 
@@ -43,10 +40,7 @@ final class TriedInTurn {
             values.add(tried.get(number));
         }
         AtomicReference<R> found = new AtomicReference<>();
-        EveryWayOfChoosing.each(values, chosen -> {
-            if (!left.spend()) {
-                return false;
-            }
+        EveryWayOfChoosing.each(values, left, chosen -> {
             Map<NumericTerm, ExactRatio> at = new LinkedHashMap<>();
             for (int each = 0; each < numbers.size(); each++) {
                 at.put(numbers.get(each), chosen.get(each));

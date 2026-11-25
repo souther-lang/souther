@@ -153,17 +153,11 @@ public final class InputNumbersAnAnswerTurnsOn {
         CompositionBudget pairsFigure = CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED;
         CompositionBudget lookedFigure = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT;
         int mostPairs = pairsFigure.maximum();
-        int mostLooked = lookedFigure.maximum();
         List<InputNumbersAnAnswerTurnsOn> out = new ArrayList<>();
-        int[] looked = {0};
-        EveryWayOfChoosing.each(candidates, choice -> {
-            // The walk is bounded before a choice is looked at: one counted past the figure is one
-            // that was never put to the way.
-            if (looked[0] == mostLooked) {
-                stoppedBy.add(lookedFigure);
-                return false;
-            }
-            looked[0]++;
+        // The walk is bounded before a choice is looked at: one past the figure is one that was
+        // never put to the way.
+        Tries looked = new Tries(lookedFigure.maximum());
+        EveryWayOfChoosing.each(candidates, looked, choice -> {
             InputNumbersAnAnswerTurnsOn pair = pinned(reaching, terms, choice, naming, ofTheRow);
             if (pair == null) {
                 return true;
@@ -175,6 +169,9 @@ public final class InputNumbersAnAnswerTurnsOn {
             out.add(pair);
             return true;
         });
+        if (looked.cutShort()) {
+            stoppedBy.add(lookedFigure);
+        }
         return out.isEmpty() ? new Pairs(List.of(unpinned), stoppedBy) : new Pairs(out, stoppedBy);
     }
 
@@ -359,14 +356,9 @@ public final class InputNumbersAnAnswerTurnsOn {
         List<ExactRatio> out = new ArrayList<>();
         // The ends of every place, which is as many choices as the places have ends multiplied, so
         // the walk over them is held to what a walk over the input's numbers is.
-        int[] looked = {0};
         CompositionBudget lookedFigure = CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT;
-        int mostLooked = lookedFigure.maximum();
-        EveryWayOfChoosing.each(ends, choice -> {
-            if (looked[0]++ == mostLooked) {
-                stoppedBy.add(lookedFigure);
-                return false;
-            }
+        Tries looked = new Tries(lookedFigure.maximum());
+        EveryWayOfChoosing.each(ends, looked, choice -> {
             // Every product first and then one sum of them: a run of additions asks every partial
             // sum to be held, and which partial sums there are is the order the places are in, which
             // is the names' and not anything the weights and ends say.
@@ -382,6 +374,9 @@ public final class InputNumbersAnAnswerTurnsOn {
             }
             return true;
         });
+        if (looked.cutShort()) {
+            stoppedBy.add(lookedFigure);
+        }
         return out;
     }
 

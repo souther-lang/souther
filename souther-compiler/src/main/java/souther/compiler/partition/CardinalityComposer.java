@@ -50,6 +50,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
 
 /**
  * Containers with so many of their elements meeting each of some statements.
@@ -3327,11 +3328,9 @@ final class CardinalityComposer {
         /** How many of a group's values one sharing may draw, by the group. */
         private final IntUnaryOperator capacity;
 
-        /** How many more sharings this may look at, over every size it is asked for. */
-        private int left;
-
-        /** Whether a sharing was in front of the walk when there was no room left for it. */
-        private boolean stopped;
+        /** How many more sharings this may look at, over every size it is asked for: each one
+         *  handed over and each that falls away before every element is shared out. */
+        private final Tries left;
 
         /** Whether some group from the {@code g}-th on meets the {@code i}-th thing asked, at
          *  {@code [g][i]}: worked out once, from the last group back. */
@@ -3366,7 +3365,7 @@ final class CardinalityComposer {
             this.joints = joints;
             this.size = size;
             this.capacity = capacity;
-            this.left = most;
+            this.left = new Tries(most);
             int count = groups.counts().size();
             this.meetableFrom = new boolean[count + 1][asked.size()];
             for (int g = count - 1; g >= 0; g--) {
@@ -3391,60 +3390,58 @@ final class CardinalityComposer {
                 return true;
             }
             this.elements = elements;
-            return share(new int[groups.counts().size()], new int[asked.size()], 0, elements,
-                    take);
+            return DepthFirst.walk(new Shared(0, elements, new int[groups.counts().size()],
+                    new int[asked.size()]), left, this::sharingsPast, way -> {
+                        if (!meetsEveryCount(way.meeting())) {
+                            return true;
+                        }
+                        handedOver = way.meeting();
+                        return take.test(way.share());
+                    }) == DepthFirst.Walked.EVERY_END_REACHED;
         }
 
         /** Whether a sharing was left unlooked at for the figure, which is what the walk was
          *  stopped by and not the sharings running out. */
         boolean spent() {
-            return stopped;
+            return left.cutShort();
         }
 
         /**
-         * @param meeting how many of the elements shared out before {@code g} meet each statement
+         * The groups before {@code g} shared out.
+         *
+         * @param remaining the elements left to share out among the rest
+         * @param share     how many of each group's values the sharing draws
+         * @param meeting   how many of the elements shared out meet each thing asked
          */
-        private boolean share(int[] share, int[] meeting, int g, int remaining,
-                              Predicate<int[]> take) {
-            if (g == share.length) {
-                if (remaining != 0) {
-                    return true;
-                }
-                if (left == 0) {
-                    stopped = true;
-                    return false;
-                }
-                left--;
-                if (!meetsEveryCount(meeting)) {
-                    return true;
-                }
-                handedOver = meeting;
-                return take.test(share.clone());
+        private record Shared(int g, int remaining, int[] share, int[] meeting) {}
+
+        /**
+         * The sharings one group past {@code at}, the most of its values first — none where the
+         * elements left cannot bring every count to what it asks, or have already taken one past
+         * it, which is no sharing whatever the rest of it is — or null where every group is shared
+         * out and so is every element. Every group shared out with elements left over is no
+         * sharing either.
+         */
+        private Iterable<Shared> sharingsPast(Shared at) {
+            int g = at.g();
+            if (g == at.share().length) {
+                return at.remaining() == 0 ? null : List.of();
             }
-            // A sharing whose counts the elements left cannot bring to what is asked, or have
-            // already taken past it, is none whatever the rest of it is, and is not walked.
-            if (!stillMeetable(meeting, g, remaining)) {
-                return true;
+            if (!stillMeetable(at.meeting(), g, at.remaining())) {
+                return List.of();
             }
             int weight = groups.weights().get(g);
-            int most = Math.min(remaining / weight, capacity.applyAsInt(g));
+            int most = Math.min(at.remaining() / weight, capacity.applyAsInt(g));
             int[] counted = groups.counts().get(g);
-            for (int n = most; n >= 0; n--) {
+            return () -> IntStream.iterate(most, n -> n >= 0, n -> n - 1).mapToObj(n -> {
+                int[] share = at.share().clone();
                 share[g] = n;
+                int[] meeting = at.meeting().clone();
                 for (int i = 0; i < counted.length; i++) {
                     meeting[i] += n * counted[i];
                 }
-                boolean more = share(share, meeting, g + 1, remaining - n * weight, take);
-                for (int i = 0; i < counted.length; i++) {
-                    meeting[i] -= n * counted[i];
-                }
-                if (!more) {
-                    share[g] = 0;
-                    return false;
-                }
-            }
-            share[g] = 0;
-            return true;
+                return new Shared(g + 1, at.remaining() - n * weight, share, meeting);
+            }).iterator();
         }
 
         /**
