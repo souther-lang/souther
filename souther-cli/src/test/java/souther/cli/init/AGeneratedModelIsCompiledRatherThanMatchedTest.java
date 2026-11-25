@@ -39,7 +39,10 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
      */
     @Test
     void everyModelShortOfTheFullOneCompiles() {
-        for (Model model : List.of(Model.NONE, Model.MINIMAL)) {
+        for (Model model : Model.values()) {
+            if (model == Model.FULL) {
+                continue;
+            }
             List<Located> warnings = new ArrayList<>();
             Compilation compiled = Compiler.compiledModules(texts(model), ModulePath.EMPTY,
                     warnings, Adequacy.Asked.NOTHING);

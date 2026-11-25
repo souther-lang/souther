@@ -19,9 +19,11 @@ class WhatInitWritesIsAlreadyInTheFormFmtWritesTest {
         for (Model model : Model.values()) {
             Project project = new Project(new Coordinate("com.example", "hello"),
                     "com.example.hello", model, BuildSystem.MAVEN, "9.9.9");
-            String written = Templates.sourcesOf(project).getFirst().content();
-            assertEquals(Formatter.format(written), written,
-                    () -> model + " is not in the form fmt writes");
+            for (Templates.File file : Templates.sourcesOf(project)) {
+                String written = file.content();
+                assertEquals(Formatter.format(written), written,
+                        () -> model + ": " + file.path() + " is not in the form fmt writes");
+            }
         }
     }
 }
