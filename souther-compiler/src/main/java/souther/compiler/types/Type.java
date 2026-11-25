@@ -549,7 +549,7 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
                 Type key = at.apply(m.key(), with.key());
                 Type value = key == null ? null : at.apply(m.value(), with.value());
                 yield value == null ? null
-                        : key == m.key() && value == m.value() ? m : new MapOf(key, value);
+                        : (key == m.key() && value == m.value()) ? m : new MapOf(key, value);
             }
             case TupleOf tu -> {
                 List<Type> elements = other instanceof TupleOf with
@@ -564,7 +564,8 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
                 List<Type> params = eachPaired(f.params(), with.params(), at);
                 Type result = params == null ? null : at.apply(f.result(), with.result());
                 yield result == null ? null
-                        : params == f.params() && result == f.result() ? f : new FnOf(params, result);
+                        : (params == f.params() && result == f.result()) ? f
+                                : new FnOf(params, result);
             }
         };
     }
