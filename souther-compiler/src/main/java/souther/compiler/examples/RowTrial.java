@@ -101,7 +101,7 @@ public final class RowTrial {
                               EvaluationPolicy steps) {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
-        EnsuresChecks ensures = new EnsuresChecks(loader, ensured, signatures.keySet());
+        EnsuresChecks ensures = new EnsuresChecks(loader, ensured);
         UnionMembers members = new UnionMembers(loader, kinds, sums);
         RowTrials running = (behavior, sig) -> new RowTrials.OfBehavior() {
 

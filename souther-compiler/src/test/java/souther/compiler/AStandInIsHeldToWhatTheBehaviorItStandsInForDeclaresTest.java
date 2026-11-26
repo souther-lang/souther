@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
@@ -9,14 +10,18 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Output;
 import souther.compiler.source.SourceId;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,10 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What a {@code _} row and a {@code with} answer is held to what the behavior they stand in for
  * declares, for the arguments the stand-in is called with, whoever implements that behavior.
  *
- * <p>Neither states an input, so neither can be held where it is written. A behavior with a body
- * holds its own answer in the body, and a stand-in takes the body's place, so the stand-in holds it
- * instead. A behavior another module declares is checked by nothing the calling code emits, so the
- * stand-in holds that one too, to the declaring module's clause.
+ * <p>Neither states an input, so neither can be held where it is written. A stand-in takes the place
+ * of the behavior's implementation and owes what that implementation owed. A body holds its own
+ * answer, so a stand-in for one holds it instead — in whichever module the body is written. What
+ * Java supplies is held by the code calling it, where the answer comes back, and a stand-in for it
+ * leaves that to the same code, which is the one check whichever module's stage calls it.
  *
  * <p>Each refusal is read for the clause that stopped the row, since a row stopping for some other
  * reason would be refused with the same code.
@@ -139,9 +145,8 @@ class AStandInIsHeldToWhatTheBehaviorItStandsInForDeclaresTest {
     }
 
     /**
-     * A behavior another module declares, stood in for here. The calling code emits no check for a
-     * behavior it did not declare, so the stand-in holds it, to the clause the declaring module
-     * wrote.
+     * A behavior with a body in another module, stood in for here. The body is what checked its
+     * answer, so the stand-in holds it, to the clause the declaring module wrote.
      */
     @Test
     void aStandInForABehaviorAnotherModuleDeclaresIsHeldToThatModulesClause() {
@@ -169,7 +174,81 @@ class AStandInIsHeldToWhatTheBehaviorItStandsInForDeclaresTest {
         stoppedBy(c, "past the bound", "probe.rates.convert: bounded");
     }
 
+    /**
+     * A behavior Java supplies to another module, whose stage this module's composition hands the
+     * stand-in to. That stage's own code checks the answer where it comes back, so the stand-in
+     * runs no check of its own — and {@code double}, which has a body there, would be held by the
+     * stand-in that took its place. Each is answered by the module declaring it, which is what the
+     * stand-in is built with; the module whose rows these are decided nothing about either.
+     */
+    private static final String PRICED = """
+            module lib.q exposing ( rate, double, priced : Int )
+
+            behavior rate : (n: Int) -> Int
+                ensures positive = value > n
+
+            behavior double : (n: Int) -> Int
+                ensures twice = value == n + n
+            let double (n) = n + n
+
+            behavior priced = rate >-> double
+            """;
+
+    private static String again(String rateAnswers) {
+        return """
+                module app.v
+                import lib.q ( priced, double )
+
+                behavior again = priced >-> double
+
+                fake lib.q.rate
+                    | _ -> %s
+
+                example again
+                    | "four times what rate answers" : (1) -> 40
+                """.formatted(rateAnswers);
+    }
+
+    @Test
+    void aStandInHandedToAnotherModulesStageIsHeldByHowItsOwnModuleHoldsIt() {
+        Compilation c = compiles(List.of(PRICED, again("10")));
+
+        assertEquals(Map.of(
+                        new ValueName.Behavior("lib.q", "rate"),
+                        EnsuresEnforcement.AtEachCrossing.class,
+                        new ValueName.Behavior("lib.q", "double"),
+                        EnsuresEnforcement.AtTheCallee.class),
+                heldAsDeclared(c, "app.v", "rate", "double"),
+                "the answers are the declaring module's, never the rows' module's not-decided");
+        held(c, "four times what rate answers");
+    }
+
+    @Test
+    void anAnswerTheOtherModulesStageRulesOutStopsTheRowAtThatClause() {
+        Compilation c = ACompiledModel.refusedWith(List.of("E1905"),
+                Compilation.ofSources(List.of(PRICED, again("-5")), ModulePath.EMPTY));
+
+        stoppedBy(c, "four times what rate answers", "lib.q.rate: positive");
+    }
+
     // --- harness --------------------------------------------------------------------------------
+
+    private static Compilation compiles(List<String> sources) {
+        return ACompiledModel.compiles(Compilation.ofSources(sources, ModulePath.EMPTY));
+    }
+
+    /** How the reading of {@code module}'s rows holds each of {@code names} of {@code lib.q}. */
+    private static Map<ValueName.Behavior, Class<?>> heldAsDeclared(Compilation c, String module,
+                                                                  String... names) {
+        Map<ValueName.Behavior, EnsuresEnforcement> held =
+                ExampleExecutions.of(c.db(), module).ensured().held();
+        Map<ValueName.Behavior, Class<?>> kinds = new LinkedHashMap<>();
+        for (String name : names) {
+            ValueName.Behavior behavior = new ValueName.Behavior("lib.q", name);
+            kinds.put(behavior, held.get(behavior).getClass());
+        }
+        return kinds;
+    }
 
     private static Compilation refused(String source) {
         return ACompiledModel.refusedWith(List.of("E1905"),

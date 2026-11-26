@@ -133,7 +133,7 @@ public final class ExampleStatements {
                               Deadline deadline, EvaluationPolicy policy,
                               DeclaredEnsures ensured,
                               Map<String, Declaring> declaring) {
-        this.ensures = new EnsuresChecks(loader, ensured, sigs.keySet());
+        this.ensures = new EnsuresChecks(loader, ensured);
         this.declaring = declaring;
         this.module = module;
         this.symbols = symbols;

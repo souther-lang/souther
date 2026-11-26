@@ -5,7 +5,6 @@ import souther.compiler.abort.AbortSet;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What is being done about a behavior's {@code ensures}, answered once for the whole compilation.
@@ -184,24 +183,21 @@ public sealed interface EnsuresEnforcement {
     }
 
     /**
-     * What is being done about {@code behavior}'s clause, read from what it declares and from
-     * whether its body comes from outside.
+     * What is being done about a behavior's clause, read from what it declares ({@code contract},
+     * null where it declares nothing) and from whether Java supplies its body.
      *
-     * <p>The one place the two facts meet, and it is asked only of a behavior this compilation
-     * declares. {@code injected} has to be the set as the requirements pass answered it: the backend
-     * goes on adding to a set of that name, so that a behavior this module gives a body to but
-     * reaches as a dependency joins it, and a reader arriving afterwards would find a bodied
-     * behavior sitting among the injected ones.
+     * <p>The one place the two facts meet. Both are facts about the behavior as the module that
+     * declares it has it, so the answer is the same whoever asks: the compilation of that module
+     * placing its checks, and a run standing something in for the behavior asking what the
+     * implementation it replaced would have checked. {@code injected} is the classification the
+     * declaring module answers ({@code Bodies.Implementation}), and not the set the backend goes on
+     * adding to, where a behavior this module gives a body to but reaches as a dependency joins the
+     * injected ones.
      */
-    public static EnsuresEnforcement of(ValueName.Behavior behavior,
-                                        Map<String, Contract> contracts,
-                                        Set<ValueName.Behavior> injected) {
-        Contract contract = contracts.get(behavior.name());
+    public static EnsuresEnforcement of(Contract contract, boolean injected) {
         if (contract == null) {
             return NoContract.INSTANCE;
         }
-        return injected.contains(behavior)
-                ? new AtEachCrossing(contract)
-                : new AtTheCallee(contract);
+        return injected ? new AtEachCrossing(contract) : new AtTheCallee(contract);
     }
 }

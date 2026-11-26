@@ -1,28 +1,34 @@
 package souther.compiler.execute;
 
-import souther.compiler.core.Contract;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
 
 /**
- * What the behaviors a module's rows reach declare of what they answer, and where that module's own
- * compilation checks each of its own.
+ * What every behavior a module's rows reach declares of what it answers, and how the module that
+ * declares it holds that.
  *
- * <p>Two maps over two sets, and the difference is the point. {@code clauses} holds every reachable
- * behavior that states something, under the declaration it belongs to, because a value a row or a
- * stand-in gives for a behavior another module declares is held to that module's clause.
- * {@code placed} holds what {@code module} decided for each behavior it declares, and nothing for
- * another module's, which {@link EnsuresEnforcement#in} reads as not decided here rather than as a
- * table that was not filled. Joined into one map, the second distinction would be lost.
+ * <p>Each answer is the declaring module's and not the module whose rows these are. A stand-in for a
+ * behavior takes the place of its implementation, and what it owes is what that implementation owed:
+ * a body checks its own answer, and what Java supplies is checked by the code calling it. That is a
+ * fact about the behavior, so it is one answer however many places call the stand-in — the rows'
+ * own module, or a stage another module declares that a composition hands the same stand-in to.
  *
- * <p>Together because what holds a stand-in needs both: the clause to run, and whether the code that
- * calls the stand-in already runs it.
+ * <p>Every reachable behavior is here, the ones that state nothing included, so being absent means
+ * that the behavior was not read and nothing else. None is {@link EnsuresEnforcement.NotDecidedHere}:
+ * that is a caller's answer about a module it does not own, and each answer here is the owner's.
  *
- * @param module  the module whose rows these are, and whose emitted code applies them
- * @param clauses what each reachable behavior declares, where it declares something
- * @param placed  where {@code module}'s compilation checks each behavior it declares
+ * @param held how the module declaring each reachable behavior holds what it declares
  */
-public record DeclaredEnsures(String module, Map<ValueName.Behavior, Contract> clauses,
-                              Map<ValueName.Behavior, EnsuresEnforcement> placed) {}
+public record DeclaredEnsures(Map<ValueName.Behavior, EnsuresEnforcement> held) {
+
+    public DeclaredEnsures {
+        held.forEach((behavior, answer) -> {
+            if (answer instanceof EnsuresEnforcement.NotDecidedHere) {
+                throw new IllegalArgumentException("`" + behavior + "` is answered as not decided,"
+                        + " and the module declaring it decides for every behavior it declares");
+            }
+        });
+    }
+}

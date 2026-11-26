@@ -824,7 +824,7 @@ public final class ExampleVerifier {
                             DeclaredEnsures ensured,
                             ProbeImage probes) {
         this.probes = probes;
-        this.ensures = new EnsuresChecks(loader, ensured, sigs.keySet());
+        this.ensures = new EnsuresChecks(loader, ensured);
         this.members = new UnionMembers(loader, kinds, sums);
         this.module = module;
         this.symbols = symbols;

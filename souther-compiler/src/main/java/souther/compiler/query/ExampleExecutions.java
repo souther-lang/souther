@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.CheckedDeclarations;
 import souther.compiler.check.CheckedEnsures;
@@ -24,6 +25,7 @@ import souther.compiler.types.ValueName;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What an evaluation of one module's examples reads, put together in one place.
@@ -94,17 +96,16 @@ public final class ExampleExecutions {
         // that module's clause, by the check that module emitted.
         Map<ValueName.Behavior, CheckedEnsures> declared =
                 db.ask(new Bodies.ReachableContracts(module)).value();
-        // Where this module's compilation put each of its own checks, the decision its emitted code
-        // was made from. A stand-in is called by that code, so whether it has to hold its answer
-        // itself is read off this and not worked out again from whether a behavior has a body.
-        Map<ValueName.Behavior, EnsuresEnforcement> placed =
-                db.ask(new Bodies.EnsuresChecks(module)).value();
-        if (requirements == null || declared == null || placed == null) {
+        if (requirements == null || declared == null) {
             return null;
         }
         // The reading that runs. What decides a row is the emitted check (spec §example-ensures),
         // and this is what that check was emitted from.
         Map<ValueName.Behavior, Contract> contracts = CheckedEnsures.executableOf(declared);
+        DeclaredEnsures ensured = heldByTheirModules(db, sigs.value().keySet(), contracts);
+        if (ensured == null) {
+            return null;
+        }
         // The one part that may be empty rather than missing. A module defining no value of its own
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
@@ -112,9 +113,33 @@ public final class ExampleExecutions {
                 Shapes.sumCases(db), Shapes.declarationKinds(db),
                 checkedFieldTypes(db), sigs.value(),
                 requirements, values == null ? Map.of() : values,
-                new DeclaredEnsures(module, contracts, placed),
+                ensured,
                 Output.policyOf(db),
                 withDeclaring ? declaringOf(db, prepared.value()) : Map.of());
+    }
+
+    /**
+     * How the module declaring each of {@code reachable} holds what it declares, or null where one
+     * of those modules has not classified its behaviors.
+     *
+     * <p>By the rule the declaring module's own compilation places its checks by
+     * ({@link EnsuresEnforcement#of}), from the same two facts: the clause, and whether Java supplies
+     * the body as that module classifies it. Asked of each behavior's own module rather than of the
+     * one whose rows these are, which has decided nothing about another module's behaviors — and a
+     * module read off the path is answered with what it published.
+     */
+    private static DeclaredEnsures heldByTheirModules(Db db, Set<ValueName.Behavior> reachable,
+                                                      Map<ValueName.Behavior, Contract> contracts) {
+        Map<ValueName.Behavior, EnsuresEnforcement> held = new LinkedHashMap<>();
+        for (ValueName.Behavior behavior : reachable) {
+            BehaviorBodies bodies = db.ask(new Bodies.Implementation(behavior.module())).value();
+            if (bodies == null) {
+                return null;
+            }
+            held.put(behavior, EnsuresEnforcement.of(contracts.get(behavior),
+                    bodies.of(behavior).isInjectionTarget()));
+        }
+        return new DeclaredEnsures(held);
     }
 
     /**
