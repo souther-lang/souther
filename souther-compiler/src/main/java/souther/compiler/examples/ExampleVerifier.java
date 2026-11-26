@@ -811,6 +811,8 @@ public final class ExampleVerifier {
     private final Set<String> said = new LinkedHashSet<>();
     /** What holds a row's values to what the behavior declares of what it answers. */
     private final EnsuresChecks ensures;
+    /** What a stand-in's answer is handed back as, for a dependency answering a union. */
+    private final UnionMembers members;
 
     private ExampleVerifier(souther.compiler.check.Prepared.ForExamples module,
                             Symbols symbols, SumCases sums,
@@ -825,6 +827,7 @@ public final class ExampleVerifier {
                             ProbeImage probes) {
         this.probes = probes;
         this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
+        this.members = new UnionMembers(loader, kinds, sums);
         this.module = module;
         this.symbols = symbols;
         this.sums = sums;
@@ -2468,7 +2471,7 @@ public final class ExampleVerifier {
                     // writing what a dependency answers, so that a reader of a row has one question
                     // to ask of either.
                     yield new StoodInFor.Read(
-                            StandingIn.by(fixtures, dependency, depSig, _ -> value),
+                            StandingIn.by(members, dependency, depSig, _ -> value),
                             RowStatements.StandInRead.of(dependency, w.pos(), takes(depSig),
                                     List.of(), new StoodIn.Otherwise.Answer(
                                             fixtures.observed(value), w.value().pos())));
@@ -2557,7 +2560,7 @@ public final class ExampleVerifier {
                                     ValueName.Behavior dependency, Sig depSig) {
         Hir.Fake fk = standingIn.read();
         StandingIn.OffATable stood =
-                StandingIn.byTheTable(fixtures, ensures, standingIn, dependency, depSig);
+                StandingIn.byTheTable(fixtures, ensures, members, standingIn, dependency, depSig);
         if (stood == null) {
             return notRead(dependency, fk.pos());
         }

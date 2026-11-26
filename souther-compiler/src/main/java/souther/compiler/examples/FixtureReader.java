@@ -39,7 +39,6 @@ import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -52,8 +51,6 @@ import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
 
-import java.lang.invoke.MethodType;
-import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -63,7 +60,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.UnaryOperator;
 
 /**
  * Reads a written fixture as the value it states, against the type of the position it is written in.
@@ -239,74 +235,6 @@ public final class FixtureReader {
         Object value = builtStandIn(written, out);
         TypeSymbol was = caseOfValue(value, outType);
         return new BuiltFixture(was != null ? was : constructedCase(written), value);
-    }
-
-    /**
-     * What makes a value a stand-in for {@code behavior} answers into the member of its union
-     * {@code out} that the behavior answers with.
-     *
-     * <p>A behavior answers a union as the JVM carries it. A case the behavior's module declares is a
-     * member as it is; a primitive and a type another module declares reach the union through a
-     * bridge case that module emits (spec §jvm-anonymous-union). A fixture is built as the Souther
-     * value, so a stand-in answering one of those hands back the bridge case holding it — which is
-     * what a caller holding the dependency by its typed {@code apply} is declared to receive, and what
-     * it reads the value back out of.
-     *
-     * <p>The members are walked by the rule a caller's projection of the behavior is made by, and
-     * {@link ExampleVerifier#projected} undoes this.
-     *
-     * <p>Worked out once per stand-in: which class carries which member does not turn on the call.
-     *
-     * @throws IllegalStateException where a class the union is answered through is not in this
-     *                               compile's classes, which is its emission failing and nothing a
-     *                               stand-in says
-     */
-    UnaryOperator<Object> asAMemberOf(ValueName.Behavior behavior, Type out) {
-        if (!(out instanceof Type.Union)) {
-            return UnaryOperator.identity();
-        }
-        Class<?> union = loaded(new GeneratedClass.BehaviorResult(behavior.module(), behavior.name()));
-        List<Constructor<?>> bridges = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
-            if (!member.isDeclaredByLanguage() && member instanceof TypeSymbol.AtModule at
-                    && at.module().equals(behavior.module())) {
-                continue;
-            }
-            Constructor<?>[] made = loaded(new GeneratedClass.BridgeCase(behavior.module(), member))
-                    .getConstructors();
-            if (made.length != 1 || made[0].getParameterCount() != 1) {
-                throw new IllegalStateException("the bridge case of `" + member + "` in `"
-                        + behavior + "`'s union is not built from the one value it holds");
-            }
-            bridges.add(made[0]);
-        }
-        return value -> {
-            if (union.isInstance(value)) {
-                return value;
-            }
-            for (Constructor<?> bridge : bridges) {
-                if (MethodType.methodType(bridge.getParameterTypes()[0]).wrap().returnType()
-                        .isInstance(value)) {
-                    try {
-                        return bridge.newInstance(value);
-                    } catch (ReflectiveOperationException e) {
-                        throw new IllegalStateException("the bridge case " + bridge.getName()
-                                + " did not take the value it holds", e);
-                    }
-                }
-            }
-            return value;
-        };
-    }
-
-    /** A class this compile emitted, loaded. */
-    private Class<?> loaded(GeneratedClass generated) {
-        try {
-            return GeneratedClasses.load(loader, generated);
-        } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(generated).binaryName()
-                    + "` is not in this compile's classes", e);
-        }
     }
 
     /**

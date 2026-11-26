@@ -101,6 +101,7 @@ public final class RowTrial {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
         EnsuresChecks ensures = new EnsuresChecks(loader, contracts, signatures.keySet());
+        UnionMembers members = new UnionMembers(loader, kinds, sums);
         RowTrials running = (behavior, sig) -> new RowTrials.OfBehavior() {
 
             @Override
@@ -136,8 +137,8 @@ public final class RowTrial {
                 if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
                     return Optional.empty();   // nothing applies this behavior, so nothing ran
                 }
-                return RowTrial.ready(reader(), module, kinds, sums, ensures, applies, behavior,
-                        sig, inputs, answers);
+                return RowTrial.ready(reader(), module, kinds, sums, ensures, members, applies,
+                        behavior, sig, inputs, answers);
             }
 
             /**
@@ -219,7 +220,7 @@ public final class RowTrial {
      */
     private static Optional<Ready> ready(FixtureReader fixtures, Prepared.ForExamples module,
                                          DeclarationKinds kinds, SumCases sums,
-                                         EnsuresChecks ensures,
+                                         EnsuresChecks ensures, UnionMembers members,
                                          Answerer.Answer.Something applies, String behavior,
                                          Sig sig, List<Hir.Expr> inputs,
                                          List<RowTrials.AnsweredWith> answers) {
@@ -240,7 +241,8 @@ public final class RowTrial {
                 String what = "input " + (i + 1) + " of `" + behavior + "`";
                 over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
             }
-            List<DependencyStandin> standins = standingIn(fixtures, module, ensures, answers);
+            List<DependencyStandin> standins = standingIn(fixtures, module, ensures, members,
+                    answers);
             if (standins == null) {
                 // A table the row leans on is not one to stand in with, so there was nothing to
                 // apply the behavior with and nothing ran. What is wrong with it is wrong about
@@ -316,17 +318,18 @@ public final class RowTrial {
     private static List<DependencyStandin> standingIn(FixtureReader fixtures,
                                                       Prepared.ForExamples module,
                                                       EnsuresChecks ensures,
+                                                      UnionMembers members,
                                                       List<RowTrials.AnsweredWith> answers) {
         List<DependencyStandin> out = new ArrayList<>(answers.size());
         for (RowTrials.AnsweredWith each : answers) {
             switch (each) {
                 case RowTrials.AnsweredWith.OnTheRow(var dependency, var signature, var written) -> {
                     Object value = fixtures.buildFixture(written, signature.out()).value();
-                    out.add(StandingIn.by(fixtures, dependency, signature, _ -> value));
+                    out.add(StandingIn.by(members, dependency, signature, _ -> value));
                 }
                 case RowTrials.AnsweredWith.InTheModule(var dependency, var signature) -> {
-                    StandingIn.OffATable stood = statedFor(fixtures, module, ensures, dependency,
-                            signature);
+                    StandingIn.OffATable stood = statedFor(fixtures, module, ensures, members,
+                            dependency, signature);
                     if (stood == null) {
                         return null;
                     }
@@ -348,10 +351,12 @@ public final class RowTrial {
     private static StandingIn.OffATable statedFor(FixtureReader fixtures,
                                                   Prepared.ForExamples module,
                                                   EnsuresChecks ensures,
+                                                  UnionMembers members,
                                                   ValueName.Behavior dependency, Sig signature) {
         return module.fakes().declaredFor(dependency)
                 instanceof FakeTables.Declaration.One(var stated)
-                ? StandingIn.byTheTable(fixtures, ensures, stated, dependency, signature) : null;
+                ? StandingIn.byTheTable(fixtures, ensures, members, stated, dependency, signature)
+                : null;
     }
 
     /**
