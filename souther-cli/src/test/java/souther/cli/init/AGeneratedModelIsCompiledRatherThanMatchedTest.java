@@ -33,17 +33,19 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
                 MAVEN.southerVersion());
     }
 
-    /** Every level compiles, including the one that is a module header and nothing else. */
+    /**
+     * The levels short of {@code full} compile, including the one that is a module header and nothing
+     * else. The {@code full} one is compiled below, where its rows are read as well.
+     */
     @Test
-    void everyModelThisCommandWritesCompiles() {
+    void everyModelShortOfTheFullOneCompiles() {
         for (Model model : Model.values()) {
-            List<String> texts = Templates.sourcesOf(at(model)).stream()
-                    .filter(file -> file.path().endsWith(".sou"))
-                    .map(Templates.File::content)
-                    .toList();
+            if (model == Model.FULL) {
+                continue;
+            }
             List<Located> warnings = new ArrayList<>();
-            Compilation compiled = Compiler.compiledModules(texts, ModulePath.EMPTY, warnings,
-                    Adequacy.Asked.NOTHING);
+            Compilation compiled = Compiler.compiledModules(texts(model), ModulePath.EMPTY,
+                    warnings, Adequacy.Asked.NOTHING);
             assertTrue(compiled.classes().size() > 0 || model == Model.NONE,
                     model + " compiled to no classes at all");
             assertEquals(List.of(), warnings.stream().map(Object::toString).toList(),
@@ -51,8 +53,16 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
         }
     }
 
+    private static List<String> texts(Model model) {
+        return Templates.sourcesOf(at(model)).stream()
+                .filter(file -> file.path().endsWith(".sou"))
+                .map(Templates.File::content)
+                .toList();
+    }
+
     /**
-     * The rows the {@code full} model comes with leave nothing owed.
+     * The {@code full} model compiles without a warning, and the rows it comes with leave nothing
+     * owed.
      *
      * <p>The point of shipping rows in a template is that {@code souther examples} answers on the
      * first run. A template whose own report names a gap teaches the reader that the report is
@@ -65,14 +75,14 @@ class AGeneratedModelIsCompiledRatherThanMatchedTest {
      */
     @Test
     void theRowsTheFullModelComesWithLeaveNothingOwed() {
-        List<String> texts = Templates.sourcesOf(at(Model.FULL)).stream()
-                .filter(file -> file.path().endsWith(".sou"))
-                .map(Templates.File::content)
-                .toList();
         List<Located> warnings = new ArrayList<>();
-        Compilation compiled = ACompiledModel.compiles(Compiler.analyzedModules(texts,
+        Compilation compiled = ACompiledModel.compiles(Compiler.analyzedModules(texts(Model.FULL),
                 ModulePath.EMPTY, warnings, Adequacy.Asked.fullReport()));
         AdequacyReport report = AdequacyReport.of(compiled);
+
+        assertTrue(compiled.classes().size() > 0, "full compiled to no classes at all");
+        assertEquals(List.of(), warnings.stream().map(Object::toString).toList(),
+                "full compiles with a warning");
 
         assertEquals(List.of(), report.adequacyGaps().stream()
                         .map(each -> each.about().toString()).toList(),
