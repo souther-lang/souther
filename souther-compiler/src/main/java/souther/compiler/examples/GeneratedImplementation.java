@@ -170,9 +170,28 @@ final class GeneratedImplementation implements Answerer {
      * neither assumes either.
      */
     private Object instanceOf(Class<?> held, DependencyStandin standin) {
+        Method answering = answeredBy(held, standin);
         return held.isInterface()
-                ? proxyOf(held, standin.answers())
-                : subclassOf(held, standin);
+                ? proxyOf(held, answering, standin.answers())
+                : subclassOf(held, answering, standin);
+    }
+
+    /**
+     * The method a stand-in held as {@code held} answers: the one abstract method a behavior's class
+     * has, whichever of the ABI's forms it is. A class with none or with several is not one the ABI
+     * makes, and a stand-in that picked one of several would be answering for a method nothing said
+     * it stands for.
+     */
+    private static Method answeredBy(Class<?> held, DependencyStandin standin) {
+        List<Method> abstracts = Arrays.stream(held.getMethods())
+                .filter(m -> Modifier.isAbstract(m.getModifiers()))
+                .toList();
+        if (abstracts.size() != 1) {
+            throw new StandinNotBuilt(standin.dependency(), "`" + held.getName() + "` has "
+                    + abstracts.size() + " abstract methods, and a behavior's class has the one it"
+                    + " is applied by");
+        }
+        return abstracts.getFirst();
     }
 
     /**
@@ -223,22 +242,30 @@ final class GeneratedImplementation implements Answerer {
     }
 
     /**
-     * A proxy of the interface {@code held} whose {@code apply} runs {@code answers}.
+     * A proxy of the interface {@code held} whose {@code answering} runs {@code answers}, and which
+     * is the object it is for {@code Object}'s methods.
      *
      * <p>Defined by the loader that defined the interface. A behavior its module does not expose has
      * a package-private interface, and a proxy of one has to be in its package and its loader.
+     *
+     * <p>Anything else it is asked is refused rather than answered with nothing. {@link #answeredBy}
+     * found the one method the class has, so another is a class this compile did not make.
      */
-    private static Object proxyOf(Class<?> held, Function<Object[], Object> answers) {
+    private static Object proxyOf(Class<?> held, Method answering,
+                                  Function<Object[], Object> answers) {
         return Proxy.newProxyInstance(held.getClassLoader(), new Class<?>[] {held}, (proxy, method, a) -> {
-            if (method.getName().equals("apply")) {
+            if (method.equals(answering)) {
                 return answers.apply(a == null ? new Object[0] : a);
             }
-            return switch (method.getName()) {
-                case "toString" -> "fake";
-                case "hashCode" -> System.identityHashCode(proxy);
-                case "equals" -> proxy == (a != null && a.length > 0 ? a[0] : null);
-                default -> null;
-            };
+            if (method.getDeclaringClass() == Object.class) {
+                return switch (method.getName()) {
+                    case "toString" -> "a stand-in for " + held.getName();
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    default -> proxy == a[0];
+                };
+            }
+            throw new IllegalStateException("a stand-in for " + held.getName() + " answers "
+                    + answering + ", and was asked " + method);
         });
     }
 
@@ -250,22 +277,13 @@ final class GeneratedImplementation implements Answerer {
      * <p>The subclass is named for the dependency, in the module that declares it, which is where its
      * base was generated (spec §java-base-class) and not always the module being applied.
      */
-    private Object subclassOf(Class<?> base, DependencyStandin standin) {
+    private Object subclassOf(Class<?> base, Method answering, DependencyStandin standin) {
         GeneratedClass.BehaviorInterface baseClass = new GeneratedClass.BehaviorInterface(
                 standin.dependency().module(), standin.dependency().name());
         try {
-            Method apply = null;
-            for (Method m : base.getDeclaredMethods()) {
-                if (m.getName().equals("apply") && Modifier.isAbstract(m.getModifiers())) {
-                    apply = m;
-                }
-            }
-            if (apply == null) {
-                throw new NoSuchMethodException("abstract apply on " + base.getName());
-            }
             String fakeName = SoutherJvmAbi.nameOf(new GeneratedClass.ExampleFake(baseClass)).binaryName();
-            Method applyM = apply;
-            Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
+            Class<?> fakeClass = loader.define(fakeName,
+                    () -> fakeSubclassBytes(fakeName, base, answering));
             return fakeClass.getConstructor(Function.class).newInstance(standin.answers());
         } catch (ReflectiveOperationException e) {
             throw new StandinNotBuilt(standin.dependency(),

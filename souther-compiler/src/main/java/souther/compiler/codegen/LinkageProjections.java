@@ -1,7 +1,6 @@
 package souther.compiler.codegen;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DerivedSymbols;
@@ -12,6 +11,7 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.JvmClassNames;
 import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -206,16 +206,9 @@ public final class LinkageProjections {
      */
     private static List<LinkageProjection.Bridged> answeredThrough(Settled settled, Type answers,
                                                                    LinkageReader foreign) {
-        if (!(answers instanceof Type.Union)) {
-            return List.of();
-        }
         List<LinkageProjection.Bridged> out = new ArrayList<>();
-        for (TypeSymbol member
-                : AtomSpace.subjectAtoms(answers, settled.kinds(), settled.sums())) {
-            if (!member.isDeclaredByLanguage() && member instanceof TypeSymbol.AtModule at
-                    && at.module().equals(settled.module())) {
-                continue;
-            }
+        for (TypeSymbol member : JvmClassNames.bridgedMembers(settled.module(), answers,
+                settled.kinds(), settled.sums())) {
             ClassDesc bridge = classOf(new GeneratedClass.BridgeCase(settled.module(), member),
                     foreign);
             out.add(new LinkageProjection.Bridged(member, bridge.descriptorString(),

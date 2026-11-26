@@ -1,18 +1,25 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.Disposition;
+import souther.compiler.observe.FailurePhase;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.Stage;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Db;
+import souther.compiler.query.Output;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Modifier;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A behavior with a body of its own is stood in for as whatever the behavior depending on it holds it
@@ -23,11 +30,111 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * implements. Which of the three a dependency is turns on how many inputs it takes and who implements
  * it, and a stand-in means the same whichever it is.
  *
- * <p>Every model here has a row whose expectation is wrong. A row that never ran says nothing, so a
- * model whose every row is right would pass with none of them run; the wrong one is refused only if
- * it ran.
+ * <p>Each model exposes only the behavior its rows are about, so every dependency Souther implements
+ * is a class its module does not expose.
+ *
+ * <p>A row is held to having been compared and held, and not to having said nothing: a row that
+ * never ran says nothing too.
  */
 class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
+
+    /**
+     * A behavior one constructor takes dependencies of every kind for: implemented in Souther (its
+     * own {@code depends on} makes it one that may be depended on, spec §depends-on) taking none, two
+     * and three inputs, and supplied by Java taking two.
+     *
+     * <p>Each kind is held as a different class, and one constructor takes them side by side, so a
+     * stand-in made into the wrong one, or handed to the wrong place, is a row that does not run.
+     * Nothing stands in for {@code lookup}: a row reaching a stood-in behavior's own body would have
+     * nothing to call it with.
+     */
+    private static final String LAYERED = """
+            module probe.layered exposing ( top )
+
+            behavior lookup : (key: Int) -> Int
+            behavior rate : (a: Int, b: Int) -> Int
+
+            behavior stamp : () -> Int
+                depends on lookup
+            let stamp (lookup) = lookup(0)
+
+            behavior convert : (a: Int, b: Int) -> Int
+                depends on lookup
+            let convert (a, b, lookup) = lookup(a) + b
+
+            behavior blend : (a: Int, b: Int, c: Int) -> Int
+                depends on lookup
+            let blend (a, b, c, lookup) = lookup(a) + b + c
+
+            behavior top : (a: Int, b: Int) -> Int
+                depends on stamp, convert, blend, rate
+            let top (a, b, stamp, convert, blend, rate) =
+                stamp() + convert(a, b) + blend(a, b, 1) + rate(a, b)
+            """;
+
+    /**
+     * What the model's dependencies are emitted as: the interfaces of the three Souther implements,
+     * none of them public.
+     */
+    @Test
+    void theDependenciesImplementedInSoutherAreClassesTheModuleDoesNotExpose() throws Exception {
+        Map<String, ClassFileImage> classes = Compiler.compile(LAYERED + """
+
+                fake stamp
+                    | _ -> 100
+                """);
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+
+        for (String dependency : List.of("Stamp", "Convert", "Blend")) {
+            Class<?> held = loader.loadClass("probe.layered." + dependency);
+            assertFalse(Modifier.isPublic(held.getModifiers()), held + " is not exposed");
+            assertEquals(true, held.isInterface(), held + " is the interface of what Souther implements");
+        }
+    }
+
+    /**
+     * Each dependency stood in for by its table, whatever count of inputs it takes. The two rows tell
+     * {@code (1, 2)} from {@code (2, 1)}, so each stand-in is handed every argument in the order the
+     * call wrote it.
+     */
+    @Test
+    void aDependencyImplementedInSoutherIsStoodInForByItsTableWhateverItTakes() {
+        held(rows(List.of(), together(LAYERED + """
+
+                fake stamp
+                    | _ -> 100
+
+                fake convert
+                    | (1, 2) -> 10
+                    | (2, 1) -> 20
+
+                fake blend
+                    | (1, 2, 1) -> 1000
+                    | (2, 1, 1) -> 2000
+
+                fake rate
+                    | (1, 2) -> 5
+                    | (2, 1) -> 7
+
+                example top
+                    | "one then two" : (1, 2) -> 1115
+                    | "two then one" : (2, 1) -> 2127
+                """), "probe.layered"), "one then two", "two then one");
+    }
+
+    /** The same dependencies stood in for by a {@code with} on the row, over their tables. */
+    @Test
+    void aDependencyImplementedInSoutherIsStoodInForByAWithWhateverItTakes() {
+        held(rows(List.of(), together(LAYERED + """
+
+                fake convert
+                    | _ -> 10
+
+                example top
+                    | "each as the row says" : (1, 2)
+                        with stamp = 1, convert = 20, blend = 300, rate = 4000 -> 4321
+                """), "probe.layered"), "each as the row says");
+    }
 
     private static final String STOCK = """
             module probe.stock exposing ( Shortage )
@@ -42,7 +149,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
      * {@code convert} is implemented here and nothing stands in for the {@code lookup} its body calls.
      */
     private static final String BRIDGED = """
-            module probe.bridged
+            module probe.bridged exposing ( top )
             import probe.stock ( Shortage )
 
             data Missing = { key: Int }
@@ -73,7 +180,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
     /** Each member answered by a table, read back by the caller through the case it reached. */
     @Test
     void aMemberReachingTheUnionThroughABridgeIsAnsweredByATable() {
-        ACompiledModel.refusedWith(List.of("E1905"), together(List.of(STOCK, BRIDGED + """
+        held(rows(List.of(), Compilation.ofSources(List.of(STOCK, BRIDGED + """
 
                 fake convert
                     | (1, 2) -> 7
@@ -89,14 +196,14 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
                     | "an Int and a Missing" : (1, 2) -> 7205
                     | "a Shortage and an Int" : (2, 1) -> 103006
                     | "a Missing and a Shortage" : (3, 3) -> 204108
-                    | "and not this" : (1, 2) -> 1
-                """)));
+                """), ModulePath.EMPTY), "probe.bridged"),
+                "an Int and a Missing", "a Shortage and an Int", "a Missing and a Shortage");
     }
 
     /** The same members answered by the row. */
     @Test
     void aMemberReachingTheUnionThroughABridgeIsAnsweredByAWith() {
-        ACompiledModel.refusedWith(List.of("E1905"), together(List.of(STOCK, BRIDGED + """
+        held(rows(List.of(), Compilation.ofSources(List.of(STOCK, BRIDGED + """
 
                 example top
                     | "an Int and a Missing" : (1, 2)
@@ -105,9 +212,8 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
                         with convert = Shortage { short = 3 }, price = 6 -> 103006
                     | "a Missing and a Shortage" : (3, 3)
                         with convert = Missing { key = 4 }, price = Shortage { short = 8 } -> 204108
-                    | "and not this" : (1, 2)
-                        with convert = 7, price = Missing { key = 5 } -> 1
-                """)));
+                """), ModulePath.EMPTY), "probe.bridged"),
+                "an Int and a Missing", "a Shortage and an Int", "a Missing and a Shortage");
     }
 
     /** A behavior another module implements, taking two inputs, with a requirement of its own. */
@@ -137,39 +243,33 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
                 | "both orders" : (1, 2) -> 30
             """;
 
-    private static final String CONVERTING_WRONGLY = CONVERTING.replace("-> 30", "-> 31");
-
     /** Compiled with the module that stands in for it. */
     @Test
     void aBehaviorAnotherModuleImplementsIsStoodInForCompiledTogether() {
-        assertDoesNotThrow(() -> Compiler.compileModules(List.of(RATES, CONVERTING)));
-        assertEquals("E1905", assertThrows(CompileException.class,
-                        () -> Compiler.compileModules(List.of(RATES, CONVERTING_WRONGLY)))
-                .diagnostic().code(), "the row is run, so a wrong answer is refused");
+        held(rows(List.of(), Compilation.ofSources(List.of(RATES, CONVERTING), ModulePath.EMPTY),
+                "probe.converting"), "both orders");
     }
 
     /** Read off the path, as its compiled classes. */
     @Test
     void aBehaviorAnotherModuleImplementsIsStoodInForReadOffThePath() {
-        Map<String, ClassFileImage> rates = Compiler.compile(RATES);
-
-        assertDoesNotThrow(() -> Compiler.compileModules(List.of(CONVERTING), ModulePath.of(rates)));
-        assertEquals("E1905", assertThrows(CompileException.class,
-                        () -> Compiler.compileModules(List.of(CONVERTING_WRONGLY),
-                                ModulePath.of(rates)))
-                .diagnostic().code(), "the row is run, so a wrong answer is refused");
+        held(rows(List.of(), Compilation.ofSources(List.of(CONVERTING),
+                ModulePath.of(Compiler.compile(RATES))), "probe.converting"), "both orders");
     }
 
     /** A table with no row for a call the body makes stops the row there (E1909). */
     @Test
     void aCallTheTableHasNoRowForStopsTheRow() {
-        ACompiledModel.refusedWith(List.of("E1909"), together(List.of(RATES, CONVERTING.replace(
-                "| (2, 1) -> 20", "| (3, 3) -> 20"))));
+        RowOutcome row = rows(List.of("E1909"), Compilation.ofSources(List.of(RATES,
+                CONVERTING.replace("| (2, 1) -> 20", "| (3, 3) -> 20")), ModulePath.EMPTY),
+                "probe.converting").get("both orders");
+
+        assertEquals(Disposition.FAILED, row.disposition(), row.toString());
     }
 
     /** A behavior implemented here, taking two inputs, that declares what it answers. */
     private static final String KEPT = """
-            module probe.kept
+            module probe.kept exposing ( top )
 
             behavior lookup : (key: Int) -> Int
 
@@ -183,21 +283,51 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
             let top (a, b, convert) = convert(a, b)
             """;
 
-    /** A table row stating an answer the declaration rules out is refused where it is written. */
+    /**
+     * A table row stating an answer the declaration rules out is refused where it is written, and a
+     * row reaching the table does not run against it.
+     */
     @Test
     void aTableRowTheDeclarationRulesOutIsRefused() {
-        ACompiledModel.refusedWith(List.of("E1929"), together(List.of(KEPT + """
+        RowOutcome row = rows(List.of("E1929"), together(KEPT + """
 
                 fake convert
                     | (1, 2) -> 500
 
                 example top
                     | "past the bound" : (1, 2) -> 500
-                """)));
+                """), "probe.kept").get("past the bound");
+
+        assertEquals(List.of(Disposition.FAILED, FailurePhase.FAKE_RESOLUTION),
+                List.of(row.disposition(), row.failurePhase()), row.toString());
     }
 
-    /** The modules of {@code sources}, compiled together. */
-    private static Compilation together(List<String> sources) {
-        return Compilation.ofSources(sources, ModulePath.EMPTY);
+    private static Compilation together(String source) {
+        return Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+    }
+
+    /**
+     * Every row {@code module}'s examples write, by its name, once the compilation is held to be
+     * refused with {@code codes} and nothing else.
+     */
+    private static Map<String, RowOutcome> rows(List<String> codes, Compilation compilation,
+                                                String module) {
+        ACompiledModel.refusedWith(codes, compilation);
+        Db db = compilation.db();
+        Map<String, RowOutcome> rows = new LinkedHashMap<>();
+        for (RowOutcome row : db.ask(Output.Examples.asked(db, module,
+                compilation.sourceIdOf(module))).value().rows()) {
+            rows.put(row.identity() instanceof RowIdentity.Named(String name) ? name
+                    : String.valueOf(row.identity()), row);
+        }
+        return rows;
+    }
+
+    /** That the rows are {@code names}, and every one of them was compared and held. */
+    private static void held(Map<String, RowOutcome> rows, String... names) {
+        assertEquals(List.of(names), List.copyOf(rows.keySet()), "the rows the model writes");
+        rows.forEach((name, row) -> assertEquals(
+                List.of(Stage.COMPARED, Disposition.HELD, FailurePhase.NONE),
+                List.of(row.stage(), row.disposition(), row.failurePhase()), name + ": " + row));
     }
 }

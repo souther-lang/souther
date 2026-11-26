@@ -34,7 +34,6 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -137,8 +136,8 @@ public final class RowTrial {
                 if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
                     return Optional.empty();   // nothing applies this behavior, so nothing ran
                 }
-                return RowTrial.ready(reader(), module, kinds, sums, ensures, members, applies,
-                        behavior, sig, inputs, answers);
+                return RowTrial.ready(reader(), module, ensures, members, applies, behavior, sig,
+                        inputs, answers);
             }
 
             /**
@@ -219,7 +218,6 @@ public final class RowTrial {
      * that could not be made is a row that never ran.
      */
     private static Optional<Ready> ready(FixtureReader fixtures, Prepared.ForExamples module,
-                                         DeclarationKinds kinds, SumCases sums,
                                          EnsuresChecks ensures, UnionMembers members,
                                          Answerer.Answer.Something applies, String behavior,
                                          Sig sig, List<Hir.Expr> inputs,
@@ -264,7 +262,7 @@ public final class RowTrial {
             return Optional.empty();
         }
         return Optional.of(new Ready(applying, over,
-                new AnswerReading(fixtures, sig.outputType(), module.name(), kinds, sums)));
+                new AnswerReading(fixtures, sig.outputType(), module.targeted(behavior), members)));
     }
 
     /**
@@ -272,13 +270,8 @@ public final class RowTrial {
      * into the form the compiler owns. What a written row's answer is read with as well, so that the
      * same answer from either comes out as the same value.
      */
-    private record AnswerReading(FixtureReader fixtures, Type out, String module,
-                                 DeclarationKinds kinds, SumCases sums) {
-
-        AnswerReading {
-            Objects.requireNonNull(kinds, "an answer is projected by what each declaration is");
-            Objects.requireNonNull(sums, "and by the cases each sum has");
-        }
+    private record AnswerReading(FixtureReader fixtures, Type out, ValueName.Behavior behavior,
+                                 UnionMembers members) {
 
         /**
          * The answer, read whole. What is read here is compared with another run's answer and
@@ -288,7 +281,7 @@ public final class RowTrial {
          */
         AnswerObservation read(Object answered) {
             return new AnswerObservation.Answered(fixtures.structured(
-                    ExampleVerifier.projected(answered, out, module, kinds, sums)));
+                    members.asTheValue(behavior, out, answered)));
         }
     }
 

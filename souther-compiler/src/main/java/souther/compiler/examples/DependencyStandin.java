@@ -35,6 +35,6 @@ import java.util.function.Function;
  *                   it because the base an instance extends is generated where the behavior is
  *                   declared, which is not always the module the row is written in
  * @param answers    what it answers, for the arguments it is called with, as the member of its union
- *                   the dependency answers with ({@link UnionMembers})
+ *                   the dependency answers with ({@link UnionMembers#asAMember})
  */
 public record DependencyStandin(ValueName.Behavior dependency, Function<Object[], Object> answers) {}

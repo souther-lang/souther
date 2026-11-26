@@ -7,7 +7,6 @@ import souther.compiler.observe.WaitShown;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
-import souther.compiler.check.AtomSpace;
 import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DeclarationKinds;
@@ -34,8 +33,6 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.observe.ReplacedRun;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -550,7 +547,7 @@ public final class ExampleVerifier {
                     new StandinObservation.Reason.AValueCouldNotCross(
                             String.valueOf(fe.getMessage())));
         }
-        answered = projected(answered, sig.outputType());
+        answered = projected(behavior, answered, sig.outputType());
         // Into this compile's classes before the check, for the reason
         // `keepsWhatIsDeclaredOfWhatItAnswered` does it: the emitted check guards each rule with an
         // `instanceof` against the class this compile emitted, so an answer of another loader's
@@ -687,7 +684,7 @@ public final class ExampleVerifier {
                     new StandinObservation.Reason.AValueCouldNotCross(
                             String.valueOf(fe.getMessage())));
         }
-        answered = projected(answered, sig.outputType());
+        answered = projected(behavior, answered, sig.outputType());
         return fixtures.holds(stated, answered, sig.outputType())
                 instanceof Verdict.NotHeld(Mismatch differs)
                 ? new StandinObservation.OtherThanStated(entry.stated(),
@@ -2093,7 +2090,7 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.VALUE_CROSSING);
             return;
         }
-        result = projected(result, sig.outputType());
+        result = projected(target.name(), result, sig.outputType());
         // The case the run answered with is the one the value is. Its class names the module that
         // declares it, and what this module means by that class's spelling is a different question.
         // A primitive case declares no class, so a date or a number is matched against the cases the
@@ -2160,40 +2157,11 @@ public final class ExampleVerifier {
     }
 
     /**
-     * The Souther value behind a behavior's answer. A member this module declared is the answer
-     * itself; a primitive or an imported type reached the union through a bridge case (spec §jvm-anonymous-union),
-     * and a row writes the value, not the bridge case — which is a name this source does not have.
-     * The same projection a Souther caller does, done on the loaded classes.
+     * The Souther value behind what {@code behavior} of this module answered: a row writes the
+     * value, not the bridge case it may arrive in ({@link UnionMembers#asTheValue}).
      */
-    private Object projected(Object result, Type out) {
-        return projected(result, out, module.name(), kinds, sums);
-    }
-
-    /**
-     * {@link #projected(Object, Type)} for a caller holding the module's declarations rather than a
-     * verifier: a run of a row nobody wrote answers in the same classes, and what it answered is the
-     * value behind the bridge case for the same reason.
-     */
-    static Object projected(Object result, Type out, String module, DeclarationKinds kinds,
-                            SumCases sums) {
-        if (result == null || !(out instanceof Type.Union)) {
-            return result;
-        }
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
-            if (!member.isDeclaredByLanguage()
-                    && member instanceof TypeSymbol.AtModule at
-                    && at.module().equals(module)) {
-                continue;
-            }
-            if (SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module, member)).is(result.getClass())) {
-                try {
-                    return result.getClass().getMethod("value").invoke(result);
-                } catch (ReflectiveOperationException e) {
-                    throw new IllegalStateException("a bridge case with no `value`: " + result.getClass(), e);
-                }
-            }
-        }
-        return result;
+    private Object projected(String behavior, Object result, Type out) {
+        return members.asTheValue(module.targeted(behavior), out, result);
     }
 
     /**
@@ -2259,7 +2227,8 @@ public final class ExampleVerifier {
         ValueName.Behavior behavior = module.targeted(target.name());
         String why = switch (evidence) {
             case Evidence.Answer(Object value) ->
-                    ensures.notHeld(behavior, args, projected(value, sig.outputType()));
+                    ensures.notHeld(behavior, args,
+                            members.asTheValue(behavior, sig.outputType(), value));
             case Evidence.Case(TypeSymbol name) -> ensures.notHeldForCase(behavior, args, name);
         };
         if (why == null) {
