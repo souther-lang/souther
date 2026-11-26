@@ -121,21 +121,18 @@ class AStandInIsHeldToWhatTheBehaviorItStandsInForDeclaresTest {
         Compilation c = refused("""
                 module probe.bridged exposing ( top )
 
-                data Missing = { key: Int }
+                data Missing
 
                 behavior lookup : (key: Int) -> Int
 
                 behavior convert : (a: Int, b: Int) -> Int | Missing
                     depends on lookup
-                    constructs Missing
                     ensures bounded = Int -> value < a + 100
-                let convert (a, b, lookup) = if lookup(a) > b then lookup(a) else Missing { key = a }
+                let convert (a, b, lookup) = lookup(a)
 
-                behavior top : (a: Int, b: Int) -> Int
+                behavior top : (a: Int, b: Int) -> Int | Missing
                     depends on convert
-                let top (a, b, convert) = match convert(a, b) with
-                    | Int as n -> n
-                    | Missing as m -> m.key + 200
+                let top (a, b, convert) = convert(a, b)
 
                 example top
                     | "past the bound" : (1, 2) with convert = 500 -> 500
