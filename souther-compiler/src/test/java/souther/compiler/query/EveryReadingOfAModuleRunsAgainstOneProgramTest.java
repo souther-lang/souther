@@ -12,7 +12,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A compilation evaluates a module as one program, whatever reads it.
+ * Every reading of a module's examples runs against one program of that module, whatever reads it.
  *
  * <p>Its rows, the tables its fakes state, what its statements say of each other, the values a search
  * builds and the rows a search tries are all run against the program this compilation evaluates the
@@ -20,11 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * fixtures and all, for classes that differ from the first only in calls that do nothing outside a
  * recording.
  *
+ * <p>About the module being evaluated, and not about a module it imports. An import is linked into
+ * that program as the one recording nothing whatever the compilation measures: a recording is the
+ * evaluated module's, and an import's probes would put numbers of the import's own plan into it. So
+ * an import whose own rows are measured is generated once for those and once to be imported.
+ *
  * <p>The model reaches every one of those readings: a table and a row recorded for the behavior it
  * stands in for, so their statements are compared, and a row for the behavior that depends on it, so
  * a search builds values and tries rows.
  */
-class AModuleIsEvaluatedAsOneProgramPerCompilationTest {
+class EveryReadingOfAModuleRunsAgainstOneProgramTest {
 
     private static final String MODEL = """
             module probe.once

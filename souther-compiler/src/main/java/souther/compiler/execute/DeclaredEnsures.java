@@ -3,6 +3,8 @@ package souther.compiler.execute;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.ValueName;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -24,6 +26,9 @@ import java.util.Map;
 public record DeclaredEnsures(Map<ValueName.Behavior, EnsuresEnforcement> held) {
 
     public DeclaredEnsures {
+        // Copied before it is held to anything, so what was checked is what is kept: a map a
+        // caller could still change would let a caller's answer in after the check.
+        held = Collections.unmodifiableMap(new LinkedHashMap<>(held));
         held.forEach((behavior, answer) -> {
             if (answer instanceof EnsuresEnforcement.NotDecidedHere) {
                 throw new IllegalArgumentException("`" + behavior + "` is answered as not decided,"

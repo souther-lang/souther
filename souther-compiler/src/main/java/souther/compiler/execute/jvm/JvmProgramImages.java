@@ -29,11 +29,13 @@ public interface JvmProgramImages {
      * The program this compilation evaluates {@code module} as, recording the arms where the
      * compilation measures them.
      *
-     * <p>One for the compilation, and every reading of the module is of it: its rows, its tables,
-     * the values a search builds and the rows a search tries. Which one is not the caller's to say.
-     * A reading that named the uncounted-arms program while the rows ran on the recording one would
-     * have the module generated twice, and the two programs differ only in calls that record and
-     * do nothing when no run is recording.
+     * <p>One for each module evaluated, and every reading of the module is of it: its rows, its
+     * tables, the values a search builds and the rows a search tries. Which one is not the caller's
+     * to say. A reading that named the program recording nothing while the rows ran on the
+     * recording one would have the module generated twice, and the two programs differ only in
+     * calls that record and do nothing when no run is recording. A module it imports is linked in
+     * as the program recording nothing, whatever this answers for the module itself: a recording is
+     * the evaluated module's, and an import's probes would write the import's numbers into it.
      *
      * <p>Null where this compile could not make it. The rows are then not run, which is not a fault
      * of the model they are about — the caller says what that means for what it was asked.
