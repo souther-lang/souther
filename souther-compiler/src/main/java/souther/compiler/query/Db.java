@@ -122,7 +122,22 @@ import java.util.function.Supplier;
 public final class Db implements StoreWork {
 
     /**
-     * What is known about one key.
+     * What asking a key came to: its answer, and the revision the answer last came out different
+     * at, which is what checking a kept answer that read the key compares.
+     *
+     * <p>Two things and not one, because what is kept and what was answered once are different
+     * facts. A {@link Memo} is kept and is what the next asker gets; an {@link Unkept} answer is
+     * this ask's alone.
+     */
+    private sealed interface Known permits Memo, Unkept {
+
+        Answer<?> answer();
+
+        long changedAt();
+    }
+
+    /**
+     * What is kept about one key.
      *
      * @param filed the key as the store filed it, which is the instance a read of it is recorded as
      *              and a memo replacing this one keeps. A table compares an instance it holds by
@@ -134,12 +149,21 @@ public final class Db implements StoreWork {
      * @param reads what answering it read, in the order it read them
      */
     private record Memo(Filed filed, Answer<?> answer, long verifiedAt, long changedAt,
-                        Set<Filed> reads) {
+                        Set<Filed> reads) implements Known {
 
         Memo verifiedAt(long revision) {
             return new Memo(filed, answer, revision, changedAt, reads);
         }
     }
+
+    /**
+     * An answer this store does not keep — one reached through a cycle — which changed now.
+     *
+     * <p>Now and not when what is kept for the key last changed. What is kept is an answer from
+     * before this one was worked out, and a kept answer that read the key, checked against that,
+     * would be found to still hold and be handed out though the key no longer answers what it read.
+     */
+    private record Unkept(Answer<?> answer, long changedAt) implements Known {}
 
     /**
      * A key as this store holds it: the key, and a hash that tells apart the questions asked about
@@ -464,7 +488,7 @@ public final class Db implements StoreWork {
      * and the read recorded for the question in flight. All of it and not only the answer, because
      * checking a kept answer reads when each dependency last changed.
      */
-    private Memo answer(Filed asked) {
+    private Known answer(Filed asked) {
         Key<?> key = asked.key();
         Memo memo = memos.get(asked);
         Filed filed = memo != null ? memo.filed() : asked;
@@ -475,7 +499,7 @@ public final class Db implements StoreWork {
         if (inProgress.contains(key)) {
             // Everything in flight has now seen an answer that depends on where it was entered.
             throughCycle.addAll(inProgress);
-            return unkept(filed, memo, key.onCycle(List.copyOf(inProgress)));
+            return new Unkept(key.onCycle(List.copyOf(inProgress)), revision);
         }
         // Before either of the two things that cost anything, and after the one that does not. An
         // answer already verified at this revision is a lookup and a return; checking what is left
@@ -512,29 +536,20 @@ public final class Db implements StoreWork {
             inProgress.remove(key);
             reachedThroughCycle = throughCycle.remove(key);
         }
-        Memo known;
+        Known known;
         if (reachedThroughCycle) {
-            known = unkept(filed, memo, answer);
+            known = new Unkept(answer, revision);
         } else {
             long changedAt = memo != null && memo.answer().equals(answer)
                     ? memo.changedAt() : revision;
-            known = new Memo(filed, answer, revision, changedAt, read);
-            memos.put(filed, known);
+            Memo kept = new Memo(filed, answer, revision, changedAt, read);
+            memos.put(filed, kept);
+            known = kept;
         }
         if (!answer.reports().isEmpty() && hasSpoken.add(key)) {
             spoke.add(key);
         }
         return known;
-    }
-
-    /**
-     * An answer this store does not keep, as what is known about its key. A check of a kept answer
-     * that read the key compares it with what is kept for the key, since the answer in hand is not
-     * one of this revision's values; where nothing is kept, the key changed now.
-     */
-    private Memo unkept(Filed filed, Memo kept, Answer<?> answer) {
-        return new Memo(filed, answer, revision, kept != null ? kept.changedAt() : revision,
-                Set.of());
     }
 
     /**
