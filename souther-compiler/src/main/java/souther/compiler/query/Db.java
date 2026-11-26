@@ -124,15 +124,20 @@ public final class Db implements StoreWork {
     /**
      * What is known about one key.
      *
+     * @param filed the key as the store filed it, which is the instance a read of it is recorded as
+     *              and a memo replacing this one keeps. A table compares an instance it holds by
+     *              identity and a new one field by field, and asking builds a new one each time.
+     *              Equality still decides: the instance only spares a second comparison
      * @param answer the answer as of {@code verifiedAt}
      * @param verifiedAt the revision this answer was last known to be current at
      * @param changedAt the revision the answer last came out different at
      * @param reads what answering it read, in the order it read them
      */
-    private record Memo(Answer<?> answer, long verifiedAt, long changedAt, Set<Filed> reads) {
+    private record Memo(Filed filed, Answer<?> answer, long verifiedAt, long changedAt,
+                        Set<Filed> reads) {
 
         Memo verifiedAt(long revision) {
-            return new Memo(answer, revision, changedAt, reads);
+            return new Memo(filed, answer, revision, changedAt, reads);
         }
     }
 
@@ -378,13 +383,14 @@ public final class Db implements StoreWork {
      */
     public <T> Db set(Input<T> key, T value) {
         Answer<T> now = Answer.of(value);
-        Filed filed = Filed.of(key);
-        Memo known = memos.get(filed);
+        Filed given = Filed.of(key);
+        Memo known = memos.get(given);
         if (known != null && known.answer().equals(now)) {
             return this;
         }
         revision++;
-        memos.put(filed, new Memo(now, revision, revision, Set.of()));
+        Filed filed = known != null ? known.filed() : given;
+        memos.put(filed, new Memo(filed, now, revision, revision, Set.of()));
         return this;
     }
 
@@ -450,20 +456,26 @@ public final class Db implements StoreWork {
         asked = true;
         Filed filed = Filed.of(key);
         return (Answer<T>) (allowances.inForce() ? answer(filed)
-                : allowances.over(() -> answer(filed)));
+                : allowances.over(() -> answer(filed))).answer();
     }
 
-    private Answer<?> answer(Filed filed) {
-        Key<?> key = filed.key();
+    /**
+     * What is known about {@code asked} now, its answer worked out where nothing kept still holds,
+     * and the read recorded for the question in flight. All of it and not only the answer, because
+     * checking a kept answer reads when each dependency last changed.
+     */
+    private Memo answer(Filed asked) {
+        Key<?> key = asked.key();
+        Memo memo = memos.get(asked);
+        Filed filed = memo != null ? memo.filed() : asked;
         recordRead(filed);
-        Memo memo = memos.get(filed);
         if (memo != null && memo.verifiedAt() == revision) {
-            return memo.answer();
+            return memo;
         }
         if (inProgress.contains(key)) {
             // Everything in flight has now seen an answer that depends on where it was entered.
             throughCycle.addAll(inProgress);
-            return key.onCycle(List.copyOf(inProgress));
+            return unkept(filed, memo, key.onCycle(List.copyOf(inProgress)));
         }
         // Before either of the two things that cost anything, and after the one that does not. An
         // answer already verified at this revision is a lookup and a return; checking what is left
@@ -472,8 +484,9 @@ public final class Db implements StoreWork {
         // being asked its cheapest question over and over, and that is the question an edit asks.
         abandonment.stopIfAsked();
         if (memo != null && stillHolds(memo)) {
-            memos.put(filed, memo.verifiedAt(revision));
-            return memo.answer();
+            Memo verified = memo.verifiedAt(revision);
+            memos.put(filed, verified);
+            return verified;
         }
         inProgress.add(key);
         frames.push(new LinkedHashSet<>());
@@ -499,15 +512,29 @@ public final class Db implements StoreWork {
             inProgress.remove(key);
             reachedThroughCycle = throughCycle.remove(key);
         }
-        if (!reachedThroughCycle) {
+        Memo known;
+        if (reachedThroughCycle) {
+            known = unkept(filed, memo, answer);
+        } else {
             long changedAt = memo != null && memo.answer().equals(answer)
                     ? memo.changedAt() : revision;
-            memos.put(filed, new Memo(answer, revision, changedAt, read));
+            known = new Memo(filed, answer, revision, changedAt, read);
+            memos.put(filed, known);
         }
         if (!answer.reports().isEmpty() && hasSpoken.add(key)) {
             spoke.add(key);
         }
-        return answer;
+        return known;
+    }
+
+    /**
+     * An answer this store does not keep, as what is known about its key. A check of a kept answer
+     * that read the key compares it with what is kept for the key, since the answer in hand is not
+     * one of this revision's values; where nothing is kept, the key changed now.
+     */
+    private Memo unkept(Filed filed, Memo kept, Answer<?> answer) {
+        return new Memo(filed, answer, revision, kept != null ? kept.changedAt() : revision,
+                Set.of());
     }
 
     /**
@@ -531,9 +558,7 @@ public final class Db implements StoreWork {
                 // that another question has already been through would go the whole way without
                 // being asked once — which is the walk this is, most of the time.
                 abandonment.stopIfAsked();
-                answer(read);
-                Memo dependency = memos.get(read);
-                if (dependency == null || dependency.changedAt() > memo.verifiedAt()) {
+                if (answer(read).changedAt() > memo.verifiedAt()) {
                     return false;
                 }
             }
