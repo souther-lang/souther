@@ -1431,7 +1431,7 @@ public final class Output {
             List<souther.compiler.observe.Incompleteness> everywhere = new ArrayList<>();
             Set<String> named = new LinkedHashSet<>();
             for (SourceId sourceId : origins) {
-                Examples.Of observed = db.ask(new Examples(name, sourceId, arms)).value();
+                Examples.Of observed = db.ask(new Examples(name, sourceId)).value();
                 // What this source wrote and what became of reading it, put together here — where
                 // both are still this source's. Flattened first and matched afterwards, a row of
                 // one source takes a reason that happened in another: two sources exampling one
@@ -1769,26 +1769,16 @@ public final class Output {
      * The examples of one module, evaluated. Every module's examples are evaluated before any
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
+     *
+     * <p>Run the one way this compilation runs them, which is not part of the key. What a
+     * measurement needs beyond a compile is the arms each row took, and asking for that as a second
+     * key ran every row a second time — against different bytecode, on a second wait, with a second
+     * chance to be reported differently. Two sets of outcomes for one model can disagree, and a
+     * report built half from each says a case is verified and its branch unreached in the same
+     * breath. So the program the rows run against is the one this compilation evaluates the module
+     * as, and nothing a caller says picks another.
      */
-    public record Examples(String name, SourceId sourceId, ArmObservation arms)
-            implements Key<Examples.Of> {
-
-        /**
-         * The rows of one source, run the one way this compilation runs them.
-         *
-         * <p>Which mode is derived here rather than chosen by the caller, so that a compile evaluates
-         * its rows once. What a measurement needs beyond a compile is the arms each row took, and
-         * asking for that as a second key ran every row a second time — against different bytecode,
-         * on a second wait, with a second chance to be reported differently. Two sets of outcomes for
-         * one model can disagree, and a report built half from each says a case is verified and its
-         * branch unreached in the same breath.
-         *
-         * <p>Keyed on what is actually emitted rather than on the adequacy level, because two levels
-         * that measure the same thing should not be two compiles.
-         */
-        public static Examples asked(Db db, String name, SourceId sourceId) {
-            return new Examples(name, sourceId, Adequacy.armsAsked(db));
-        }
+    public record Examples(String name, SourceId sourceId) implements Key<Examples.Of> {
 
         /**
          * What this source's rows turned out to be.
@@ -1819,17 +1809,10 @@ public final class Output {
             return sourceId;
         }
 
-        /**
-         * The rows this source wrote, run — and the fakes it wrote, built.
-         *
-         * <p>The fakes here rather than in {@link #evaluate}, which a measurement runs a second time
-         * against instrumented classes. Whether a table can be built
-         * is not a question a measurement asks, and asking it twice would have one table answered for
-         * by two builds.
-         */
+        /** The rows this source wrote, run — and the fakes it wrote, built. */
         @Override
         public Answer<Examples.Of> compute(Db db) {
-            Answer<Examples.Of> ran = evaluate(db, name, sourceId, arms);
+            Answer<Examples.Of> ran = evaluate(db, name, sourceId);
             if (!(fakeTables(db, name, sourceId)
                     instanceof souther.compiler.observe.TableBuild.Built(
                             List<Diagnostic> wrong))) {
@@ -1874,17 +1857,8 @@ public final class Output {
                     : db.execution().fakeTables(asked, sourceId);
         }
 
-        /**
-         * The rows of one source, run.
-         *
-         * <p>What varies between running rows to compile a module and running them to measure it is
-         * what the run records, and that is what is passed. Which classes carry it is the runner's,
-         * so the two cannot become two evaluations by a caller reaching for a different set: a row
-         * that held under one and failed under the other would be a difference in the measurement
-         * and not in the model, and the report has no way to tell.
-         */
-        static Answer<Examples.Of> evaluate(Db db, String name, SourceId sourceId,
-                                            ArmObservation arms) {
+        /** The rows of one source, run. */
+        private static Answer<Examples.Of> evaluate(Db db, String name, SourceId sourceId) {
             ExampleExecution asked = ExampleExecutions.of(db, name);
             if (asked == null) {
                 return Answer.absent();   // nothing here can have its examples evaluated yet
@@ -1896,13 +1870,13 @@ public final class Output {
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
-            if (!(db.execution().run(asked, sourceId, arms)
+            if (!(db.execution().run(asked, sourceId)
                     instanceof souther.compiler.observe.RowRun.Ran(Observations observed))) {
                 // Nothing ran. Where the arms were wanted, that is a measurement nobody made and it
                 // is said so — falling back to a run that records nothing is not open, because what
                 // holds a row to a budget is the counting and a row run without it is back on the
                 // clock. Where they were not, nothing was worked out at all.
-                return arms == ArmObservation.OMIT ? Answer.absent()
+                return Adequacy.armsAsked(db) == ArmObservation.OMIT ? Answer.absent()
                         : Answer.of(new Examples.Of(List.of(), List.of(
                                 souther.compiler.observe.Incompleteness.of(
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,

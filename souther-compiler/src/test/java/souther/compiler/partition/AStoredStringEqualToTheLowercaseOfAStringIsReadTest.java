@@ -183,8 +183,7 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
                 // for not holding, and that is the only thing the model is refused for.
                 Compilation running = Compilation.ofSource(
                         model + "\nexample f\n" + examples + "\n", "Main");
-                Output.Examples key = Output.Examples.asked(running.db(), "demo",
-                        running.sourceIds().get(0));
+                Output.Examples key = new Output.Examples("demo", running.sourceIds().get(0));
                 List<String> arms = running.db().ask(key).value().rows().stream()
                         .map(row -> row.resultArm().name()).toList();
                 assertEquals(Set.of("Same", "Differ"), Set.copyOf(arms),

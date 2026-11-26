@@ -65,7 +65,7 @@ class ARowOfferedForAnEqualityOfTwoStringsIsOneTheEqualityCanComeOutThatWayOnTes
         for (String module : pasted.modules()) {
             for (SourceId id : pasted.exampleSourcesOf(module)) {
                 Output.Examples.Of result = pasted.db()
-                        .ask(Output.Examples.asked(pasted.db(), module, id)).value();
+                        .ask(new Output.Examples(module, id)).value();
                 if (result != null) {
                     rows.addAll(result.rows());
                 }

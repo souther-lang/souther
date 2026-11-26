@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.CompileException;
@@ -43,7 +42,7 @@ class AnEvaluationThatCouldNotAnswerIsNotTheModelsFaultTest {
     private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("example.answers").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.answers", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("example.answers", sourceId))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);

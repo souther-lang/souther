@@ -5,7 +5,6 @@ import souther.compiler.examples.Answering;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.execute.ExampleExecution;
-import souther.compiler.observe.ArmObservation;
 
 import java.util.Map;
 import java.util.Set;
@@ -54,7 +53,7 @@ public final class JvmExampleRuns {
         Deadline deadline = JvmDeadlines.onWorkers().forThisCompile(asked.policy().compilerTimeout());
         Answering answering = Answering.bound(implementation, answersFor, sigs,
                 Handoff.onTheThreadThatAsked());
-        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        JvmProgramImage image = images.evaluating(asked.module());
         if (image == null) {
             throw new IllegalStateException("`" + asked.module() + "` emitted nothing to run its"
                     + " rows against");

@@ -109,7 +109,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
                 Output.Examples.Of ran = compilation.db()
-                        .ask(Output.Examples.asked(compilation.db(), module, id)).value();
+                        .ask(new Output.Examples(module, id)).value();
                 if (ran != null) {
                     rows.addAll(ran.rows());
                 }

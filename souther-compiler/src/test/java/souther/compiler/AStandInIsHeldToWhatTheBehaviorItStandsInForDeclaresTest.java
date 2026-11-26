@@ -215,7 +215,7 @@ class AStandInIsHeldToWhatTheBehaviorItStandsInForDeclaresTest {
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : c.modules()) {
             for (SourceId id : c.exampleSourcesOf(module)) {
-                Output.Examples.Of ran = db.ask(Output.Examples.asked(db, module, id)).value();
+                Output.Examples.Of ran = db.ask(new Output.Examples(module, id)).value();
                 if (ran != null) {
                     rows.addAll(ran.rows());
                 }

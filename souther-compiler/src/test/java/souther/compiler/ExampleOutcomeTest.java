@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
@@ -71,8 +70,7 @@ class ExampleOutcomeTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
-        Output.Examples key = Output.Examples.asked(compilation.db(), module,
-                compilation.sourceIds().get(0));
+        Output.Examples key = new Output.Examples(module, compilation.sourceIds().get(0));
         return new Evaluated(compilation.db().ask(key).value(), compilation.db().ask(key).reports());
     }
 
@@ -188,7 +186,8 @@ class ExampleOutcomeTest {
         ACompiledModel.compiles(compilation);
 
         Output.Examples.Of attached = compilation.db()
-                .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou"), ArmObservation.OMIT)).value();
+                .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou")))
+                .value();
         assertNotNull(attached);
         assertEquals(1, attached.rows().size());
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("trip-examples.sou")),
@@ -196,7 +195,7 @@ class ExampleOutcomeTest {
         assertEquals(Disposition.HELD, attached.rows().get(0).disposition());
 
         Output.Examples.Of own = compilation.db()
-                .ask(new Output.Examples("example.trip", new SourceId("trip.sou"), ArmObservation.OMIT)).value();
+                .ask(new Output.Examples("example.trip", new SourceId("trip.sou"))).value();
         assertNotNull(own);
         assertEquals(List.of(), own.rows(), "the module's own source wrote no rows");
     }

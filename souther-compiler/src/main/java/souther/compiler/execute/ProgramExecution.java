@@ -1,6 +1,5 @@
 package souther.compiler.execute;
 
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.RowRun;
 import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
@@ -79,12 +78,12 @@ public interface ProgramExecution {
      * from one preparation, so which module's program a row is run against is not something a caller
      * can state wrongly here.
      *
-     * <p>{@code arms} is what the run is to record beside the counting, which is the one thing that
-     * varies between running a module's rows to compile it and running them to measure it. It is
-     * said in what the run is to observe rather than in what it is to be built from, because which
-     * classes those are is not a fact about the program.
+     * <p>Whether the run records the arms it takes is not asked here. It is what this compilation
+     * measures, and so it is one answer for every reading below — a row, a table, a value and a
+     * trial are each run against the one program this compilation evaluates the module as, and
+     * none of them can be handed another.
      */
-    RowRun run(ExampleExecution asked, SourceId source, ArmObservation arms);
+    RowRun run(ExampleExecution asked, SourceId source);
 
     /**
      * What building the tables the {@code fake} rows of {@code source} state says about them.
@@ -123,10 +122,10 @@ public interface ProgramExecution {
     /**
      * A way to run rows nobody wrote and see where they went, or none where nothing records it.
      *
-     * <p>{@code arms} is what the run is to record, as it is for {@link #run}. A trial exists to
-     * find out which arms a candidate reaches, so a run recording nothing answers a search with
-     * every candidate having reached nothing — which reads as a row that missed rather than as a
-     * measurement that was not made.
+     * <p>Run against the program {@link #run} runs rows against. A trial exists to find out which
+     * arms a candidate reaches, so it is asked for only where this compilation records them: a run
+     * recording nothing answers a search with every candidate having reached nothing — which reads
+     * as a row that missed rather than as a measurement that was not made.
      */
-    RowTrials trials(ExampleExecution asked, ArmObservation arms);
+    RowTrials trials(ExampleExecution asked);
 }

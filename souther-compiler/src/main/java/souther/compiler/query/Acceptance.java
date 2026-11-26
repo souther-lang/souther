@@ -128,7 +128,7 @@ public final class Acceptance {
                 // Only the errors: this key also carries what a clean run wants to say about how
                 // well the rows cover the model, and a warning is not a reason to fail the build.
                 for (Report failure
-                        : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
+                        : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     refused.add(new Located(failure.diagnostic(), ReportContext.inFile(id)));
                 }
             }

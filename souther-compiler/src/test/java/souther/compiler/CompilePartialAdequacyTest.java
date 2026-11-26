@@ -963,8 +963,8 @@ class CompilePartialAdequacyTest {
         SourceId sourceId = compilation.exampleSourcesOf("example.loop").getFirst();
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
-                .ask(souther.compiler.query.Output.Examples.asked(
-                        compilation.db(), "example.loop", sourceId)).value().rows();
+                .ask(new souther.compiler.query.Output.Examples(
+                        "example.loop", sourceId)).value().rows();
 
         assertEquals(1, rows.size());
         assertEquals(Disposition.INCOMPLETE, rows.get(0).disposition());

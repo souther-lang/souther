@@ -171,8 +171,7 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
         // A row expecting NoDuplicate does not hold where the guard comes out the other way, which
         // is all that is wrong with any of them.
         ACompiledModel.refusedWith(List.of("E1905", "E1905", "E1905"), running);
-        Output.Examples key = Output.Examples.asked(running.db(), "demo",
-                running.sourceIds().get(0));
+        Output.Examples key = new Output.Examples("demo", running.sourceIds().get(0));
         Set<String> answered = running.db().ask(key).value().rows().stream()
                 .map(row -> row.resultArm().name()).collect(Collectors.toSet());
         assertEquals(Set.of("NoDuplicate", "Duplicate"), answered, examples);

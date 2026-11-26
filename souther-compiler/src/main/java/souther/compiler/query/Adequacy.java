@@ -8170,7 +8170,7 @@ public final class Adequacy {
             return null;
         }
         ExampleExecution asked = ExampleExecutions.of(db, module);
-        return asked == null ? null : db.execution().trials(asked, armsAsked(db));
+        return asked == null ? null : db.execution().trials(asked);
     }
 
     /**

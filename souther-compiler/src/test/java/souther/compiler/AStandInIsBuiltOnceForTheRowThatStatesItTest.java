@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.execute.EvaluationPolicy;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
@@ -98,7 +97,7 @@ class AStandInIsBuiltOnceForTheRowThatStatesItTest {
         ACompiledModel.compiles(compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.once").getFirst();
         return compilation.db()
-                .ask(new Output.Examples("example.once", sourceId, ArmObservation.OMIT)).value()
+                .ask(new Output.Examples("example.once", sourceId)).value()
                 .rows();
     }
 }

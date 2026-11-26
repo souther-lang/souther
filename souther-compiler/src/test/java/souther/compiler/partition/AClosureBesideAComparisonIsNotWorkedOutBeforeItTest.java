@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.observe.AnswerObservation;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -58,7 +57,7 @@ class AClosureBesideAComparisonIsNotWorkedOutBeforeItTest {
         Compilation compilation = ACompiledModel.answered(modelOf(body));
         SourceId source = compilation.exampleSourcesOf("probe").getFirst();
         return compilation.db()
-                .ask(new Output.Examples("probe", source, ArmObservation.OMIT)).value().rows();
+                .ask(new Output.Examples("probe", source)).value().rows();
     }
 
     private static int elementsAnswered(RowOutcome row) {

@@ -82,7 +82,7 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
         assertNotNull(compilation.db().ask(new Bodies.Checked(module)).value(),
                 "the model under test compiles");
         Output.Examples.Of observed = compilation.db()
-                .ask(Output.Examples.asked(compilation.db(), module,
+                .ask(new Output.Examples(module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         RuleReadingContext reading =

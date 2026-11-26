@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.execute.EvaluationPolicy;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.WorkFigure;
@@ -102,7 +101,7 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
         ACompiledModel.refusedWith(List.of("E1910"), compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.loops").getFirst();
         List<Incompleteness> gaps = compilation.db().ask(new Output.Examples("example.loops",
-                sourceId, ArmObservation.OMIT)).value().incompleteness();
+                sourceId)).value().incompleteness();
         assertEquals(1, gaps.size(), gaps::toString);
         assertEquals(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED, gaps.get(0).code());
         return gaps.get(0).figure();

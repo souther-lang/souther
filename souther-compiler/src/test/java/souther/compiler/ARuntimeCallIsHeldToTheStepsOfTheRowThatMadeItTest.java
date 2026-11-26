@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.execute.EvaluationPolicy;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -75,7 +74,7 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
     private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("example.calling").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.calling", sourceId, ArmObservation.OMIT)).value().rows();
+                .ask(new Output.Examples("example.calling", sourceId)).value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);
     }

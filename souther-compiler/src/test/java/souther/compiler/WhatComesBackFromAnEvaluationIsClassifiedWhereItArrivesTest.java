@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.CompileException;
@@ -74,7 +73,7 @@ class WhatComesBackFromAnEvaluationIsClassifiedWhereItArrivesTest {
         ACompiledModel.refusedWith(List.of("E1924"), compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.arrives").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.arrives", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("example.arrives", sourceId))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);

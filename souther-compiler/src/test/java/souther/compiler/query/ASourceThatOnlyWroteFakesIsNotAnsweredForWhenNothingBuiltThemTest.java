@@ -81,7 +81,7 @@ class ASourceThatOnlyWroteFakesIsNotAnsweredForWhenNothingBuiltThemTest {
         Db db = tooWide();
 
         Answer<Output.Examples.Of> answered =
-                db.ask(Output.Examples.asked(db, "example.wide", ATTACHED));
+                db.ask(new Output.Examples("example.wide", ATTACHED));
 
         assertNull(answered.value(),
                 "nothing built the fakes this file wrote, so nothing here answers for it");
@@ -118,7 +118,7 @@ class ASourceThatOnlyWroteFakesIsNotAnsweredForWhenNothingBuiltThemTest {
                 List.of(heldByTheJvm(), ONLY_A_FAKE), ModulePath.EMPTY)).db();
 
         Answer<Output.Examples.Of> answered =
-                db.ask(Output.Examples.asked(db, "example.wide", ATTACHED));
+                db.ask(new Output.Examples("example.wide", ATTACHED));
 
         assertNotNull(answered.value(),
                 "the fakes build here, so the file is answered for — with no rows in it");

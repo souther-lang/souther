@@ -263,8 +263,8 @@ class CompileExampleCoverageTest {
         String module = compilation.modules().get(0);
         SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
-                .ask(souther.compiler.query.Output.Examples.asked(
-                        compilation.db(), module, sourceId)).value().rows();
+                .ask(new souther.compiler.query.Output.Examples(
+                        module, sourceId)).value().rows();
 
         assertEquals(1, rows.size());
         assertEquals(souther.compiler.observe.Disposition.INCOMPLETE, rows.get(0).disposition(),
