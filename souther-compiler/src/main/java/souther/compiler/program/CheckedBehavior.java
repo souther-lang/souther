@@ -29,14 +29,11 @@ public final class CheckedBehavior {
 
     private final ValueName.Behavior name;
     private final BehaviorTarget target;
-    private final EnsuresEnforcement ensures;
     private final List<CheckedRow> rows;
 
-    CheckedBehavior(ValueName.Behavior name, BehaviorTarget target, EnsuresEnforcement ensures,
-                    List<CheckedRow> rows) {
+    CheckedBehavior(ValueName.Behavior name, BehaviorTarget target, List<CheckedRow> rows) {
         this.name = name;
         this.target = target;
-        this.ensures = ensures;
         this.rows = List.copyOf(rows);
     }
 
@@ -76,23 +73,16 @@ public final class CheckedBehavior {
     }
 
     /**
-     * What this behavior declares about its answer, and where that is held to.
+     * What this behavior declares about its answer, and where that is held to
+     * ({@link BehaviorTarget#ensures}).
      *
      * <p>The two together, because an output needs both and neither is worth having alone: a
      * contract with nowhere to check it is a rule nothing runs, and a placement with no rule is a
-     * check with nothing in it. {@link EnsuresEnforcement.AtTheCallee} is checked where the
-     * behavior answers, so a caller emits nothing;
-     * {@link EnsuresEnforcement.AtEachCrossing} is a behavior whose answer arrives from outside, so
-     * every crossing into what this program emits checks it;
-     * {@link EnsuresEnforcement.NoContract} is a behavior that declares nothing.
-     *
-     * <p>{@link EnsuresEnforcement.NotDecidedHere} is for a behavior another module declared, and
-     * no behavior of this program is one — every module here was compiled together. It is an arm of
-     * the answer all the same, because collapsing it would make "there is no check" and "nobody
-     * decided" one sentence.
+     * check with nothing in it. Read off the target, which is what a call to it reaches too, so the
+     * module emitting the behavior and every module calling it read one answer.
      */
     public EnsuresEnforcement ensures() {
-        return ensures;
+        return target.ensures();
     }
 
     /**

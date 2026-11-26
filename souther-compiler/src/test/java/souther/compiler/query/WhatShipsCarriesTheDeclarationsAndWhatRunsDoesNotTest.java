@@ -193,7 +193,7 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
         Compilation compilation = started();
 
         Output.Examples.Of rows = compilation.db()
-                .ask(new Output.Examples("shop.cart", ROWS_AT, ArmObservation.OMIT)).value();
+                .ask(new Output.Examples("shop.cart", ROWS_AT)).value();
 
         assertNotNull(rows);
         assertEquals(List.of(Disposition.HELD),

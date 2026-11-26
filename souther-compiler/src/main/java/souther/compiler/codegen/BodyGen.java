@@ -39,7 +39,6 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
 
-import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.types.Refinement;
@@ -2118,8 +2117,11 @@ final class BodyGen {
             // project-check-canonicalize-cast, which would hold `ensures` to a value the carrier
             // invariant has not established yet. CanonicalizeAtCrossing.emit runs on the Souther
             // value project leaves, before checkAtCrossing hands anything to `Ensures.check`.
-            List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof EnsuresEnforcement.AtEachCrossing
-                    ? new ArrayList<>() : null;
+            //
+            // Whether it is checked is the callee's projection's answer, which is the same in every
+            // module that calls it: an answer Java supplies enters the program at this call whether
+            // the module declaring the behavior is this one or another.
+            List<Integer> saved = linked.checkedWhereCalled().isPresent() ? new ArrayList<>() : null;
             // Held as its projection says — the unary Behavior for one input, its own class for any
             // other number — and applied by what it says a caller applies one held that way with: a
             // base Java extends virtually, an interface through the interface. A `() -> R`
@@ -2137,7 +2139,7 @@ final class BodyGen {
             left(entered);
             project(linked);
             CanonicalizeAtCrossing.emit(ctx, code, success);
-            checkAtCrossing(callee, saved);
+            checkAtCrossing(linked, saved);
             castFromObject(code, success);
         }
 
@@ -2162,7 +2164,7 @@ final class BodyGen {
          * it is read after the boundary's carrier is off it and before a primitive is taken out of
          * it.
          */
-        private void checkAtCrossing(ValueName.Behavior callee, List<Integer> saved) {
+        private void checkAtCrossing(LinkageProjection.Behavior callee, List<Integer> saved) {
             if (saved == null) {
                 return;
             }
@@ -2172,14 +2174,7 @@ final class BodyGen {
                 code.aload(slot);
             }
             code.aload(carrier);
-            List<ClassDesc> params = new ArrayList<>();
-            for (int i = 0; i <= saved.size(); i++) {
-                params.add(CD_Object);
-            }
-            code.invokestatic(ctx.cd(new GeneratedClass.Ensures(
-                            new GeneratedClass.BehaviorInterface(callee.module(), callee.name()))),
-                    "check",
-                    MethodTypeDesc.of(ConstantDescs.CD_void, params.toArray(new ClassDesc[0])));
+            invoke(callee.checkedWhereCalled().orElseThrow());
             code.aload(carrier);
         }
 

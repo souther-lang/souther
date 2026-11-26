@@ -4605,7 +4605,8 @@ public final class Bodies {
             Map<ValueName.Behavior, EnsuresEnforcement> checks = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : lowered.behaviors()) {
                 ValueName.Behavior named = new ValueName.Behavior(lowered.name(), behavior.name());
-                checks.put(named, EnsuresEnforcement.of(named, executable, injected));
+                checks.put(named, EnsuresEnforcement.of(executable.get(named.name()),
+                        injected.contains(named)));
             }
             return Answer.of(Ordered.map(checks));
         }

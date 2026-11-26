@@ -366,7 +366,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
         ACompiledModel.refusedWith(codes, compilation);
         Db db = compilation.db();
         Map<String, RowOutcome> rows = new LinkedHashMap<>();
-        for (RowOutcome row : db.ask(Output.Examples.asked(db, module,
+        for (RowOutcome row : db.ask(new Output.Examples(module,
                 compilation.sourceIdOf(module))).value().rows()) {
             rows.put(row.identity() instanceof RowIdentity.Named(String name) ? name
                     : String.valueOf(row.identity()), row);

@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
@@ -39,7 +38,7 @@ class AnExampleShortOfRoomIsUndecidedAndNotFailedTest {
         ACompiledModel.refusedWith(List.of("E1941"), compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.room").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.room", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("example.room", sourceId))
                 .value().rows();
 
         assertEquals(1, rows.size(), rows.toString());

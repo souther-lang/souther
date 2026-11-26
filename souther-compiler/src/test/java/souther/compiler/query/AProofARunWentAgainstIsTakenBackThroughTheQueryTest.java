@@ -123,7 +123,7 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
         String module = compilation.modules().getFirst();
         return compilation.exampleSourcesOf(module).stream()
                 .flatMap(id -> compilation.db()
-                        .ask(Output.Examples.asked(compilation.db(), module, id))
+                        .ask(new Output.Examples(module, id))
                         .value().rows().stream())
                 .findFirst().orElseThrow(() -> new AssertionError("a row of the module"));
     }

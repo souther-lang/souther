@@ -1,0 +1,112 @@
+Lsouther/runtime/meta/SoutherBehavior;
+  implementation: string
+  requirements: array of string
+  signature: string
+  signatureFrom: string
+Lsouther/runtime/meta/SoutherData;
+  value: string
+Lsouther/runtime/meta/SoutherModule;
+  behaviors: array of string
+  compat: int
+  compiler: string
+  header: string
+  imports: array of string
+  invariantHelpers: array of string
+  name: string
+  providedCopies: array of string
+  providedLinkages: array of string
+  requiredCopies: array of string
+  requiredLinkages: array of string
+  types: array of string
+  valueAnswers: array of string
+providedLinkages shared.money.Amount
+  declared as = newtype
+  exposed = true
+  carried as = Lshared/money/Amount;
+  ordered as = natural
+  laid out as = (value)
+  field value = Int
+  built by = invokestatic Lshared/money/Amount;.__construct(J)Lsouther/runtime/Result;
+providedLinkages shared.money.Pricing
+  declared as = sum
+  exposed = false
+  carried as = Lshared/money/Pricing;
+  cases = shared.money.Receipt | shared.money.Unpriced
+providedLinkages shared.money.Receipt
+  declared as = product
+  exposed = true
+  carried as = Lshared/money/Receipt;
+  laid out as = (paid)
+  field paid = shared.money.Amount
+  built by = invokestatic Lshared/money/Receipt;.__construct(Lshared/money/Amount;)Lsouther/runtime/Result;
+providedLinkages shared.money.Unpriced
+  declared as = unit
+  exposed = false
+  carried as = Lshared/money/Unpriced;
+providedLinkages shared.money.ceiling
+  entered by = invokestatic Lshared/money/$Values;.ceiling()Ljava/lang/Object;
+  answers = shared.money.Amount
+providedLinkages shared.money.charge
+  realized as = implemented
+  exposed = true
+  takes = (shared.money.Amount)
+  answers = shared.money.Receipt
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  built with = () through Lshared/money/Charge$Impl;()V
+  applied when built by = invokevirtual Lshared/money/Charge$Impl;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+providedLinkages shared.money.halve
+  realized as = implemented
+  exposed = true
+  takes = (Int)
+  answers = Int
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  built with = () through Lshared/money/Halve$Impl;()V
+  applied when built by = invokevirtual Lshared/money/Halve$Impl;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+providedLinkages shared.money.price
+  realized as = supplied by Java
+  exposed = false
+  takes = (shared.money.Amount)
+  answers = Int | shared.money.Unpriced
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  answers Int through = Lshared/money/IntCase;.value()J
+providedLinkages shared.money.quote
+  realized as = supplied by Java
+  exposed = true
+  takes = (shared.money.Amount)
+  answers = shared.money.Receipt
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  checked where called by = invokestatic Lshared/money/Quote$Ensures;.check(Ljava/lang/Object;Ljava/lang/Object;)V
+providedLinkages shared.money.settle
+  realized as = implemented
+  exposed = true
+  takes = (shared.money.Amount)
+  answers = shared.money.Receipt
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  built with = (shared.money.quote) through Lshared/money/Settle$Impl;(Lsouther/runtime/Behavior;)V
+  applied when built by = invokevirtual Lshared/money/Settle$Impl;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+providedLinkages shared.rates.half
+  realized as = implemented
+  exposed = true
+  takes = (Int)
+  answers = Int
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  built with = () through Lshared/rates/Half$Impl;()V
+  applied when built by = invokevirtual Lshared/rates/Half$Impl;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+providedLinkages shared.rates.offset
+  entered by = invokestatic Lshared/rates/$Values;.offset()Ljava/lang/Object;
+  answers = Int
+requiredLinkages shared.rates.half
+  realized as = implemented
+  exposed = true
+  takes = (Int)
+  answers = Int
+  held as = Lsouther/runtime/Behavior;
+  applied by = invokeinterface Lsouther/runtime/Behavior;.apply(Ljava/lang/Object;)Ljava/lang/Object;
+  built with = () through Lshared/rates/Half$Impl;()V
+  applied when built by = invokevirtual Lshared/rates/Half$Impl;.apply(Ljava/lang/Object;)Ljava/lang/Object;

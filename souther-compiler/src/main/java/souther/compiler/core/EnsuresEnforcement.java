@@ -5,7 +5,6 @@ import souther.compiler.abort.AbortSet;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What is being done about a behavior's {@code ensures}, answered once for the whole compilation.
@@ -24,11 +23,13 @@ import java.util.Set;
  * pipeline stage's application is where a bodied stage's own check already runs and where an
  * injected stage's crossing check goes.
  *
- * <p>Four cases and not three, because "there is no check" and "this stage did not decide" are not
- * the same answer. The first is a conclusion, reached by reading what a behavior declared. The
- * second is the absence of one, and it is what a compilation has to say about a behavior another
- * module declared. Collapsed into one variant they read alike at every use, and the thing that is
- * waiting to be designed reads as a fact somebody measured.
+ * <p>The module declaring a behavior decides, and its answer is the answer wherever the behavior is
+ * called. Both facts it rests on are the behavior's own — what it declares, and whether Java supplies
+ * its body — so a caller in another module has nothing to decide differently: a body checks its own
+ * answer for every caller, and an answer Java supplies enters the program at every call, whoever
+ * makes it. What a caller reads of it is the callee's projection
+ * ({@code LinkageProjection.Behavior#checkedWhereCalled}), which an artifact records, so a caller
+ * built against a module whose clause has since moved is told so when it is linked again.
  */
 public sealed interface EnsuresEnforcement {
 
@@ -48,7 +49,8 @@ public sealed interface EnsuresEnforcement {
     }
 
     /**
-     * The answer arrives from outside, so every crossing into generated code checks it.
+     * The answer arrives from outside, so every crossing into generated code checks it, in whichever
+     * module the crossing is.
      *
      * <p>An injected behavior's {@code apply} is supplied by the Java implementation (ADR-0056), so
      * there is no body here to check in. The line is the one the Decoder draws for an outside value:
@@ -77,28 +79,7 @@ public sealed interface EnsuresEnforcement {
     }
 
     /**
-     * This compilation has not decided, which is its answer for a behavior another module declared.
-     *
-     * <p>Not {@link NoContract}. Such a behavior may well declare a clause — the artifact carries the
-     * declaration and this compilation can read it — and what is missing is not the clause but the
-     * basis for acting on it: which boundary revision the artifact was published under, whether what
-     * it published is an executable guarantee at all, and on what basis this compilation may rely on
-     * it. Those make an ownership model, and answering them by reading a module name would decide
-     * them by a spelling.
-     *
-     * <p>So this is where the unfinished thing is, said as one answer. A behavior that reaches here
-     * is one whose clause nothing in this compilation runs, and that is visible rather than arrived
-     * at: the day cross-module ownership is designed, this answer becomes one of the two above, and
-     * the sites that read it are the sites that already had to say what they do with it.
-     */
-    record NotDecidedHere() implements EnsuresEnforcement {
-
-        /** The one of these there is, for the same reason {@link NoContract#INSTANCE} is. */
-        public static final NotDecidedHere INSTANCE = new NotDecidedHere();
-    }
-
-    /**
-     * What is checked, or null where nothing is and where nothing was decided.
+     * What is checked, or null where nothing is.
      *
      * <p>The contract rides the answer rather than being looked up beside it. An emitter needs both
      * — where the check goes and what it says — and handed them apart it would hold a case saying
@@ -110,7 +91,6 @@ public sealed interface EnsuresEnforcement {
             case AtTheCallee(Contract c) -> c;
             case AtEachCrossing(Contract c) -> c;
             case NoContract _ -> null;
-            case NotDecidedHere _ -> null;
         };
     }
 
@@ -124,84 +104,50 @@ public sealed interface EnsuresEnforcement {
      * for a {@code Core} site — not folded into that walker, because where a clause is checked is
      * already a semantic object of its own and asking it a second question here is cheaper and more
      * honest than reading the same fact out of a tree walk.
-     *
-     * <p>{@link NotDecidedHere} is not answered here at all. {@link AbortSet#NONE} states, by its
-     * own contract, that a site {@code always answers a value or a business case, never neither} —
-     * and {@link NotDecidedHere} is the opposite of that claim: this compilation has not decided
-     * whether the crossing checks anything, so there is no fact yet to state as an {@link AbortSet}.
-     * Answering {@code NONE} for it would be "nothing said" read back as "considered and found
-     * total" — the exact confusion a backend-neutral abort vocabulary exists to end. So this throws
-     * instead, the same refusal {@link #contract} would be making too if it did not already have
-     * {@code null} to answer with. Every {@link souther.compiler.program.CheckedBehavior} this
-     * compiler emits is checked against its own declaring module, which {@link #in} never answers
-     * {@link NotDecidedHere} for — so no site this compiler builds a program from reaches this arm;
-     * it exists for the day cross-module ownership is designed and this becomes one of the other
-     * three answers.
-     *
-     * @throws IllegalStateException where this is {@link NotDecidedHere} — this compilation has
-     *     nothing to say about whether the crossing aborts, and {@link AbortSet} has no value that
-     *     means "unknown"
      */
     default AbortSet aborts() {
         return switch (this) {
             case AtTheCallee _ -> AbortSet.of(AbortKind.ENSURES_NOT_HELD);
             case AtEachCrossing _ -> AbortSet.of(AbortKind.ENSURES_NOT_HELD);
             case NoContract _ -> AbortSet.NONE;
-            case NotDecidedHere _ -> throw new IllegalStateException(
-                    "whether this crossing can end without a value for ENSURES_NOT_HELD is not"
-                            + " decided here — asked of a behavior another module declares, which"
-                            + " this compilation did not classify");
         };
     }
 
     /**
-     * What {@code decided} says about {@code behavior}, where {@code decided} is the compilation of
-     * {@code module}.
+     * What {@code decided}, the compilation of {@code module}, says about {@code behavior}, one of
+     * {@code module}'s own.
      *
-     * <p>The one place a miss is read, and the two kinds of miss are not one answer.
-     * {@link NotDecidedHere} is for a behavior another module declared, which this compilation did
-     * not classify because classifying it needs an ownership model it has not got.
-     *
-     * <p>A behavior of {@code module} is another matter. This compilation decided about every one of
-     * its own — that is what building the table is — so a miss there is not an answer at all but a
-     * table that was not filled, and giving it the foreign answer would let a local behavior with a
-     * clause emit no check while reading as a boundary somebody had reasoned about. The whole point
-     * of there being four cases is that a combination nothing means cannot be written; a miss
-     * standing for two unlike things would put one back in by the side door.
+     * <p>A table of a module's own decisions is asked about its own behaviors only: what a caller
+     * reads of another module's behavior is that behavior's projection, made by the same rule
+     * ({@link #of}) from the same facts. So a miss is a table that was not filled — or a behavior of
+     * another module asked of the wrong table — and is this compiler failing either way.
      */
     public static EnsuresEnforcement in(Map<ValueName.Behavior, EnsuresEnforcement> decided,
                                         String module, ValueName.Behavior behavior) {
         EnsuresEnforcement answered = decided.get(behavior);
-        if (answered != null) {
-            return answered;
+        if (answered == null) {
+            throw new IllegalStateException("no enforcement decision for `" + behavior + "` in the"
+                    + " table `" + module + "`'s compilation decided for its own behaviors");
         }
-        if (!behavior.module().equals(module)) {
-            return NotDecidedHere.INSTANCE;
-        }
-        throw new IllegalStateException(
-                "no enforcement decision for `" + behavior.name() + "`, which `" + module
-                        + "` declares");
+        return answered;
     }
 
     /**
-     * What is being done about {@code behavior}'s clause, read from what it declares and from
-     * whether its body comes from outside.
+     * What is being done about a behavior's clause, read from what it declares ({@code contract},
+     * null where it declares nothing) and from whether Java supplies its body.
      *
-     * <p>The one place the two facts meet, and it is asked only of a behavior this compilation
-     * declares. {@code injected} has to be the set as the requirements pass answered it: the backend
-     * goes on adding to a set of that name, so that a behavior this module gives a body to but
-     * reaches as a dependency joins it, and a reader arriving afterwards would find a bodied
-     * behavior sitting among the injected ones.
+     * <p>The one place the two facts meet. Both are facts about the behavior as the module that
+     * declares it has it, so the answer is the same whoever asks: the compilation of that module
+     * placing its checks, and a run standing something in for the behavior asking what the
+     * implementation it replaced would have checked. {@code injected} is the classification the
+     * declaring module answers ({@code Bodies.Implementation}), and not the set the backend goes on
+     * adding to, where a behavior this module gives a body to but reaches as a dependency joins the
+     * injected ones.
      */
-    public static EnsuresEnforcement of(ValueName.Behavior behavior,
-                                        Map<String, Contract> contracts,
-                                        Set<ValueName.Behavior> injected) {
-        Contract contract = contracts.get(behavior.name());
+    public static EnsuresEnforcement of(Contract contract, boolean injected) {
         if (contract == null) {
             return NoContract.INSTANCE;
         }
-        return injected.contains(behavior)
-                ? new AtEachCrossing(contract)
-                : new AtTheCallee(contract);
+        return injected ? new AtEachCrossing(contract) : new AtTheCallee(contract);
     }
 }

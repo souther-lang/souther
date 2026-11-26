@@ -40,15 +40,26 @@ final class StandingIn {
      * ({@link UnionMembers#asAMember}). A table and a {@code with} both come through here, so
      * neither has a reading of its own of what a union is answered as.
      *
+     * <p>And held to what the dependency declares, for the arguments it was actually called with,
+     * where taking the place of the dependency took away what held it
+     * ({@link EnsuresChecks#holdAStandIn}). Here, so that a {@code _} row, a {@code with} and a
+     * {@code with} a search composed are held alike: none of them states the input it is called
+     * with, so none can be held before the call.
+     *
+     * @param ensures   the run's, which knows what each dependency declares and where it is checked
      * @param members   the run's, which knows what each dependency's union is answered through
      * @param signature the dependency's own, whose output is what it answers
      * @param answers   what it answers, for the arguments it is called with, as the Souther value
      */
-    static DependencyStandin by(UnionMembers members, ValueName.Behavior dependency, Sig signature,
+    static DependencyStandin by(EnsuresChecks ensures, UnionMembers members,
+                                ValueName.Behavior dependency, Sig signature,
                                 Function<Object[], Object> answers) {
         Type out = signature.out().type();
-        return new DependencyStandin(dependency,
-                answers.andThen(value -> members.asAMember(dependency, out, value)));
+        return new DependencyStandin(dependency, arguments -> {
+            Object value = answers.apply(arguments);
+            ensures.holdAStandIn(dependency, arguments, value);
+            return members.asAMember(dependency, out, value);
+        });
     }
 
     /**
@@ -96,7 +107,7 @@ final class StandingIn {
             }
             return answering.answer().value();
         };
-        return new OffATable(by(members, dependency, signature, answers), table);
+        return new OffATable(by(ensures, members, dependency, signature, answers), table);
     }
 
     /** A stand-in a module's table gives, and the table it dispatches over. */

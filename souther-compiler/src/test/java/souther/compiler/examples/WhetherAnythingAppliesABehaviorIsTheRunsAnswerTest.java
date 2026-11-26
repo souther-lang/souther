@@ -1,6 +1,5 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
@@ -17,6 +16,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -225,7 +225,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         Scopes.derived(mine.db(), name).value(),
                         Shapes.sumCases(mine.db()),
                         Shapes.declarationKinds(mine.db()),
-                        souther.compiler.query.ExampleExecutions.of(mine.db(), name).fieldTypes(),
+                        ExampleExecutions.of(mine.db(), name).fieldTypes(),
                         mine.db().ask(new Bodies.Reachable(name)).value(),
                         artifactOf(other, "example.elsewhere"),
                         () -> {
@@ -237,8 +237,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                         EvaluationPolicy.DEFAULT,
                         Answering.generatedHere(),
-                        CheckedEnsures.executableOf(
-                                mine.db().ask(new Bodies.ReachableContracts(name)).value())));
+                        ExampleExecutions.of(mine.db(), name).ensured()));
 
         assertTrue(refused.getMessage().contains("example.applying")
                         && refused.getMessage().contains("example.elsewhere"),
@@ -322,7 +321,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 Scopes.derived(c.db(), name).value(),
                 Shapes.sumCases(c.db()),
                 Shapes.declarationKinds(c.db()),
-                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
+                ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifactOf(c, name),
                 // Every answer here applies this compile's own classes, so nothing is held against
@@ -336,8 +335,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                CheckedEnsures.executableOf(
-                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
+                ExampleExecutions.of(c.db(), name).ensured());
     }
 
     private static Compilation compiled() {

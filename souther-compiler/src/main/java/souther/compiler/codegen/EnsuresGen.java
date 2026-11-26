@@ -20,6 +20,7 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static souther.compiler.codegen.Descriptors.CD_ConstraintViolation;
@@ -68,18 +69,24 @@ final class EnsuresGen {
         this.ctx = ctx;
     }
 
+    /**
+     * What a behavior taking {@code inputs} has its answer checked by: each input and then the
+     * answer, every one a reference (ADR-0104), and nothing back. Said once, here where the method
+     * is written, for every class that calls it.
+     */
+    public static MethodTypeDesc checkType(int inputs) {
+        ClassDesc[] params = new ClassDesc[inputs + 1];
+        Arrays.fill(params, ConstantDescs.CD_Object);
+        return MethodTypeDesc.of(ConstantDescs.CD_void, params);
+    }
+
     /** The class carrying {@code contract}'s check. */
     byte[] generate(Contract contract) {
         ClassDesc cd = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(contract.behavior().module(),
                         contract.behavior().name())));
-        List<ClassDesc> params = new ArrayList<>();
-        for (int i = 0; i <= contract.params().size(); i++) {
-            params.add(ConstantDescs.CD_Object);
-        }
-        MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_void,
-                params.toArray(new ClassDesc[0]));
-        List<ClassDesc> byCase = new ArrayList<>(params);
+        MethodTypeDesc check = checkType(contract.params().size());
+        List<ClassDesc> byCase = new ArrayList<>(check.parameterList());
         byCase.set(contract.params().size(), CD_String);
         MethodTypeDesc checkCase = MethodTypeDesc.of(ConstantDescs.CD_void,
                 byCase.toArray(new ClassDesc[0]));

@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.execute.EvaluationPolicy;
@@ -42,7 +41,7 @@ class ASettingBelongsToTheCompileThatReadItTest {
         ACompiledModel.refusedWith(refusals, compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.setting").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.setting", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("example.setting", sourceId))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);

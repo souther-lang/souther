@@ -79,7 +79,7 @@ class WhatASourceGotWrongIsSaidEvenWhereNothingCouldBeEmittedTest {
         Db db = refusedForTheClash();
 
         Answer<Output.Examples.Of> answered =
-                db.ask(Output.Examples.asked(db, "example.wide", ATTACHED));
+                db.ask(new Output.Examples("example.wide", ATTACHED));
 
         assertEquals(1, answered.reports().size(),
                 () -> "the file declares a name the module declares: " + answered.reports());

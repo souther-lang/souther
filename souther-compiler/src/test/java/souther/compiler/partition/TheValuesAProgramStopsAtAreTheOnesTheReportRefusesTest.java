@@ -7,7 +7,6 @@ import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
@@ -74,7 +73,7 @@ class TheValuesAProgramStopsAtAreTheOnesTheReportRefusesTest {
         Map<String, RowOutcome> rows = new java.util.LinkedHashMap<>();
         SourceId source = compilation.exampleSourcesOf("demo").getFirst();
         for (RowOutcome row : compilation.db()
-                .ask(new Output.Examples("demo", source, ArmObservation.OMIT)).value().rows()) {
+                .ask(new Output.Examples("demo", source)).value().rows()) {
             rows.put(row.identity().shown(), row);
         }
         assertEquals(6, rows.size(), rows::toString);

@@ -1,7 +1,10 @@
 package souther.compiler.examples;
 
 import souther.compiler.core.Contract;
+import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.generated.GeneratedLinkage;
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -12,7 +15,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -46,19 +48,17 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class EnsuresChecks {
 
-    /** Every behavior a row or a fake here may state something about — this module's and the ones it
-     *  borrows — under the declaration each is. Only the ones that state something are here. */
-    private final Map<ValueName.Behavior, Contract> contracts;
-
     /**
-     * Every behavior this reading was given, whether or not it declares anything.
+     * How the module declaring each behavior a row or a fake here may state something about holds
+     * what it declares — this module's and the ones it borrows, under the declaration each is. The
+     * clause rides the answer ({@link EnsuresEnforcement#contract}).
      *
-     * <p>Beside {@link #contracts} so that being absent from that one means "states nothing" and
-     * only that. Without it a behavior whose module was never read would answer the same as one
-     * with no {@code ensures}, and a reading that came up short would pass for a model that had
-     * nothing to say.
+     * <p>Every one of them, the ones stating nothing included, so being absent means that the
+     * behavior was not read and only that. Otherwise a behavior whose module was never read would
+     * answer the same as one with no {@code ensures}, and a reading that came up short would pass
+     * for a model that had nothing to say.
      */
-    private final Set<ValueName.Behavior> reachable;
+    private final Map<ValueName.Behavior, EnsuresEnforcement> held;
 
     private final ClassLoader loader;
 
@@ -79,24 +79,21 @@ final class EnsuresChecks {
      *  unique. */
     private final Map<ValueName.Behavior, Method> foundForCase = new ConcurrentHashMap<>();
 
-    EnsuresChecks(ClassLoader loader, Map<ValueName.Behavior, Contract> contracts,
-                  Set<ValueName.Behavior> reachable) {
+    EnsuresChecks(ClassLoader loader, DeclaredEnsures declared) {
         this.loader = loader;
-        this.contracts = contracts;
-        this.reachable = reachable;
+        this.held = declared.held();
     }
 
     /**
      * Whether {@code behavior} states anything of what it answers.
      *
-     * <p>Asked of the contracts, which is where the answer is: a behavior writing no {@code ensures}
-     * is not put in them ({@code Bodies.Contracts}), so being absent and stating nothing are one
-     * fact rather than two that agree. Answerable without applying anything, because what a behavior
-     * declares does not turn on an input — {@link #contractOf} reads the name and uses the arguments
-     * only to check their number against it.
+     * <p>Answerable without applying anything, because what a behavior declares does not turn on an
+     * input — {@link #contractOf} reads the name and uses the arguments only to check their number
+     * against it.
      */
     boolean states(ValueName.Behavior behavior) {
-        return contracts.containsKey(behavior);
+        EnsuresEnforcement answer = held.get(behavior);
+        return answer != null && answer.contract() != null;
     }
 
     /**
@@ -104,20 +101,18 @@ final class EnsuresChecks {
      * where every rule held — and where the behavior states nothing, which is every rule it has
      * holding.
      *
-     * @throws IllegalStateException where the check could not be called, which is this compiler
-     *                               failing to reach its own output rather than anything about the
-     *                               values. Not a {@link FixtureException}: that says a written
-     *                               fixture is at fault, and a caller catching one would report a
-     *                               broken emission as an author's mistake
+     * @throws GeneratedClassDefect where the check could not be called, which is this compiler
+     *                              failing to reach its own output rather than anything about the
+     *                              values. Not a {@link FixtureException}: that says a written
+     *                              fixture is at fault, and a caller catching one would report a
+     *                              broken emission as an author's mistake
      */
     String notHeld(ValueName.Behavior behavior, Object[] args, Object answer) {
         Contract contract = contractOf(behavior, args);
         if (contract == null) {
             return null;
         }
-        Object[] handed = Arrays.copyOf(args, args.length + 1);
-        handed[args.length] = answer;
-        return said(behavior.name(), () -> check(behavior, contract).invoke(null, handed));
+        return said(behavior, () -> check(behavior, contract).invoke(null, handing(args, answer)));
     }
 
     /**
@@ -129,17 +124,61 @@ final class EnsuresChecks {
      * read the answer, and they are held where the behavior answers, as everything nothing wrote a
      * value for is.
      *
-     * @throws IllegalStateException on the same terms as {@link #notHeld}
+     * @throws GeneratedClassDefect on the same terms as {@link #notHeld}
      */
     String notHeldForCase(ValueName.Behavior behavior, Object[] args, TypeSymbol answered) {
         Contract contract = contractOf(behavior, args);
         if (contract == null) {
             return null;
         }
-        Object[] handed = Arrays.copyOf(args, args.length + 1);
-        handed[args.length] = SoutherJvmAbi.caseTokenOf(answered).qualified();
-        return said(behavior.name(),
-                () -> checkForCase(behavior, contract).invoke(null, handed));
+        String token = SoutherJvmAbi.caseTokenOf(answered).qualified();
+        return said(behavior,
+                () -> checkForCase(behavior, contract).invoke(null, handing(args, token)));
+    }
+
+    /**
+     * Holds what a stand-in for {@code dependency} answered to {@code args} to what the dependency
+     * declares, where the implementation it took the place of would have.
+     *
+     * <p>A stand-in owes what that implementation owed, and nothing about who calls it. A body
+     * checks its own answer ({@code AtTheCallee}), and no code calling it checks it again, in its
+     * module or any other — so taking the body's place takes its check, and this is then the one
+     * check of the call. What Java supplies checks nothing ({@code AtEachCrossing}): every class
+     * calling it, in whichever module, checks the answer where it comes back, and a stand-in running
+     * that check as well would run it twice. Read off how the module declaring the dependency holds
+     * it, which is one answer however many places call one stand-in: the rows' own module calls it,
+     * and so does a stage another module declares that a composition hands it to.
+     *
+     * <p>{@code answer} is the Souther value, before it is handed back as a member of the union the
+     * dependency answers through. The emitted check reads the value; handed the bridge case holding
+     * it, a rule guarded by the case it is would read the bridge and hold nothing.
+     *
+     * <p>A violation goes out as the check threw it, so a run stopped here stops as one stopped at a
+     * crossing does and is read by the same reading of where a run ended.
+     *
+     * @throws GeneratedClassDefect where the check could not be called, which is this compiler
+     *                              failing inside a call its own code makes
+     */
+    void holdAStandIn(ValueName.Behavior dependency, Object[] args, Object answer) {
+        if (declared(dependency) instanceof EnsuresEnforcement.AtTheCallee) {
+            Contract contract = contractOf(dependency, args);
+            called(dependency,
+                    () -> check(dependency, contract).invoke(null, handing(args, answer)));
+        }
+    }
+
+    /** How the module declaring {@code behavior} holds what it declares. */
+    private EnsuresEnforcement declared(ValueName.Behavior behavior) {
+        EnsuresEnforcement answer = held.get(behavior);
+        if (answer == null) {
+            // Refused rather than answered with "declares nothing": a caller handed silence would
+            // take a reading that came up short for a model with nothing to say.
+            throw new GeneratedClassDefect("`" + behavior + "` is not among the behaviors this"
+                    + " reading was given, so what it declares cannot be answered here; a value is"
+                    + " held to a clause by the module that declares it and that module was not"
+                    + " read", null);
+        }
+        return answer;
     }
 
     /**
@@ -147,31 +186,25 @@ final class EnsuresChecks {
      * declares nothing.
      *
      * <p>Asked by the declaration, so a behavior another module declares is answered with that
-     * module's clause. Being asked about one this reading cannot name at all is refused rather than
-     * answered with "declares nothing": the two are told apart because {@code reachable} says which
-     * behaviors were read, and a caller handed silence for the second would take a reading that came
-     * up short for a model with nothing to say.
+     * module's clause.
      */
     private Contract contractOf(ValueName.Behavior behavior, Object[] args) {
-        if (!reachable.contains(behavior)) {
-            throw new IllegalStateException("`" + behavior + "` is not among the behaviors this"
-                    + " reading was given, so what it declares cannot be answered here; a value is"
-                    + " held to a clause by the module that declares it and that module's contracts"
-                    + " were not read");
-        }
-        Contract contract = contracts.get(behavior);
-        if (contract == null) {
-            return null;
-        }
-        if (args.length != contract.params().size()) {
+        Contract contract = declared(behavior).contract();
+        if (contract != null && args.length != contract.params().size()) {
             // Whoever built the arguments built them against the signature, so this is that reading
             // and this one disagreeing. Said rather than passed on to reflection, which would report
             // it as a method that is not there.
-            throw new IllegalStateException("`" + behavior.name() + "` takes "
-                    + contract.params().size() + " input(s) and the check was handed "
-                    + args.length);
+            throw new GeneratedClassDefect("`" + behavior + "` takes " + contract.params().size()
+                    + " input(s) and its check was handed " + args.length, null);
         }
         return contract;
+    }
+
+    /** The arguments a check is called with: the behavior's own, and then what is held to them. */
+    private static Object[] handing(Object[] args, Object last) {
+        Object[] handed = Arrays.copyOf(args, args.length + 1);
+        handed[args.length] = last;
+        return handed;
     }
 
     /** An emitted check, called. */
@@ -182,38 +215,49 @@ final class EnsuresChecks {
     /**
      * What {@code call} said, or null where it held.
      *
-     * <p>One reading of an abort for both checks. Which entry point was called says what evidence
-     * the declaration was asked from; what a violation of it is, and what an end other than a
-     * violation means for the row, are the same either way.
+     * <p>A violation is a value here and not an end: what it says is what a row is told. Matched by
+     * name — the check runs under the loader the classes are in, and the runtime it aborts with is
+     * whatever that loader reads it from, so what is wanted is only which abort it was, the same
+     * reading a row's own application does.
      */
-    private String said(String behavior, Called call) {
+    private String said(ValueName.Behavior behavior, Called call) {
+        try {
+            called(behavior, call);
+            return null;
+        } catch (RuntimeException ended) {
+            if ("souther.runtime.ConstraintViolation".equals(ended.getClass().getName())) {
+                return ended.getMessage();
+            }
+            throw ended;
+        }
+    }
+
+    /**
+     * {@code call}, run, ending as the check ended.
+     *
+     * <p>One way a check is called, whatever its answer is read for. A violation, or the model's
+     * code ending some other way while the clause was worked out — a budget spent, a stack run out
+     * — goes out as the check threw it, for whoever reads the row to read. The rest is the check
+     * not being reachable, which is this compiler failing: the class is emitted for every clause
+     * {@link #held} carries, so a miss is that correspondence broken rather than a behavior with
+     * nothing to check.
+     */
+    private static void called(ValueName.Behavior behavior, Called call) {
         try {
             call.call();
-            return null;
         } catch (InvocationTargetException ite) {
-            Throwable cause = ite.getCause();
             GeneratedLinkage.rejectDefect(ite);
-            // Matched by name: the check runs under the loader the classes are in, and the runtime
-            // it aborts with is whatever that loader reads it from. What is wanted here is only
-            // which abort it was — the same reading a row's own application does.
-            if (cause != null
-                    && "souther.runtime.ConstraintViolation".equals(cause.getClass().getName())) {
-                return cause.getMessage();
-            }
-            // Not the clause failing: the model's code ran and ended some other way, and what that
-            // means for the row — a budget spent, a stack run out — is read where the row is.
-            switch (cause) {
-                case null -> throw new IllegalStateException("a check threw nothing", ite);
+            switch (ite.getCause()) {
+                case null -> throw new GeneratedClassDefect("the check of `" + behavior
+                        + "` threw nothing", ite);
                 case RuntimeException re -> throw re;
                 case Error err -> throw err;
-                default -> throw new IllegalStateException(
-                        "a check threw a checked exception: " + cause, cause);
+                default -> throw new GeneratedClassDefect("the check of `" + behavior
+                        + "` threw a checked exception", ite.getCause());
             }
         } catch (ReflectiveOperationException e) {
-            // The class is emitted for every contract this answer holds, so a miss is that
-            // correspondence broken rather than a behavior with nothing to check.
-            throw new IllegalStateException("what `" + behavior
-                    + "` declares could not be checked: " + e.getMessage(), e);
+            throw new GeneratedClassDefect("what `" + behavior + "` declares could not be checked: "
+                    + e.getMessage(), e);
         }
     }
 

@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.DoesNotComeBack;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.source.SourceId;
@@ -70,7 +69,7 @@ class AnArrangementNamedAfterRowsHaveRunIsRefusedTest {
     private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("example.twice").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("example.twice", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("example.twice", sourceId))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);

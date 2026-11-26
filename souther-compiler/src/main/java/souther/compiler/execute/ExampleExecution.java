@@ -1,7 +1,6 @@
 package souther.compiler.execute;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -50,7 +49,7 @@ public final class ExampleExecution {
     private final Map<ValueName.Behavior, Sig> signatures;
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final Map<String, Hir.FnDef> definitions;
-    private final Map<ValueName.Behavior, Contract> contracts;
+    private final DeclaredEnsures ensured;
     private final EvaluationPolicy policy;
     private final Map<String, ExampleExecution> declaring;
 
@@ -61,7 +60,7 @@ public final class ExampleExecution {
                             Map<ValueName.Behavior, Sig> signatures,
                             Map<String, List<BehaviorRequirement>> requirements,
                             Map<String, Hir.FnDef> definitions,
-                            Map<ValueName.Behavior, Contract> contracts,
+                            DeclaredEnsures ensured,
                             EvaluationPolicy policy,
                             Map<String, ExampleExecution> declaring) {
         this.prepared = prepared;
@@ -77,7 +76,7 @@ public final class ExampleExecution {
         this.signatures = signatures;
         this.requirements = requirements;
         this.definitions = definitions;
-        this.contracts = contracts;
+        this.ensured = ensured;
         this.policy = policy;
     }
 
@@ -168,9 +167,9 @@ public final class ExampleExecution {
     }
 
     /** What each behavior declares of what it answers, which is what holds a row's values to
-     *  something. */
-    public Map<ValueName.Behavior, Contract> contracts() {
-        return contracts;
+     *  something, and where this module checks each of its own, which says what a stand-in owes. */
+    public DeclaredEnsures ensured() {
+        return ensured;
     }
 
     /**

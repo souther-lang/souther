@@ -1,6 +1,5 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
@@ -17,6 +16,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -337,7 +337,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 Scopes.derived(c.db(), name).value(),
                 Shapes.sumCases(c.db()),
                 Shapes.declarationKinds(c.db()),
-                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
+                ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 // The answerers here apply this compile's own classes, so there is no second set of
@@ -351,7 +351,6 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer,
-                CheckedEnsures.executableOf(
-                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
+                ExampleExecutions.of(c.db(), name).ensured());
     }
 }

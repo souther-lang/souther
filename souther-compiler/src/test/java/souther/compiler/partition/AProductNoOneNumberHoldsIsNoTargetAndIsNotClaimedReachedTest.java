@@ -109,7 +109,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
                 Output.Examples.Of ran = compilation.db()
-                        .ask(Output.Examples.asked(compilation.db(), module, id)).value();
+                        .ask(new Output.Examples(module, id)).value();
                 if (ran != null) {
                     rows.addAll(ran.rows());
                 }
@@ -222,35 +222,14 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
      */
     @Test
     void aProductNoOneNumberHoldsIsMeasuredWhateverItIsPutBesideOrUnder() {
-        for (String condition : List.of(
+        assertEachMeasured("a: Int, b: Int, c: Int, d: Int", List.of(
                 "(a + b) * c >= 1000",
                 "(a + b) * c + d >= 1000",
                 "Int.floorMod((a + b) * c, 7) >= 1",
                 "(a + b) * c >= d",
                 "(a + b) * c >= 1000 && a >= 5",
                 "(a + b) * c >= 1000 && (a + b) * c <= 5000",
-                "d * ((a + b) * c) >= 1000")) {
-            String model = """
-                    module demo
-
-                    data Ok
-                    data No
-
-                    behavior f : (a: Int, b: Int, c: Int, d: Int) -> Ok | No
-                    let f (a, b, c, d) = {
-                        guard %s else No
-                        Ok
-                    }
-                    """.formatted(condition);
-            Compilation compilation = Compilation.ofSource(model, "Main");
-            assertDoesNotThrow(() -> {
-                compilation.measure(Adequacy.Asked.fullReport());
-                compilation.answerEverything();
-            }, condition);
-            ACompiledModel.compiles(compilation);
-            assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
-            assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
-        }
+                "d * ((a + b) * c) >= 1000"));
     }
 
     /**
@@ -259,7 +238,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
      */
     @Test
     void aProductNoOneNumberHoldsIsMeasuredBesideAListsTotalsAndCounts() {
-        for (String condition : List.of(
+        assertEachMeasured("ns: List<Int>, a: Int, b: Int, c: Int", List.of(
                 "List.sum(ns) + (a + b) * c >= 1000",
                 "List.length(List.filter(n -> n * c >= 10, ns)) >= 2",
                 "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2",
@@ -269,28 +248,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2 && a >= 5",
                 "a >= 5 && List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2",
                 "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 2 && List.sum(ns) >= 9",
-                "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 1 && c >= 3")) {
-            String model = """
-                    module demo
-
-                    data Ok
-                    data No
-
-                    behavior f : (ns: List<Int>, a: Int, b: Int, c: Int) -> Ok | No
-                    let f (ns, a, b, c) = {
-                        guard %s else No
-                        Ok
-                    }
-                    """.formatted(condition);
-            Compilation compilation = Compilation.ofSource(model, "Main");
-            assertDoesNotThrow(() -> {
-                compilation.measure(Adequacy.Asked.fullReport());
-                compilation.answerEverything();
-            }, condition);
-            ACompiledModel.compiles(compilation);
-            assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
-            assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
-        }
+                "List.length(List.filter(n -> (n + a) * c >= 10, ns)) >= 1 && c >= 3"));
     }
 
     /**
@@ -299,7 +257,7 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
      */
     @Test
     void aProductNoOneNumberHoldsIsMeasuredUnderAQuantifierAndOverAMap() {
-        for (String condition : List.of(
+        assertEachMeasured("ns: List<Int>, m: Map<String, Int>, a: Int, b: Int, c: Int", List.of(
                 "List.any(n -> (n + a) * c >= 10, ns)",
                 "List.all(n -> (n + a) * c >= 10, ns)",
                 "List.all(n -> (n + a) * c >= 10, ns) && a >= 5",
@@ -307,28 +265,47 @@ class AProductNoOneNumberHoldsIsNoTargetAndIsNotClaimedReachedTest {
                 "List.all(n -> n * c >= 10, ns) && (a + b) * c >= 1000",
                 "Map.size(Map.filterEntries((_, d) -> (d + a) * c >= 10, m)) >= 1",
                 "Map.size(Map.filterEntries((_, d) -> (d + a) * c >= 10, m)) >= 1 && a >= 5",
-                "List.sum(Map.values(m)) + (a + b) * c >= 1000")) {
-            String model = """
-                    module demo
+                "List.sum(Map.values(m)) + (a + b) * c >= 1000"));
+    }
 
-                    data Ok
-                    data No
+    /**
+     * Each of {@code conditions} as the guard of a behavior taking {@code parameters}, measured
+     * with every search a measurement makes: each is read, and each one's coverage is answered.
+     *
+     * <p>The behaviors of one module, one for each condition, so what they share — the module,
+     * its declarations, the checks of them — is made once. What is measured of one behavior is
+     * its own, and is asked for by its name.
+     */
+    private static void assertEachMeasured(String parameters, List<String> conditions) {
+        StringBuilder model = new StringBuilder("""
+                module demo
 
-                    behavior f : (ns: List<Int>, m: Map<String, Int>, a: Int, b: Int, c: Int)
-                            -> Ok | No
-                    let f (ns, m, a, b, c) = {
+                data Ok
+                data No
+                """);
+        String arguments = parameters.replaceAll(":\\s*[A-Za-z]+(<[^>]*>)?", "");
+        for (int i = 0; i < conditions.size(); i++) {
+            model.append("""
+
+                    behavior f%d : (%s) -> Ok | No
+                    let f%d (%s) = {
                         guard %s else No
                         Ok
                     }
-                    """.formatted(condition);
-            Compilation compilation = Compilation.ofSource(model, "Main");
-            assertDoesNotThrow(() -> {
-                compilation.measure(Adequacy.Asked.fullReport());
-                compilation.answerEverything();
-            }, condition);
-            ACompiledModel.compiles(compilation);
-            assertNotNull(Adequacy.readingsOf(compilation.db(), "demo"), condition);
-            assertNotNull(compilation.db().ask(new Adequacy.Coverage("demo")).value(), condition);
+                    """.formatted(i, parameters, i, arguments, conditions.get(i)));
+        }
+        Compilation compilation = Compilation.ofSource(model.toString(), "Main");
+        assertDoesNotThrow(() -> {
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+        }, model::toString);
+        ACompiledModel.compiles(compilation);
+        Map<String, List<BorderAssessment>> readings = Adequacy.readingsOf(compilation.db(), "demo");
+        Map<String, ?> coverage = compilation.db().ask(new Adequacy.Coverage("demo")).value();
+        for (int i = 0; i < conditions.size(); i++) {
+            String behavior = "f" + i;
+            assertNotNull(readings.get(behavior), conditions.get(i));
+            assertTrue(coverage.containsKey(behavior), conditions.get(i));
         }
     }
 

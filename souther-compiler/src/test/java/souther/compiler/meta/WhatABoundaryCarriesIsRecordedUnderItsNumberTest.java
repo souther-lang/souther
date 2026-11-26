@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.codegen.Backend;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 
 import java.io.InputStream;
 import java.lang.classfile.Annotation;
@@ -20,6 +22,7 @@ import java.util.TreeMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a compiled module carries across the boundary, held against the number that says which
@@ -35,8 +38,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * <p>Recorded per number rather than in one file that follows the shape. A record that moved with
  * the shape would be edited in the same commit that broke the boundary and say nothing; one named
  * for the number is missing until somebody raises it. The reverse is not held: the boundary covers
- * more than these members — what emitted code calls goes across it too — so the number may move
+ * more than this records — what emitted code calls goes across it too — so the number may move
  * while this record stands.
+ *
+ * <p>The members' shape and what is written in them both. A module's linkages are strings, so a
+ * fact a projection gains or says otherwise keeps every member's shape and is read by a compiler at
+ * the same number as a projection this compiler does not work out — so the fixture's linkages, as
+ * a reader takes them apart, are recorded too, every fact's label and value. They are the rules a
+ * declaration is turned into JVM facts by, applied to one module, which is what the number says a
+ * jar and a compiler agree on.
  */
 class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
 
@@ -78,12 +88,19 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
             let charge (a) = Receipt { paid = a }
 
             behavior quote : (a: Amount) -> Receipt
+                ensures covered = value.paid.value >= a.value
 
             behavior settle : (a: Amount) -> Receipt depends on quote
             let settle (a, quote) = quote(a)
 
             behavior halve : (n: Int) -> Int
             let halve (n) = half(n) + offset
+
+            data Unpriced
+
+            data Pricing = Receipt | Unpriced
+
+            behavior price : (a: Amount) -> Int | Unpriced
             """;
 
     /** Both modules, compiled together. */
@@ -118,6 +135,7 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
      */
     private static String carried(Map<String, ClassFileImage> classes) {
         Map<String, Map<String, String>> byAnnotation = new TreeMap<>();
+        Map<String, String> linkages = new TreeMap<>();
         for (ClassFileImage image : classes.values()) {
             for (Annotation annotation : annotations(image.bytes())) {
                 String type = annotation.className().stringValue();
@@ -129,6 +147,11 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
                     String kind = kindOf(element.value());
                     members.merge(element.name().stringValue(), kind,
                             (was, now) -> was.endsWith(UNREAD) ? now : was);
+                    String name = element.name().stringValue();
+                    if (name.endsWith("Linkages")
+                            && element.value() instanceof AnnotationValue.OfArray entries) {
+                        linkagesOf(name, entries, linkages);
+                    }
                 }
             }
         }
@@ -138,7 +161,50 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
             members.forEach((name, kind) ->
                     out.append("  ").append(name).append(": ").append(kind).append('\n'));
         });
+        linkages.forEach((declaration, facts) ->
+                out.append(declaration).append('\n').append(facts));
         return out.toString();
+    }
+
+    /**
+     * Every declaration {@code entries} records, as a reader takes them apart, with each fact under
+     * it, into {@code out} by the member and the declaration.
+     */
+    private static void linkagesOf(String member, AnnotationValue.OfArray entries,
+                                   Map<String, String> out) {
+        List<String> written = entries.values().stream()
+                .map(each -> ((AnnotationValue.OfString) each).stringValue()).toList();
+        Map<LinkageTarget, LinkageRecord> read = PublishedLinkages.read(written);
+        assertNotNull(read, () -> member + " holds an entry no reader takes apart: " + written);
+        read.forEach((target, record) -> {
+            StringBuilder facts = new StringBuilder();
+            record.facts().forEach((label, value) ->
+                    facts.append("  ").append(label).append(" = ").append(value).append('\n'));
+            out.put(member + " " + target.shown(), facts.toString());
+        });
+    }
+
+    /**
+     * The fixture's linkages hold every fact a projection writes, or one could move unrecorded.
+     *
+     * <p>Asked of the labels the record holds, against the facts a projection says of a behavior, a
+     * declared type and a value: a label the fixture never makes is a fact this record could not
+     * see change.
+     */
+    @Test
+    void everyFactAProjectionWritesWasMeasured() {
+        String carried = carried(compiled());
+
+        for (String label : List.of("realized as", "takes", "answers", "held as", "applied by",
+                "built with", "applied when built by", "through", "checked where called by",
+                "declared as", "carried as", "ordered as", "laid out as", "field ", "cases",
+                "built by",
+                "entered by")) {
+            assertTrue(carried.contains("  " + label) || carried.contains(label + " = "),
+                    () -> "no linkage the fixture writes holds `" + label + "`, so a change to it"
+                            + " is a change this record does not see. Give it one in MODULE:\n\n"
+                            + carried);
+        }
     }
 
     /** An array the fixture left empty, which says its own name and nothing about what it holds. */

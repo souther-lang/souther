@@ -21,7 +21,6 @@ import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.RowRun;
 import souther.compiler.observe.StatementReading;
@@ -79,8 +78,8 @@ public final class JvmProgramExecution implements ProgramExecution {
     }
 
     @Override
-    public RowRun run(ExampleExecution asked, SourceId source, ArmObservation arms) {
-        JvmProgramImage image = images.evaluating(asked.module(), arms);
+    public RowRun run(ExampleExecution asked, SourceId source) {
+        JvmProgramImage image = images.evaluating(asked.module());
         if (image == null) {
             return new RowRun.NotRunHere();
         }
@@ -94,7 +93,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                 // What applies a behavior here is what this compile emitted. A compile has nothing
                 // else to run a row against; something supplied from outside one arrives through
                 // the same seam and brings its own classes.
-                Answering.generatedHere(), asked.contracts());
+                Answering.generatedHere(), asked.ensured());
         return new RowRun.Ran(observed);
     }
 
@@ -108,7 +107,7 @@ public final class JvmProgramExecution implements ProgramExecution {
             // its rows had to say.
             return new TableBuild.Built(List.of());
         }
-        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        JvmProgramImage image = images.evaluating(asked.module());
         if (image == null) {
             return new TableBuild.NotBuiltHere();
         }
@@ -119,12 +118,12 @@ public final class JvmProgramExecution implements ProgramExecution {
                 asked.kinds(),
                 asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
-                source, keeping(asked), asked.policy(), asked.contracts()));
+                source, keeping(asked), asked.policy(), asked.ensured()));
     }
 
     @Override
     public StatementReading statements(ExampleExecution asked) {
-        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        JvmProgramImage image = images.evaluating(asked.module());
         if (image == null) {
             return new StatementReading.NotReadHere();
         }
@@ -140,7 +139,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         return new StatementReading.Read(ExampleStatements.disagreements(asked.forExamples(),
                 asked.symbols(), asked.sums(), asked.kinds(), asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(),
-                asked.definitions(), keeping(asked), asked.policy(), asked.contracts(),
+                asked.definitions(), keeping(asked), asked.policy(), asked.ensured(),
                 declaring));
     }
 
@@ -148,13 +147,7 @@ public final class JvmProgramExecution implements ProgramExecution {
     public BoundaryValues values(ExampleExecution asked) {
         // The classes alone: building a value applies no behavior, so what the compile implemented
         // is not a question this asks.
-        //
-        // And uncounted, said outright rather than taken from what the build happens to be
-        // measuring. Which arms a row goes through is recorded by instrumenting the bodies, and a
-        // value is built by the decoders without one of them running — so asking for the recorded
-        // classes here would make composing a value fail wherever the plan and the bodies do not
-        // line up, which is a fault in a measurement nothing here is making.
-        JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
+        JvmProgramImage image = images.evaluating(asked.module());
         return image == null ? null
                 : FixtureReader.constructing(asked.forExamples(), asked.symbols(),
                         asked.sums(), asked.kinds(), asked.fieldTypes(),
@@ -162,8 +155,8 @@ public final class JvmProgramExecution implements ProgramExecution {
     }
 
     @Override
-    public RowTrials trials(ExampleExecution asked, ArmObservation arms) {
-        JvmProgramImage image = images.evaluating(asked.module(), arms);
+    public RowTrials trials(ExampleExecution asked) {
+        JvmProgramImage image = images.evaluating(asked.module());
         if (image == null || image.program().implementations() == null) {
             return null;
         }
@@ -171,7 +164,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                 asked.fieldTypes(),
                 image.program().classes(),
                 image.around(), asked.definitions(), image.program().implementations(),
-                asked.signatures(), asked.contracts(),
+                asked.signatures(), asked.ensured(),
                 image.program().probes(), asked.policy());
     }
 
@@ -206,7 +199,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         Map<String, ConstantOutcome> outcomes = new LinkedHashMap<>();
         // The classes a row is evaluated with: they count the steps and the depth they spend, so a
         // value that does not stop is held to the same figures a row is.
-        JvmProgramImage image = images.evaluating(asked.writtenIn(), ArmObservation.OMIT);
+        JvmProgramImage image = images.evaluating(asked.writtenIn());
         if (image == null) {
             asked.inOrder().forEach(each ->
                     outcomes.put(each.name(), new ConstantOutcome.NotEvaluatedHere()));

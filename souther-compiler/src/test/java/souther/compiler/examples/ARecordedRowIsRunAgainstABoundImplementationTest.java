@@ -1,6 +1,5 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
@@ -19,6 +18,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -457,7 +457,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 Scopes.derived(c.db(), name).value(),
                 Shapes.sumCases(c.db()),
                 Shapes.declarationKinds(c.db()),
-                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
+                ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 declarationsOf(c),
@@ -475,8 +475,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                         // here is that binding: this drives the seam under it, so it says outright
                         // that the application does not cross anywhere.
                         CallerApplication.Application::call),
-                CheckedEnsures.executableOf(
-                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
+                ExampleExecutions.of(c.db(), name).ensured());
     }
 
     /** What the module's rows are written for, as this compile emitted it. */

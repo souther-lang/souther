@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.RunStop;
 import souther.compiler.execute.RowTrials;
@@ -11,7 +12,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
-import souther.compiler.core.Contract;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
@@ -77,10 +77,12 @@ public final class RowTrial {
      * combination would otherwise come back missed.
      *
      * @param signatures what each behavior this module reaches takes and answers, and
-     *                   {@code contracts} what it states of its answer. Both are what a module's
+     *                   {@code ensured} what it states of its answer. Both are what a module's
      *                   tables are held to before one stands anything in, which is the same holding
      *                   a written row's run is under — a search running against a table a written
-     *                   row is refused would be certifying rows in an environment nothing else has
+     *                   row is refused would be certifying rows in an environment nothing else has.
+     *                   A composed {@code with} is held to {@code ensured} where it is called, as a
+     *                   written one is
      * @param steps how many counted points a row may pass, and how deep a recursive helper may go.
      *              A composed row is not a row anyone wrote, so a model that loops on it is this
      *              search's problem to stop rather than an author's to be told about
@@ -94,12 +96,12 @@ public final class RowTrial {
                               ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
                               Map<ValueName.Behavior, Sig> signatures,
-                              Map<ValueName.Behavior, Contract> contracts,
+                              DeclaredEnsures ensured,
                               ProbeImage probes,
                               EvaluationPolicy steps) {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
-        EnsuresChecks ensures = new EnsuresChecks(loader, contracts, signatures.keySet());
+        EnsuresChecks ensures = new EnsuresChecks(loader, ensured);
         UnionMembers members = new UnionMembers(loader, kinds, sums);
         RowTrials running = (behavior, sig) -> new RowTrials.OfBehavior() {
 
@@ -318,7 +320,7 @@ public final class RowTrial {
             switch (each) {
                 case RowTrials.AnsweredWith.OnTheRow(var dependency, var signature, var written) -> {
                     Object value = fixtures.buildFixture(written, signature.out()).value();
-                    out.add(StandingIn.by(members, dependency, signature, _ -> value));
+                    out.add(StandingIn.by(ensures, members, dependency, signature, _ -> value));
                 }
                 case RowTrials.AnsweredWith.InTheModule(var dependency, var signature) -> {
                     StandingIn.OffATable stood = statedFor(fixtures, module, ensures, members,

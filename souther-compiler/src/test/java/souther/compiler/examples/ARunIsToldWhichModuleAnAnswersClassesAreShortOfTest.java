@@ -1,6 +1,5 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
@@ -17,6 +16,7 @@ import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -220,7 +220,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
                 Scopes.derived(c.db(), name).value(),
                 Shapes.sumCases(c.db()),
                 Shapes.declarationKinds(c.db()),
-                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
+                ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 () -> declarationsOf(List.of(SHARED, ROOT)),
@@ -230,8 +230,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
                 JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answering,
-                CheckedEnsures.executableOf(
-                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
+                ExampleExecutions.of(c.db(), name).ensured());
     }
 
     /** The classes one build of these sources emits, read for what they were stamped with. */
