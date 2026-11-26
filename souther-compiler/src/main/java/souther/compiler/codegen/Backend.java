@@ -1920,7 +1920,7 @@ public final class Backend {
         CodegenContext.invoke(code, apply);
         projectStage(code, linked, slot);
         CanonicalizeAtCrossing.emit(ctx, code, stageOut);
-        checkStageAtCrossing(code, stage, arity, slot + 1);
+        checkStageAtCrossing(code, linked, arity, slot + 1);
         code.astore(1);
     }
 
@@ -1936,7 +1936,7 @@ public final class Backend {
         CodegenContext.invoke(code, linked.apply());
         projectStage(code, linked, slot);
         CanonicalizeAtCrossing.emit(ctx, code, stageOut);
-        checkStageAtCrossing(code, stage, 1, slot + 1);
+        checkStageAtCrossing(code, linked, 1, slot + 1);
         code.astore(1);
     }
 
@@ -1946,12 +1946,13 @@ public final class Backend {
      *
      * <p>A stage whose body this compiler emits holds itself where it answers, so nothing is emitted
      * for it here — this is the same crossing a call from a body makes, at the place a pipeline
-     * makes it. Read before the running value is stored back, because storing it is what overwrites
+     * makes it, and asked of the stage's projection as that one is, whichever module declares the
+     * stage. Read before the running value is stored back, because storing it is what overwrites
      * the argument a single-input stage was given.
      */
-    private void checkStageAtCrossing(CodeBuilder code, ValueName.Behavior stage, int arity,
-                                      int carrier) {
-        if (!(ctx.ensuresCheckOf(stage) instanceof EnsuresEnforcement.AtEachCrossing)) {
+    private void checkStageAtCrossing(CodeBuilder code, LinkageProjection.Behavior stage,
+                                      int arity, int carrier) {
+        if (stage.checkedWhereCalled().isEmpty()) {
             return;
         }
         code.astore(carrier);
@@ -1959,11 +1960,7 @@ public final class Backend {
             code.aload(i + 1);
         }
         code.aload(carrier);
-        ClassDesc[] params = new ClassDesc[arity + 1];
-        java.util.Arrays.fill(params, CD_Object);
-        code.invokestatic(ctx.cd(new GeneratedClass.Ensures(
-                        new GeneratedClass.BehaviorInterface(stage.module(), stage.name()))),
-                "check", MethodTypeDesc.of(ConstantDescs.CD_void, params));
+        CodegenContext.invoke(code, stage.checkedWhereCalled().orElseThrow());
         code.aload(carrier);
     }
 

@@ -10,6 +10,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Contract;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassNames;
 import souther.compiler.jvm.LinkageProjection;
@@ -70,6 +72,8 @@ public final class LinkageProjections {
      * @param kinds           which form each declaration was written in, reading into the same
      * @param sums            what a value of each sum can be, read off what the declarations say
      *                        through the same
+     * @param contracts       what each of its behaviors that declares something of its answer
+     *                        declares, by the behavior
      */
     public record Settled(String module, Set<String> publishedNames, List<TypeKey> declarations,
                           Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders,
@@ -77,7 +81,7 @@ public final class LinkageProjections {
                           Map<String, BehaviorImplementation> implementations,
                           Map<String, List<ValueName.Behavior>> requirements,
                           Map<String, Type> values, DerivedSymbols symbols,
-                          DeclarationKinds kinds, SumCases sums) {
+                          DeclarationKinds kinds, SumCases sums, Map<String, Contract> contracts) {
 
         public Settled {
             if (symbols == null || kinds == null || sums == null) {
@@ -177,9 +181,20 @@ public final class LinkageProjections {
                             implementation, "apply",
                             BehaviorAbi.erasedApply(takes.size()))));
         }
+        // Where the clause is checked is the one rule the module's own compilation places it by,
+        // so what a caller elsewhere runs and what this module's own callers run cannot differ.
+        Optional<LinkageProjection.Invocation> checkedWhereCalled =
+                EnsuresEnforcement.of(settled.contracts().get(name), state.isInjectionTarget())
+                        instanceof EnsuresEnforcement.AtEachCrossing
+                        ? Optional.of(LinkageProjection.Invocation.of(
+                                LinkageProjection.Opcode.STATIC,
+                                classOf(new GeneratedClass.Ensures(new GeneratedClass
+                                        .BehaviorInterface(settled.module(), name)), foreign),
+                                "check", EnsuresGen.checkType(takes.size())))
+                        : Optional.empty();
         return new LinkageProjection.Behavior(behavior, realization, settled.exposes(name), takes,
                 answers, BehaviorAbi.heldAs(behavior, takes).descriptorString(), apply,
-                construction, answeredThrough(settled, answers, foreign));
+                construction, answeredThrough(settled, answers, foreign), checkedWhereCalled);
     }
 
     /**

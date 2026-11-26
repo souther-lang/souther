@@ -89,7 +89,7 @@ class AnImplementedBehaviorMustHaveTheImplementationItWasClassifiedAsHavingTest 
                     was.exposed(), was.takes(), was.answers(), was.heldAs(), was.apply(),
                     realization == LinkageProjection.Realization.IMPLEMENTED
                             ? built : Optional.empty(),
-                    was.answeredThrough()));
+                    was.answeredThrough(), Optional.empty()));
         });
         LinkageReader linkage = new LinkageReader("m", provides,
                 Linkages.reading(compilation.db()), own.read());

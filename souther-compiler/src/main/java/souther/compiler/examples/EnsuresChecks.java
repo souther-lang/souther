@@ -143,12 +143,11 @@ final class EnsuresChecks {
      * <p>A stand-in owes what that implementation owed, and nothing about who calls it. A body
      * checks its own answer ({@code AtTheCallee}), and no code calling it checks it again, in its
      * module or any other — so taking the body's place takes its check, and this is then the one
-     * check of the call. What Java supplies checks nothing ({@code AtEachCrossing}): the code of the
-     * module declaring it checks the answer where it comes back, and a stand-in running that check
-     * as well would run it twice. Read off how the module declaring the dependency holds it, which
-     * is one answer however many places call one stand-in: the rows' own module calls it, and so
-     * does a stage another module declares that a composition hands it to, under a placement of its
-     * own module's.
+     * check of the call. What Java supplies checks nothing ({@code AtEachCrossing}): every class
+     * calling it, in whichever module, checks the answer where it comes back, and a stand-in running
+     * that check as well would run it twice. Read off how the module declaring the dependency holds
+     * it, which is one answer however many places call one stand-in: the rows' own module calls it,
+     * and so does a stage another module declares that a composition hands it to.
      *
      * <p>{@code answer} is the Souther value, before it is handed back as a member of the union the
      * dependency answers through. The emitted check reads the value; handed the bridge case holding

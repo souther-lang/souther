@@ -18,22 +18,15 @@ import java.util.Map;
  * own module, or a stage another module declares that a composition hands the same stand-in to.
  *
  * <p>Every reachable behavior is here, the ones that state nothing included, so being absent means
- * that the behavior was not read and nothing else. None is {@link EnsuresEnforcement.NotDecidedHere}:
- * that is a caller's answer about a module it does not own, and each answer here is the owner's.
+ * that the behavior was not read and nothing else.
  *
  * @param held how the module declaring each reachable behavior holds what it declares
  */
 public record DeclaredEnsures(Map<ValueName.Behavior, EnsuresEnforcement> held) {
 
     public DeclaredEnsures {
-        // Copied before it is held to anything, so what was checked is what is kept: a map a
-        // caller could still change would let a caller's answer in after the check.
+        // Copied, so what a reading was built with is what it keeps: a map a caller could still
+        // change would put a second answer under a behavior after the first was read.
         held = Collections.unmodifiableMap(new LinkedHashMap<>(held));
-        held.forEach((behavior, answer) -> {
-            if (answer instanceof EnsuresEnforcement.NotDecidedHere) {
-                throw new IllegalArgumentException("`" + behavior + "` is answered as not decided,"
-                        + " and the module declaring it decides for every behavior it declares");
-            }
-        });
     }
 }

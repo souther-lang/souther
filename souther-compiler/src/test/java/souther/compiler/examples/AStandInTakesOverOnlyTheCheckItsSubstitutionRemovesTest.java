@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * stand-in taking its place runs that check. What Java supplies is checked by the code calling it,
  * so a stand-in running the check as well would hold the answer twice.
  *
- * <p>The answer is the declaring module's, and never a caller's "not decided": a stand-in is called
- * from more than one module's code, and what it owes cannot turn on which.
+ * <p>The answer is the declaring module's: a stand-in is called from more than one module's code,
+ * and what it owes cannot turn on which.
  */
 class AStandInTakesOverOnlyTheCheckItsSubstitutionRemovesTest {
 
@@ -55,12 +55,6 @@ class AStandInTakesOverOnlyTheCheckItsSubstitutionRemovesTest {
     void aStandInForABehaviorNothingReadIsThisCompilerFailing() {
         assertThrows(GeneratedClassDefect.class, () -> checks(EnsuresEnforcement.NoContract.INSTANCE)
                 .holdAStandIn(new ValueName.Behavior("lib", "unread"), new Object[] {1L}, 2L));
-    }
-
-    @Test
-    void aCallersNotDecidedIsNoAnswerAboutADeclaredBehavior() {
-        assertThrows(IllegalArgumentException.class, () -> new DeclaredEnsures(
-                Map.of(CONVERT, EnsuresEnforcement.NotDecidedHere.INSTANCE)));
     }
 
     /** The checks where the module declaring {@code convert} holds its clause as {@code held}. */

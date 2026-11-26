@@ -1,6 +1,7 @@
 package souther.compiler.program;
 
 import souther.compiler.core.Core;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
@@ -85,7 +86,7 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
         return new BehaviorTarget(
                 CheckedSignature.declared(parameters,
                         new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
-                implementation, List.of());
+                implementation, List.of(), EnsuresEnforcement.NoContract.INSTANCE);
     }
 
     private static CheckedImplementation.Body body(Core.Binder... parameters) {

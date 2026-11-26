@@ -121,10 +121,16 @@ public sealed interface LinkageProjection {
      * @param construction    how a class elsewhere builds it, where it has an implementation to build
      * @param answeredThrough the bridge case each member of an output union that its own module did
      *                        not declare is reached through, in the order the union lists them
+     * @param checkedWhereCalled the check every class calling it runs over what it answered, where
+     *                        its answer comes from outside the program and it declares what it
+     *                        answers; empty where its own body checks it or there is nothing to
+     *                        check. A caller in any module runs it, since an answer Java supplies
+     *                        enters the program at each call whichever module makes the call
      */
     record Behavior(ValueName.Behavior behavior, Realization realization, boolean exposed,
                     List<Type> takes, Type answers, String heldAs, Invocation apply,
-                    Optional<Construction> construction, List<Bridged> answeredThrough)
+                    Optional<Construction> construction, List<Bridged> answeredThrough,
+                    Optional<Invocation> checkedWhereCalled)
             implements LinkageProjection {
 
         public Behavior {
@@ -134,6 +140,10 @@ public sealed interface LinkageProjection {
                 throw new IllegalArgumentException("`" + behavior + "` is " + realization
                         + ", and a class elsewhere builds a behavior exactly when it has an"
                         + " implementation to build");
+            }
+            if (checkedWhereCalled.isPresent() && realization != Realization.SUPPLIED_BY_JAVA) {
+                throw new IllegalArgumentException("`" + behavior + "` is " + realization
+                        + ", and only an answer from outside is checked where it is called");
             }
         }
 
@@ -168,6 +178,8 @@ public sealed interface LinkageProjection {
                 facts.add(new Fact("answers " + shown(bridged.member()) + " through",
                         bridged.bridge() + ".value" + bridged.value()));
             }
+            checkedWhereCalled.ifPresent(check ->
+                    facts.add(new Fact("checked where called by", check.shown())));
             return List.copyOf(facts);
         }
     }

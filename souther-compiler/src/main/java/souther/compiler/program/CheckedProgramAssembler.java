@@ -8,6 +8,7 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -284,7 +285,8 @@ final class CheckedProgramAssembler {
             CheckedImplementation implementation = implementedAs(state, named, declared,
                     implementations, module.checked(), module.compositions());
             BehaviorTarget target = new BehaviorTarget(signature, implementation,
-                    constructionRequirementsOf(named, module.requirements()));
+                    constructionRequirementsOf(named, module.requirements()),
+                    EnsuresEnforcement.in(module.checks(), module.name(), named));
             file(targets, named, target);
             declares.put(named, target);
         }
@@ -320,12 +322,17 @@ final class CheckedProgramAssembler {
             // the module to what it was built against.
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(module)).value();
+            // What each declares of its answer, placed by the rule the module's own compilation
+            // placed it by: a call here to one of these checks what comes back exactly where a
+            // call in that module would.
+            Map<String, CheckedEnsures> contracts = db.ask(new Bodies.Contracts(module)).value();
             if (declares == null || signatures == null || declaredSignatures == null
-                    || implementations == null || requirements == null) {
+                    || implementations == null || requirements == null || contracts == null) {
                 throw new IllegalStateException("`" + module + "` was read off the path and this"
                         + " compile has nothing to say about the behaviors it declares");
             }
             Map<String, List<ValueName.Behavior>> required = requirementsOf(requirements);
+            Map<String, Contract> executable = CheckedEnsures.executable(contracts);
             for (Ast.BehaviorDef declared : declares.behaviors()) {
                 ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
                 CheckedSignature signature = switch (declared) {
@@ -344,7 +351,9 @@ final class CheckedProgramAssembler {
                 }
                 CheckedImplementation implementation = publishedAs(implementations.of(named));
                 file(targets, named, new BehaviorTarget(signature, implementation,
-                        constructionRequirementsOf(named, required)));
+                        constructionRequirementsOf(named, required),
+                        EnsuresEnforcement.of(executable.get(declared.name()),
+                                implementations.of(named).isInjectionTarget())));
             }
         }
     }
@@ -641,7 +650,6 @@ final class CheckedProgramAssembler {
         List<CheckedBehavior> behaviors = new ArrayList<>();
         module.declared().forEach((named, target) ->
                 behaviors.add(new CheckedBehavior(named, target,
-                        EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets, emitted.rowValues()))));
         return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),

@@ -228,6 +228,33 @@ class AStandInIsHeldToWhatTheBehaviorItStandsInForDeclaresTest {
         stoppedBy(c, "four times what rate answers", "lib.q.rate: positive");
     }
 
+    /**
+     * A behavior Java supplies to another module, called straight from a body of this one. The
+     * calling code checks an answer from outside whichever module declares the behavior, so a
+     * stand-in for it is held there, as one called by the declaring module's own code is.
+     */
+    @Test
+    void aStandInCalledStraightFromAnotherModuleIsHeldWhereItIsCalled() {
+        Compilation c = ACompiledModel.refusedWith(List.of("E1905"), Compilation.ofSources(List.of("""
+                module lib.rates exposing ( rate )
+
+                behavior rate : (n: Int) -> Int
+                    ensures positive = value > n
+                """, """
+                module app.billing
+                import lib.rates ( rate )
+
+                behavior total : (n: Int) -> Int
+                    depends on rate
+                let total (n, rate) = rate(n)
+
+                example total
+                    | "under what it is given" : (1) with rate = -10 -> -10
+                """), ModulePath.EMPTY));
+
+        stoppedBy(c, "under what it is given", "lib.rates.rate: positive");
+    }
+
     // --- harness --------------------------------------------------------------------------------
 
     private static Compilation compiles(List<String> sources) {

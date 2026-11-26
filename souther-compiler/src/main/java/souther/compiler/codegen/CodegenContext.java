@@ -241,12 +241,9 @@ final class CodegenContext {
     }
 
     /**
-     * What is being done about {@code behavior}'s clause.
-     *
-     * <p>{@link EnsuresEnforcement.NotDecidedHere} for a behavior another module declared, which the
-     * lookup answers rather than this: a table of this compilation's decisions holds one for every
-     * behavior it declares, so a name it has nothing under is a name from somewhere else — which is
-     * not the same answer as having decided there is no check.
+     * What is being done about the clause of {@code behavior}, one this module declares — which is
+     * where its {@code apply} is emitted. A call reads whether it checks what comes back off the
+     * callee's projection instead, the same answer for a callee of any module.
      */
     EnsuresEnforcement ensuresCheckOf(ValueName.Behavior behavior) {
         return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
