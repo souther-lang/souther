@@ -1,6 +1,5 @@
 package souther.compiler.examples;
 
-import souther.compiler.check.CheckedEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.jvm.JvmDeadlines;
 import souther.compiler.observe.Observations;
@@ -20,6 +19,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -234,7 +234,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 Scopes.derived(c.db(), name).value(),
                 Shapes.sumCases(c.db()),
                 Shapes.declarationKinds(c.db()),
-                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
+                ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),
                 artifact,
                 // The crossing here is between two loaders of one build, so what the answerer reads
@@ -248,8 +248,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent),
-                CheckedEnsures.executableOf(
-                        c.db().ask(new Bodies.ReachableContracts(name)).value()));
+                ExampleExecutions.of(c.db(), name).ensured());
     }
 
     private static Class<?> loaded(ClassLoader loader, String name) {

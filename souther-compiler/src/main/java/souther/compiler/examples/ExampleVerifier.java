@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.Observations;
@@ -7,7 +8,6 @@ import souther.compiler.observe.WaitShown;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
-import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.SumCases;
@@ -164,10 +164,11 @@ public final class ExampleVerifier {
      * and a name it has one of would be applied, so a row would be answered by an implementation of
      * something else rather than failing to find anything.
      *
-     * <p>{@code contracts} is what the module's behaviors declare of what they answer, which is what
-     * says there is a check to run over a row's values. Read from the answer that owns it rather
-     * than from the classes: a check that will not load is a compile that did not emit what it said
-     * it would, and reading the loader for this would take that for a behavior with nothing to say.
+     * <p>{@code ensured} is what the module's behaviors declare of what they answer, which is what
+     * says there is a check to run over a row's values, and where the module's compilation checks
+     * each, which says whether a stand-in has to. Read from the answers that own them rather than
+     * from the classes: a check that will not load is a compile that did not emit what it said it
+     * would, and reading the loader for this would take that for a behavior with nothing to say.
      *
      * @throws IllegalArgumentException where the artifact is of another module
      */
@@ -182,7 +183,7 @@ public final class ExampleVerifier {
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      Deadline deadline, EvaluationPolicy policy,
                                      Answering answering,
-                                     Map<ValueName.Behavior, Contract> contracts) {
+                                     DeclaredEnsures ensured) {
         if (!artifact.implementations().module().equals(module.name())) {
             throw new IllegalArgumentException("the rows are `" + module.name()
                     + "`'s and the artifact is `" + artifact.implementations().module()
@@ -193,7 +194,7 @@ public final class ExampleVerifier {
         }
         ExampleVerifier v = evaluating(module, symbols, sums, kinds, fields, sigs, artifact,
                 declared,
-                requirements, parent, values, deadline, policy, answering, contracts);
+                requirements, parent, values, deadline, policy, answering, ensured);
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
@@ -244,13 +245,13 @@ public final class ExampleVerifier {
                                       ClassLoader parent, Map<String, Hir.FnDef> values,
                                       Deadline deadline, EvaluationPolicy policy,
                                       Answering answering,
-                                      Map<ValueName.Behavior, Contract> contracts) {
+                                      DeclaredEnsures ensured) {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         return new ExampleVerifier(module, symbols, sums, kinds, fields, sigs, requirements,
                 loader,
                 values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared,
-                contracts, artifact.probes());
+                ensured, artifact.probes());
     }
 
     /**
@@ -820,10 +821,10 @@ public final class ExampleVerifier {
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
                             Supplier<PublishedClasses> declared,
-                            Map<ValueName.Behavior, Contract> contracts,
+                            DeclaredEnsures ensured,
                             ProbeImage probes) {
         this.probes = probes;
-        this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
+        this.ensures = new EnsuresChecks(loader, ensured, sigs.keySet());
         this.members = new UnionMembers(loader, kinds, sums);
         this.module = module;
         this.symbols = symbols;
@@ -2440,7 +2441,7 @@ public final class ExampleVerifier {
                     // writing what a dependency answers, so that a reader of a row has one question
                     // to ask of either.
                     yield new StoodInFor.Read(
-                            StandingIn.by(members, dependency, depSig, _ -> value),
+                            StandingIn.by(ensures, members, dependency, depSig, _ -> value),
                             RowStatements.StandInRead.of(dependency, w.pos(), takes(depSig),
                                     List.of(), new StoodIn.Otherwise.Answer(
                                             fixtures.observed(value), w.value().pos())));

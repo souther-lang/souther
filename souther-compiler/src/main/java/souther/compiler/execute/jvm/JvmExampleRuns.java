@@ -64,6 +64,6 @@ public final class JvmExampleRuns {
                 asked.signatures(),
                 image.program(), image.published(), asked.requirements(), image.around(),
                 asked.definitions(), deadline, asked.policy(), answering,
-                asked.contracts());
+                asked.ensured());
     }
 }

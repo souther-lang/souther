@@ -8,7 +8,9 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.core.Contract;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.ValueShape;
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.FieldTypes;
@@ -92,7 +94,12 @@ public final class ExampleExecutions {
         // that module's clause, by the check that module emitted.
         Map<ValueName.Behavior, CheckedEnsures> declared =
                 db.ask(new Bodies.ReachableContracts(module)).value();
-        if (requirements == null || declared == null) {
+        // Where this module's compilation put each of its own checks, the decision its emitted code
+        // was made from. A stand-in is called by that code, so whether it has to hold its answer
+        // itself is read off this and not worked out again from whether a behavior has a body.
+        Map<ValueName.Behavior, EnsuresEnforcement> placed =
+                db.ask(new Bodies.EnsuresChecks(module)).value();
+        if (requirements == null || declared == null || placed == null) {
             return null;
         }
         // The reading that runs. What decides a row is the emitted check (spec §example-ensures),
@@ -104,7 +111,8 @@ public final class ExampleExecutions {
         return new ExampleExecution(prepared.value(), scope.value(),
                 Shapes.sumCases(db), Shapes.declarationKinds(db),
                 checkedFieldTypes(db), sigs.value(),
-                requirements, values == null ? Map.of() : values, contracts,
+                requirements, values == null ? Map.of() : values,
+                new DeclaredEnsures(module, contracts, placed),
                 Output.policyOf(db),
                 withDeclaring ? declaringOf(db, prepared.value()) : Map.of());
     }

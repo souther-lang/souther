@@ -1,7 +1,10 @@
 package souther.compiler.examples;
 
 import souther.compiler.core.Contract;
+import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.generated.GeneratedLinkage;
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -62,6 +65,12 @@ final class EnsuresChecks {
 
     private final ClassLoader loader;
 
+    /** The module whose emitted code applies the rows, and so calls every stand-in. */
+    private final String module;
+
+    /** Where {@link #module}'s compilation checks each behavior it declares. */
+    private final Map<ValueName.Behavior, EnsuresEnforcement> placed;
+
     /**
      * The check of each behavior that has one, once it has been looked up.
      *
@@ -79,10 +88,11 @@ final class EnsuresChecks {
      *  unique. */
     private final Map<ValueName.Behavior, Method> foundForCase = new ConcurrentHashMap<>();
 
-    EnsuresChecks(ClassLoader loader, Map<ValueName.Behavior, Contract> contracts,
-                  Set<ValueName.Behavior> reachable) {
+    EnsuresChecks(ClassLoader loader, DeclaredEnsures declared, Set<ValueName.Behavior> reachable) {
         this.loader = loader;
-        this.contracts = contracts;
+        this.contracts = declared.clauses();
+        this.module = declared.module();
+        this.placed = declared.placed();
         this.reachable = reachable;
     }
 
@@ -140,6 +150,67 @@ final class EnsuresChecks {
         handed[args.length] = SoutherJvmAbi.caseTokenOf(answered).qualified();
         return said(behavior.name(),
                 () -> checkForCase(behavior, contract).invoke(null, handed));
+    }
+
+    /**
+     * Holds what a stand-in for {@code dependency} answered to {@code args} to what the dependency
+     * declares, where nothing else holds it.
+     *
+     * <p>A stand-in takes over the check its substitution removes, not a check the crossing already
+     * performs. Only an implementation {@link #module} emitted is applied with stand-ins — a bound
+     * one refuses them — so which checks surround a call to one is that module's decision, read as
+     * {@link EnsuresEnforcement#in} answers it. {@code AtTheCallee} puts the check in the
+     * {@code $Impl} the stand-in takes the place of, so it moves here. {@code NotDecidedHere} is a
+     * behavior another module declares, and the calling code emits nothing for it, so nothing else
+     * would run its clause; the clause is the declaring module's, which {@link #contracts} holds.
+     * {@code AtEachCrossing} is checked by the calling code where the answer comes back, and holding
+     * it here as well would check it twice. {@code NoContract} has nothing to check.
+     *
+     * <p>{@code answer} is the Souther value, before it is handed back as a member of the union the
+     * dependency answers through. The emitted check reads the value; handed the bridge case holding
+     * it, a rule guarded by the case it is would read the bridge and hold nothing.
+     *
+     * <p>A violation goes out as the check threw it, so a run stopped here stops as one stopped at a
+     * crossing does and is read by the same reading of where a run ended. Anything else wrong here is
+     * this compiler failing, since a stand-in runs inside a call the generated code makes.
+     */
+    void holdAStandIn(ValueName.Behavior dependency, Object[] args, Object answer) {
+        Contract contract;
+        try {
+            switch (EnsuresEnforcement.in(placed, module, dependency)) {
+                case EnsuresEnforcement.AtEachCrossing _, EnsuresEnforcement.NoContract _ -> {
+                    return;
+                }
+                case EnsuresEnforcement.AtTheCallee _, EnsuresEnforcement.NotDecidedHere _ -> { }
+            }
+            contract = contractOf(dependency, args);
+        } catch (IllegalStateException e) {
+            throw new GeneratedClassDefect("the stand-in for `" + dependency
+                    + "` could not be held to what it declares: " + e.getMessage(), e);
+        }
+        if (contract == null) {
+            return;
+        }
+        Object[] handed = Arrays.copyOf(args, args.length + 1);
+        handed[args.length] = answer;
+        try {
+            check(dependency, contract).invoke(null, handed);
+        } catch (InvocationTargetException ite) {
+            GeneratedLinkage.rejectDefect(ite);
+            // The clause failing, or the run spending what it may while the clause was worked out —
+            // both are the run's to read, as they are where a crossing checks.
+            switch (ite.getCause()) {
+                case null -> throw new GeneratedClassDefect("the check of `" + dependency
+                        + "` threw nothing", ite);
+                case RuntimeException re -> throw re;
+                case Error err -> throw err;
+                default -> throw new GeneratedClassDefect("the check of `" + dependency
+                        + "` threw a checked exception", ite.getCause());
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new GeneratedClassDefect("what `" + dependency
+                    + "` declares could not be checked: " + e.getMessage(), e);
+        }
     }
 
     /**

@@ -3668,7 +3668,7 @@ A row waiting for an implementation is held all the same. The values are written
 
 What is held is decided by what the row wrote, and an arm is part of what it wrote. A bare case name naming a unit case states the whole answer — a unit case has one value, so naming it is writing it — and such a row is held like any other. This is the same reading of an arm as <<ensures>>'s: an arm is a reference to the answer, so `+ensures NotFound -> id > 0+` is decided by a row stating an input and that arm, with no construction written.
 
-Where only one side is written there is no relation to hold. A `+_+` row of a `+fake+` states no input, and a `+with+` supplies an answer for whatever it is asked; what either states is held where the behavior answers.
+Where only one side is written there is no relation to hold here. A `+_+` row of a `+fake+` states no input, and a `+with+` supplies an answer for whatever it is asked; what either answers is held when it is called, to the arguments of that call, by the same check. [[a-stand-in-is-held-whoever-implements-the-behavior]]What a stand-in answers MUST be held to what the behavior it stands in for declares, whoever implements that behavior. An injected behavior's answer is checked where it crosses into generated code, and a stand-in for one is checked there and not a second time. A behavior with a body checks its answer in that body, which the stand-in takes the place of, so the stand-in runs that check itself. A behavior another module declares is checked by nothing the calling module emits, so a stand-in for one runs the check the declaring module emitted. A stand-in that is never called is held to nothing. A row stopped by such a check stops as one stopped by any other check does (<<e1905>>).
 
 A table with a refused row answers nothing wherever else it is read. Nothing stands in with it (<<example-fakes>>), and it is not compared with the rows recorded for the behavior (<<stand-in-and-recorded-row-agree>>): that comparison names neither side as the right one, and this has already named one. The two cannot both be said about one pair.
 
@@ -7283,7 +7283,7 @@ order.lookup: asked, answering Found
 
 Emitted at a row of a `+fake+` table whose input and output do not keep an `+ensures+` of the behavior the table stands in for (<<a-fake-row-keeps-what-the-dependency-states>>). The same rule as <<e1928>> at the other place a model writes both sides of a relation down, and told apart from it because what an author does about the two is not the same: one is what a behavior owes, the other what stands in for it while some other behavior's row runs.
 
-A `+_+` row states no input, so there is nothing here to relate its answer to; what it answers is held at the crossing into generated code, like any other answer arriving from outside.
+A `+_+` row states no input, so there is nothing here to relate its answer to; what it answers is held when it is called, to the arguments of that call (<<a-stand-in-is-held-whoever-implements-the-behavior>>).
 
 A table with such a row is not one to stand in with, as a table that will not build is not (<<example-fakes>>). A row reaching it stops without a fake and says nothing of its own: running it would put the rest of the behavior in a state the model rules out, and what the row then reported would be about a run that cannot happen.
 

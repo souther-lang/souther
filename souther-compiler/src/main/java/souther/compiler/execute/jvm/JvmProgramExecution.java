@@ -94,7 +94,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                 // What applies a behavior here is what this compile emitted. A compile has nothing
                 // else to run a row against; something supplied from outside one arrives through
                 // the same seam and brings its own classes.
-                Answering.generatedHere(), asked.contracts());
+                Answering.generatedHere(), asked.ensured());
         return new RowRun.Ran(observed);
     }
 
@@ -119,7 +119,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                 asked.kinds(),
                 asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
-                source, keeping(asked), asked.policy(), asked.contracts()));
+                source, keeping(asked), asked.policy(), asked.ensured()));
     }
 
     @Override
@@ -140,7 +140,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         return new StatementReading.Read(ExampleStatements.disagreements(asked.forExamples(),
                 asked.symbols(), asked.sums(), asked.kinds(), asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(),
-                asked.definitions(), keeping(asked), asked.policy(), asked.contracts(),
+                asked.definitions(), keeping(asked), asked.policy(), asked.ensured(),
                 declaring));
     }
 
@@ -171,7 +171,7 @@ public final class JvmProgramExecution implements ProgramExecution {
                 asked.fieldTypes(),
                 image.program().classes(),
                 image.around(), asked.definitions(), image.program().implementations(),
-                asked.signatures(), asked.contracts(),
+                asked.signatures(), asked.ensured(),
                 image.program().probes(), asked.policy());
     }
 

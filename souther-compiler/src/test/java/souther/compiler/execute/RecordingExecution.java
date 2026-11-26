@@ -79,7 +79,7 @@ final class RecordingExecution implements ProgramExecution {
                 + ", " + about.signatures().size() + " behaviors"
                 + ", " + about.requirements().size() + " requirement tables"
                 + ", " + about.definitions().size() + " definitions"
-                + ", " + about.contracts().size() + " contracts"
+                + ", " + about.ensured().clauses().size() + " contracts"
                 + ", names " + (Objects.requireNonNull(about.symbols()) != null)
                 + ", " + held.stepLimit() / written + " steps an example"
                 + ", " + held.recursionDepthLimit() + " deep"

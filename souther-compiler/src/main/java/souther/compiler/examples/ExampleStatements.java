@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.WrittenStatements.Disagreement;
 import souther.compiler.observe.WrittenStatements.Readings;
@@ -12,7 +13,6 @@ import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.ast.Hir;
-import souther.compiler.core.Contract;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -131,9 +131,9 @@ public final class ExampleStatements {
                               Map<ValueName.Behavior, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy,
-                              Map<ValueName.Behavior, Contract> contracts,
+                              DeclaredEnsures ensured,
                               Map<String, Declaring> declaring) {
-        this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
+        this.ensures = new EnsuresChecks(loader, ensured, sigs.keySet());
         this.declaring = declaring;
         this.module = module;
         this.symbols = symbols;
@@ -357,7 +357,7 @@ public final class ExampleStatements {
                                          Map<String, ClassFileImage> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          Deadline deadline, EvaluationPolicy policy,
-                                         Map<ValueName.Behavior, Contract> contracts,
+                                         DeclaredEnsures ensured,
                                          Map<String, Declaring> declaring) {
         if (module.examples().isEmpty() && module.fakes().written().isEmpty()) {
             return Readings.NONE;
@@ -372,7 +372,7 @@ public final class ExampleStatements {
             return Readings.NONE;
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sums, kinds, fields, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
+                new MemoryClassLoader(classes, parent), values, deadline, policy, ensured,
                 declaring);
         try {
             return v.collectDisagreements(contested);
@@ -454,7 +454,7 @@ public final class ExampleStatements {
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
                                               Deadline deadline, EvaluationPolicy policy,
-                                              Map<ValueName.Behavior, Contract> contracts) {
+                                              DeclaredEnsures ensured) {
         List<souther.compiler.check.FakeTables.Occurrence.Resolved> building =
                 tablesBuiltIn(module, sigs, sourceId);
         if (building.isEmpty()) {
@@ -463,7 +463,7 @@ public final class ExampleStatements {
         // Building a table reads statements written here and nothing another module wrote, so it
         // needs no reading of one.
         ExampleStatements v = new ExampleStatements(module, symbols, sums, kinds, fields, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
+                new MemoryClassLoader(classes, parent), values, deadline, policy, ensured,
                 Map.of());
         List<Diagnostic> said = new ArrayList<>();
         for (souther.compiler.check.FakeTables.Occurrence.Resolved table : building) {
