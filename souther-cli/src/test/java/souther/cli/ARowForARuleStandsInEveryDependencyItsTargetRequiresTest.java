@@ -142,6 +142,36 @@ class ARowForARuleStandsInEveryDependencyItsTargetRequiresTest {
                 () -> "and the dependency the decision reads nothing of is answered too: " + block);
     }
 
+    /** A body comparing what a dependency with a body of its own answers: one implemented here,
+     *  taking two inputs, with a requirement of its own nothing stands in for. */
+    private static final String COMPARED_OVER_A_BODY = TYPES + """
+
+            behavior lookup : (key: Int) -> Int
+
+            behavior convert : (a: Int, b: Int) -> Int
+                depends on lookup
+            let convert (a, b, lookup) = lookup(a) + b
+
+            behavior decides : (a: Int, b: Int) -> Answer
+                depends on convert
+            let decides (a, b, convert) = if convert(a, b) >= 700 then Yes else No
+            """;
+
+    /**
+     * The same two rules where the dependency is implemented in Souther. A row is run to settle a
+     * rule, so the rows go out only if the dependency can be stood in for, and what it is held as is
+     * its own interface rather than a base Java extends.
+     */
+    @Test
+    void twoRulesOverWhatABehaviorWithABodyAnswersAreTwoRows() {
+        String block = generated(COMPARED_OVER_A_BODY);
+
+        assertTrue(block.contains("with convert = 700"),
+                () -> "one row answers on the side the comparison holds: " + block);
+        assertTrue(block.contains("with convert = 699"),
+                () -> "and one on the side it does not: " + block);
+    }
+
     /** A body asking one dependency about two calls it can tell apart. */
     private static final String TWO_CALLS = TYPES + """
 

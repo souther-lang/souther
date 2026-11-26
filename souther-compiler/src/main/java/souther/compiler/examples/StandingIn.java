@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * Where a stand-in for a dependency is made.
@@ -34,13 +35,18 @@ final class StandingIn {
     /**
      * A stand-in for {@code dependency} that answers by {@code answers}.
      *
-     * @param inputs  how many inputs the dependency takes, which decides what an instance of it can
-     *                be made into
-     * @param answers what it answers, for the arguments it is called with
+     * <p>What it answers is handed back as the member of the dependency's union it is, which for a
+     * primitive or a type another module declares is the bridge case holding it
+     * ({@link FixtureReader#asAMemberOf}). A table and a {@code with} both come through here, so
+     * neither has a reading of its own of what a union is answered as.
+     *
+     * @param signature the dependency's own, whose output is what it answers
+     * @param answers   what it answers, for the arguments it is called with, as the Souther value
      */
-    static DependencyStandin by(ValueName.Behavior dependency, int inputs,
+    static DependencyStandin by(FixtureReader fixtures, ValueName.Behavior dependency, Sig signature,
                                 Function<Object[], Object> answers) {
-        return new DependencyStandin(dependency, inputs, answers);
+        UnaryOperator<Object> asAMember = fixtures.asAMemberOf(dependency, signature.out().type());
+        return new DependencyStandin(dependency, answers.andThen(asAMember));
     }
 
     /**
@@ -88,7 +94,7 @@ final class StandingIn {
             }
             return answering.answer().value();
         };
-        return new OffATable(by(dependency, arity, answers), table);
+        return new OffATable(by(fixtures, dependency, signature, answers), table);
     }
 
     /** A stand-in a module's table gives, and the table it dispatches over. */

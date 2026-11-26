@@ -275,55 +275,94 @@ class AStandInNamesTheBehaviorItStandsInForTest {
     }
 
     /**
-     * A dependency implemented in Souther says it cannot be stood in for, rather than aborting.
+     * A behavior one constructor takes dependencies of every kind for: implemented in Souther (its
+     * own {@code depends on} makes it one that may be depended on, spec §depends-on) taking none, two
+     * and three inputs, and supplied by Java taking two.
      *
-     * <p>What may be depended on is a behavior whose requirement set is not empty, and a written
-     * {@code let} declaring its own {@code depends on} has one (spec §depends-on) — so a dependency
-     * is not always something Java supplies. The two are emitted differently: Java's as an abstract
-     * base to extend, Souther's as an interface with its body on the {@code $Impl}. A stand-in
-     * taking any count of inputs but one is a generated class, and generating one against an
-     * interface produces a class that will not link.
+     * <p>Each kind is held as a different class — a Souther-implemented behavior taking any count
+     * but one as its own interface, a Java-supplied one as the base Java extends — and one
+     * constructor takes them side by side, so a stand-in made into the wrong one, or handed to the
+     * wrong place, is a row that does not run. Nothing stands in for {@code lookup}: a row reaching
+     * a stood-in behavior's own body would have nothing to call it with.
+     */
+    private static final String LAYERED = """
+            module probe.layered
+
+            behavior lookup : (key: Int) -> Int
+            behavior rate : (a: Int, b: Int) -> Int
+
+            behavior stamp : () -> Int
+                depends on lookup
+            let stamp (lookup) = lookup(0)
+
+            behavior convert : (a: Int, b: Int) -> Int
+                depends on lookup
+            let convert (a, b, lookup) = lookup(a) + b
+
+            behavior blend : (a: Int, b: Int, c: Int) -> Int
+                depends on lookup
+            let blend (a, b, c, lookup) = lookup(a) + b + c
+
+            behavior top : (a: Int, b: Int) -> Int
+                depends on stamp, convert, blend, rate
+            let top (a, b, stamp, convert, blend, rate) =
+                stamp() + convert(a, b) + blend(a, b, 1) + rate(a, b)
+            """;
+
+    /**
+     * A dependency implemented in Souther is stood in for by its table, whatever count of inputs it
+     * takes.
      *
-     * <p>Written down as a limit and not as a crash. The reading that used to refuse this refused
-     * every dependency another module declares with it, which is what this change removed; taking
-     * the whole refusal out left the assumption underneath it with no owner.
-     *
-     * <p>Taking nothing, so the unary {@code Behavior} proxy — which proxies an interface and so
-     * never met the difference — is not the path this takes.
+     * <p>The two rows tell {@code (1, 2)} from {@code (2, 1)}, so each stand-in is handed every
+     * argument in the order the call wrote it.
      */
     @Test
-    void aDependencyImplementedInSoutherCannotBeStoodInFor() {
-        List<String> codes = new java.util.ArrayList<>();
-        Compilation compiled = Compilation.ofSource("""
-                module probe.layered
+    void aDependencyImplementedInSoutherIsStoodInForByItsTableWhateverItTakes() {
+        List<String> codes = new ArrayList<>();
+        Compilation compiled = Compilation.ofSource(LAYERED + """
 
-                data Stamp = String
-                data Noted = { at: Stamp }
-                data Filed = { at: Noted }
+                fake stamp
+                    | _ -> 100
 
-                behavior now : () -> Stamp
+                fake convert
+                    | (1, 2) -> 10
+                    | (2, 1) -> 20
 
-                behavior note : () -> Noted
-                    constructs Noted
-                    depends on now
-                let note (now) = Noted { at = now() }
+                fake blend
+                    | (1, 2, 1) -> 1000
+                    | (2, 1, 1) -> 2000
 
-                behavior file : () -> Filed
-                    constructs Filed
-                    depends on note
-                let file (note) = Filed { at = note() }
+                fake rate
+                    | (1, 2) -> 5
+                    | (2, 1) -> 7
 
-                fake note
-                    | _ -> Noted { at = Stamp("t") }
-
-                example file
-                    | "one" : () -> Filed { at = Noted { at = Stamp("t") } }
+                example top
+                    | "one then two" : (1, 2) -> 1115
+                    | "two then one" : (2, 1) -> 2127
                 """, "Main");
         compiled.answerEverything();
         compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
 
-        assertEquals(List.of("E1908"), codes,
-                "the stand-in could not be made, said at the row rather than thrown");
+        assertEquals(List.of(), codes, "both rows run, every dependency answered by its table");
+    }
+
+    /** The same dependencies stood in for by a {@code with} on the row, over their tables. */
+    @Test
+    void aDependencyImplementedInSoutherIsStoodInForByAWithWhateverItTakes() {
+        List<String> codes = new ArrayList<>();
+        Compilation compiled = Compilation.ofSource(LAYERED + """
+
+                fake convert
+                    | _ -> 10
+
+                example top
+                    | "each as the row says" : (1, 2)
+                        with stamp = 1, convert = 20, blend = 300, rate = 4000 -> 4321
+                """, "Main");
+        compiled.answerEverything();
+        compiled.errors().forEach(e -> codes.add(e.diagnostic().code()));
+
+        assertEquals(List.of(), codes, "the row runs, `convert` answered by the row and not its table");
     }
 
     /** A name no behavior answers to is refused where it is written, rather than leaving a table

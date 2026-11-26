@@ -7,6 +7,12 @@ import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.observe.Applied;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
@@ -81,11 +87,29 @@ final class GeneratedImplementation implements Answerer {
      *
      * <p>Made here rather than when the behavior is applied, because a row whose stand-ins could not
      * be made never entered the behavior and its outcome has to say so.
+     *
+     * <p>What each stand-in has to be is read off the constructor the implementation was emitted
+     * with, before any stand-in is made. The constructor's parameter is the fact; an instance is made
+     * to be it, and is never what the parameter is worked out from.
+     *
+     * <p>An implementation that cannot be reached is still said where it is applied. No stand-in was
+     * wrong, and a row said not to have been given one would name what did not happen.
      */
     private Applying applying(String behavior, List<DependencyStandin> standins) {
+        Constructor<?> constructor;
+        try {
+            constructor = constructorOf(behavior);
+        } catch (ReflectiveOperationException e) {
+            return unreached(e);
+        }
+        Class<?>[] takes = constructor.getParameterTypes();
+        if (takes.length != standins.size()) {
+            throw new IllegalStateException("`" + behavior + "` is constructed with " + takes.length
+                    + " dependencies and is handed " + standins.size() + " stand-ins");
+        }
         Object[] instances = new Object[standins.size()];
         for (int i = 0; i < standins.size(); i++) {
-            instances[i] = instanceOf(standins.get(i));
+            instances[i] = instanceOf(takes[i], standins.get(i));
         }
         return new Applying() {
 
@@ -96,22 +120,59 @@ final class GeneratedImplementation implements Answerer {
 
             @Override
             public Object to(List<Handed> arguments) {
-                return apply(behavior, instances, arguments);
+                return apply(constructor, instances, arguments);
+            }
+        };
+    }
+
+    /** The behavior whose implementation could not be reached, said so when it is applied. */
+    private static Applying unreached(ReflectiveOperationException e) {
+        return new Applying() {
+
+            @Override
+            public Applied applied() {
+                return new Applied.GeneratedHere();
+            }
+
+            @Override
+            public Object to(List<Handed> arguments) {
+                throw new ImplementationNotReached(String.valueOf(e.getMessage()), e);
             }
         };
     }
 
     /**
-     * A stand-in as the injected instance: a unary {@code Behavior} proxy for a single-input
-     * dependency, or a runtime-generated subclass of the standalone base for one taking any other
-     * count (whose typed {@code apply} the unary {@code Behavior} cannot stand in for; issue #57).
-     * Both the table and the constant {@code with} stand-in route through here, so neither path assumes
-     * an arity.
+     * The constructor the behavior's {@code $Impl} was emitted with, opened.
+     *
+     * <p>An implementation is emitted with one: the injecting constructor where it depends on
+     * anything, and the one taking nothing where it does not.
      */
-    private Object instanceOf(DependencyStandin standin) {
-        return standin.inputs() == 1
-                ? behaviorProxy(standin.answers())
-                : standaloneInstance(standin);
+    private Constructor<?> constructorOf(String behavior) throws ReflectiveOperationException {
+        Class<?> c = GeneratedClasses.load(loader,
+                new GeneratedClass.BehaviorImpl(generated.module(), behavior));
+        Constructor<?>[] declared = c.getDeclaredConstructors();
+        if (declared.length != 1) {
+            throw new NoSuchMethodException(c.getName() + " declares " + declared.length
+                    + " constructors, and an implementation is emitted with one");
+        }
+        declared[0].setAccessible(true);
+        return declared[0];
+    }
+
+    /**
+     * A stand-in as what the constructor takes for it, {@code held}.
+     *
+     * <p>An interface is proxied, and an abstract base is extended by a generated subclass. Which a
+     * dependency is held as is the ABI's answer ({@code codegen.BehaviorAbi}) — the unary
+     * {@code Behavior}, a Java-supplied behavior's base, or a Souther-implemented behavior's own
+     * interface — and this reads the answer rather than giving it a second time from how many inputs
+     * the dependency takes or who implements it. A {@code with} and a table both arrive here, so
+     * neither assumes either.
+     */
+    private Object instanceOf(Class<?> held, DependencyStandin standin) {
+        return held.isInterface()
+                ? proxyOf(held, standin.answers())
+                : subclassOf(held, standin);
     }
 
     /**
@@ -125,39 +186,22 @@ final class GeneratedImplementation implements Answerer {
      * boundary, so exposure does not decide whether it can be evaluated — the declared members are
      * taken and opened.
      */
-    private Object apply(String behavior, Object[] fakes, List<Handed> arguments) {
+    private Object apply(Constructor<?> constructor, Object[] fakes, List<Handed> arguments) {
         Object[] args = new Object[arguments.size()];
         for (int i = 0; i < args.length; i++) {
             // The value as this compile built it: these are the classes being applied, so nothing
             // crosses and nothing is read back into a neutral form on the way in.
             args[i] = arguments.get(i).built();
         }
-        Class<?> c;
         Object instance;
-        java.lang.reflect.Method apply;
+        Method apply;
         try {
-            c = GeneratedClasses.load(loader,
-                    new GeneratedClass.BehaviorImpl(generated.module(), behavior));
-            if (fakes.length == 0) {
-                instance = openCtor(c).newInstance();
-            } else {
-                // the injecting constructor takes one param per dependency: the unary Behavior for a
-                // single-input dep (a Proxy), or the dep's own base class for a multi-input dep (a
-                // generated subclass) — issue #57. The fake's runtime type tells the two apart.
-                Class<?> behaviorIface = loader.loadClass("souther.runtime.Behavior");
-                Class<?>[] ctorParams = new Class<?>[fakes.length];
-                for (int i = 0; i < fakes.length; i++) {
-                    ctorParams[i] = behaviorIface.isInstance(fakes[i])
-                            ? behaviorIface
-                            : fakes[i].getClass().getSuperclass();
-                }
-                instance = openCtor(c, ctorParams).newInstance(fakes);
-            }
+            instance = constructor.newInstance(fakes);
             Class<?>[] paramTypes = new Class<?>[args.length];
-            java.util.Arrays.fill(paramTypes, Object.class);
-            apply = c.getDeclaredMethod("apply", paramTypes);
+            Arrays.fill(paramTypes, Object.class);
+            apply = constructor.getDeclaringClass().getDeclaredMethod("apply", paramTypes);
             apply.setAccessible(true);
-        } catch (java.lang.reflect.InvocationTargetException ite) {
+        } catch (InvocationTargetException ite) {
             // The constructor ran and threw. That is the model's code, so it goes out the way the
             // behavior's own failure does — unless it is a class of this compile failing to link,
             // which is not the model's.
@@ -167,7 +211,7 @@ final class GeneratedImplementation implements Answerer {
         }
         try {
             return apply.invoke(instance, args);
-        } catch (java.lang.reflect.InvocationTargetException ite) {
+        } catch (InvocationTargetException ite) {
             // What the applied code came back with, carried out as it stands. Whose failure it is and
             // what it means for the row are read where the row is. The classes are this compile's
             // own, so one that will not link is its output failing and is said so before it is
@@ -178,24 +222,14 @@ final class GeneratedImplementation implements Answerer {
         }
     }
 
-    /** The {@code $Impl}'s constructor, opened. */
-    private static java.lang.reflect.Constructor<?> openCtor(Class<?> c, Class<?>... params)
-            throws ReflectiveOperationException {
-        java.lang.reflect.Constructor<?> ctor = c.getDeclaredConstructor(params);
-        ctor.setAccessible(true);
-        return ctor;
-    }
-
-    /** A {@code Behavior} proxy whose {@code apply} runs {@code answers}. Reflective so the runtime
-     * (souther-runtime, `provided`) may be absent, in which case the LinkageError is caught upstream. */
-    private Object behaviorProxy(Function<Object[], Object> answers) {
-        Class<?> iface;
-        try {
-            iface = loader.loadClass("souther.runtime.Behavior");
-        } catch (ClassNotFoundException _) {
-            throw new NoClassDefFoundError("souther.runtime.Behavior");
-        }
-        return java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[] {iface}, (proxy, method, a) -> {
+    /**
+     * A proxy of the interface {@code held} whose {@code apply} runs {@code answers}.
+     *
+     * <p>Defined by the loader that defined the interface. A behavior its module does not expose has
+     * a package-private interface, and a proxy of one has to be in its package and its loader.
+     */
+    private static Object proxyOf(Class<?> held, Function<Object[], Object> answers) {
+        return Proxy.newProxyInstance(held.getClassLoader(), new Class<?>[] {held}, (proxy, method, a) -> {
             if (method.getName().equals("apply")) {
                 return answers.apply(a == null ? new Object[0] : a);
             }
@@ -208,36 +242,21 @@ final class GeneratedImplementation implements Answerer {
         });
     }
 
-    /** Generates (once) and instantiates a subclass of a standalone injected base whose typed
+    /**
+     * Generates (once) and instantiates a subclass of the abstract base {@code base}, whose typed
      * {@code apply} packs its arguments into an {@code Object[]} and delegates to what the stand-in
-     * answers. */
-    private Object standaloneInstance(DependencyStandin standin) {
-        // The module that declares the dependency, which is where its abstract base was generated
-        // (spec §java-base-class). The module being applied is not it: a behavior may depend on one
-        // another module declares, and reading the base out of this module's package would name a
-        // class nothing generated.
+     * answers.
+     *
+     * <p>The subclass is named for the dependency, in the module that declares it, which is where its
+     * base was generated (spec §java-base-class) and not always the module being applied.
+     */
+    private Object subclassOf(Class<?> base, DependencyStandin standin) {
         GeneratedClass.BehaviorInterface baseClass = new GeneratedClass.BehaviorInterface(
                 standin.dependency().module(), standin.dependency().name());
         try {
-            Class<?> base = GeneratedClasses.load(loader, baseClass);
-            if (base.isInterface()) {
-                // Not a behavior Java supplies. What may be depended on is anything whose
-                // requirement set is not empty, and a written `let` declaring its own `depends on`
-                // has one (spec §depends-on) — such a behavior is emitted as an interface with its
-                // body on the `$Impl`, and what an injecting constructor takes for it is that
-                // interface rather than a base to extend. Nothing here can make one: the class this
-                // would generate has no body to be, and the constructor this instance would be
-                // handed to is read off the stand-in's own superclass, which an interface has none
-                // of. Said as a stand-in that could not be made, which is a row that does not run
-                // rather than this compiler failing to reach its own output.
-                throw new StandinNotBuilt(standin.dependency(), "`"
-                        + standin.dependency().name() + "` is implemented in Souther and takes "
-                        + standin.inputs() + " input(s); only a behavior Java supplies, or one "
-                        + "taking a single input, can be stood in for");
-            }
-            java.lang.reflect.Method apply = null;
-            for (java.lang.reflect.Method m : base.getDeclaredMethods()) {
-                if (m.getName().equals("apply") && java.lang.reflect.Modifier.isAbstract(m.getModifiers())) {
+            Method apply = null;
+            for (Method m : base.getDeclaredMethods()) {
+                if (m.getName().equals("apply") && Modifier.isAbstract(m.getModifiers())) {
                     apply = m;
                 }
             }
@@ -245,7 +264,7 @@ final class GeneratedImplementation implements Answerer {
                 throw new NoSuchMethodException("abstract apply on " + base.getName());
             }
             String fakeName = SoutherJvmAbi.nameOf(new GeneratedClass.ExampleFake(baseClass)).binaryName();
-            java.lang.reflect.Method applyM = apply;
+            Method applyM = apply;
             Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
             return fakeClass.getConstructor(Function.class).newInstance(standin.answers());
         } catch (ReflectiveOperationException e) {
@@ -254,7 +273,7 @@ final class GeneratedImplementation implements Answerer {
         }
     }
 
-    private byte[] fakeSubclassBytes(String fakeName, Class<?> base, java.lang.reflect.Method apply) {
+    private byte[] fakeSubclassBytes(String fakeName, Class<?> base, Method apply) {
         java.lang.constant.ClassDesc cdFake = java.lang.constant.ClassDesc.of(fakeName);
         java.lang.constant.ClassDesc cdBase = java.lang.constant.ClassDesc.of(base.getName());
         java.lang.constant.ClassDesc cdFunc =

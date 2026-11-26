@@ -322,7 +322,7 @@ public final class RowTrial {
             switch (each) {
                 case RowTrials.AnsweredWith.OnTheRow(var dependency, var signature, var written) -> {
                     Object value = fixtures.buildFixture(written, signature.out()).value();
-                    out.add(StandingIn.by(dependency, signature.ins().size(), _ -> value));
+                    out.add(StandingIn.by(fixtures, dependency, signature, _ -> value));
                 }
                 case RowTrials.AnsweredWith.InTheModule(var dependency, var signature) -> {
                     StandingIn.OffATable stood = statedFor(fixtures, module, ensures, dependency,

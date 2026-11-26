@@ -2468,7 +2468,7 @@ public final class ExampleVerifier {
                     // writing what a dependency answers, so that a reader of a row has one question
                     // to ask of either.
                     yield new StoodInFor.Read(
-                            StandingIn.by(dependency, depSig.ins().size(), _ -> value),
+                            StandingIn.by(fixtures, dependency, depSig, _ -> value),
                             RowStatements.StandInRead.of(dependency, w.pos(), takes(depSig),
                                     List.of(), new StoodIn.Otherwise.Answer(
                                             fixtures.observed(value), w.value().pos())));
