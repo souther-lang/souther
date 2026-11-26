@@ -89,6 +89,19 @@ class AnAnswerJavaSuppliesIsCheckedWhereverItEntersTheProgramTest {
         assertEquals(1, checksOf(classes.get("down.Use$Impl"), "up/Fetch$Ensures"));
     }
 
+    /** And a composition here whose stages are that behavior checks it after each stage, as the
+     *  call from a body does: a stage is a crossing too. */
+    @Test
+    void aCompositionHereChecksEachStageAnotherModuleSupplies() {
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(DECLARING, """
+                module down
+                import up ( Amount, fetch )
+                behavior twice = fetch >-> fetch
+                """));
+
+        assertEquals(2, checksOf(classes.get("down.Twice$Impl"), "up/Fetch$Ensures"));
+    }
+
     /** And one compiled against the declaring module's published classes. */
     @Test
     void aCallerBuiltAgainstTheDeclaringModuleOffThePathChecksIt() {

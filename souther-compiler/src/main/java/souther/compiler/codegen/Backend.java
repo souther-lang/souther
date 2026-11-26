@@ -1515,6 +1515,14 @@ public final class Backend {
      * the fact nor the projection alone, so what it says it provides and was built against is not
      * what this compiler works out for it.
      *
+     * <p>Version 40 changes where what a behavior declares of its answer is checked, and what a
+     * behavior offers another module's classes says so. An answer Java supplies is checked by every
+     * class calling it, in whichever module, with the check the declaring module emits; a behavior's
+     * projection carries that check, and a class calling it is built against it. A module written
+     * under version 39 records no such fact, so what it says it provides is not what this compiler
+     * works out for it, and its classes call another module's behavior without checking what comes
+     * back.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1525,7 +1533,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 39;
+    public static final int BOUNDARY_VERSION = 40;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
@@ -1663,12 +1671,7 @@ public final class Backend {
                                    MethodTypeDesc mtdApply, int n) {
         ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
-        List<ClassDesc> checkParams = new ArrayList<>();
-        for (int i = 0; i <= n; i++) {
-            checkParams.add(CD_Object);
-        }
-        MethodTypeDesc mtdCheck =
-                MethodTypeDesc.of(ConstantDescs.CD_void, checkParams.toArray(new ClassDesc[0]));
+        MethodTypeDesc mtdCheck = EnsuresGen.checkType(n);
         cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
             int answered = n + 1;    // this=0, the arguments are 1..n
             int carrier = n + 2;
