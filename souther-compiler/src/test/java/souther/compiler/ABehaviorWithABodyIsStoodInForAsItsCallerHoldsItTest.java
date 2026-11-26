@@ -1,16 +1,13 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.HumanRenderer;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -76,7 +73,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
     /** Each member answered by a table, read back by the caller through the case it reached. */
     @Test
     void aMemberReachingTheUnionThroughABridgeIsAnsweredByATable() {
-        assertReports(List.of("E1905"), codes(List.of(STOCK, BRIDGED + """
+        ACompiledModel.refusedWith(List.of("E1905"), together(List.of(STOCK, BRIDGED + """
 
                 fake convert
                     | (1, 2) -> 7
@@ -99,7 +96,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
     /** The same members answered by the row. */
     @Test
     void aMemberReachingTheUnionThroughABridgeIsAnsweredByAWith() {
-        assertReports(List.of("E1905"), codes(List.of(STOCK, BRIDGED + """
+        ACompiledModel.refusedWith(List.of("E1905"), together(List.of(STOCK, BRIDGED + """
 
                 example top
                     | "an Int and a Missing" : (1, 2)
@@ -166,7 +163,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
     /** A table with no row for a call the body makes stops the row there (E1909). */
     @Test
     void aCallTheTableHasNoRowForStopsTheRow() {
-        assertReports(List.of("E1909"), codes(List.of(RATES, CONVERTING.replace(
+        ACompiledModel.refusedWith(List.of("E1909"), together(List.of(RATES, CONVERTING.replace(
                 "| (2, 1) -> 20", "| (3, 3) -> 20"))));
     }
 
@@ -189,7 +186,7 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
     /** A table row stating an answer the declaration rules out is refused where it is written. */
     @Test
     void aTableRowTheDeclarationRulesOutIsRefused() {
-        assertReports(List.of("E1929"), codes(List.of(KEPT + """
+        ACompiledModel.refusedWith(List.of("E1929"), together(List.of(KEPT + """
 
                 fake convert
                     | (1, 2) -> 500
@@ -199,26 +196,8 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
                 """)));
     }
 
-    /**
-     * The codes every module of {@code sources} reports, once its rows are run, each followed by what
-     * it said — so an assertion that fails shows the report and not only the count.
-     */
-    private static Reported codes(List<String> sources) {
-        Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compiled.answerEverything();
-        List<String> codes = new ArrayList<>();
-        StringBuilder said = new StringBuilder();
-        compiled.errors().forEach(e -> {
-            codes.add(e.diagnostic().code());
-            said.append(new HumanRenderer(false).render(e.diagnostic(), null, Locale.ENGLISH))
-                    .append('\n');
-        });
-        return new Reported(codes, said.toString());
+    /** The modules of {@code sources}, compiled together. */
+    private static Compilation together(List<String> sources) {
+        return Compilation.ofSources(sources, ModulePath.EMPTY);
     }
-
-    private static void assertReports(List<String> expected, Reported reported) {
-        assertEquals(expected, reported.codes(), reported.said());
-    }
-
-    private record Reported(List<String> codes, String said) {}
 }
