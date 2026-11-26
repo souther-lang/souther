@@ -1,6 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.AtomSpace;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.coverage.ConditionOutcomeSite;
@@ -731,22 +730,7 @@ final class CodegenContext {
      * this module declared — then the union's JVM form and its Souther form are the same values and
      * neither boundary converts anything. */
     List<TypeSymbol> bridgedMembers(Type out) {
-        return bridgedMembersIn(pkg, out);
-    }
-
-    private List<TypeSymbol> bridgedMembersIn(String module, Type out) {
-        if (!(out instanceof Type.Union)) {
-            return List.of();
-        }
-        List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
-            if (member.isDeclaredByLanguage()
-                    || !(member instanceof TypeSymbol.AtModule at)
-                    || !at.module().equals(module)) {
-                bridged.add(member);
-            }
-        }
-        return bridged;
+        return JvmClassNames.bridgedMembers(pkg, out, kinds, sums);
     }
 
     /** The {@code $Fns} method name for a definition the module emits. A module-own helper keeps its

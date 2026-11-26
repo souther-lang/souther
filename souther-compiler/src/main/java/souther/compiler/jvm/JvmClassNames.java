@@ -1,7 +1,7 @@
 package souther.compiler.jvm;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.Boundary;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.SumCases;
 import souther.compiler.diag.CompileException;
@@ -121,10 +121,8 @@ public final class JvmClassNames {
             Map<JvmClassName, String> behaviorClassOwner) {
         Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
         results.forEach((union, output) -> {
-            for (TypeSymbol member : Boundary.of(output, kinds, sums).atoms()) {
-                if (!isLocalMember(module.name(), member)) {
-                    bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(union);
-                }
+            for (TypeSymbol member : bridgedMembers(module.name(), output, kinds, sums)) {
+                bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(union);
             }
         });
         Map<JvmClassName, TypeSymbol> byBridgeName = new LinkedHashMap<>();
@@ -170,6 +168,31 @@ public final class JvmClassNames {
     public static boolean isLocalMember(String module, TypeSymbol member) {
         return !member.isDeclaredByLanguage()
                 && member instanceof TypeSymbol.AtModule at && at.module().equals(module);
+    }
+
+    /**
+     * The members of {@code out} that reach it through a bridge case {@code module} emits, in the
+     * order the union lists them: every member but the ones {@code module} declared. Empty for an
+     * output that is no union.
+     *
+     * <p>Which members a behavior's answer carries in a bridge case, said once. The classes that
+     * emit a union, the projection another module's classes read it by and an example run that
+     * converts a value either way all ask this, so what a union is answered as on the JVM is not
+     * worked out again by any of them. What the union's members are is {@link AtomSpace}'s answer
+     * and not this one's.
+     */
+    public static List<TypeSymbol> bridgedMembers(String module, Type out, DeclarationKinds kinds,
+                                                  SumCases sums) {
+        if (!(out instanceof Type.Union)) {
+            return List.of();
+        }
+        List<TypeSymbol> bridged = new ArrayList<>();
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
+            if (!isLocalMember(module, member)) {
+                bridged.add(member);
+            }
+        }
+        return bridged;
     }
 
     /** The behavior of this module written under {@code name}. Every result union and every bridge

@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.Sig;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -34,13 +35,20 @@ final class StandingIn {
     /**
      * A stand-in for {@code dependency} that answers by {@code answers}.
      *
-     * @param inputs  how many inputs the dependency takes, which decides what an instance of it can
-     *                be made into
-     * @param answers what it answers, for the arguments it is called with
+     * <p>What it answers is handed back as the member of the dependency's union it is, which for a
+     * primitive or a type another module declares is the bridge case holding it
+     * ({@link UnionMembers#asAMember}). A table and a {@code with} both come through here, so
+     * neither has a reading of its own of what a union is answered as.
+     *
+     * @param members   the run's, which knows what each dependency's union is answered through
+     * @param signature the dependency's own, whose output is what it answers
+     * @param answers   what it answers, for the arguments it is called with, as the Souther value
      */
-    static DependencyStandin by(ValueName.Behavior dependency, int inputs,
+    static DependencyStandin by(UnionMembers members, ValueName.Behavior dependency, Sig signature,
                                 Function<Object[], Object> answers) {
-        return new DependencyStandin(dependency, inputs, answers);
+        Type out = signature.out().type();
+        return new DependencyStandin(dependency,
+                answers.andThen(value -> members.asAMember(dependency, out, value)));
     }
 
     /**
@@ -57,7 +65,7 @@ final class StandingIn {
      * standing in with either would put the rest of the behavior in a state the model rules out,
      * and everything said afterwards would be about a run that cannot happen.
      */
-    static OffATable byTheTable(FixtureReader fixtures, EnsuresChecks ensures,
+    static OffATable byTheTable(FixtureReader fixtures, EnsuresChecks ensures, UnionMembers members,
                                 FakeTables.Occurrence.Resolved stated,
                                 ValueName.Behavior dependency, Sig signature) {
         Hir.Fake fk = stated.read();
@@ -88,7 +96,7 @@ final class StandingIn {
             }
             return answering.answer().value();
         };
-        return new OffATable(by(dependency, arity, answers), table);
+        return new OffATable(by(members, dependency, signature, answers), table);
     }
 
     /** A stand-in a module's table gives, and the table it dispatches over. */

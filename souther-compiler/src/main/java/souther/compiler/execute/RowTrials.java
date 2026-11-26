@@ -130,8 +130,8 @@ public interface RowTrials {
 
         /**
          * What that behavior takes and answers, which is what a value here is built through and
-         * what decides what an instance of it can be. The dependency's own and not the target's: a
-         * stand-in stands where the dependency does.
+         * what the member of its union an answer is handed back as is read from. The dependency's
+         * own and not the target's: a stand-in stands where the dependency does.
          */
         Sig signature();
 

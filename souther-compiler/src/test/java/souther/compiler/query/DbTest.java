@@ -5,6 +5,7 @@ import souther.compiler.diag.msg.ModuleMessage;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -293,6 +294,116 @@ class DbTest {
 
         assertEquals("a query cycle was reported for Knot[step=0], but its dependency chain does"
                 + " not contain it: [Asks[step=0]]", raised.getMessage());
+    }
+
+    /** A key that reads the text of {@code mode.sou}, and reads itself where the text says to. */
+    record Turns() implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            ran("turns");
+            String mode = db.ask(new Text("mode.sou")).value();
+            return Answer.of("loop".equals(mode) ? "looped:" + db.ask(new Turns()).value()
+                    : "plain:" + mode);
+        }
+
+        @Override
+        public Answer<String> onCycle(List<Key<?>> cycle) {
+            return Answer.of("cycle" + cycle.size());
+        }
+    }
+
+    /** What {@link Turns} answers, read by a key that does not take part in its cycle. */
+    record AroundTurns() implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            ran("around");
+            return Answer.of("around(" + db.ask(new Turns()).value() + ")");
+        }
+    }
+
+    /**
+     * A kept answer that read a key the edit made answer through a cycle is worked out again.
+     *
+     * <p>Checking the kept answer asks the key, which is worked out anew and comes out through the
+     * cycle, so nothing keeps it. What is kept for the key is the answer from before the edit, and
+     * the check compared with that would find the key unchanged and hand back the answer from
+     * before the edit. An answer nothing keeps is one that changed now.
+     */
+    @Test
+    void aKeptAnswerReadingAKeyAnEditSentThroughACycleIsWorkedOutAgain() {
+        Db db = new Db().set(new Text("mode.sou"), "a");
+        assertEquals("around(plain:a)", db.ask(new AroundTurns()).value());
+
+        db.set(new Text("mode.sou"), "loop");
+
+        assertEquals("around(looped:cycle2)", db.ask(new AroundTurns()).value());
+        assertEquals("around(looped:cycle2)", db.ask(new AroundTurns()).value(),
+                "and asked again, the answer from before the edit is not what comes back");
+    }
+
+    /** A key that asks one other three times while it is worked out. */
+    record AsksThrice(String file) implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            String once = db.ask(new Shouted(file)).value();
+            return Answer.of(once + db.ask(new Shouted(file)).value()
+                    + db.ask(new Shouted(file)).value());
+        }
+    }
+
+    /** A key asked again inside one computation is one read of it, worked out once. */
+    @Test
+    void aKeyAskedSeveralTimesInOneComputationIsOneRead() {
+        Db db = new Db().set(new Text("a.sou"), "x");
+
+        assertEquals("XXX", db.ask(new AsksThrice("a.sou")).value());
+        assertEquals(Set.of(new Shouted("a.sou")), db.dependenciesOf(new AsksThrice("a.sou")));
+        assertEquals(1, runs("shouted:a.sou"));
+    }
+
+    /** A key about the module {@code gone}, which {@code forget} drops with the module. */
+    record OfGone(String file) implements Key<String> {
+        @Override
+        public String module() {
+            return "gone";
+        }
+
+        @Override
+        public Answer<String> compute(Db db) {
+            ran("ofGone");
+            return Answer.of("of:" + db.ask(new Text(file)).value());
+        }
+    }
+
+    /** A key outside that module that reads one inside it. */
+    record ReadsGone(String file) implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            ran("readsGone");
+            return Answer.of("reads(" + db.ask(new OfGone(file)).value() + ")");
+        }
+    }
+
+    /**
+     * A key forgotten and asked again is another instance of the key, and what read the one before
+     * finds it by what it is.
+     *
+     * <p>The answer that read it is checked against the key filed anew, so the check sees a key
+     * that changed now and works the reader out again, and the reader reads the key it now finds.
+     */
+    @Test
+    void aKeyFiledAgainAfterItWasForgottenIsFoundByWhatItIs() {
+        Db db = new Db().set(new Text("a.sou"), "x");
+        assertEquals("reads(of:x)", db.ask(new ReadsGone("a.sou")).value());
+
+        db.forget(new SourceId("gone.sou"), "gone");
+        db.set(new Text("a.sou"), "y");
+
+        assertEquals("reads(of:y)", db.ask(new ReadsGone("a.sou")).value());
+        assertEquals("reads(of:y)", db.ask(new ReadsGone("a.sou")).value());
+        assertEquals(2, runs("ofGone"));
+        assertEquals(2, runs("readsGone"));
+        assertEquals(Set.of(new OfGone("a.sou")), db.dependenciesOf(new ReadsGone("a.sou")));
     }
 
     /** Two files joined, so an edit to one can be watched for its effect on the other. */
