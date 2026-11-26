@@ -257,6 +257,57 @@ class ABehaviorWithABodyIsStoodInForAsItsCallerHoldsItTest {
                 ModulePath.of(Compiler.compile(RATES))), "probe.converting"), "both orders");
     }
 
+    /**
+     * A behavior another module implements that answers a union, one of whose members a third
+     * module declares. Three modules each own one part of the answer: {@code probe.stock} the type
+     * {@code Shortage}, {@code probe.supply} the union and the bridge case {@code Shortage} and
+     * {@code Int} reach it through, and {@code probe.ordering} the rows. Read off the path, so the
+     * union and its bridge cases are classes another build emitted.
+     */
+    private static final String SUPPLY = """
+            module probe.supply exposing ( Missing, supply )
+            import probe.stock ( Shortage )
+
+            data Missing = { key: Int }
+
+            behavior lookup : (key: Int) -> Int
+
+            behavior supply : (a: Int, b: Int) -> Int | Shortage | Missing
+                depends on lookup
+                constructs Missing
+            let supply (a, b, lookup) = if lookup(a) > b then lookup(a) else Missing { key = a }
+            """;
+
+    private static final String ORDERING = """
+            module probe.ordering exposing ( top )
+            import probe.stock ( Shortage )
+            import probe.supply ( Missing, supply )
+
+            behavior top : (a: Int, b: Int) -> Int
+                depends on supply
+            let top (a, b, supply) = match supply(a, b) with
+                | Int as n -> n
+                | Shortage as s -> s.short + 100
+                | Missing as m -> m.key + 200
+
+            fake supply
+                | (1, 2) -> 7
+                | (2, 1) -> Shortage { short = 3 }
+                | (3, 3) -> Missing { key = 4 }
+
+            example top
+                | "an Int" : (1, 2) -> 7
+                | "a Shortage" : (2, 1) -> 103
+                | "a Missing" : (3, 3) -> 204
+            """;
+
+    @Test
+    void aUnionAnotherModuleAnswersWithAThirdModulesTypeIsStoodInForReadOffThePath() {
+        held(rows(List.of(), Compilation.ofSources(List.of(ORDERING),
+                ModulePath.of(Compiler.compileModules(List.of(STOCK, SUPPLY)))),
+                "probe.ordering"), "an Int", "a Shortage", "a Missing");
+    }
+
     /** A table with no row for a call the body makes stops the row there (E1909). */
     @Test
     void aCallTheTableHasNoRowForStopsTheRow() {

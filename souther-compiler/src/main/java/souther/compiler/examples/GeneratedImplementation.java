@@ -1,12 +1,15 @@
 package souther.compiler.examples;
 
 import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.observe.Applied;
+import souther.compiler.types.ValueName;
 
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -104,8 +107,8 @@ final class GeneratedImplementation implements Answerer {
         }
         Class<?>[] takes = constructor.getParameterTypes();
         if (takes.length != standins.size()) {
-            throw new IllegalStateException("`" + behavior + "` is constructed with " + takes.length
-                    + " dependencies and is handed " + standins.size() + " stand-ins");
+            throw new GeneratedClassDefect("`" + behavior + "` is constructed with " + takes.length
+                    + " dependencies and is handed " + standins.size() + " stand-ins", null);
         }
         Object[] instances = new Object[standins.size()];
         for (int i = 0; i < standins.size(); i++) {
@@ -168,12 +171,19 @@ final class GeneratedImplementation implements Answerer {
      * interface — and this reads the answer rather than giving it a second time from how many inputs
      * the dependency takes or who implements it. A {@code with} and a table both arrive here, so
      * neither assumes either.
+     *
+     * <p>What is wrong here is this compiler failing ({@link GeneratedClassDefect}), whether it is
+     * found while the instance is made or inside a call the generated code makes on it: a class the
+     * ABI does not make, a method the instance is not for, an answer of a type the method does not
+     * return. None of them is a stand-in the model wrote that could not be made, or the model's code
+     * failing.
      */
     private Object instanceOf(Class<?> held, DependencyStandin standin) {
-        Method answering = answeredBy(held, standin);
+        Method answering = answeredBy(held);
+        Function<Object[], Object> answers = returning(answering, standin);
         return held.isInterface()
-                ? proxyOf(held, answering, standin.answers())
-                : subclassOf(held, answering, standin);
+                ? proxyOf(held, answering, answers)
+                : subclassOf(held, answering, standin.dependency(), answers);
     }
 
     /**
@@ -182,16 +192,36 @@ final class GeneratedImplementation implements Answerer {
      * makes, and a stand-in that picked one of several would be answering for a method nothing said
      * it stands for.
      */
-    private static Method answeredBy(Class<?> held, DependencyStandin standin) {
+    private static Method answeredBy(Class<?> held) {
         List<Method> abstracts = Arrays.stream(held.getMethods())
                 .filter(m -> Modifier.isAbstract(m.getModifiers()))
                 .toList();
         if (abstracts.size() != 1) {
-            throw new StandinNotBuilt(standin.dependency(), "`" + held.getName() + "` has "
-                    + abstracts.size() + " abstract methods, and a behavior's class has the one it"
-                    + " is applied by");
+            throw new GeneratedClassDefect("`" + held.getName() + "` has " + abstracts.size()
+                    + " abstract methods, and a behavior's class has the one it is applied by",
+                    null);
         }
         return abstracts.getFirst();
+    }
+
+    /**
+     * What {@code standin} answers, held to be of the type {@code answering} returns. The instance
+     * hands it on as that type, and one of another type would stop the call as though the generated
+     * code had failed.
+     */
+    private static Function<Object[], Object> returning(Method answering,
+                                                        DependencyStandin standin) {
+        Class<?> returns = MethodType.methodType(answering.getReturnType()).wrap().returnType();
+        Function<Object[], Object> answers = standin.answers();
+        return arguments -> {
+            Object answer = answers.apply(arguments);
+            if (answer != null && !returns.isInstance(answer)) {
+                throw new GeneratedClassDefect("the stand-in for `" + standin.dependency()
+                        + "` answered " + answer + ", and " + answering + " returns "
+                        + returns.getName(), null);
+            }
+            return answer;
+        };
     }
 
     /**
@@ -264,8 +294,8 @@ final class GeneratedImplementation implements Answerer {
                     default -> proxy == a[0];
                 };
             }
-            throw new IllegalStateException("a stand-in for " + held.getName() + " answers "
-                    + answering + ", and was asked " + method);
+            throw new GeneratedClassDefect("a stand-in for " + held.getName() + " answers "
+                    + answering + ", and was asked " + method, null);
         });
     }
 
@@ -277,17 +307,18 @@ final class GeneratedImplementation implements Answerer {
      * <p>The subclass is named for the dependency, in the module that declares it, which is where its
      * base was generated (spec §java-base-class) and not always the module being applied.
      */
-    private Object subclassOf(Class<?> base, Method answering, DependencyStandin standin) {
+    private Object subclassOf(Class<?> base, Method answering, ValueName.Behavior dependency,
+                              Function<Object[], Object> answers) {
         GeneratedClass.BehaviorInterface baseClass = new GeneratedClass.BehaviorInterface(
-                standin.dependency().module(), standin.dependency().name());
+                dependency.module(), dependency.name());
         try {
             String fakeName = SoutherJvmAbi.nameOf(new GeneratedClass.ExampleFake(baseClass)).binaryName();
             Class<?> fakeClass = loader.define(fakeName,
                     () -> fakeSubclassBytes(fakeName, base, answering));
-            return fakeClass.getConstructor(Function.class).newInstance(standin.answers());
+            return fakeClass.getConstructor(Function.class).newInstance(answers);
         } catch (ReflectiveOperationException e) {
-            throw new StandinNotBuilt(standin.dependency(),
-                    "its base subclass could not be built: " + e);
+            throw new GeneratedClassDefect("the subclass standing in for `" + dependency
+                    + "` could not be made", e);
         }
     }
 

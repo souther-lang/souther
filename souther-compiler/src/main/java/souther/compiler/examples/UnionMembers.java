@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.SumCases;
+import souther.compiler.generated.GeneratedLinkage.GeneratedClassDefect;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.JvmClassNames;
@@ -39,6 +40,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>One for a run, beside {@link EnsuresChecks} and for the same reason: which members a union
  * carries in which class is a fact about the behavior and this loader, so it is worked out once per
  * behavior and not once per row. Concurrent because a row is a thread.
+ *
+ * <p>Kept by the behavior alone, though what is worked out reads its output too. That holds because
+ * a behavior is one declaration with one signature for the whole of a run, so every caller passes the
+ * output that behavior has. A behavior whose output could differ between two calls in one run — one
+ * that is made concrete where it is used — would need this kept by both.
+ *
+ * <p>What it finds wrong is this compiler failing ({@link GeneratedClassDefect}) and not anything the
+ * model did. A stand-in's answer is converted inside a call the generated code made, so that is what
+ * a reading of the run finds there however the call wrapped it.
  */
 final class UnionMembers {
 
@@ -59,10 +69,8 @@ final class UnionMembers {
      * its union it is — the value itself for a member the behavior's module declared, the bridge
      * case holding it otherwise.
      *
-     * @throws IllegalStateException where {@code value} is no member of the union, or a class the
-     *                               union is answered through is not in this compile's classes:
-     *                               both are this compiler failing, and neither is anything a
-     *                               stand-in says
+     * @throws GeneratedClassDefect where {@code value} is no member of the union, or a class the
+     *                              union is answered through is not in this compile's classes
      */
     Object asAMember(ValueName.Behavior behavior, Type out, Object value) {
         if (!(out instanceof Type.Union)) {
@@ -85,7 +93,8 @@ final class UnionMembers {
                 try {
                     return answered.getClass().getMethod("value").invoke(answered);
                 } catch (ReflectiveOperationException e) {
-                    throw new IllegalStateException("a bridge case with no `value`: " + carried, e);
+                    throw new GeneratedClassDefect("the bridge case " + carried
+                            + " has no `value` to read", e);
                 }
             }
         }
@@ -119,8 +128,8 @@ final class UnionMembers {
             Constructor<?>[] made = bridge.getConstructors();
             if (!union.isAssignableFrom(bridge) || made.length != 1
                     || made[0].getParameterCount() != 1) {
-                throw new IllegalStateException("`" + bridge.getName() + "` is not a bridge case of `"
-                        + union.getName() + "` holding the one value of `" + member + "`");
+                throw new GeneratedClassDefect("`" + bridge.getName() + "` is not a bridge case of `"
+                        + union.getName() + "` holding the one value of `" + member + "`", null);
             }
             bridges.add(new Bridge(
                     MethodType.methodType(made[0].getParameterTypes()[0]).wrap().returnType(),
@@ -134,7 +143,7 @@ final class UnionMembers {
         try {
             return GeneratedClasses.load(loader, generated);
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(generated).binaryName()
+            throw new GeneratedClassDefect("`" + SoutherJvmAbi.nameOf(generated).binaryName()
                     + "` is not in this compile's classes", e);
         }
     }
@@ -155,13 +164,13 @@ final class UnionMembers {
                     try {
                         return bridge.made().newInstance(value);
                     } catch (ReflectiveOperationException e) {
-                        throw new IllegalStateException("the bridge case "
+                        throw new GeneratedClassDefect("the bridge case "
                                 + bridge.made().getName() + " did not take the value it holds", e);
                     }
                 }
             }
-            throw new IllegalStateException(value + " is no member of " + union.getName()
-                    + ", nor held by any of its bridge cases");
+            throw new GeneratedClassDefect(value + " is no member of " + union.getName()
+                    + ", nor held by any of its bridge cases", null);
         }
     }
 }

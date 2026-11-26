@@ -129,7 +129,13 @@ public final class GeneratedLinkage {
     public interface Attributed {}
 
     /**
-     * A class this compiler generated that the JVM refused to link.
+     * This compiler's output failing: a class it generated that the JVM refused to link, or what it
+     * made to run those classes — a stand-in for what they depend on — finding them, or itself, not
+     * to be what it was made as.
+     *
+     * <p>The second is raised where it is found, which is often inside the generated code: a
+     * stand-in answers a call the generated code makes. So it reaches a catch through whatever the
+     * reflective call wrapped it in, and is found there as the first is ({@link #rethrowClassified}).
      *
      * <p>An {@link Error} and not a {@code RuntimeException}. A catch that turns a failure into an
      * answer about a value, a row or a module is written for what evaluating them throws, and it is
@@ -143,6 +149,11 @@ public final class GeneratedLinkage {
         GeneratedClassDefect(LinkageError cause) {
             super("a generated class does not link, which is this compiler's output and not the"
                     + " model: " + cause, cause);
+        }
+
+        /** What this compile made to run its classes found them, or itself, not as it made them. */
+        public GeneratedClassDefect(String found, Throwable cause) {
+            super(found + ", which is this compiler's output and not the model", cause);
         }
     }
 }
