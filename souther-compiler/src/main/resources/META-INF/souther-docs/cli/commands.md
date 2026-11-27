@@ -144,12 +144,15 @@ fetching and nothing else, so a backend that fetches tools of its own when it ru
 The backend runs in this command's JVM. Its jar holds the backend's own classes and one provider of
 `souther.compiler.command.TargetCommand`, named in `META-INF/services` the way a `ServiceLoader`
 finds one; the compiler it reads the program with is this Souther's, also where the jar holds classes
-of a compiler. Its arguments, working directory, environment and standard streams are the command's
-own, and the exit status is what the backend answers. A target that is neither installed nor fetched
-is refused with exit status 2, naming each directory searched and what it held, and what Maven
-Central answered. Two jars of one pair, a jar that is not a backend, a jar that does not provide
-exactly one such command of its own and a link to a jar that is not there are refused with exit
-status 2 too, and nothing is fetched in their place. Nothing runs before either.
+of a compiler. A backend is that one jar: what it uses is in it or is this Souther's, so a jar whose
+manifest names a `Class-Path` is refused. Its arguments, working directory, environment and standard
+streams are the command's own, and the exit status is what the backend answers. A target that is
+neither installed nor fetched is refused with exit status 2, naming each directory searched and what
+it held, and what Maven Central answered. Two jars of one pair, a jar that is not a backend, a jar
+that does not provide exactly one such command of its own, a jar whose command cannot be loaded —
+a class it needs is in neither the jar nor this Souther, or it was compiled for a newer Java — and a
+link to a jar that is not there are refused with exit status 2 too, and nothing is fetched in their
+place. Nothing runs before either.
 
 <!-- souther-section: backend -->
 ## backend

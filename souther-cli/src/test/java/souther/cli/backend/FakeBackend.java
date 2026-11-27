@@ -12,8 +12,11 @@ import java.lang.constant.ClassDesc;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 
 /**
  * A jar built inside a test, carrying the descriptor of a backend and a command it provides.
@@ -45,6 +48,18 @@ public final class FakeBackend {
     /** The name a jar holds its command under. */
     private static final String THE_COMMAND = "Fake";
 
+    /** The name a jar that provides two holds its second command under. */
+    private static final String ANOTHER_COMMAND = "FakeToo";
+
+    /** The name a jar holds a class under that is no command, where it names one as its command. */
+    private static final String NO_COMMAND = "NoCommand";
+
+    /** The name a jar holds a command under whose superclass is nowhere. */
+    private static final String DEPENDENT = "Dependent";
+
+    /** The class such a command extends, which no jar and no class path holds. */
+    public static final String NOWHERE = "nowhere.ABaseNoJarHolds";
+
     /** The class of the compiler a jar may carry a second definition of. */
     private static final String A_CLASS_OF_THE_COMPILER = "souther.compiler.meta.ModuleMetadata";
 
@@ -54,12 +69,13 @@ public final class FakeBackend {
     /** Writes a backend jar at {@code jar}, whose output says {@code marker}. */
     public static Path write(Path jar, String name, String southerVersion, String marker)
             throws IOException {
-        return pack(jar, marker, descriptor(name, southerVersion), THE_COMMAND + "\n", false);
+        return pack(jar, marker, descriptor(name, southerVersion), THE_COMMAND + "\n", Map.of(),
+                null);
     }
 
     /** Writes a jar at {@code jar} whose descriptor is exactly {@code descriptor}, or none. */
     public static Path writeWithDescriptor(Path jar, String descriptor) throws IOException {
-        return pack(jar, "described", descriptor, THE_COMMAND + "\n", false);
+        return pack(jar, "described", descriptor, THE_COMMAND + "\n", Map.of(), null);
     }
 
     /**
@@ -68,7 +84,7 @@ public final class FakeBackend {
      */
     public static Path writeProviding(Path jar, String name, String southerVersion,
                                       String provided) throws IOException {
-        return pack(jar, "providing", descriptor(name, southerVersion), provided, false);
+        return pack(jar, "providing", descriptor(name, southerVersion), provided, Map.of(), null);
     }
 
     /**
@@ -77,7 +93,49 @@ public final class FakeBackend {
      */
     public static Path writeCarryingAClassOfTheCompiler(Path jar, String name,
                                                         String southerVersion) throws IOException {
-        return pack(jar, "carrying", descriptor(name, southerVersion), THE_COMMAND + "\n", true);
+        return pack(jar, "carrying", descriptor(name, southerVersion), THE_COMMAND + "\n",
+                Map.of(A_CLASS_OF_THE_COMPILER,
+                        renamed(ASecondDefinition.class, A_CLASS_OF_THE_COMPILER)), null);
+    }
+
+    /** Writes a backend jar at {@code jar} that holds two commands and names both. */
+    public static Path writeProvidingTwoCommands(Path jar, String name, String southerVersion)
+            throws IOException {
+        return pack(jar, "two", descriptor(name, southerVersion),
+                THE_COMMAND + "\n" + ANOTHER_COMMAND + "\n",
+                Map.of(ANOTHER_COMMAND, renamed(FakeCommand.class, ANOTHER_COMMAND)), null);
+    }
+
+    /** Writes a backend jar at {@code jar} that names, as its command, a class that is none. */
+    public static Path writeProvidingWhatIsNoCommand(Path jar, String name, String southerVersion)
+            throws IOException {
+        return pack(jar, "none", descriptor(name, southerVersion), NO_COMMAND + "\n",
+                Map.of(NO_COMMAND, renamed(ASecondDefinition.class, NO_COMMAND)), null);
+    }
+
+    /**
+     * Writes a backend jar at {@code jar} whose command extends {@link #NOWHERE}, a class neither
+     * the jar nor this class path holds: what a backend built against a library this Souther does
+     * not run with comes to.
+     */
+    public static Path writeProvidingACommandThatExtendsWhatIsNowhere(
+            Path jar, String name, String southerVersion) throws IOException {
+        byte[] dependent = ClassFile.of().build(ClassDesc.of(DEPENDENT), built -> built
+                .withFlags(ClassFile.ACC_PUBLIC)
+                .withSuperclass(ClassDesc.of(NOWHERE))
+                .withInterfaceSymbols(TargetCommand.class.describeConstable().orElseThrow()));
+        return pack(jar, "dependent", descriptor(name, southerVersion), DEPENDENT + "\n",
+                Map.of(DEPENDENT, dependent), null);
+    }
+
+    /**
+     * Writes a backend jar at {@code jar} whose manifest names {@code classPath} as a class path
+     * beside it, and which is a backend that runs in everything else.
+     */
+    public static Path writeNamingAClassPath(Path jar, String name, String southerVersion,
+                                             String classPath) throws IOException {
+        return pack(jar, "class-path", descriptor(name, southerVersion), THE_COMMAND + "\n",
+                Map.of(), classPath);
     }
 
     private static String descriptor(String name, String southerVersion) {
@@ -100,11 +158,20 @@ public final class FakeBackend {
                 ClassTransform.transformingMethodBodies(CodeTransform.ACCEPT_ALL));
     }
 
+    /**
+     * Writes the jar: the command under its name, the marker, and beside them each class of
+     * {@code beside}, by its name. A jar says a class path only where {@code classPath} is one.
+     */
     private static Path pack(Path jar, String marker, String descriptor, String provided,
-                             boolean carryingAClassOfTheCompiler) throws IOException {
+                             Map<String, byte[]> beside, String classPath) throws IOException {
         Files.createDirectories(jar.getParent());
+        Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        if (classPath != null) {
+            manifest.getMainAttributes().put(Attributes.Name.CLASS_PATH, classPath);
+        }
         try (OutputStream file = Files.newOutputStream(jar);
-             JarOutputStream out = new JarOutputStream(file)) {
+             JarOutputStream out = new JarOutputStream(file, manifest)) {
             entry(out, THE_COMMAND + ".class", renamed(FakeCommand.class, THE_COMMAND));
             entry(out, MARKER, marker.getBytes(StandardCharsets.UTF_8));
             if (descriptor != null) {
@@ -113,9 +180,8 @@ public final class FakeBackend {
             if (provided != null) {
                 entry(out, PROVIDED, provided.getBytes(StandardCharsets.UTF_8));
             }
-            if (carryingAClassOfTheCompiler) {
-                entry(out, A_CLASS_OF_THE_COMPILER.replace('.', '/') + ".class",
-                        renamed(ASecondDefinition.class, A_CLASS_OF_THE_COMPILER));
+            for (Map.Entry<String, byte[]> held : beside.entrySet()) {
+                entry(out, held.getKey().replace('.', '/') + ".class", held.getValue());
             }
         }
         return jar;

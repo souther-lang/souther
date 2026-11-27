@@ -40,7 +40,8 @@ class ABackendIsRunByTheOneCommandItsJarProvidesBesideThisSouthersCompilerTest {
 
     private Environment environment() {
         PrintStream nowhere = new PrintStream(OutputStream.nullOutputStream());
-        return new Environment(Map.of(), Map.of("user.home", dir.toString()), dir,
+        return new Environment(Map.of(),
+                Map.of("user.home", dir.toString(), "fake.property", "handed-to-the-run"), dir,
                 new ByteArrayInputStream(new byte[0]),
                 new PrintStream(out, true, StandardCharsets.UTF_8), nowhere, false, WrittenOn.DAY);
     }
@@ -111,6 +112,94 @@ class ABackendIsRunByTheOneCommandItsJarProvidesBesideThisSouthersCompilerTest {
 
         assertEquals("cli.backend.command", refused.key());
         assertEquals("", said());
+    }
+
+    @Test
+    void aJarProvidingTwoCommandsIsRefusedBeforeEitherRuns() throws Exception {
+        Path jar = FakeBackend.writeProvidingTwoCommands(dir.resolve("fake.jar"), "fake", HERE);
+
+        Backends.Refused refused = assertThrows(Backends.Refused.class, () -> run(jar));
+
+        assertEquals("cli.backend.command", refused.key());
+        assertEquals(List.of(jar, 2), List.of(refused.arguments()));
+        assertEquals("", said());
+    }
+
+    @Test
+    void aClassTheJarNamesThatIsNoCommandIsRefusedSayingWhy() throws Exception {
+        Path jar = FakeBackend.writeProvidingWhatIsNoCommand(dir.resolve("fake.jar"), "fake",
+                HERE);
+
+        Backends.Refused refused = assertThrows(Backends.Refused.class, () -> run(jar));
+
+        assertEquals("cli.backend.command.unusable", refused.key());
+        assertTrue(String.valueOf(refused.arguments()[1]).contains("not a subtype"),
+                String.valueOf(refused.arguments()[1]));
+    }
+
+    /**
+     * A class that does not link is not what a lookup of providers reports as its own failure: the
+     * JVM throws it as it is. It is a refusal of the jar all the same, naming what was missing.
+     */
+    @Test
+    void aCommandThatExtendsAClassHeldNowhereIsRefusedNamingIt() throws Exception {
+        Path jar = FakeBackend.writeProvidingACommandThatExtendsWhatIsNowhere(
+                dir.resolve("fake.jar"), "fake", HERE);
+
+        Backends.Refused refused = assertThrows(Backends.Refused.class, () -> run(jar));
+
+        assertEquals("cli.backend.command.unusable", refused.key());
+        String why = String.valueOf(refused.arguments()[1]);
+        assertTrue(why.contains(NoClassDefFoundError.class.getSimpleName())
+                && why.contains(FakeBackend.NOWHERE.replace('.', '/')), why);
+    }
+
+    /**
+     * A jar whose manifest names a class path would have its loader read the jars named there as
+     * the backend's own, so it is refused, though the command it holds is one that runs.
+     */
+    @Test
+    void aJarThatNamesAClassPathBesideItselfIsRefusedAndNothingRuns() throws Exception {
+        Path jar = FakeBackend.writeNamingAClassPath(dir.resolve("fake.jar"), "fake", HERE,
+                "another.jar");
+
+        Backends.Refused refused = assertThrows(Backends.Refused.class, () -> run(jar));
+
+        assertEquals("cli.backend.classpath", refused.key());
+        assertEquals("", said());
+    }
+
+    /**
+     * The fake's constructor refuses to make it under a context loader other than its own, so its
+     * running at all says the loader was the thread's before the command was constructed.
+     */
+    @Test
+    void theCommandIsConstructedUnderItsOwnContextLoader() throws Exception {
+        int status = run(FakeBackend.write(dir.resolve("fake.jar"), "fake", HERE, "ran"));
+
+        assertEquals(3, status);
+        assertTrue(said().contains("marker=ran\n"), said());
+    }
+
+    /** What the command throws is thrown on as it is, and the thread's loader is the one before. */
+    @Test
+    void whatTheCommandThrowsIsThrownOnAndTheContextLoaderIsGivenBack() throws Exception {
+        ClassLoader before = Thread.currentThread().getContextClassLoader();
+        Path jar = FakeBackend.write(dir.resolve("fake.jar"), "fake", HERE, "ran");
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> BackendCommand.run(new Backends.Backend("fake", HERE, jar),
+                        List.of("--throw"), environment()));
+
+        assertEquals(FakeCommand.ASKED_TO_FAIL, thrown.getMessage());
+        assertSame(before, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    void theCommandReadsThePropertiesItsRunWasGiven() throws Exception {
+        run(FakeBackend.write(dir.resolve("fake.jar"), "fake", HERE, "ran"));
+
+        assertTrue(said().contains("property=handed-to-the-run\n"), said());
     }
 
     @Test
