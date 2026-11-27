@@ -4,7 +4,6 @@ import souther.compiler.execute.jvm.JvmProgramImage;
 import souther.compiler.execute.jvm.JvmProgramImages;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.observe.ArmObservation;
 
 import java.util.Map;
 
@@ -34,9 +33,17 @@ final class QueryJvmProgramImages implements JvmProgramImages {
         return classes == null ? null : Output.loader(db, classes);
     }
 
+    /**
+     * The one program, read off what this compilation measures. Recording the arms is the only way
+     * the two programs differ, and the recording one may stand wherever the other would: a probe or
+     * an arm rewrite does nothing unless a run is recording or rewriting, and measuring never makes
+     * a module that compiles into one that does not ({@code Backend.generate} writes a method again
+     * without what it could not hold).
+     */
     @Override
-    public JvmProgramImage evaluating(String module, ArmObservation arms) {
-        EvaluationArtifact program = db.ask(new Output.EvaluationLinked(module, arms)).value();
+    public JvmProgramImage evaluating(String module) {
+        EvaluationArtifact program =
+                db.ask(new Output.EvaluationLinked(module, Adequacy.armsAsked(db))).value();
         if (program == null) {
             return null;
         }

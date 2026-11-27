@@ -87,8 +87,7 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
 
     private static CheckedProgram program(BehaviorTarget held,
                                           Map<ValueName.Behavior, BehaviorTarget> index) {
-        CheckedBehavior behavior = new CheckedBehavior(NAMED, held,
-                EnsuresEnforcement.NoContract.INSTANCE, List.of());
+        CheckedBehavior behavior = new CheckedBehavior(NAMED, held, List.of());
         return new CheckedProgram(
                 List.of(new CheckedModule("demo", List.of(behavior), List.of(), List.of(), List.of(),
                         List.of(), Set.of(), Set.of())),
@@ -106,6 +105,7 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
                         List.of(new CheckedSignature.Parameter("n",
                                 new CheckedBoundaryInput.Scalar(LeafScalar.INT))),
                         new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
-                new CheckedImplementation.Injected(), List.of());
+                new CheckedImplementation.Injected(), List.of(),
+                EnsuresEnforcement.NoContract.INSTANCE);
     }
 }

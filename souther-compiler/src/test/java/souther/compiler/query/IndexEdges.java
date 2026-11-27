@@ -426,7 +426,6 @@ final class IndexEdges {
                 WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Output.Evaluated.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Output.EvaluationLinked.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
-        holds(out, Output.Examples.class, "arms", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Output.Examples.class, "sourceId", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Adequacy.Obligations.class, "scope", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Front.AttachedTo.class, "id", WhatAComponentHolds.HOW_TO_READ_IT);

@@ -1,7 +1,6 @@
 package souther.compiler.codegen;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DerivedSymbols;
@@ -11,7 +10,10 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.core.Contract;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.JvmClassNames;
 import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -70,6 +72,8 @@ public final class LinkageProjections {
      * @param kinds           which form each declaration was written in, reading into the same
      * @param sums            what a value of each sum can be, read off what the declarations say
      *                        through the same
+     * @param contracts       what each of its behaviors that declares something of its answer
+     *                        declares, by the behavior
      */
     public record Settled(String module, Set<String> publishedNames, List<TypeKey> declarations,
                           Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders,
@@ -77,7 +81,7 @@ public final class LinkageProjections {
                           Map<String, BehaviorImplementation> implementations,
                           Map<String, List<ValueName.Behavior>> requirements,
                           Map<String, Type> values, DerivedSymbols symbols,
-                          DeclarationKinds kinds, SumCases sums) {
+                          DeclarationKinds kinds, SumCases sums, Map<String, Contract> contracts) {
 
         public Settled {
             if (symbols == null || kinds == null || sums == null) {
@@ -177,9 +181,20 @@ public final class LinkageProjections {
                             implementation, "apply",
                             BehaviorAbi.erasedApply(takes.size()))));
         }
+        // Where the clause is checked is the one rule the module's own compilation places it by,
+        // so what a caller elsewhere runs and what this module's own callers run cannot differ.
+        Optional<LinkageProjection.Invocation> checkedWhereCalled =
+                EnsuresEnforcement.of(settled.contracts().get(name), state.isInjectionTarget())
+                        instanceof EnsuresEnforcement.AtEachCrossing
+                        ? Optional.of(LinkageProjection.Invocation.of(
+                                LinkageProjection.Opcode.STATIC,
+                                classOf(new GeneratedClass.Ensures(new GeneratedClass
+                                        .BehaviorInterface(settled.module(), name)), foreign),
+                                "check", EnsuresGen.checkType(takes.size())))
+                        : Optional.empty();
         return new LinkageProjection.Behavior(behavior, realization, settled.exposes(name), takes,
                 answers, BehaviorAbi.heldAs(behavior, takes).descriptorString(), apply,
-                construction, answeredThrough(settled, answers, foreign));
+                construction, answeredThrough(settled, answers, foreign), checkedWhereCalled);
     }
 
     /**
@@ -206,16 +221,9 @@ public final class LinkageProjections {
      */
     private static List<LinkageProjection.Bridged> answeredThrough(Settled settled, Type answers,
                                                                    LinkageReader foreign) {
-        if (!(answers instanceof Type.Union)) {
-            return List.of();
-        }
         List<LinkageProjection.Bridged> out = new ArrayList<>();
-        for (TypeSymbol member
-                : AtomSpace.subjectAtoms(answers, settled.kinds(), settled.sums())) {
-            if (!member.isDeclaredByLanguage() && member instanceof TypeSymbol.AtModule at
-                    && at.module().equals(settled.module())) {
-                continue;
-            }
+        for (TypeSymbol member : JvmClassNames.bridgedMembers(settled.module(), answers,
+                settled.kinds(), settled.sums())) {
             ClassDesc bridge = classOf(new GeneratedClass.BridgeCase(settled.module(), member),
                     foreign);
             out.add(new LinkageProjection.Bridged(member, bridge.descriptorString(),

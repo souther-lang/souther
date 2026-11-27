@@ -1,5 +1,7 @@
 package souther.cli.init;
 
+import souther.compiler.fmt.Formatter;
+
 import java.util.List;
 
 /**
@@ -29,9 +31,15 @@ final class Templates {
      *
      * <p>The build's own files are not among them. What a build file says depends on whether one is
      * being written or one that exists is being added to, and the source does not.
+     *
+     * <p>In the form {@code souther fmt} writes, so a project's first {@code fmt --check} passes on a
+     * file its author has not touched. The template says what the model is and the formatter how it
+     * is laid out, once the module's name is in it: whether the header's names fit on its line
+     * depends on how long that name is, so no one text of the template is the canonical form for
+     * every project.
      */
     static List<File> sourcesOf(Project project) {
-        return List.of(new File(modelPathOf(project), model(project)));
+        return List.of(new File(modelPathOf(project), Formatter.format(model(project))));
     }
 
     /** Where the module itself goes, which is the file the module header is in. */

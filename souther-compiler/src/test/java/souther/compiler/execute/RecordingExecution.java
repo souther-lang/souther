@@ -1,6 +1,5 @@
 package souther.compiler.execute;
 
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.RowRun;
 import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
@@ -51,8 +50,8 @@ final class RecordingExecution implements ProgramExecution {
     }
 
     @Override
-    public RowRun run(ExampleExecution about, SourceId source, ArmObservation arms) {
-        asked.add("rows of " + read(about) + " written in " + source + ", arms " + arms);
+    public RowRun run(ExampleExecution about, SourceId source) {
+        asked.add("rows of " + read(about) + " written in " + source);
         return new RowRun.NotRunHere();
     }
 
@@ -79,7 +78,7 @@ final class RecordingExecution implements ProgramExecution {
                 + ", " + about.signatures().size() + " behaviors"
                 + ", " + about.requirements().size() + " requirement tables"
                 + ", " + about.definitions().size() + " definitions"
-                + ", " + about.contracts().size() + " contracts"
+                + ", " + about.ensured().held().size() + " behaviors held to what they declare"
                 + ", names " + (Objects.requireNonNull(about.symbols()) != null)
                 + ", " + held.stepLimit() / written + " steps an example"
                 + ", " + held.recursionDepthLimit() + " deep"
@@ -106,8 +105,8 @@ final class RecordingExecution implements ProgramExecution {
     }
 
     @Override
-    public RowTrials trials(ExampleExecution about, ArmObservation arms) {
-        asked.add("trials of " + read(about) + ", arms " + arms);
+    public RowTrials trials(ExampleExecution about) {
+        asked.add("trials of " + read(about));
         return null;
     }
 }

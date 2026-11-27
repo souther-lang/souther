@@ -10,7 +10,6 @@ import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.ValueBuild;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.RowTrials;
-import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.RowRun;
 import souther.compiler.observe.StatementReading;
 import souther.compiler.observe.TableBuild;
@@ -75,7 +74,7 @@ class WhatRunsAProgramIsNamedOnceTest {
         }
 
         @Override
-        public RowRun run(ExampleExecution asked, SourceId source, ArmObservation arms) {
+        public RowRun run(ExampleExecution asked, SourceId source) {
             return new RowRun.NotRunHere();
         }
 
@@ -95,7 +94,7 @@ class WhatRunsAProgramIsNamedOnceTest {
         }
 
         @Override
-        public RowTrials trials(ExampleExecution asked, ArmObservation arms) {
+        public RowTrials trials(ExampleExecution asked) {
             return null;
         }
     }

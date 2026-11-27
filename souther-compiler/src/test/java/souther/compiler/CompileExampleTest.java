@@ -289,7 +289,7 @@ class CompileExampleTest {
         String moduleName = compilation.modules().get(0);
         ACompiledModel.refusedWith(List.of("E1905", "E1905"), compilation);
         List<Report> fails = compilation.db()
-                .ask(Output.Examples.asked(compilation.db(), moduleName,
+                .ask(new Output.Examples(moduleName,
                         compilation.sourceIds().get(0))).reports();
         assertEquals(2, fails.size());
     }

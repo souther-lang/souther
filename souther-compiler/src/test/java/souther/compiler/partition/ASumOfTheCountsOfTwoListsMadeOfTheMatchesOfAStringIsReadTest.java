@@ -12,9 +12,14 @@ import souther.compiler.query.Output;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,13 +43,10 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
             module demo
 
             data AccountId = String
-                invariant String.matches("001[0-9A-Za-z]{12}", value)
             data ContactId = String
-                invariant String.matches("003[0-9A-Za-z]{12}", value)
             data EmailAddress = String
                 invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
             data PhoneNumber = String
-                invariant String.matches("\\\\+?[0-9][0-9 \\\\-()]{6,19}", value)
             data DomainName = String
                 invariant String.matches("[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?(\\\\.[a-z0-9]([a-z0-9\\\\-]*[a-z0-9])?)+", value)
 
@@ -99,12 +101,16 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
 
             let emailMatches (reach: ContactPoint, contacts: ContactBook): List<Contact> =
                 List.flatMap(e -> contactsOnEmail(e, contacts), emailOf(reach))
+            """;
 
-            behavior screen : (lead: NewLead, accounts: AccountBook, contacts: ContactBook)
+    /** A behavior screening a lead by {@code GUARD}, named {@code NAME}. */
+    private static final String SCREEN = """
+
+            behavior NAME : (lead: NewLead, accounts: AccountBook, contacts: ContactBook)
                     -> NoDuplicate | Duplicate
                 constructs Duplicate, DomainName, NoDuplicate
 
-            let screen (lead, accounts, contacts) = {
+            let NAME (lead, accounts, contacts) = {
                 let matchedAccounts = List.map(a -> a.id, domainMatches(lead.reach, accounts))
                 let matchedContacts = List.map(c -> c.id, emailMatches(lead.reach, contacts))
                 guard GUARD else NoDuplicate { n = 0 }
@@ -115,16 +121,39 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
     private static final String THE_SUM =
             "List.length(matchedAccounts) + List.length(matchedContacts) >= 1";
 
-    private static String source(String guard) {
-        return BOOKS.replace("GUARD", guard);
+    /** Each count alone and the sum, by the behavior screening by it. */
+    private static final Map<String, String> GUARDS = Map.of(
+            "byAccounts", "List.length(matchedAccounts) >= 1",
+            "byContacts", "List.length(matchedContacts) >= 1",
+            "bySum", THE_SUM);
+
+    private static String screening(String name, String guard) {
+        return SCREEN.replace("NAME", name).replace("GUARD", guard);
     }
 
-    private static String json(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+    private static String source(String guard) {
+        return BOOKS + screening("screen", guard);
+    }
+
+    /**
+     * What the model's own rules draw for each behavior, measured at {@code OFF}: which relations
+     * are shown over the address and where a run stops are read without running a row. The
+     * guards are behaviors of one module, so the declarations they share are checked once, and
+     * each behavior's part of the report is read apart from the others'.
+     */
+    private static Map<String, String> reportsOfEachGuard() {
+        StringBuilder source = new StringBuilder(BOOKS);
+        GUARDS.forEach((name, guard) -> source.append(screening(name, guard)));
+        Compilation compilation = Compilation.ofSource(source.toString(), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        Map<String, String> each = new TreeMap<>();
+        for (JsonNode behavior : report.path("modules").path(0).path("behaviors")) {
+            each.put(behavior.path("name").asString(), behavior.toString());
+        }
+        return each;
     }
 
     /**
@@ -134,14 +163,15 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
      */
     @Test
     void theSumIsReadAsEachCountAloneIs() {
-        for (String guard : List.of("List.length(matchedAccounts) >= 1",
-                "List.length(matchedContacts) >= 1", THE_SUM)) {
-            String report = json(source(guard));
+        Map<String, String> reports = reportsOfEachGuard();
+        assertEquals(new TreeSet<>(GUARDS.keySet()), reports.keySet());
+        for (String guard : GUARDS.keySet()) {
+            String report = reports.get(guard);
             assertFalse(report.contains("relation_shown_over_a_region"), () -> guard + report);
             assertFalse(report.contains("relation_not_shown_to_reach_every_value"),
                     () -> guard + report);
             assertTrue(report.contains("\"stopsPastTheRepresentation\"")
-                    && report.contains("\"operation\" : \"String.lowercase\""),
+                    && report.contains("\"operation\":\"String.lowercase\""),
                     () -> guard + report);
         }
     }
@@ -171,8 +201,7 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
         // A row expecting NoDuplicate does not hold where the guard comes out the other way, which
         // is all that is wrong with any of them.
         ACompiledModel.refusedWith(List.of("E1905", "E1905", "E1905"), running);
-        Output.Examples key = Output.Examples.asked(running.db(), "demo",
-                running.sourceIds().get(0));
+        Output.Examples key = new Output.Examples("demo", running.sourceIds().get(0));
         Set<String> answered = running.db().ask(key).value().rows().stream()
                 .map(row -> row.resultArm().name()).collect(Collectors.toSet());
         assertEquals(Set.of("NoDuplicate", "Duplicate"), answered, examples);

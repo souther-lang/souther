@@ -1,7 +1,7 @@
 package souther.compiler;
 
-import souther.compiler.check.CheckedEnsures;
 import souther.compiler.observe.WrittenStatements;
+import souther.compiler.query.ExampleExecutions;
 import souther.compiler.diag.Primary;
 
 import souther.compiler.source.SourceId;
@@ -468,7 +468,7 @@ class CompileFakeExampleDisagreementTest {
                 souther.compiler.query.Scopes.derived(c.db(), name).value(),
                 souther.compiler.query.Shapes.sumCases(c.db()),
                 souther.compiler.query.Shapes.declarationKinds(c.db()),
-                souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
+                ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new souther.compiler.query.Bodies.Reachable(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
                         name, souther.compiler.observe.ArmObservation.OMIT)).value().classes(),
@@ -476,8 +476,7 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
                 JvmDeadlines.of(EvaluationPolicy.DEFAULT.compilerTimeout()),
                 EvaluationPolicy.DEFAULT,
-                CheckedEnsures.executableOf(c.db().ask(
-                        new souther.compiler.query.Bodies.ReachableContracts(name)).value()),
+                ExampleExecutions.of(c.db(), name).ensured(),
                 // One source, so there is no module whose rows this one stands in for a behavior of.
                 java.util.Map.of());
     }

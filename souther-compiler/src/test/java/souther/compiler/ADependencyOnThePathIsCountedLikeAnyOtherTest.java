@@ -74,7 +74,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
     private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("app.uses").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("app.uses", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("app.uses", sourceId))
                 .value().rows();
         assertEquals(1, rows.size(), rows.toString());
         return rows.get(0);
@@ -176,7 +176,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
 
         SourceId sourceId = compilation.exampleSourcesOf("app.calls").getFirst();
         List<RowOutcome> rows = compilation.db()
-                .ask(new Output.Examples("app.calls", sourceId, ArmObservation.OMIT))
+                .ask(new Output.Examples("app.calls", sourceId))
                 .value().rows();
 
         assertEquals(FailurePhase.STEP_LIMIT, rows.get(0).failurePhase(),

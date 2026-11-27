@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ValueName;
 
@@ -31,11 +32,14 @@ class ABehaviorTargetHoldsItsConstructionRequirementsToItsImplementationTest {
     private static final ValueName.Behavior FIRST = new ValueName.Behavior("lib", "first");
     private static final ValueName.Behavior SECOND = new ValueName.Behavior("lib", "second");
 
+    /** What a target of a behavior declaring nothing of its answer is checked by. */
+    private static final EnsuresEnforcement NOTHING = EnsuresEnforcement.NoContract.INSTANCE;
+
     @Test
     void anInjectedBehaviorSaidToRequireSomethingIsRefused() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new BehaviorTarget(DECLARED, new CheckedImplementation.Injected(),
-                        List.of(FIRST)));
+                        List.of(FIRST), NOTHING));
 
         assertEquals("an injected behavior is not constructed by Souther, and is said to require"
                 + " [lib.first]", refused.getMessage());
@@ -46,7 +50,7 @@ class ABehaviorTargetHoldsItsConstructionRequirementsToItsImplementationTest {
     @Test
     void anInjectedBehaviorRequiringNothingIsMade() {
         assertEquals(List.of(), new BehaviorTarget(DECLARED, new CheckedImplementation.Injected(),
-                List.of()).requirements());
+                List.of(), NOTHING).requirements());
     }
 
     /** An unwritten behavior may declare what it depends on before anyone writes it: what it
@@ -55,7 +59,7 @@ class ABehaviorTargetHoldsItsConstructionRequirementsToItsImplementationTest {
     void anUnwrittenBehaviorMayRequireWhatItDeclaresItDependsOn() {
         assertEquals(List.of(FIRST, SECOND),
                 new BehaviorTarget(DECLARED, new CheckedImplementation.Unwritten(),
-                        List.of(FIRST, SECOND)).requirements());
+                        List.of(FIRST, SECOND), NOTHING).requirements());
     }
 
     /** And so may one another compile emitted, in the order it was published in. */
@@ -63,7 +67,7 @@ class ABehaviorTargetHoldsItsConstructionRequirementsToItsImplementationTest {
     void aBehaviorImplementedElsewhereKeepsTheOrderItWasHanded() {
         assertEquals(List.of(SECOND, FIRST),
                 new BehaviorTarget(DECLARED, new CheckedImplementation.ImplementedElsewhere(),
-                        List.of(SECOND, FIRST)).requirements());
+                        List.of(SECOND, FIRST), NOTHING).requirements());
     }
 
     /** What it was handed is copied, so a list changed afterwards does not change what the target
@@ -72,7 +76,7 @@ class ABehaviorTargetHoldsItsConstructionRequirementsToItsImplementationTest {
     void theRequirementsAreHeldAsTheyWereHanded() {
         List<ValueName.Behavior> handed = new ArrayList<>(List.of(FIRST));
         BehaviorTarget made = new BehaviorTarget(DECLARED, new CheckedImplementation.Unwritten(),
-                handed);
+                handed, NOTHING);
         handed.add(SECOND);
 
         assertEquals(List.of(FIRST), made.requirements());

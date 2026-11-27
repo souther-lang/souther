@@ -95,7 +95,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
             compilation.db().ask(new Output.All());
             for (String module : compilation.modules()) {
                 for (SourceId id : compilation.exampleSourcesOf(module)) {
-                    compilation.db().ask(Output.Examples.asked(compilation.db(), module, id));
+                    compilation.db().ask(new Output.Examples(module, id));
                 }
             }
             measured = compilation;

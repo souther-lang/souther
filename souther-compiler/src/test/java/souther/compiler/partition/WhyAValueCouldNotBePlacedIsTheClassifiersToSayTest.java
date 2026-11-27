@@ -129,7 +129,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES, TestDay.TODAY),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         Output.Examples.Of observed = compilation.db()
-                .ask(Output.Examples.asked(compilation.db(), module,
+                .ask(new Output.Examples(module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         return new Read(MeasuredInput.of("submit", read.reading(rules), partitioning),

@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.execute.DeclaredEnsures;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.RunStop;
 import souther.compiler.execute.RowTrials;
@@ -11,7 +12,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
-import souther.compiler.core.Contract;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
@@ -34,7 +34,6 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -78,10 +77,12 @@ public final class RowTrial {
      * combination would otherwise come back missed.
      *
      * @param signatures what each behavior this module reaches takes and answers, and
-     *                   {@code contracts} what it states of its answer. Both are what a module's
+     *                   {@code ensured} what it states of its answer. Both are what a module's
      *                   tables are held to before one stands anything in, which is the same holding
      *                   a written row's run is under — a search running against a table a written
-     *                   row is refused would be certifying rows in an environment nothing else has
+     *                   row is refused would be certifying rows in an environment nothing else has.
+     *                   A composed {@code with} is held to {@code ensured} where it is called, as a
+     *                   written one is
      * @param steps how many counted points a row may pass, and how deep a recursive helper may go.
      *              A composed row is not a row anyone wrote, so a model that loops on it is this
      *              search's problem to stop rather than an author's to be told about
@@ -95,12 +96,13 @@ public final class RowTrial {
                               ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
                               Map<ValueName.Behavior, Sig> signatures,
-                              Map<ValueName.Behavior, Contract> contracts,
+                              DeclaredEnsures ensured,
                               ProbeImage probes,
                               EvaluationPolicy steps) {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
-        EnsuresChecks ensures = new EnsuresChecks(loader, contracts, signatures.keySet());
+        EnsuresChecks ensures = new EnsuresChecks(loader, ensured);
+        UnionMembers members = new UnionMembers(loader, kinds, sums);
         RowTrials running = (behavior, sig) -> new RowTrials.OfBehavior() {
 
             @Override
@@ -136,8 +138,8 @@ public final class RowTrial {
                 if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
                     return Optional.empty();   // nothing applies this behavior, so nothing ran
                 }
-                return RowTrial.ready(reader(), module, kinds, sums, ensures, applies, behavior,
-                        sig, inputs, answers);
+                return RowTrial.ready(reader(), module, ensures, members, applies, behavior, sig,
+                        inputs, answers);
             }
 
             /**
@@ -218,8 +220,7 @@ public final class RowTrial {
      * that could not be made is a row that never ran.
      */
     private static Optional<Ready> ready(FixtureReader fixtures, Prepared.ForExamples module,
-                                         DeclarationKinds kinds, SumCases sums,
-                                         EnsuresChecks ensures,
+                                         EnsuresChecks ensures, UnionMembers members,
                                          Answerer.Answer.Something applies, String behavior,
                                          Sig sig, List<Hir.Expr> inputs,
                                          List<RowTrials.AnsweredWith> answers) {
@@ -240,7 +241,8 @@ public final class RowTrial {
                 String what = "input " + (i + 1) + " of `" + behavior + "`";
                 over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
             }
-            List<DependencyStandin> standins = standingIn(fixtures, module, ensures, answers);
+            List<DependencyStandin> standins = standingIn(fixtures, module, ensures, members,
+                    answers);
             if (standins == null) {
                 // A table the row leans on is not one to stand in with, so there was nothing to
                 // apply the behavior with and nothing ran. What is wrong with it is wrong about
@@ -262,7 +264,7 @@ public final class RowTrial {
             return Optional.empty();
         }
         return Optional.of(new Ready(applying, over,
-                new AnswerReading(fixtures, sig.outputType(), module.name(), kinds, sums)));
+                new AnswerReading(fixtures, sig.outputType(), module.targeted(behavior), members)));
     }
 
     /**
@@ -270,13 +272,8 @@ public final class RowTrial {
      * into the form the compiler owns. What a written row's answer is read with as well, so that the
      * same answer from either comes out as the same value.
      */
-    private record AnswerReading(FixtureReader fixtures, Type out, String module,
-                                 DeclarationKinds kinds, SumCases sums) {
-
-        AnswerReading {
-            Objects.requireNonNull(kinds, "an answer is projected by what each declaration is");
-            Objects.requireNonNull(sums, "and by the cases each sum has");
-        }
+    private record AnswerReading(FixtureReader fixtures, Type out, ValueName.Behavior behavior,
+                                 UnionMembers members) {
 
         /**
          * The answer, read whole. What is read here is compared with another run's answer and
@@ -286,7 +283,7 @@ public final class RowTrial {
          */
         AnswerObservation read(Object answered) {
             return new AnswerObservation.Answered(fixtures.structured(
-                    ExampleVerifier.projected(answered, out, module, kinds, sums)));
+                    members.asTheValue(behavior, out, answered)));
         }
     }
 
@@ -316,17 +313,18 @@ public final class RowTrial {
     private static List<DependencyStandin> standingIn(FixtureReader fixtures,
                                                       Prepared.ForExamples module,
                                                       EnsuresChecks ensures,
+                                                      UnionMembers members,
                                                       List<RowTrials.AnsweredWith> answers) {
         List<DependencyStandin> out = new ArrayList<>(answers.size());
         for (RowTrials.AnsweredWith each : answers) {
             switch (each) {
                 case RowTrials.AnsweredWith.OnTheRow(var dependency, var signature, var written) -> {
                     Object value = fixtures.buildFixture(written, signature.out()).value();
-                    out.add(StandingIn.by(dependency, signature.ins().size(), _ -> value));
+                    out.add(StandingIn.by(ensures, members, dependency, signature, _ -> value));
                 }
                 case RowTrials.AnsweredWith.InTheModule(var dependency, var signature) -> {
-                    StandingIn.OffATable stood = statedFor(fixtures, module, ensures, dependency,
-                            signature);
+                    StandingIn.OffATable stood = statedFor(fixtures, module, ensures, members,
+                            dependency, signature);
                     if (stood == null) {
                         return null;
                     }
@@ -348,10 +346,12 @@ public final class RowTrial {
     private static StandingIn.OffATable statedFor(FixtureReader fixtures,
                                                   Prepared.ForExamples module,
                                                   EnsuresChecks ensures,
+                                                  UnionMembers members,
                                                   ValueName.Behavior dependency, Sig signature) {
         return module.fakes().declaredFor(dependency)
                 instanceof FakeTables.Declaration.One(var stated)
-                ? StandingIn.byTheTable(fixtures, ensures, stated, dependency, signature) : null;
+                ? StandingIn.byTheTable(fixtures, ensures, members, stated, dependency, signature)
+                : null;
     }
 
     /**

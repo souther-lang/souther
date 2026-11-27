@@ -124,7 +124,7 @@ final class Phases {
 
         for (String module : modules) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
-                compilation.db().ask(Output.Examples.asked(compilation.db(), module, id));
+                compilation.db().ask(new Output.Examples(module, id));
             }
         }
         charge(micros, "examples", mark);

@@ -2,6 +2,7 @@ package souther.compiler.program;
 
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
@@ -76,7 +77,8 @@ class ABehaviorTargetHoldsItsImplementationToTheFormOfItsSignatureTest {
      *  the only thing asked of it here. */
     private static BehaviorTarget target(CheckedSignature signature,
                                          CheckedImplementation implementation) {
-        return new BehaviorTarget(signature, implementation, List.of());
+        return new BehaviorTarget(signature, implementation, List.of(),
+                EnsuresEnforcement.NoContract.INSTANCE);
     }
 
     private static CheckedImplementation.Body body() {

@@ -1,6 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.AtomSpace;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.coverage.ConditionOutcomeSite;
@@ -242,12 +241,9 @@ final class CodegenContext {
     }
 
     /**
-     * What is being done about {@code behavior}'s clause.
-     *
-     * <p>{@link EnsuresEnforcement.NotDecidedHere} for a behavior another module declared, which the
-     * lookup answers rather than this: a table of this compilation's decisions holds one for every
-     * behavior it declares, so a name it has nothing under is a name from somewhere else — which is
-     * not the same answer as having decided there is no check.
+     * What is being done about the clause of {@code behavior}, one this module declares — which is
+     * where its {@code apply} is emitted. A call reads whether it checks what comes back off the
+     * callee's projection instead, the same answer for a callee of any module.
      */
     EnsuresEnforcement ensuresCheckOf(ValueName.Behavior behavior) {
         return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
@@ -731,22 +727,7 @@ final class CodegenContext {
      * this module declared — then the union's JVM form and its Souther form are the same values and
      * neither boundary converts anything. */
     List<TypeSymbol> bridgedMembers(Type out) {
-        return bridgedMembersIn(pkg, out);
-    }
-
-    private List<TypeSymbol> bridgedMembersIn(String module, Type out) {
-        if (!(out instanceof Type.Union)) {
-            return List.of();
-        }
-        List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
-            if (member.isDeclaredByLanguage()
-                    || !(member instanceof TypeSymbol.AtModule at)
-                    || !at.module().equals(module)) {
-                bridged.add(member);
-            }
-        }
-        return bridged;
+        return JvmClassNames.bridgedMembers(pkg, out, kinds, sums);
     }
 
     /** The {@code $Fns} method name for a definition the module emits. A module-own helper keeps its

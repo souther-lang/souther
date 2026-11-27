@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -49,26 +50,36 @@ import java.util.List;
  * implementation held to it: an unwritten behavior may declare what it depends on before anyone
  * writes it, and what it requires is not where its implementation comes from.
  *
- * <p>A class and not a record. What a target is known to be will grow — what a caller may
- * assume of the answer is a decision this compilation does not make for a behavior another module
- * declared ({@link souther.compiler.core.EnsuresEnforcement.NotDecidedHere}) — and each of those
- * arrives as a question a reader asks rather than as a place in a constructor every existing reader
- * would have to be recompiled against.
+ * <p>A class and not a record. What a target is known to be will grow, and each of those arrives as a
+ * question a reader asks rather than as a place in a constructor every existing reader would have to
+ * be recompiled against.
  */
 public final class BehaviorTarget {
 
     private final CheckedSignature signature;
     private final CheckedImplementation implementation;
     private final List<ValueName.Behavior> requirements;
+    private final EnsuresEnforcement ensures;
 
     BehaviorTarget(CheckedSignature signature, CheckedImplementation implementation,
-                   List<ValueName.Behavior> requirements) {
-        if (signature == null || implementation == null || requirements == null) {
+                   List<ValueName.Behavior> requirements, EnsuresEnforcement ensures) {
+        if (signature == null || implementation == null || requirements == null
+                || ensures == null) {
             throw new IllegalArgumentException(
                     "a behavior target is what it takes and answers, where its implementation"
-                            + " comes from and what constructing it requires");
+                            + " comes from, what constructing it requires and where what it"
+                            + " declares is checked");
         }
         holdTheFormOfTheSignature(signature, implementation);
+        // Checked by its callers exactly where it has no body of Souther's to check in: an answer
+        // from outside checked by nobody, or one from a body checked a second time, is a target
+        // saying two things.
+        if ((ensures instanceof EnsuresEnforcement.AtEachCrossing)
+                != (implementation instanceof CheckedImplementation.Injected
+                        && ensures.contract() != null)) {
+            throw new IllegalArgumentException("a behavior implemented as " + implementation
+                    + " is checked " + ensures);
+        }
         if (implementation instanceof CheckedImplementation.Injected && !requirements.isEmpty()) {
             throw new IllegalArgumentException("an injected behavior is not constructed by"
                     + " Souther, and is said to require " + requirements);
@@ -84,6 +95,7 @@ public final class BehaviorTarget {
         this.signature = signature;
         this.implementation = implementation;
         this.requirements = List.copyOf(requirements);
+        this.ensures = ensures;
     }
 
     // No wildcard arm: an implementation added later does not compile until it is decided here
@@ -138,5 +150,18 @@ public final class BehaviorTarget {
      */
     public List<ValueName.Behavior> requirements() {
         return requirements;
+    }
+
+    /**
+     * What it declares of its answer, and where that is checked: in its own body
+     * ({@link EnsuresEnforcement.AtTheCallee}), by every class calling it, in whichever module
+     * ({@link EnsuresEnforcement.AtEachCrossing}), or nowhere, because it declares nothing.
+     *
+     * <p>The module declaring the behavior decides it, and that is the answer for every caller: an
+     * output emitting a call reads here whether to check what comes back, whether the callee is a
+     * behavior of the module being emitted or of one read off the path.
+     */
+    public EnsuresEnforcement ensures() {
+        return ensures;
     }
 }

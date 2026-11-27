@@ -91,9 +91,12 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
     }
 
     /** The same, of sources the language refuses for what is written about the fakes and the
-     *  JVM's width: {@code refused} is every error said, in the order it is said. */
+     *  JVM's width: {@code refused} is every error said, in the order it is said. The compilation
+     *  records the arms its rows take, so a module nothing could be emitted for is one whose rows
+     *  went unmeasured. */
     private static Db checkedDb(List<String> sources, List<String> refused) {
         Compilation c = Compilation.ofSources(sources, ModulePath.EMPTY);
+        c.observe(RowObservation.RECORD_ARMS);
         return ACompiledModel.refusedWith(refused, c).db();
     }
 
@@ -101,8 +104,7 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
     void aSourceThatWroteNoFakeIsStillAnsweredForWhereNothingCouldBeEmitted() {
         Db db = checkedDb(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE));
 
-        Answer<Output.Examples.Of> answered = db.ask(
-                new Output.Examples("example.wide", ATTACHED, ArmObservation.RECORD));
+        Answer<Output.Examples.Of> answered = db.ask(new Output.Examples("example.wide", ATTACHED));
 
         assertNotNull(answered.value(),
                 "it wrote no table, so nothing of its went unbuilt, and its rows still have"
@@ -126,8 +128,7 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
                 List.of(tooWideForTheJvm(A_FAKE), A_SECOND_FAKE_FOR_THE_SAME_DEPENDENCY),
                 List.of("E2101", "E1933", "E1933"));
 
-        Answer<Output.Examples.Of> answered = db.ask(
-                new Output.Examples("example.wide", ATTACHED, ArmObservation.RECORD));
+        Answer<Output.Examples.Of> answered = db.ask(new Output.Examples("example.wide", ATTACHED));
 
         assertNull(answered.value(),
                 "it wrote a table, so it is a file whose tables this module could not build");
@@ -142,6 +143,6 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
         assertTrue(db.ask(new Bodies.Checked("example.wide")).present(),
                 "the language accepts it");
         assertTrue(db.ask(new Output.EvaluationLinked("example.wide",
-                ArmObservation.OMIT)).value() == null, "and the JVM will not hold it");
+                ArmObservation.RECORD)).value() == null, "and the JVM will not hold it");
     }
 }

@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.Derived;
 import souther.compiler.check.EnumerationListings;
@@ -224,8 +225,12 @@ public final class Linkages {
                     db.ask(new Bodies.Requirements(name));
             Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name, reader);
             Map<String, Type> values = publishedValues(db, name, onThePath);
+            // What each behavior declares of its answer, which says where a caller elsewhere
+            // checks it: an answer Java supplies is checked by every class taking it back.
+            Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Bodies.Contracts(name));
             if (written == null || !signatures.present() || !implementations.present()
-                    || !requirements.present() || !symbols.present() || values == null) {
+                    || !requirements.present() || !symbols.present() || values == null
+                    || !contracts.present()) {
                 return Answer.absent();
             }
             List<TypeKey> declarations = new ArrayList<>();
@@ -257,7 +262,8 @@ public final class Linkages {
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
                     new LinkageProjections.Settled(name, written.published(), declarations,
                             orders, signatures.value(), implementations.value().states(), required,
-                            values, symbols.value(), kinds, sums),
+                            values, symbols.value(), kinds, sums,
+                            CheckedEnsures.executable(contracts.value())),
                     reader);
             if (onThePath != null) {
                 itOffersWhatItsClassesOffer(name, provides, onThePath.provides());

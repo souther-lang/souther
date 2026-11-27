@@ -296,7 +296,7 @@ class ARowWhoseAnswerIsOwedIsARowAndAssertsNothingTest {
         for (String module : compilation.modules()) {
             for (SourceId sourceId : compilation.exampleSourcesOf(module)) {
                 Output.Examples.Of observed = compilation.db()
-                        .ask(Output.Examples.asked(compilation.db(), module, sourceId)).value();
+                        .ask(new Output.Examples(module, sourceId)).value();
                 if (observed == null) {
                     continue;
                 }
