@@ -72,10 +72,11 @@ class WhoMayAskTheJdkWhatACharacterIsTest {
      * package, {@code AdequacyReport}, {@code ArmWord}. A precondition
      * on a value the compiler or its caller supplied, refusing nothing a source can write:
      * {@code SoutherProcessor}'s option, {@code Messages}' language tag, {@code SourceId},
-     * {@code FixtureText}.
+     * {@code FixtureText}, and the property an {@code Environment} is to name.
      */
     private static final List<String> MAY_ASK = List.of(
             "souther/compiler/apt/SoutherProcessor#process java/lang/String.isBlank",
+            "souther/compiler/command/Environment#<init> java/lang/String.isBlank",
             "souther/compiler/coverage/ArmWord#of java/lang/String.toLowerCase",
             "souther/compiler/cst/SyntaxKind#display java/lang/String.toLowerCase",
             "souther/compiler/diag/DiagnosticCode#docAnchor java/lang/String.toLowerCase",
