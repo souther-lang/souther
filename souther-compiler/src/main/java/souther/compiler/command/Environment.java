@@ -1,4 +1,4 @@
-package souther.cli;
+package souther.compiler.command;
 
 import java.io.Console;
 import java.io.InputStream;
@@ -15,21 +15,18 @@ import java.util.Properties;
  * What a run of the command line is given besides its arguments: the variables and properties it
  * reads, the directory it is run in, and the streams it reads and writes.
  *
- * <p>Read from the process once, by {@link Main#main}, and handed to everything below it. Nothing
- * under {@code main} asks the process for a variable, a property or a stream of its own accord, so
- * a run is a function of its arguments and this value: a test runs the command line in its own JVM
- * with the variables it names and streams it reads back, and two such runs share nothing a run
- * reads.
+ * <p>Read from the process once, by the command line's {@code main}, and handed to everything
+ * below it, a {@link TargetCommand} the line names among them. Nothing under {@code main} asks the
+ * process for a variable, a property or a stream of its own accord, so a run is a function of its
+ * arguments and this value: a test runs the command line in its own JVM with the variables it
+ * names and streams it reads back, and two such runs share nothing a run reads.
  *
  * <p>{@code processStreams} says whether {@code in}, {@code out} and {@code err} are this process's
- * own standard streams. Two things are decided by it and by nothing else: a process the run starts
- * inherits the streams where they are the process's, and is given pipes copied to and from them
- * where they are not; and only the process's own output can be a terminal.
+ * own standard streams, and only the process's own output can be a terminal.
  *
- * <p>Two properties a run reads without asking whether they are there, so an environment names
- * them or is not one: {@code user.home}, under which a fetched backend goes where
- * {@code SOUTHER_HOME} does not say, and {@code java.home}, the JVM a backend is started on. A
- * JVM sets both, so this process's environment always names them.
+ * <p>One property a run reads without asking whether it is there, so an environment names it or is
+ * not one: {@code user.home}, under which a fetched backend goes where {@code SOUTHER_HOME} does
+ * not say. A JVM sets it, so this process's environment always names it.
  *
  * @param variables the environment variables, by name
  * @param properties the system properties, by name
@@ -42,7 +39,7 @@ public record Environment(Map<String, String> variables, Map<String, String> pro
                           Path workingDirectory, InputStream in, PrintStream out, PrintStream err,
                           boolean processStreams, LocalDate today) {
 
-    private static final List<String> NAMED = List.of("user.home", "java.home");
+    private static final List<String> NAMED = List.of("user.home");
 
     public Environment {
         variables = Map.copyOf(variables);
@@ -99,11 +96,6 @@ public record Environment(Map<String, String> variables, Map<String, String> pro
     /** The user's home, from {@code user.home}. */
     public Path userHome() {
         return path(properties.get("user.home"));
-    }
-
-    /** The JVM a backend the run starts is run on, from {@code java.home}. */
-    public Path javaHome() {
-        return path(properties.get("java.home"));
     }
 
     /**

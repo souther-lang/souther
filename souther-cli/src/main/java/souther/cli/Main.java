@@ -7,6 +7,7 @@ import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.CanonicalNames;
+import souther.compiler.command.Environment;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.CompileException;
@@ -41,7 +42,7 @@ import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
 import souther.lsp.ToolingMetadata;
 import souther.cli.backend.BackendFetch;
-import souther.cli.backend.BackendProcess;
+import souther.cli.backend.BackendCommand;
 import souther.cli.backend.Backends;
 import souther.cli.backend.Central;
 import souther.cli.backend.Shown;
@@ -241,7 +242,7 @@ public final class Main {
             if (backend.isEmpty()) {
                 return 2;
             }
-            return BackendProcess.run(backend.get(), target.arguments(), environment);
+            return BackendCommand.run(backend.get(), target.arguments(), environment);
         } catch (Backends.Refused e) {
             err.println(Messages.get(e.key(), locale, e.arguments()));
             return 2;

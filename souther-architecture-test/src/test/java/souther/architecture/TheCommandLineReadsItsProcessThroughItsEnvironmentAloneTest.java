@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The command line reads the process it runs in through {@code souther.cli.Environment} and
- * nothing else: its variables, its properties, its streams, the directory a path is read from, and
- * the proxy a request is sent through.
+ * The command line reads the process it runs in through
+ * {@code souther.compiler.command.Environment} and nothing else: its variables, its properties, its
+ * streams, the directory a path is read from, and the proxy a request is sent through.
  *
  * <p>A run is a function of its arguments and the environment it is handed, which is what lets a
  * test run the command line in its own JVM with the environment it names. A class of the command
@@ -26,8 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * into a file without a directory is read from the JVM's directory; the proxy is one because the
  * JVM's selector reads the JVM's properties.
  *
- * <p>Read off the compiled classes of the {@code souther-cli} module, so a reference is a row here
- * however it is spelled: a method reference or a static import names the same member.
+ * <p>Read off the compiled classes of the {@code souther-cli} module and of the package the
+ * compiler declares what a command is handed in, so a reference is a row here however it is
+ * spelled: a method reference or a static import names the same member.
  */
 class TheCommandLineReadsItsProcessThroughItsEnvironmentAloneTest {
 
@@ -48,14 +49,17 @@ class TheCommandLineReadsItsProcessThroughItsEnvironmentAloneTest {
      * which are not a property and which the JVM alone reads.
      */
     private static final List<String> ASKS = List.of(
-            "souther/cli/Environment -> java/lang/System#console",
-            "souther/cli/Environment -> java/lang/System#err",
-            "souther/cli/Environment -> java/lang/System#getProperties",
-            "souther/cli/Environment -> java/lang/System#getenv",
-            "souther/cli/Environment -> java/lang/System#in",
-            "souther/cli/Environment -> java/lang/System#out",
-            "souther/cli/Environment -> java/nio/file/Path#of",
-            "souther/cli/backend/ProxyProperties -> java/net/ProxySelector#getDefault");
+            "souther/cli/backend/ProxyProperties -> java/net/ProxySelector#getDefault",
+            "souther/compiler/command/Environment -> java/lang/System#console",
+            "souther/compiler/command/Environment -> java/lang/System#err",
+            "souther/compiler/command/Environment -> java/lang/System#getProperties",
+            "souther/compiler/command/Environment -> java/lang/System#getenv",
+            "souther/compiler/command/Environment -> java/lang/System#in",
+            "souther/compiler/command/Environment -> java/lang/System#out",
+            "souther/compiler/command/Environment -> java/nio/file/Path#of");
+
+    /** The package of the compiler that declares what a command of the command line is handed. */
+    private static final String HANDED_TO_A_COMMAND = "souther/compiler/command/";
 
     @Test
     void everyPlaceTheCommandLineAsksItsProcessIsWrittenDownHere() {
@@ -69,13 +73,26 @@ class TheCommandLineReadsItsProcessThroughItsEnvironmentAloneTest {
      *  them. */
     @Test
     void theWalkSeesTheCommandLine() {
-        assertTrue(asking().stream().anyMatch(row -> row.startsWith("souther/cli/Environment ")),
+        assertTrue(asking().stream().anyMatch(row -> row.startsWith(HANDED_TO_A_COMMAND)),
                 "the Environment reads the process, so a walk not finding that is finding nothing");
+        assertTrue(theCommandLine().stream().anyMatch(each -> each.thisClass().asInternalName()
+                        .equals("souther/cli/Main")),
+                "the walk reads the module the command line is written in");
+    }
+
+    private static List<ClassModel> theCommandLine() {
+        List<ClassModel> out = new ArrayList<>(COMPILED.classesOf(COMPILED.module("souther-cli")));
+        for (ClassModel each : COMPILED.classesOf(COMPILED.module("souther-compiler"))) {
+            if (each.thisClass().asInternalName().startsWith(HANDED_TO_A_COMMAND)) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     private static List<String> asking() {
         Set<String> out = new TreeSet<>();
-        for (ClassModel each : COMPILED.classesOf(COMPILED.module("souther-cli"))) {
+        for (ClassModel each : theCommandLine()) {
             for (PoolEntry entry : each.constantPool()) {
                 if (entry instanceof MemberRefEntry member) {
                     String owner = member.owner().asInternalName();

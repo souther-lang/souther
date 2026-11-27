@@ -3,6 +3,7 @@ package souther.cli;
 import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
+import souther.compiler.command.Environment;
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.GeneratedLinkage;
 import souther.compiler.generated.JsonBoundary;

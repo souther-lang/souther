@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import souther.cli.CliProcess.Ran;
+import souther.compiler.command.Environment;
 
 import java.io.IOException;
 import java.nio.file.Files;
