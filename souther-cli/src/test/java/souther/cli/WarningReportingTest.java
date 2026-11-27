@@ -1,6 +1,7 @@
 package souther.cli;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.command.Environment;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.Located;

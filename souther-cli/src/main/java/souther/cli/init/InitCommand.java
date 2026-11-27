@@ -1,6 +1,6 @@
 package souther.cli.init;
 
-import souther.cli.Environment;
+import souther.compiler.command.Environment;
 import souther.cli.ProjectVersion;
 import souther.compiler.Reserved;
 import souther.compiler.diag.Messages;

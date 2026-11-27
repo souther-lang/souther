@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.command.Environment;
 import souther.lsp.transport.MessageConnection;
 import souther.test.Workers;
 import souther.test.WrittenOutput;

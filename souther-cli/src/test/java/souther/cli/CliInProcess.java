@@ -1,6 +1,7 @@
 package souther.cli;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.command.Environment;
 import souther.test.WrittenOn;
 
 import java.io.ByteArrayInputStream;
@@ -26,8 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * what it writes and answers with.
  *
  * <p>Nothing of the JVM running the test is read. The variables are the ones a test names and no
- * others; the properties are those, over a {@code user.home} under the test's own directory and the
- * {@code java.home} a backend the run starts is run on; and the streams are the ones read back here.
+ * others; the properties are those, over a {@code user.home} under the test's own directory; and
+ * the streams are the ones read back here.
  * The same arguments through {@link CliProcess} reach the same {@link Main#run}, from an
  * {@link Environment} its process read.
  */
@@ -61,7 +62,6 @@ final class CliInProcess {
                                            OutputStream out, OutputStream err) {
         Map<String, String> given = new HashMap<>();
         given.put("user.home", CliProcess.userHome(scratch).toString());
-        given.put("java.home", System.getProperty("java.home"));
         given.putAll(properties);
         return new Environment(variables, given, workingDirectory, in,
                 new PrintStream(out, true, StandardCharsets.UTF_8),

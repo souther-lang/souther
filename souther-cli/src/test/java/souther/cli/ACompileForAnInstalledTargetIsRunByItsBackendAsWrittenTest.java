@@ -19,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>That everything is handed over is asked of the CLI run as a process, because arguments,
  * standard streams, the working directory, the environment and the exit status are facts about a
- * process, and the backend inherits the CLI's: only a process started from a shell has them to
- * pass on. Which backend is run, or why none is, is a question about what the CLI does with its
- * environment, and is asked of it in this JVM.
+ * process, and the backend is handed the environment the CLI read off its own: only a process
+ * started from a shell has them to read. Which backend is run, or why none is, is a question about
+ * what the CLI does with its environment, and is asked of it in this JVM.
  */
 class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
 
@@ -61,8 +61,8 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
     }
 
     /**
-     * The same, from a run whose streams are not the process's: the backend is given pipes, and
-     * what passes through them is what it would have read and written on inherited ones.
+     * The same, from a run whose environment is not the process's: the backend reads and writes
+     * what the run was given, and nothing of the JVM it runs in.
      */
     @Test
     void aRunOnStreamsOfItsOwnHandsTheBackendTheSame(@TempDir Path home, @TempDir Path work)

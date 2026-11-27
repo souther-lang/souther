@@ -123,7 +123,7 @@ reads none of it, `--help` included: `souther compile --target wasm --help` is t
 asking itself what it takes. Written anywhere but first, `--target` is an option `compile` does not
 have.
 
-A backend is an executable jar, or a link to one, in `$SOUTHER_HOME/backends` — `~/.souther/backends`
+A backend is a jar, or a link to one, in `$SOUTHER_HOME/backends` — `~/.souther/backends`
 where `SOUTHER_HOME` is not set — or in the directory a package manager's launcher names with
 `-Dsouther.backends`, searched in that order. It says what it is in
 `META-INF/souther/backend.properties`, which has two keys and no others: `name`, the target it answers
@@ -141,13 +141,18 @@ on standard error. `SOUTHER_BACKEND_OFFLINE`, set to anything but the empty stri
 not an option, since from the target's name on the line is the backend's. It reaches this command's
 fetching and nothing else, so a backend that fetches tools of its own when it runs does so as before.
 
-The backend runs as a process of its own, under this command's `java`, with the JVM arguments this
-Souther requires — the ones `souther tooling` lists. Its arguments, working directory, environment and
-standard streams are the command's own, and the exit status is the backend's. A target that is
+The backend runs in this command's JVM. Its jar holds the backend's own classes and one provider of
+`souther.compiler.command.TargetCommand`, named in `META-INF/services` the way a `ServiceLoader`
+finds one; the compiler it reads the program with is this Souther's, also where the jar holds classes
+of a compiler. A backend is that one jar: what it uses is in it or is this Souther's, so a jar whose
+manifest names a `Class-Path` is refused. Its arguments, working directory, environment and standard
+streams are the command's own, and the exit status is what the backend answers. A target that is
 neither installed nor fetched is refused with exit status 2, naming each directory searched and what
-it held, and what Maven Central answered. Two jars of one pair, a jar that is not a backend and a link
-to a jar that is not there are refused with exit status 2 too, and nothing is fetched in their place.
-Nothing runs before either.
+it held, and what Maven Central answered. Two jars of one pair, a jar that is not a backend, a jar
+that does not provide exactly one such command of its own, a jar whose command cannot be loaded —
+a class it needs is in neither the jar nor this Souther, or it was compiled for a newer Java — and a
+link to a jar that is not there are refused with exit status 2 too, and nothing is fetched in their
+place. Nothing runs before either.
 
 <!-- souther-section: backend -->
 ## backend

@@ -1,6 +1,6 @@
 package souther.cli.backend;
 
-import souther.cli.Environment;
+import souther.compiler.command.Environment;
 import souther.compiler.io.Listing;
 
 import java.io.IOException;
@@ -21,7 +21,7 @@ import java.util.zip.ZipEntry;
 /**
  * The backends installed beside this Souther, and which of them a target names.
  *
- * <p>A backend is an executable jar, or a link to one, in a directory this class is given. It says
+ * <p>A backend is a jar, or a link to one, in a directory this class is given. It says
  * what it is in {@value #DESCRIPTOR}: the target it answers to and the Souther it was built
  * against, and nothing else. The descriptor is read as an archive entry, so choosing a backend loads
  * no class of it. What the backend is released as is its own and plays no part here.
